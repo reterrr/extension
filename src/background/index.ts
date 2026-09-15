@@ -1,10 +1,15 @@
 import "../shared/domain/schema.js";
 import "../shared/domain/core.js";
 import { loadState, saveState } from "../shared/api/storage";
-import type { FocusPayload, ObjectType } from "../shared/types/domain";
+import { createCapturedExtractionInput } from "../shared/extraction/rules";
+import { isPickerSelectionResponse } from "../shared/messaging/picker";
+import type { FocusPayload } from "../shared/types/domain";
+import type { CapturedExtractionInput } from "../shared/types/extraction";
 
 const CREATE_TYPES = ["project", "recruitment", "operator"] as const;
-const ALLOWED_WRITES = new Set([
+type CreateObjectType = (typeof CREATE_TYPES)[number];
+
+const ALLOWED_WRITES = new Set<string>([
   "ASSIGN",
   "EDIT",
   "APPLY",
@@ -13,8 +18,33 @@ const ALLOWED_WRITES = new Set([
   "REMOVE_FUNDING",
 ]);
 
+interface SelectionContextInfo {
+  frameId?: number;
+  selectionText?: string;
+  frameUrl?: string;
+  pageUrl?: string;
+}
+
+interface SelectionTab {
+  id?: number;
+  windowId?: number;
+  url?: string;
+}
+
 const focusKey = (windowId: number) => `burbot:focus:${windowId}`;
 let queue: Promise<unknown> = Promise.resolve();
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function isCreateObjectType(value: string): value is CreateObjectType {
+  return CREATE_TYPES.some((objectType) => objectType === value);
+}
 
 function enqueue<T>(work: () => Promise<T>): Promise<T> {
   const task = queue.then(work);
@@ -53,24 +83,32 @@ async function registerMenus(): Promise<void> {
 browser.runtime.onInstalled.addListener(() => void registerMenus().catch(console.error));
 browser.runtime.onStartup.addListener(() => void registerMenus().catch(console.error));
 
-async function captureInitialSelection(info: any, tab: any): Promise<any | null> {
+async function captureInitialSelection(
+  info: SelectionContextInfo,
+  tab: SelectionTab,
+): Promise<CapturedExtractionInput | null> {
   if (info.frameId && info.frameId !== 0) return null;
+  if (tab.id === undefined) return null;
 
+  const tabId = tab.id;
   let timer: ReturnType<typeof setTimeout> | undefined;
-  const capture = (async () => {
-    await browser.scripting.executeScript({
-      target: { tabId: tab.id },
-      files: ["content.js"],
-      injectImmediately: true,
-    } as any);
 
-    const result = await browser.tabs.sendMessage(
-      tab.id,
+  const capture = (async (): Promise<CapturedExtractionInput | null> => {
+    await browser.scripting.executeScript({
+      target: { tabId },
+      files: ["content.js"],
+    });
+
+    const result: unknown = await browser.tabs.sendMessage(
+      tabId,
       { type: "BURBOT_SELECTION" },
       { frameId: 0 },
     );
-    const option = result?.value?.options?.find(
-      (entry: any) => entry.extraction?.type === "selection",
+
+    if (!isPickerSelectionResponse(result) || !result.ok) return null;
+
+    const option = result.value.options.find(
+      (entry) => entry.extraction.type === "selection",
     );
 
     if (
@@ -80,15 +118,9 @@ async function captureInitialSelection(info: any, tab: any): Promise<any | null>
       return null;
     }
 
-    const candidate = {
-      pageUrl: result.value.pageUrl,
-      selector: result.value.selector,
-      ...option,
-    };
-
-    return candidate.pageUrl === (info.frameUrl || info.pageUrl || tab.url)
-      ? candidate
-      : null;
+    const candidate = createCapturedExtractionInput(result.value, option);
+    const expectedUrl = info.frameUrl ?? info.pageUrl ?? tab.url;
+    return candidate.pageUrl === expectedUrl ? candidate : null;
   })().catch(() => null);
 
   try {
@@ -99,24 +131,29 @@ async function captureInitialSelection(info: any, tab: any): Promise<any | null>
       }),
     ]);
   } finally {
-    if (timer) clearTimeout(timer);
+    if (timer !== undefined) clearTimeout(timer);
   }
 }
 
-browser.contextMenus.onClicked.addListener((info: any, tab: any) => {
-  const objectType = String(info.menuItemId).replace(
-    /^burbot-create-/,
-    "",
-  ) as ObjectType;
+browser.contextMenus.onClicked.addListener((info, tab) => {
+  if (!tab) return;
+
+  const objectType = String(info.menuItemId).replace(/^burbot-create-/, "");
+  const selectionText = info.selectionText;
+  const sourceUrl = info.frameUrl ?? info.pageUrl ?? tab.url;
 
   if (
-    !CREATE_TYPES.includes(objectType as (typeof CREATE_TYPES)[number]) ||
-    !tab?.id ||
-    !BurbotCore.clean(info.selectionText)
+    !isCreateObjectType(objectType) ||
+    tab.id === undefined ||
+    tab.windowId === undefined ||
+    !sourceUrl ||
+    !BurbotCore.clean(selectionText)
   ) {
     return;
   }
 
+  const tabId = tab.id;
+  const windowId = tab.windowId;
   const opening = browser.sidebarAction.open().catch(console.error);
   const captured = captureInitialSelection(info, tab);
 
@@ -129,8 +166,8 @@ browser.contextMenus.onClicked.addListener((info: any, tab: any) => {
         op: "CREATE_FROM_SELECTION",
         expectedRevision: state.revision,
         objectType,
-        initialValue: info.selectionText,
-        sourceUrl: info.frameUrl || info.pageUrl || tab.url,
+        initialValue: selectionText,
+        sourceUrl,
         candidate,
       },
       () => crypto.randomUUID(),
@@ -139,53 +176,57 @@ browser.contextMenus.onClicked.addListener((info: any, tab: any) => {
 
     await saveState(next);
     const object = next.objects[next.objects.length - 1];
-    await focus(tab.windowId, {
+    await focus(windowId, {
       objectId: object.id,
-      tabId: tab.id,
+      tabId,
       stamp: crypto.randomUUID(),
       note:
         object.creationNote ??
         "Object created. Choose the next field to capture.",
     });
     await opening;
-  }).catch((error: Error) => {
-    void focus(tab.windowId, {
-      error: error.message,
+  }).catch((error: unknown) => {
+    void focus(windowId, {
+      error: errorMessage(error),
       stamp: crypto.randomUUID(),
     }).catch(console.error);
   });
 });
 
-browser.action.onClicked.addListener((tab: any) => {
+browser.action.onClicked.addListener((tab) => {
+  if (tab.windowId === undefined) return;
+
   void browser.sidebarAction
     .open()
     .then(() => broadcast({ type: "BURBOT_CONNECT", windowId: tab.windowId }))
     .catch(console.error);
 });
 
-browser.runtime.onMessage.addListener((message: any, sender: any) => {
+browser.runtime.onMessage.addListener((message: unknown, sender) => {
   if (
     sender.id !== browser.runtime.id ||
     sender.tab ||
     !sender.url?.startsWith(browser.runtime.getURL("")) ||
-    message?.type !== "BURBOT_DATA"
+    !isRecord(message) ||
+    message.type !== "BURBOT_DATA"
   ) {
     return undefined;
   }
 
   const task = enqueue(async () => {
     if (message.op === "GET_FOCUS") {
-      return (
-        (await browser.storage.session.get(focusKey(message.windowId)))[
-          focusKey(message.windowId)
-        ] ?? null
-      );
+      if (typeof message.windowId !== "number") {
+        throw new Error("Window id is required.");
+      }
+
+      const key = focusKey(message.windowId);
+      return (await browser.storage.session.get(key))[key] ?? null;
     }
 
     const state = await loadState();
     if (message.op === "GET") return state;
 
-    if (!ALLOWED_WRITES.has(message.op)) {
+    if (typeof message.op !== "string" || !ALLOWED_WRITES.has(message.op)) {
       throw new Error(
         "Create objects by selecting a name on the webpage and using its context menu.",
       );
@@ -203,6 +244,6 @@ browser.runtime.onMessage.addListener((message: any, sender: any) => {
 
   return task.then(
     (value) => ({ ok: true, value }),
-    (error: Error) => ({ ok: false, error: error.message }),
+    (error: unknown) => ({ ok: false, error: errorMessage(error) }),
   );
 });

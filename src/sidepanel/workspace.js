@@ -1,3 +1,9 @@
+import {
+  createCapturedExtractionInput,
+  createPageUrlCandidate,
+} from "../shared/extraction/rules";
+import { createPickerClient } from "./pickerRpc";
+
 (() => {
   const $ = (id) => document.getElementById(id),
     C = BurbotCore;
@@ -12,6 +18,7 @@
     tabId = null,
     pageUrl = "",
     port = null,
+    pickerClient = null,
     generation = 0,
     viewEpoch = 0;
   let busy = false,
@@ -19,8 +26,7 @@
     focusStamp = "",
     descriptors = [],
     ready = false;
-  const pending = new Map(),
-    expanded = new Set();
+  const expanded = new Set();
   const chosen = () => db.objects.find((o) => o.id === objectId);
   const keyOf = (descriptor) =>
     descriptor ? C.targetKey(descriptor.target) + "/" + descriptor.field : "";
@@ -62,33 +68,10 @@
     return result.value;
   }
   function rpc(op, extra = {}) {
-    return new Promise((resolve, reject) => {
-      if (!port) {
-        reject(Error("Connect this page first."));
-        return;
-      }
-      const id = crypto.randomUUID();
-      const timer = setTimeout(() => {
-        pending.delete(id);
-        reject(Error("Page did not respond. Reconnect and try again."));
-      }, 8000);
-      pending.set(id, {
-        resolve: (value) => {
-          clearTimeout(timer);
-          resolve(value);
-        },
-        reject: (error) => {
-          clearTimeout(timer);
-          reject(error);
-        },
-      });
-      try {
-        port.postMessage({ id, op, ...extra });
-      } catch (error) {
-        pending.get(id).reject(error);
-        pending.delete(id);
-      }
-    });
+    if (!pickerClient) return Promise.reject(Error("Connect this page first."));
+    return op === "RUN"
+      ? pickerClient.request("RUN", extra)
+      : pickerClient.request(op);
   }
   function resetCapture() {
     candidate = null;
@@ -103,12 +86,12 @@
   function disconnect() {
     generation++;
     viewEpoch++;
+    const previousClient = pickerClient;
+    pickerClient = null;
+    previousClient?.dispose(Error("Page connection changed. Try again."));
     const previous = port;
     port = null;
     previous?.disconnect();
-    for (const request of pending.values())
-      request.reject(Error("Page connection changed. Try again."));
-    pending.clear();
     picking = false;
     pageUrl = "";
     preview = null;
@@ -130,16 +113,9 @@
       });
       if (token !== generation) return;
       port = browser.tabs.connect(tabId, { name: "burbot-picker", frameId: 0 });
-      port.onMessage.addListener((message) => {
+      pickerClient = createPickerClient(port, (message) => {
         if (token !== generation) return;
-        if (message.id) {
-          const request = pending.get(message.id);
-          pending.delete(message.id);
-          if (request)
-            message.ok
-              ? request.resolve(message.value)
-              : request.reject(Error(message.error));
-        } else if (message.event === "CAPTURE") {
+        if (message.event === "CAPTURE") {
           if (!busy && active) acceptCapture(message.candidate);
         } else if (message.event === "ERROR") notice(message.error, true);
         else if (message.event === "MODE") {
@@ -729,13 +705,7 @@
   });
   $("page-url").onclick = action(async () => {
     const url = await rpc("URL");
-    acceptCapture({
-      pageUrl: url,
-      selector: null,
-      options: [
-        { label: "Page URL", raw: url, extraction: { type: "pageUrl" } },
-      ],
-    });
+    acceptCapture(createPageUrlCandidate(url));
   });
   $("method").onchange = () => {
     methodIndex = Number($("method").value);
@@ -765,13 +735,10 @@
     };
     if (capture) {
       const option = capture.options[methodIndex];
+      if (!option) throw Error("Choose an extraction method.");
       if ((await rpc("URL")) !== capture.pageUrl || epoch !== viewEpoch)
         throw Error("The page changed. Capture the value again.");
-      payload.candidate = {
-        pageUrl: capture.pageUrl,
-        selector: capture.selector,
-        ...option,
-      };
+      payload.candidate = createCapturedExtractionInput(capture, option);
     }
     await data(capture ? "ASSIGN" : "EDIT", payload);
     if (epoch !== viewEpoch) return;

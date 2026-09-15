@@ -1,8 +1,29 @@
+import type { BurbotState } from "./domain";
+import type { ElementExtractionSpec } from "./extraction";
+
+interface BurbotCoreApi {
+  clean(value: unknown): string;
+  occurrences(text: string, part: string): number[];
+  readElement(element: Element, extraction: ElementExtractionSpec): string;
+  empty(): BurbotState;
+  mutate(
+    state: BurbotState,
+    message: unknown,
+    uuid: () => string,
+    now: string,
+  ): BurbotState;
+}
+
+interface BurbotSchemaEntry {
+  label: string;
+  [key: string]: unknown;
+}
+
 declare global {
-  var BurbotCore: any;
-  var BurbotSchema: Record<string, any>;
-  var BurbotFunding: Record<string, any>;
-  var BurbotDocuments: Record<string, any>;
+  var BurbotCore: BurbotCoreApi;
+  var BurbotSchema: Record<string, BurbotSchemaEntry>;
+  var BurbotFunding: Record<string, unknown>;
+  var BurbotDocuments: Record<string, unknown>;
   var __burbotPickerLoaded: boolean | undefined;
 }
 
