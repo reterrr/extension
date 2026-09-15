@@ -5,7 +5,7 @@
   const C = BurbotCore;
 
   function selectorFor(element) {
-    const unique = selector => {
+    const unique = (selector) => {
       const nodes = document.querySelectorAll(selector);
       return nodes.length === 1 && nodes[0] === element;
     };
@@ -26,11 +26,12 @@
     }
 
     const classes = Array.from(element.classList)
-      .filter(c => c.length < 70).slice(0, 3);
+      .filter((c) => c.length < 70)
+      .slice(0, 3);
 
     if (classes.length) {
-      const selector = element.localName
-        + classes.map(c => "." + CSS.escape(c)).join("");
+      const selector =
+        element.localName + classes.map((c) => "." + CSS.escape(c)).join("");
 
       if (unique(selector)) return selector;
     }
@@ -40,8 +41,10 @@
     for (let node = element; node?.nodeType === 1; node = node.parentElement) {
       let segment = CSS.escape(node.localName);
 
-      if (node.id &&
-          document.querySelectorAll("#" + CSS.escape(node.id)).length === 1) {
+      if (
+        node.id &&
+        document.querySelectorAll("#" + CSS.escape(node.id)).length === 1
+      ) {
         path.unshift("#" + CSS.escape(node.id));
         const result = path.join(" > ");
         if (unique(result)) return result;
@@ -49,8 +52,9 @@
       }
 
       const siblings = node.parentElement
-        ? Array.from(node.parentElement.children)
-            .filter(s => s.localName === node.localName)
+        ? Array.from(node.parentElement.children).filter(
+            (s) => s.localName === node.localName,
+          )
         : [node];
 
       if (siblings.length > 1)
@@ -69,9 +73,11 @@
     if (!element || element.getRootNode() !== document)
       throw Error("Shadow DOM is not supported in this version.");
 
-    if (element.closest(
-      'input,textarea,select,[contenteditable]:not([contenteditable="false"])'
-    ))
+    if (
+      element.closest(
+        'input,textarea,select,[contenteditable]:not([contenteditable="false"])',
+      )
+    )
       throw Error("Choose page content outside editable controls.");
 
     const selector = selectorFor(element);
@@ -86,8 +92,9 @@
       preceding.setEnd(range.startContainer, range.startOffset);
 
       const before = C.clean(preceding.toString());
-      const positions = C.occurrences(full, exact)
-        .filter(i => C.clean(full.slice(0, i)) === before);
+      const positions = C.occurrences(full, exact).filter(
+        (i) => C.clean(full.slice(0, i)) === before,
+      );
 
       if (positions.length !== 1)
         throw Error("Could not anchor the selection. Pick its whole element.");
@@ -97,13 +104,13 @@
       const quote = {
         exact,
         prefix: full.slice(Math.max(0, start - 60), start),
-        suffix: full.slice(end, end + 60)
+        suffix: full.slice(end, end + 60),
       };
 
       options.push({
         label: "Selected text",
         raw: exact,
-        extraction: {type: "selection", quote}
+        extraction: { type: "selection", quote },
       });
     }
 
@@ -111,47 +118,89 @@
       options.push({
         label: "Element text",
         raw: full,
-        extraction: {type: "text"}
+        extraction: { type: "text" },
       });
     }
 
-    for (const attribute of ["href", "src", "datetime", "title", "alt", "content"]) {
+    for (const attribute of [
+      "href",
+      "src",
+      "datetime",
+      "title",
+      "alt",
+      "content",
+    ]) {
       try {
-        const extraction = {type: "attribute", attribute};
+        const extraction = { type: "attribute", attribute };
         const raw = C.readElement(element, extraction);
 
         if (raw)
-          options.push({label: "Attribute: " + attribute, raw, extraction});
+          options.push({ label: "Attribute: " + attribute, raw, extraction });
       } catch {}
     }
 
     return {
       pageUrl: location.href,
       selector,
-      options: options.filter(o => o.raw.length <= 100000)
+      options: options.filter((o) => o.raw.length <= 100000),
     };
   }
 
-  browser.runtime.onConnect.addListener(port => {
+  let lastSelection = null;
+  function selectionCandidate() {
+    const selection = window.getSelection();
+    if (selection && !selection.isCollapsed && selection.rangeCount) {
+      const range = selection.getRangeAt(0);
+      const node = range.commonAncestorContainer;
+      lastSelection = candidateFor(
+        node.nodeType === 1 ? node : node.parentElement,
+        range,
+      );
+    }
+    if (!lastSelection || lastSelection.pageUrl !== location.href)
+      throw Error("Select text on this page first.");
+    return lastSelection;
+  }
+  document.addEventListener(
+    "contextmenu",
+    () => {
+      try {
+        selectionCandidate();
+      } catch {}
+    },
+    true,
+  );
+  browser.runtime.onMessage.addListener((message) => {
+    if (message?.type !== "BURBOT_SELECTION") return undefined;
+    try {
+      return Promise.resolve({ ok: true, value: selectionCandidate() });
+    } catch (error) {
+      return Promise.resolve({ ok: false, error: error.message });
+    }
+  });
+
+  browser.runtime.onConnect.addListener((port) => {
     if (port.name !== "burbot-picker") return;
 
     let picking = false;
     let overlay = null;
     let timer = null;
 
-    const send = message => {
-      try {port.postMessage(message);} catch {}
+    const send = (message) => {
+      try {
+        port.postMessage(message);
+      } catch {}
     };
 
     function stop() {
       picking = false;
       overlay?.remove();
       overlay = null;
-      send({event: "MODE", picking: false});
+      send({ event: "MODE", picking: false });
     }
 
     function fail(error) {
-      send({event: "ERROR", error: error.message});
+      send({ event: "ERROR", error: error.message });
     }
 
     function captureSelection() {
@@ -161,13 +210,9 @@
       if (!selection || selection.isCollapsed || !selection.rangeCount) return;
 
       try {
-        const range = selection.getRangeAt(0);
-        const node = range.commonAncestorContainer;
-        const element = node.nodeType === 1 ? node : node.parentElement;
-        const candidate = candidateFor(element, range);
+        const candidate = selectionCandidate();
 
-        if (candidate.options.length)
-          send({event: "CAPTURE", candidate});
+        if (candidate.options.length) send({ event: "CAPTURE", candidate });
       } catch (error) {
         fail(error);
       }
@@ -182,7 +227,7 @@
         top: rect.top + "px",
         left: rect.left + "px",
         width: rect.width + "px",
-        height: rect.height + "px"
+        height: rect.height + "px",
       });
     }
 
@@ -206,7 +251,7 @@
         if (!candidate.options.length)
           throw Error("This element has no usable text or attribute.");
 
-        send({event: "CAPTURE", candidate});
+        send({ event: "CAPTURE", candidate });
       } catch (error) {
         fail(error);
       }
@@ -226,7 +271,7 @@
     }
 
     function run(rules) {
-      return rules.map(rule => {
+      return rules.map((rule) => {
         try {
           if (rule.pageUrl !== location.href)
             throw Error("Open the original source page.");
@@ -247,14 +292,14 @@
           if (!raw || raw.length > 100000)
             throw Error("Extracted value is empty or too large.");
 
-          return {ruleId: rule.id, raw};
+          return { ruleId: rule.id, raw };
         } catch (error) {
-          return {ruleId: rule.id, error: error.message};
+          return { ruleId: rule.id, error: error.message };
         }
       });
     }
 
-    port.onMessage.addListener(message => {
+    port.onMessage.addListener((message) => {
       try {
         let value;
 
@@ -267,7 +312,7 @@
             "box-sizing:border-box;border:2px solid #18a875;background:#18a87522;";
 
           document.documentElement.append(overlay);
-          send({event: "MODE", picking: true});
+          send({ event: "MODE", picking: true });
           value = true;
         } else if (message.op === "STOP") {
           stop();
@@ -276,13 +321,15 @@
           value = run(message.rules);
         } else if (message.op === "URL") {
           value = location.href;
+        } else if (message.op === "SELECTION") {
+          value = selectionCandidate();
         } else {
           throw Error("Unknown page request.");
         }
 
-        send({id: message.id, ok: true, value});
+        send({ id: message.id, ok: true, value });
       } catch (error) {
-        send({id: message.id, ok: false, error: error.message});
+        send({ id: message.id, ok: false, error: error.message });
       }
     });
 
