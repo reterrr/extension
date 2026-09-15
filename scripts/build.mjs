@@ -1,5 +1,5 @@
 import { build, context } from "esbuild";
-import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, rm, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -39,7 +39,7 @@ const configs = [
     ...common,
     entryPoints: {
       core: "src/shared/domain/core.js",
-      picker: "src/content/picker.js",
+      picker: "src/content/picker.ts",
     },
   },
 ];

@@ -1,3 +1,5 @@
+import type { ExecutableExtractionRule } from "./extraction";
+
 export type ObjectType = "project" | "recruitment" | "operator" | "nabor";
 
 export interface BurbotObject {
@@ -11,17 +13,14 @@ export interface BurbotObject {
   updatedAt?: string;
 }
 
-export interface BurbotRule {
-  id: string;
+export type BurbotRule = ExecutableExtractionRule & {
   objectId: string;
   field: string;
-  pageUrl: string;
-  selector?: string | null;
-  extraction: Record<string, unknown>;
   sampleValue?: string;
   target?: { kind: string; id: string };
+  transform?: { sample: string; value: unknown };
   createdAt?: string;
-}
+};
 
 export interface BurbotState {
   version: 1;
