@@ -1,0 +1,17 @@
+{
+  "name": "burbot-firefox-extension",
+  "version": "0.2.0",
+  "private": true,
+  "scripts": {
+    "test": "node --test tests/core.test.cjs tests/background.test.cjs",
+    "test:browser": "node --test tests/browser.test.cjs",
+    "lint": "web-ext lint --source-dir . --ignore-files 'node_modules/**' 'tests/**' 'test-artifacts/**' 'package*.json' '*.zip'",
+    "format": "prettier --write schema.js core.js background.js picker.js sidebar.js sidebar.css sidebar.html tests/*.cjs",
+    "build": "web-ext build --overwrite-dest --source-dir . --artifacts-dir web-ext-artifacts --ignore-files 'node_modules/**' 'tests/**' 'test-artifacts/**' 'package*.json' '*.zip'"
+  },
+  "devDependencies": {
+    "playwright": "1.62.1",
+    "prettier": "^3.8.0",
+    "web-ext": "^9.0.0"
+  }
+}

@@ -1,38 +1,73 @@
 <!doctype html>
 <html lang="en">
-<meta charset="utf-8">
-<title>Burbot demo</title>
-<style>
-body {
-  font:18px/1.7 system-ui;max-width:700px;
-  margin:70px auto;padding:20px;color:#243d30
-}
-button {padding:12px}
-strong {color:#246e51}
-</style>
-
-<h1 id="title">Transformacja cyfrowa MŚP</h1>
-<p>
-  Operator:
-  <a id="operator" href="https://example.org">Example operator</a>
-</p>
-<p id="deadline-line">Applications close on 21.10.2026. Apply now.</p>
-<p>Allocation: <strong id="amount">5 000 000 PLN</strong></p>
-<p><a href="mailto:office@example.org">office@example.org</a></p>
-
-<button id="change">Change deadline and allocation</button>
-
-<p>
-  Select only the date inside the sentence, assign it to Termin,
-  then change the values and preview re-extraction.
-</p>
-
-<script>
-document.getElementById("change").onclick = () => {
-  document.getElementById("deadline-line").textContent =
-    "Applications close on 15.11.2026. Apply now.";
-
-  document.getElementById("amount").textContent = "12 000 000 PLN";
-};
-</script>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Burbot extraction demo</title>
+    <style>
+      body {
+        font: 17px/1.7 system-ui;
+        max-width: 720px;
+        margin: 40px auto;
+        padding: 20px;
+        color: #243d30;
+      }
+      h1 {
+        line-height: 1.2;
+      }
+      h2 {
+        font-size: 20px;
+        margin-top: 30px;
+      }
+      button {
+        padding: 10px 14px;
+        cursor: pointer;
+      }
+      strong,
+      a {
+        color: #246e51;
+      }
+      .hint {
+        color: #65776a;
+        font-size: 14px;
+      }
+    </style>
+    <script defer src="demo.js"></script>
+  </head>
+  <body>
+    <p class="hint">
+      Highlight the heading → right-click → Create Burbot object → Project.
+    </p>
+    <h1 id="title">Generator Kompetencji 3.0</h1>
+    <p>Project type: <strong id="type">B2B</strong></p>
+    <p>Status: <strong id="status">Active</strong></p>
+    <p>Project number: <strong id="number">FEPK.07.09-IP.01-0001/26</strong></p>
+    <p id="deadline-line">Applications close on 21.10.2026. Apply now.</p>
+    <p>
+      <a id="announcements" href="https://example.org/announcements"
+        >Project announcements</a
+      >
+    </p>
+    <h2>Micro businesses</h2>
+    <p>Refund: <strong id="refund">80%</strong></p>
+    <p>Maximum amount: <strong id="amount">100 000 PLN</strong></p>
+    <p>Maximum per person: <strong id="per-person">5 000 PLN</strong></p>
+    <p>Own contribution: <strong id="contribution">Cash</strong></p>
+    <button id="change">Change deadline and maximum amount</button>
+    <p class="hint">
+      Capture only the date inside its sentence for End date. Add a Micro
+      variant in Funding and capture the refund and maximum amount. Change the
+      page values, then use Preview re-extraction in Burbot.
+    </p>
+    <h2>Documents</h2>
+    <p>
+      Formularz zgłoszeniowy MSP: <strong id="required">Required</strong>,
+      auto-fill.
+    </p>
+    <p>Odpis KRS / CEIDG: <strong>Optional</strong>.</p>
+    <h2>Create more objects from this page</h2>
+    <p id="operator">Wojewódzki Urząd Pracy w Rzeszowie</p>
+    <p>NIP: <strong id="nip">813-10-00-001</strong></p>
+    <p id="recruitment">Nabór 3/2026</p>
+  </body>
 </html>

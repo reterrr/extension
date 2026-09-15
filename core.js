@@ -1,7 +1,11 @@
 (() => {
-  const clean = value => String(value ?? "").replace(/\s+/g, " ").trim();
-  const own = (object, key) => Object.prototype.hasOwnProperty.call(object, key);
-  const empty = () => ({version: 1, revision: 0, objects: [], rules: []});
+  const clean = (value) =>
+    String(value ?? "")
+      .replace(/\s+/g, " ")
+      .trim();
+  const own = (object, key) =>
+    Object.prototype.hasOwnProperty.call(object, key);
+  const empty = () => ({ version: 1, revision: 0, objects: [], rules: [] });
 
   function coerce(raw, type) {
     const text = clean(raw);
@@ -20,14 +24,15 @@
       const sign = value.startsWith("-") ? "-" : "";
       value = value.replace(/^[+-]/, "");
 
-      const integer = part => {
+      const integer = (part) => {
         if (/^\d+$/.test(part)) return part;
         if (/^\d{1,3}( \d{3})+$/.test(part)) return part.replace(/ /g, "");
         throw Error("Use a number such as 5 000 000 or 1 234,56 PLN.");
       };
 
       if (value.includes(",") && value.includes(".")) {
-        const decimal = value.lastIndexOf(",") > value.lastIndexOf(".") ? "," : ".";
+        const decimal =
+          value.lastIndexOf(",") > value.lastIndexOf(".") ? "," : ".";
         const group = decimal === "," ? "." : ",";
         const pieces = value.split(decimal);
 
@@ -35,8 +40,10 @@
           throw Error("Invalid number.");
 
         const groups = pieces[0].split(group);
-        if (!/^\d{1,3}$/.test(groups[0]) ||
-            groups.slice(1).some(g => !/^\d{3}$/.test(g)))
+        if (
+          !/^\d{1,3}$/.test(groups[0]) ||
+          groups.slice(1).some((g) => !/^\d{3}$/.test(g))
+        )
           throw Error("Invalid thousands grouping.");
 
         value = groups.join("") + "." + pieces[1];
@@ -45,17 +52,20 @@
         const parts = value.split(separator);
 
         if (parts.length > 2) {
-          if (!/^\d{1,3}$/.test(parts[0]) ||
-              parts.slice(1).some(g => !/^\d{3}$/.test(g)))
+          if (
+            !/^\d{1,3}$/.test(parts[0]) ||
+            parts.slice(1).some((g) => !/^\d{3}$/.test(g))
+          )
             throw Error("Invalid thousands grouping.");
 
           value = parts.join("");
         } else if (parts.length === 2) {
-          if (!/^\d+$/.test(parts[1]))
-            throw Error("Invalid decimal number.");
+          if (!/^\d+$/.test(parts[1])) throw Error("Invalid decimal number.");
 
           if (/^\d{1,3}$/.test(parts[0]) && parts[1].length === 3)
-            throw Error("Ambiguous number. Use spaces for thousands, e.g. 1 234.");
+            throw Error(
+              "Ambiguous number. Use spaces for thousands, e.g. 1 234.",
+            );
 
           value = integer(parts[0]) + "." + parts[1];
         } else {
@@ -64,26 +74,35 @@
       }
 
       const number = Number(sign + value);
-      if (!Number.isFinite(number) || Math.abs(number) > Number.MAX_SAFE_INTEGER)
+      if (
+        !Number.isFinite(number) ||
+        Math.abs(number) > Number.MAX_SAFE_INTEGER
+      )
         throw Error("Number is outside the supported range.");
 
       return number;
     }
 
     if (type === "date") {
-      const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(text)
-        || /^(\d{2})[./](\d{2})[./](\d{4})$/.exec(text);
+      const match =
+        /^(\d{4})-(\d{2})-(\d{2})$/.exec(text) ||
+        /^(\d{2})[./](\d{2})[./](\d{4})$/.exec(text);
 
       if (!match) throw Error("Use YYYY-MM-DD or DD.MM.YYYY.");
 
-      const [year, month, day] = match[1].length === 4
-        ? match.slice(1).map(Number)
-        : [Number(match[3]), Number(match[2]), Number(match[1])];
+      const [year, month, day] =
+        match[1].length === 4
+          ? match.slice(1).map(Number)
+          : [Number(match[3]), Number(match[2]), Number(match[1])];
 
       const date = new Date(Date.UTC(year, month - 1, day));
 
-      if (year < 1000 || date.getUTCFullYear() !== year ||
-          date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day)
+      if (
+        year < 1000 ||
+        date.getUTCFullYear() !== year ||
+        date.getUTCMonth() !== month - 1 ||
+        date.getUTCDate() !== day
+      )
         throw Error("Invalid calendar date.");
 
       return date.toISOString().slice(0, 10);
@@ -111,9 +130,9 @@
 
   function selectedText(text, quote) {
     text = clean(text);
-    const {prefix, suffix} = quote;
+    const { prefix, suffix } = quote;
     const starts = prefix
-      ? occurrences(text, prefix).map(i => i + prefix.length)
+      ? occurrences(text, prefix).map((i) => i + prefix.length)
       : [0];
     const ends = suffix ? occurrences(text, suffix) : [text.length];
     const pairs = [];
@@ -125,7 +144,9 @@
     }
 
     if (pairs.length !== 1)
-      throw Error("Selection context changed or is ambiguous. Select it again.");
+      throw Error(
+        "Selection context changed or is ambiguous. Select it again.",
+      );
 
     const [start, end] = pairs[0];
     const result = clean(text.slice(start, end));
@@ -135,8 +156,7 @@
   }
 
   function readElement(element, extraction) {
-    if (extraction.type === "text")
-      return clean(element.textContent);
+    if (extraction.type === "text") return clean(element.textContent);
 
     if (extraction.type === "selection")
       return selectedText(element.textContent, extraction.quote);
@@ -144,7 +164,9 @@
     if (extraction.type === "attribute") {
       const attr = extraction.attribute;
 
-      if (!["href", "src", "datetime", "title", "alt", "content"].includes(attr))
+      if (
+        !["href", "src", "datetime", "title", "alt", "content"].includes(attr)
+      )
         throw Error("Unsupported attribute.");
 
       const target = attr === "href" ? element.closest("a[href]") : element;
@@ -161,124 +183,418 @@
     throw Error("Unsupported extraction method.");
   }
 
-  function fieldDefinition(object, field) {
-    const schema = globalThis.BurbotSchema;
+  const hasValue = (value) =>
+    value !== undefined && value !== null && value !== "";
+  const displayName = (object) =>
+    String(
+      object.values?.[globalThis.BurbotSchema[object.type]?.primary] ||
+        object.label ||
+        "Untitled",
+    );
+  const targetKey = (target) =>
+    target?.kind && target.kind !== "object"
+      ? target.kind + ":" + target.id
+      : "object";
+  const matches = (rule, objectId, field, target) =>
+    rule.objectId === objectId &&
+    rule.field === field &&
+    targetKey(rule.target) === targetKey(target);
 
-    if (!own(schema, object.type) || !own(schema[object.type].fields, field))
-      throw Error("Unknown field.");
+  function coerceField(raw, definition, state) {
+    const text = clean(raw);
+    if (!text) throw Error("Choose or enter a value.");
+    if (text.length > 100000) throw Error("Value is too long.");
+    const type = definition.type;
+    if (type === "enum") {
+      const entry = Object.entries(definition.options).find(
+        ([key, label]) =>
+          key.toLowerCase() === text.toLowerCase() ||
+          label.toLowerCase() === text.toLowerCase(),
+      );
+      if (!entry) throw Error("Choose one of the available options.");
+      return definition.numeric ? Number(entry[0]) : entry[0];
+    }
+    if (type === "boolean") {
+      if (/^(true|yes|tak|1|auto|auto-fill)$/i.test(text)) return true;
+      if (/^(false|no|nie|0)$/i.test(text)) return false;
+      throw Error("Choose Yes or No.");
+    }
+    if (type === "reference") {
+      const objects = state.objects.filter(
+        (o) => o.type === definition.references,
+      );
+      const exactId = objects.find((o) => o.id === text);
+      if (exactId) return exactId.id;
+      const matches = objects.filter(
+        (o) => displayName(o).toLowerCase() === text.toLowerCase(),
+      );
+      if (matches.length !== 1)
+        throw Error(
+          "Choose an existing project. Create it from the page first if needed.",
+        );
+      return matches[0].id;
+    }
+    if (type === "nip") {
+      const nip = text.replace(/[\s-]/g, "");
+      if (!/^\d{10}$/.test(nip)) throw Error("NIP must contain 10 digits.");
+      return nip;
+    }
+    if (["money", "percentage", "integer"].includes(type)) {
+      const currency = /(PLN|EUR|USD|zł|€|\$)\s*$/i.exec(text);
+      if (currency && (type !== "money" || !/^(PLN|zł)$/i.test(currency[1])))
+        throw Error(
+          type === "money"
+            ? "Enter an amount in PLN. Currency conversion is not automatic."
+            : "Enter a value without a currency.",
+        );
+      const value = coerce(
+        type === "percentage" ? text.replace(/\s*%$/, "") : text,
+        "number",
+      );
+      if (type === "integer" && !Number.isSafeInteger(value))
+        throw Error("Enter a whole number.");
+      const min = definition.min ?? 0;
+      const max =
+        definition.max ??
+        (type === "percentage" ? 100 : Number.MAX_SAFE_INTEGER);
+      if (value < min || value > max)
+        throw Error("Value must be between " + min + " and " + max + ".");
+      return value;
+    }
+    return coerce(raw, type);
+  }
 
-    return schema[object.type].fields[field];
+  function formatValue(value, definition, state) {
+    if (!hasValue(value)) return "Not captured";
+    if (definition.type === "reference") {
+      const object = state.objects.find((o) => o.id === value);
+      return object ? displayName(object) : "Project unavailable";
+    }
+    if (definition.options?.[value]) return definition.options[value];
+    if (definition.labels?.[value]) return definition.labels[value];
+    if (definition.type === "boolean") return value ? "Yes" : "No";
+    if (definition.type === "date" && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+      return new Intl.DateTimeFormat("en-GB", {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+        timeZone: "UTC",
+      }).format(new Date(value));
+    }
+    if (
+      ["number", "money", "percentage", "integer"].includes(definition.type) &&
+      Number.isFinite(value)
+    ) {
+      const formatted = new Intl.NumberFormat("pl-PL", {
+        maximumFractionDigits: 2,
+      }).format(value);
+      return (
+        formatted +
+        (definition.type === "money"
+          ? " PLN"
+          : definition.type === "percentage"
+            ? "%"
+            : "")
+      );
+    }
+    return String(value);
+  }
+
+  function fieldContext(state, object, field, target, createDocument) {
+    let fields = globalThis.BurbotSchema[object.type]?.fields,
+      values = object.values;
+    if (target && target.kind !== "object") {
+      if (!globalThis.BurbotSchema[object.type]?.configuration)
+        throw Error("This object has no business configuration.");
+      if (target.kind === "funding") {
+        values = (state.financingRules || []).find(
+          (r) => r.id === target.id && r.objectId === object.id,
+        );
+        fields = globalThis.BurbotFunding.fields;
+        if (!values) throw Error("Funding variant no longer exists.");
+      } else if (target.kind === "document") {
+        if (
+          !globalThis.BurbotDocuments.catalog.some((d) => d.key === target.id)
+        )
+          throw Error("Unknown document.");
+        values = (state.documentRequirements || []).find(
+          (r) => r.document_type_key === target.id && r.objectId === object.id,
+        );
+        if (!values && createDocument) {
+          values = {
+            id: createDocument(),
+            objectId: object.id,
+            document_type_key: target.id,
+          };
+          (state.documentRequirements ||= []).push(values);
+        }
+        values ||= {};
+        fields = globalThis.BurbotDocuments.fields;
+      } else throw Error("Unknown field target.");
+    }
+    if (!fields || !own(fields, field)) throw Error("Unknown field.");
+    return { values, definition: fields[field] };
+  }
+
+  function validateCandidate(candidate) {
+    if (
+      !candidate ||
+      typeof candidate.raw !== "string" ||
+      !clean(candidate.raw) ||
+      candidate.raw.length > 100000
+    )
+      throw Error("Invalid captured value.");
+    coerce(candidate.pageUrl, "url");
+    const method = candidate.extraction;
+    if (
+      !method ||
+      !["text", "selection", "attribute", "pageUrl"].includes(method.type)
+    )
+      throw Error("Invalid extraction method.");
+    if (
+      method.type !== "pageUrl" &&
+      (typeof candidate.selector !== "string" ||
+        !candidate.selector ||
+        candidate.selector.length > 10000)
+    )
+      throw Error("Invalid selector.");
+    if (
+      method.type === "attribute" &&
+      !["href", "src", "datetime", "title", "alt", "content"].includes(
+        method.attribute,
+      )
+    )
+      throw Error("Invalid attribute.");
+    if (
+      method.type === "selection" &&
+      (!method.quote ||
+        ["exact", "prefix", "suffix"].some(
+          (k) => typeof method.quote[k] !== "string",
+        ))
+    )
+      throw Error("Invalid selection context.");
+  }
+
+  function ruleValue(state, object, rule, raw) {
+    const input = rule.transform?.sample === raw ? rule.transform.value : raw;
+    return coerceField(
+      input,
+      fieldContext(state, object, rule.field, rule.target).definition,
+      state,
+    );
+  }
+
+  function assign(state, object, message, uuid, now) {
+    validateCandidate(message.candidate);
+    const candidate = message.candidate;
+    const { values, definition } = fieldContext(
+      state,
+      object,
+      message.field,
+      message.target,
+      uuid,
+    );
+    const input = message.value ?? candidate.raw;
+    values[message.field] = coerceField(input, definition, state);
+    state.rules = state.rules.filter(
+      (r) => !matches(r, object.id, message.field, message.target),
+    );
+    const rule = {
+      id: uuid(),
+      objectId: object.id,
+      field: message.field,
+      pageUrl: candidate.pageUrl,
+      selector: candidate.selector,
+      extraction: candidate.extraction,
+      sampleValue: candidate.raw,
+      createdAt: now,
+    };
+    if (message.target?.kind && message.target.kind !== "object")
+      rule.target = message.target;
+    if (String(input) !== candidate.raw)
+      rule.transform = { sample: candidate.raw, value: input };
+    state.rules.push(rule);
+    if (!message.target || message.target.kind === "object") {
+      delete object.manualFields?.[message.field];
+      if (message.field === globalThis.BurbotSchema[object.type].primary)
+        object.label = String(values[message.field]);
+    }
+    object.updatedAt = now;
   }
 
   function mutate(original, message, uuid, now) {
     if (message.expectedRevision !== original.revision)
-      throw Error("Data changed in another panel. Review the refreshed values and retry.");
-
+      throw Error(
+        "Data changed in another panel. Review the refreshed values and retry.",
+      );
     const state = JSON.parse(JSON.stringify(original));
-
-    if (message.op === "CREATE") {
-      if (!own(globalThis.BurbotSchema, message.objectType))
+    if (message.op === "CREATE_FROM_SELECTION") {
+      if (!["project", "recruitment", "operator"].includes(message.objectType))
         throw Error("Unknown object type.");
-
-      const label = clean(message.label);
-
-      if (!label || label.length > 200)
-        throw Error("Enter a name (1–200 characters).");
-
-      state.objects.push({
+      const initial = clean(message.initialValue);
+      if (!initial || initial.length > 2000)
+        throw Error("Select an object name (1–2000 characters).");
+      const sourceUrl = coerce(message.sourceUrl, "url");
+      const schema = globalThis.BurbotSchema[message.objectType];
+      const object = {
         id: uuid(),
         type: message.objectType,
-        label,
+        label: initial,
         values: {},
+        sourceUrl,
         createdAt: now,
-        updatedAt: now
-      });
-    } else {
-      const object = state.objects.find(o => o.id === message.objectId);
-      if (!object) throw Error("Choose an object.");
-
-      if (message.op === "DELETE") {
-        state.objects = state.objects.filter(o => o.id !== object.id);
-        state.rules = state.rules.filter(r => r.objectId !== object.id);
-      } else if (message.op === "ASSIGN") {
-        const field = fieldDefinition(object, message.field);
-        const candidate = message.candidate;
-
-        if (!candidate || typeof candidate.raw !== "string" ||
-            candidate.raw.length > 100000)
-          throw Error("Invalid captured value.");
-
-        coerce(candidate.pageUrl, "url");
-
-        const method = candidate.extraction;
-
-        if (!method ||
-            !["text", "selection", "attribute", "pageUrl"].includes(method.type))
-          throw Error("Invalid extraction method.");
-
-        if (method.type !== "pageUrl" &&
-            (typeof candidate.selector !== "string" ||
-             !candidate.selector || candidate.selector.length > 10000))
-          throw Error("Invalid selector.");
-
-        if (method.type === "attribute" &&
-            !["href", "src", "datetime", "title", "alt", "content"].includes(method.attribute))
-          throw Error("Invalid attribute.");
-
-        if (method.type === "selection" &&
-            (!method.quote ||
-             ["exact", "prefix", "suffix"].some(k => typeof method.quote[k] !== "string")))
-          throw Error("Invalid selection context.");
-
-        object.values[message.field] = coerce(candidate.raw, field.type);
-
-        state.rules = state.rules.filter(
-          r => !(r.objectId === object.id && r.field === message.field)
+        updatedAt: now,
+      };
+      for (const [key, definition] of Object.entries(schema.fields)) {
+        if (own(definition, "default")) object.values[key] = definition.default;
+      }
+      object.values[schema.primary] = initial;
+      state.objects.push(object);
+      if (message.candidate) {
+        if (
+          clean(message.candidate.raw) !== initial ||
+          message.candidate.pageUrl !== sourceUrl
+        )
+          throw Error("The page selection changed. Select the name again.");
+        assign(
+          state,
+          object,
+          { field: schema.primary, candidate: message.candidate },
+          uuid,
+          now,
         );
-
-        state.rules.push({
-          id: uuid(),
-          objectId: object.id,
-          field: message.field,
-          pageUrl: candidate.pageUrl,
-          selector: candidate.selector,
-          extraction: method,
-          sampleValue: candidate.raw,
-          createdAt: now
-        });
-
+      } else
+        object.creationNote =
+          "Value saved from your selection. Select " +
+          schema.fields[schema.primary].label +
+          " to teach its extraction rule.";
+    } else {
+      const object = state.objects.find((o) => o.id === message.objectId);
+      if (!object) throw Error("Choose an object.");
+      if (message.op === "DELETE") {
+        state.objects = state.objects.filter((o) => o.id !== object.id);
+        state.rules = state.rules.filter((r) => r.objectId !== object.id);
+        if (state.financingRules)
+          state.financingRules = state.financingRules.filter(
+            (r) => r.objectId !== object.id,
+          );
+        if (state.documentRequirements)
+          state.documentRequirements = state.documentRequirements.filter(
+            (r) => r.objectId !== object.id,
+          );
+        // Do not silently remove other objects' references; their UI shows an unavailable project.
+      } else if (message.op === "ASSIGN") {
+        assign(state, object, message, uuid, now);
+      } else if (message.op === "EDIT") {
+        const { values, definition } = fieldContext(
+          state,
+          object,
+          message.field,
+          message.target,
+          uuid,
+        );
+        const value = coerceField(message.value, definition, state);
+        values[message.field] = value;
+        const rule = state.rules.find((r) =>
+          matches(r, object.id, message.field, message.target),
+        );
+        if (rule)
+          rule.transform = {
+            sample: rule.lastSampleValue ?? rule.sampleValue,
+            value: message.value,
+          };
+        else if (!message.target || message.target.kind === "object")
+          (object.manualFields ||= {})[message.field] = true;
+        if (
+          (!message.target || message.target.kind === "object") &&
+          message.field === globalThis.BurbotSchema[object.type].primary
+        )
+          object.label = String(value);
         object.updatedAt = now;
       } else if (message.op === "APPLY") {
-        if (!Array.isArray(message.results))
-          throw Error("Invalid preview.");
-
+        if (!Array.isArray(message.results)) throw Error("Invalid preview.");
         for (const result of message.results) {
           const rule = state.rules.find(
-            r => r.id === result.ruleId && r.objectId === object.id
+            (r) => r.id === result.ruleId && r.objectId === object.id,
           );
-
-          if (!rule)
-            throw Error("An extraction rule changed. Preview again.");
-
-          object.values[rule.field] = coerce(
-            result.raw,
-            fieldDefinition(object, rule.field).type
-          );
-
+          if (!rule) throw Error("An extraction rule changed. Preview again.");
+          const value = ruleValue(state, object, rule, result.raw);
+          fieldContext(state, object, rule.field, rule.target, uuid).values[
+            rule.field
+          ] = value;
+          if (
+            targetKey(rule.target) === "object" &&
+            rule.field === globalThis.BurbotSchema[object.type].primary
+          )
+            object.label = String(value);
+          rule.lastSampleValue = result.raw;
           rule.lastExtractedAt = now;
         }
-
         object.updatedAt = now;
-      } else {
-        throw Error("Unknown operation.");
-      }
+      } else if (message.op === "ADD_FUNDING") {
+        if (
+          !globalThis.BurbotSchema[object.type]?.configuration ||
+          !own(globalThis.BurbotFunding.sizes, message.companySize)
+        )
+          throw Error("Unknown funding group.");
+        const rows = (state.financingRules ||= []);
+        const variant =
+          Math.max(
+            0,
+            ...rows
+              .filter(
+                (r) =>
+                  r.objectId === object.id &&
+                  r.company_size === message.companySize,
+              )
+              .map((r) => r.variant_no),
+          ) + 1;
+        rows.push({
+          id: uuid(),
+          objectId: object.id,
+          company_size: message.companySize,
+          variant_no: variant,
+          own_contribution_form: "UNSPECIFIED",
+        });
+        object.updatedAt = now;
+      } else if (message.op === "REMOVE_FUNDING") {
+        fieldContext(state, object, "refund_percent", {
+          kind: "funding",
+          id: message.variantId,
+        });
+        state.financingRules = state.financingRules.filter(
+          (r) => !(r.id === message.variantId && r.objectId === object.id),
+        );
+        state.rules = state.rules.filter(
+          (r) =>
+            !(
+              r.objectId === object.id &&
+              r.target?.kind === "funding" &&
+              r.target.id === message.variantId
+            ),
+        );
+        object.updatedAt = now;
+      } else throw Error("Unknown operation.");
     }
-
     state.revision++;
     return state;
   }
 
   globalThis.BurbotCore = {
-    clean, empty, coerce, occurrences, selectedText, readElement, mutate
+    clean,
+    empty,
+    coerce,
+    occurrences,
+    selectedText,
+    readElement,
+    mutate,
+    coerceField,
+    formatValue,
+    fieldContext,
+    hasValue,
+    displayName,
+    targetKey,
+    matches,
+    ruleValue,
   };
 })();

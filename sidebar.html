@@ -1,96 +1,125 @@
 <!doctype html>
 <html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Burbot</title>
-  <link rel="stylesheet" href="sidebar.css">
-  <script defer src="schema.js"></script>
-  <script defer src="core.js"></script>
-  <script defer src="sidebar.js"></script>
-</head>
-<body>
-<header>
-  <strong>Burbot<span> / picker</span></strong>
-  <small>LOCAL</small>
-</header>
-<main>
-  <p id="connection" class="hint">
-    Click the Burbot toolbar button to connect a page.
-  </p>
-
-  <section>
-    <label for="object-type">Object type</label>
-    <select id="object-type"></select>
-
-    <form id="create-form" class="row">
-      <input id="object-name" aria-label="New object name"
-             placeholder="New object name" maxlength="200" required>
-      <button type="submit">+ Create</button>
-    </form>
-
-    <label for="object-list">Current object</label>
-    <select id="object-list">
-      <option value="">Create an object first</option>
-    </select>
-  </section>
-
-  <section>
-    <div class="section-title">
-      <h2>Fields</h2>
-      <span id="progress"></span>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Burbot workspace</title>
+    <link rel="stylesheet" href="sidebar.css" />
+    <script defer src="schema.js"></script>
+    <script defer src="core.js"></script>
+    <script defer src="sidebar.js"></script>
+  </head>
+  <body>
+    <header class="brandbar">
+      <span class="brand">Burbot<span class="brand-dot">.</span></span
+      ><span class="local-badge">EXTRACTION WORKSPACE</span>
+    </header>
+    <div class="connection-bar">
+      <span id="connection">Connect a webpage to begin</span
+      ><button id="connect" class="text-button">Connect</button>
     </div>
-    <div id="fields"></div>
-  </section>
-
-  <section>
-    <div class="section-title">
-      <h2>Capture</h2>
-      <button id="pick" disabled>Pick element</button>
+    <main>
+      <section id="empty" class="empty-state">
+        <span class="eyebrow">START ON THE PAGE</span>
+        <h1>See it. Select it.<br />Make it structured.</h1>
+        <p>Highlight a project, recruitment or operator name on a webpage.</p>
+        <p>
+          <strong>Right-click → Create Burbot object</strong><br />Choose its
+          type. We’ll open it here, ready to capture.
+        </p>
+      </section>
+      <section id="workspace" hidden>
+        <div class="object-header">
+          <span id="object-kind" class="eyebrow"></span>
+          <h1 id="object-title"></h1>
+          <div class="header-actions">
+            <details id="switcher">
+              <summary>Change object <span aria-hidden="true">⌄</span></summary>
+              <div id="object-options" class="popover"></div>
+            </details>
+            <details id="more">
+              <summary aria-label="Object actions">•••</summary>
+              <div class="popover menu">
+                <button id="export">Export JSON</button
+                ><button id="delete" class="danger">Delete object</button>
+              </div>
+            </details>
+          </div>
+          <div class="progress-label">
+            <span id="progress"></span><span id="rule-count"></span>
+          </div>
+          <progress
+            id="progress-bar"
+            value="0"
+            max="1"
+            aria-label="Fields completed"
+          ></progress>
+        </div>
+        <div id="fields"></div>
+        <section id="funding-section" class="business-section" hidden>
+          <h2>Funding</h2>
+          <div id="funding"></div>
+        </section>
+        <section id="documents-section" class="business-section" hidden>
+          <details id="documents-panel">
+            <summary class="section-summary">
+              <span
+                ><strong>Documents</strong
+                ><small id="document-count"></small></span
+              ><span aria-hidden="true">⌄</span>
+            </summary>
+            <div id="documents"></div>
+          </details>
+        </section>
+        <section class="review-section">
+          <button id="preview" class="text-button" disabled>
+            ↻ Preview re-extraction
+          </button>
+          <div id="results" hidden>
+            <div id="result-list"></div>
+            <button id="apply" class="primary" disabled>
+              Apply successful results
+            </button>
+          </div>
+        </section>
+      </section>
+    </main>
+    <p id="notice" role="status" aria-live="polite"></p>
+    <div id="capture-hint" class="capture-hint" hidden>
+      Select a field to capture a value from this page.
     </div>
-
-    <p class="hint">
-      Select text on the connected page, or pick an element.
-      Press Esc to cancel the picker.
-    </p>
-
-    <button id="page-url" disabled>Use page URL</button>
-
-    <div id="capture" hidden>
-      <label for="method">Read as</label>
-      <select id="method"></select>
-      <pre id="sample"></pre>
-      <details>
-        <summary>Locator</summary>
-        <code id="selector"></code>
-      </details>
+    <section
+      id="capture-area"
+      class="capture-area"
+      hidden
+      aria-label="Active field capture"
+    >
+      <div class="capture-heading">
+        <span
+          ><small>CAPTURING</small><strong id="active-label"></strong
+          ><span id="active-context" class="muted"></span></span
+        ><button id="deselect" class="icon-button" aria-label="Deselect field">
+          ×
+        </button>
+      </div>
+      <div class="capture-tools">
+        <button id="pick">Pick element</button
+        ><button id="selected-text">Use selected text</button
+        ><button id="page-url">Use page URL</button>
+      </div>
+      <div id="capture-source" hidden>
+        <label for="method">Read from page</label
+        ><select id="method"></select>
+        <div id="sample" class="source-sample"></div>
+      </div>
+      <label id="value-label" for="edit-value">Value</label>
+      <div id="value-control"></div>
       <p id="converted" class="hint"></p>
-      <button id="assign" class="primary" disabled>Assign value</button>
-    </div>
-  </section>
-
-  <section>
-    <button id="preview" disabled>Preview re-extraction</button>
-
-    <div id="results" hidden>
-      <div id="result-list"></div>
-      <button id="apply" class="primary" disabled>
-        Apply successful results
-      </button>
-    </div>
-
-    <details id="rule-details" hidden>
-      <summary>Saved rule for this field</summary>
-      <pre id="rule"></pre>
-    </details>
-  </section>
-
-  <p id="notice" role="status" aria-live="polite"></p>
-
-  <footer>
-    <button id="export">Export JSON</button>
-    <button id="delete" class="danger" disabled>Delete object</button>
-  </footer>
-</main>
-</body>
+      <button id="save" class="primary">Save & next</button>
+      <details id="rule-details">
+        <summary>Extraction details</summary>
+        <pre id="rule"></pre>
+      </details>
+    </section>
+  </body>
 </html>

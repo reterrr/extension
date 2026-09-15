@@ -1,30 +1,20 @@
 {
   "manifest_version": 3,
   "name": "Burbot Picker",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Build local datasets from selected page content.",
   "browser_specific_settings": {
     "gecko": {
       "id": "burbot-picker@local.example",
       "strict_min_version": "140.0",
       "data_collection_permissions": {
-        "required": [
-          "none"
-        ]
+        "required": ["none"]
       }
     }
   },
-  "permissions": [
-    "storage",
-    "activeTab",
-    "scripting"
-  ],
+  "permissions": ["storage", "activeTab", "scripting", "contextMenus"],
   "background": {
-    "scripts": [
-      "schema.js",
-      "core.js",
-      "background.js"
-    ]
+    "scripts": ["schema.js", "core.js", "background.js"]
   },
   "action": {
     "default_title": "Open Burbot and connect this tab"
