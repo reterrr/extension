@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Burbot</title>
+  <link rel="stylesheet" href="sidebar.css">
+  <script defer src="schema.js"></script>
+  <script defer src="core.js"></script>
+  <script defer src="sidebar.js"></script>
+</head>
+<body>
+<header>
+  <strong>Burbot<span> / picker</span></strong>
+  <small>LOCAL</small>
+</header>
+<main>
+  <p id="connection" class="hint">
+    Click the Burbot toolbar button to connect a page.
+  </p>
+
+  <section>
+    <label for="object-type">Object type</label>
+    <select id="object-type"></select>
+
+    <form id="create-form" class="row">
+      <input id="object-name" aria-label="New object name"
+             placeholder="New object name" maxlength="200" required>
+      <button type="submit">+ Create</button>
+    </form>
+
+    <label for="object-list">Current object</label>
+    <select id="object-list">
+      <option value="">Create an object first</option>
+    </select>
+  </section>
+
+  <section>
+    <div class="section-title">
+      <h2>Fields</h2>
+      <span id="progress"></span>
+    </div>
+    <div id="fields"></div>
+  </section>
+
+  <section>
+    <div class="section-title">
+      <h2>Capture</h2>
+      <button id="pick" disabled>Pick element</button>
+    </div>
+
+    <p class="hint">
+      Select text on the connected page, or pick an element.
+      Press Esc to cancel the picker.
+    </p>
+
+    <button id="page-url" disabled>Use page URL</button>
+
+    <div id="capture" hidden>
+      <label for="method">Read as</label>
+      <select id="method"></select>
+      <pre id="sample"></pre>
+      <details>
+        <summary>Locator</summary>
+        <code id="selector"></code>
+      </details>
+      <p id="converted" class="hint"></p>
+      <button id="assign" class="primary" disabled>Assign value</button>
+    </div>
+  </section>
+
+  <section>
+    <button id="preview" disabled>Preview re-extraction</button>
+
+    <div id="results" hidden>
+      <div id="result-list"></div>
+      <button id="apply" class="primary" disabled>
+        Apply successful results
+      </button>
+    </div>
+
+    <details id="rule-details" hidden>
+      <summary>Saved rule for this field</summary>
+      <pre id="rule"></pre>
+    </details>
+  </section>
+
+  <p id="notice" role="status" aria-live="polite"></p>
+
+  <footer>
+    <button id="export">Export JSON</button>
+    <button id="delete" class="danger" disabled>Delete object</button>
+  </footer>
+</main>
+</body>
+</html>

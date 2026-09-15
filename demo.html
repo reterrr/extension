@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Burbot demo</title>
+<style>
+body {
+  font:18px/1.7 system-ui;max-width:700px;
+  margin:70px auto;padding:20px;color:#243d30
+}
+button {padding:12px}
+strong {color:#246e51}
+</style>
+
+<h1 id="title">Transformacja cyfrowa MŚP</h1>
+<p>
+  Operator:
+  <a id="operator" href="https://example.org">Example operator</a>
+</p>
+<p id="deadline-line">Applications close on 21.10.2026. Apply now.</p>
+<p>Allocation: <strong id="amount">5 000 000 PLN</strong></p>
+<p><a href="mailto:office@example.org">office@example.org</a></p>
+
+<button id="change">Change deadline and allocation</button>
+
+<p>
+  Select only the date inside the sentence, assign it to Termin,
+  then change the values and preview re-extraction.
+</p>
+
+<script>
+document.getElementById("change").onclick = () => {
+  document.getElementById("deadline-line").textContent =
+    "Applications close on 15.11.2026. Apply now.";
+
+  document.getElementById("amount").textContent = "12 000 000 PLN";
+};
+</script>
+</html>

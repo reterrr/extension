@@ -1,0 +1,72 @@
+:root {
+  font:14px/1.5 system-ui,sans-serif;
+  color:#22372e;
+  background:#f5f7f3;
+  color-scheme:light;
+}
+* { box-sizing:border-box }
+body { margin:0;min-width:260px }
+header {
+  display:flex;align-items:center;justify-content:space-between;
+  padding:20px 16px;border-bottom:1px solid #dce4dd;
+}
+header strong { font-size:21px;letter-spacing:-.7px }
+header span { font-weight:400;color:#839188 }
+header small {
+  font-size:10px;letter-spacing:1.5px;background:#e0eadf;
+  border-radius:12px;padding:3px 8px;
+}
+main { padding:0 14px 20px }
+section { border-bottom:1px solid #dce4dd;padding:16px 0 }
+label { display:block;font-size:12px;font-weight:600;margin:8px 0 5px }
+input,select,button {
+  font:inherit;border:1px solid #cbd7cc;border-radius:7px;
+  padding:9px;background:white;color:inherit;
+}
+input,select { width:100%;min-width:0 }
+button { cursor:pointer }
+button:hover { border-color:#29634f;background:#edf4ec }
+button:focus-visible,input:focus-visible,select:focus-visible {
+  outline:2px solid #27825e;outline-offset:2px;
+}
+button:disabled { opacity:.45;cursor:default }
+.row { display:flex;gap:7px;margin-top:8px }
+.row input { flex:1 }
+.row button { white-space:nowrap }
+.section-title,footer {
+  display:flex;align-items:center;justify-content:space-between;gap:8px;
+}
+h2 { font-size:13px;margin:0 }
+.hint,#progress { color:#697a6e;font-size:12px }
+.hint { margin:10px 0 }
+.field {
+  display:block;text-align:left;width:100%;margin-top:7px;padding:10px 12px;
+}
+.field.selected { border-color:#29634f;box-shadow:inset 3px 0 #29634f }
+.field b,.field span { display:block }
+.field b { font-size:12px }
+.field span {
+  font-size:13px;white-space:pre-wrap;overflow-wrap:anywhere;color:#66766b;
+}
+.primary {
+  background:#29634f;color:white;border-color:#29634f;width:100%;margin-top:8px;
+}
+.primary:hover { background:#204e3e;color:white }
+pre,code {
+  font:12px/1.5 ui-monospace,monospace;white-space:pre-wrap;overflow-wrap:anywhere;
+}
+pre {
+  background:#eaf0e7;border-radius:6px;padding:10px;max-height:220px;overflow:auto;
+}
+details { margin-top:10px;font-size:12px }
+summary { cursor:pointer;color:#566e5d }
+#notice { min-height:22px;font-size:12px }
+#notice.error { color:#a42d34 }
+.result {
+  font-size:12px;border-left:2px solid #a5bca9;padding:6px 10px;
+  margin:10px 0;white-space:pre-wrap;overflow-wrap:anywhere;
+}
+.result.error { border-color:#bd7474 }
+.danger { color:#a42d34 }
+footer { margin-top:14px }
+[hidden] { display:none!important }
