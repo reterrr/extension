@@ -11,15 +11,15 @@ import type {
   LegacyStoredObject,
 } from "../types/legacy-storage";
 
-interface ApprovalReferencePatch {
+export interface ImportApprovalReferencePatch {
   field: string;
-  targetImportKey: string;
+  targetObjectId: string;
 }
 
 export interface ImportApprovalPlan {
   document: unknown;
   selectedImportKey: string;
-  referencePatches: ApprovalReferencePatch[];
+  referencePatches: ImportApprovalReferencePatch[];
   temporaryDependencyImportKeys: string[];
 }
 
@@ -209,7 +209,9 @@ function portableData(
     const definition = fields[field];
     if (definition?.type === "reference" && typeof value === "string") {
       const target = session.previewState.objects.find((entry) => entry.id === value);
-      if (!target?.importKey) throw new Error(`Could not resolve imported reference ${field}.`);
+      if (!target?.importKey) {
+        throw new Error(`Could not resolve imported reference ${field}.`);
+      }
       data[field] = { $ref: target.importKey };
     } else {
       data[field] = value;
@@ -240,10 +242,14 @@ export function buildImportApprovalPlan(
   }
 
   const references = referencedObjects(session, object);
-  for (const { target } of references) {
-    if (!target.importKey || !session.approvedObjectIdByImportKey[target.importKey]) {
+  const referencePatches: ImportApprovalReferencePatch[] = [];
+  for (const { field, target } of references) {
+    if (!target.importKey) throw new Error(`Could not resolve imported reference ${field}.`);
+    const targetObjectId = session.approvedObjectIdByImportKey[target.importKey];
+    if (!targetObjectId) {
       throw new Error(`Approve referenced object “${BurbotCore.displayName(target)}” first.`);
     }
+    referencePatches.push({ field, targetObjectId });
   }
 
   const sourceById = new Map(
@@ -277,10 +283,7 @@ export function buildImportApprovalPlan(
 
   return {
     selectedImportKey: object.importKey,
-    referencePatches: references.map(({ field, target }) => ({
-      field,
-      targetImportKey: target.importKey!,
-    })),
+    referencePatches,
     temporaryDependencyImportKeys: [...dependencyMap.keys()],
     document: {
       version: 1,
