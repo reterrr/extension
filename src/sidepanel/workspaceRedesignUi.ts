@@ -3,6 +3,9 @@ let enhanceQueued = false;
 let enhancing = false;
 let activeFundingSize = "";
 let lastCaptureLabel = "";
+let workspaceObserver: MutationObserver | null = null;
+let observedWorkspace: HTMLElement | null = null;
+let observedActiveLabel: HTMLElement | null = null;
 
 const fieldSectionOpen = new Map<string, boolean>();
 
@@ -12,6 +15,14 @@ function $<T extends HTMLElement = HTMLElement>(id: string): T | null {
 
 function setText(element: HTMLElement | null, value: string): void {
   if (element && element.textContent !== value) element.textContent = value;
+}
+
+function setOpen(element: HTMLDetailsElement | null, value: boolean): void {
+  if (element && element.open !== value) element.open = value;
+}
+
+function setHidden(element: HTMLElement, value: boolean): void {
+  if (element.hidden !== value) element.hidden = value;
 }
 
 function missingLabel(count: number): string {
@@ -132,10 +143,13 @@ function fundingGroupLabel(group: HTMLElement, index: number): string {
 function selectFundingTab(root: HTMLElement, size: string): void {
   activeFundingSize = size;
   for (const button of root.querySelectorAll<HTMLButtonElement>(".funding-tab")) {
-    button.setAttribute("aria-selected", String(button.dataset.size === size));
+    const selected = button.dataset.size === size;
+    if (button.getAttribute("aria-selected") !== String(selected)) {
+      button.setAttribute("aria-selected", String(selected));
+    }
   }
   for (const panel of root.querySelectorAll<HTMLElement>(".funding-tab-panel")) {
-    panel.hidden = panel.dataset.size !== size;
+    setHidden(panel, panel.dataset.size !== size);
   }
 }
 
@@ -227,7 +241,7 @@ function enhanceFunding(): void {
 
     if (variants === 1) {
       const onlyVariant = group.querySelector<HTMLDetailsElement>(".variant");
-      if (onlyVariant) onlyVariant.open = true;
+      setOpen(onlyVariant, true);
     }
   });
 
@@ -235,7 +249,7 @@ function enhanceFunding(): void {
   selectFundingTab(root, activeFundingSize || labels[0]);
 
   const panel = $("funding-panel") as HTMLDetailsElement | null;
-  if (panel && root.querySelector(".field-row.selected")) panel.open = true;
+  if (panel && root.querySelector(".field-row.selected")) setOpen(panel, true);
 }
 
 function enhanceDocuments(): void {
@@ -271,7 +285,7 @@ function enhanceDocuments(): void {
   }
 
   const panel = $("documents-panel") as HTMLDetailsElement | null;
-  if (panel && root.querySelector(".field-row.selected")) panel.open = true;
+  if (panel && root.querySelector(".field-row.selected")) setOpen(panel, true);
 }
 
 function translateObjectProgress(): void {
@@ -324,9 +338,36 @@ function enhanceCaptureDock(): void {
   }
 }
 
+function observeWorkspaceChanges(): void {
+  if (!workspaceObserver || !observedWorkspace) return;
+
+  workspaceObserver.observe(observedWorkspace, {
+    childList: true,
+    subtree: true,
+    attributes: true,
+    attributeFilter: ["class", "hidden", "open"],
+  });
+
+  if (observedActiveLabel) {
+    workspaceObserver.observe(observedActiveLabel, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+    });
+  }
+}
+
 function enhanceAll(): void {
   if (enhancing) return;
   enhancing = true;
+
+  // The enhancer itself rewrites classes, hidden/open state and DOM structure.
+  // Observing those writes recursively created an unbounded microtask feedback
+  // loop (observer -> enhance -> mutation -> observer -> ...), which could peg
+  // Firefox and exhaust system memory. Ignore our own mutations and reconnect
+  // only after the enhancement pass is complete.
+  workspaceObserver?.disconnect();
+
   try {
     enhanceFieldGroups();
     enhanceFunding();
@@ -335,6 +376,7 @@ function enhanceAll(): void {
     enhanceCaptureDock();
   } finally {
     enhancing = false;
+    observeWorkspaceChanges();
   }
 }
 
@@ -363,22 +405,10 @@ export function initWorkspaceRedesignUi(): void {
     collapse.textContent = collapsed ? "⌃" : "⌄";
   });
 
-  const observer = new MutationObserver(scheduleEnhance);
-  observer.observe(workspace, {
-    childList: true,
-    subtree: true,
-    attributes: true,
-    attributeFilter: ["class", "hidden", "open"],
-  });
-
-  const activeLabel = $("active-label");
-  if (activeLabel) {
-    observer.observe(activeLabel, {
-      childList: true,
-      subtree: true,
-      characterData: true,
-    });
-  }
+  observedWorkspace = workspace;
+  observedActiveLabel = $("active-label");
+  workspaceObserver = new MutationObserver(scheduleEnhance);
+  observeWorkspaceChanges();
 
   scheduleEnhance();
 }
