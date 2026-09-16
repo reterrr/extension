@@ -6,11 +6,17 @@ import type {
 import type { ElementExtractionCandidate } from "../types/picker";
 import type { RemoteFileSourceCandidate } from "../types/source";
 
+export interface SelectorHighlight {
+  id: string;
+  selector: string;
+}
+
 export type PickerOperation =
   | "PICK"
   | "PICK_FILE"
   | "STOP"
   | "RUN"
+  | "SHOW_SELECTORS"
   | "URL"
   | "SELECTION";
 
@@ -19,6 +25,7 @@ export type PickerRequest =
   | { id: string; op: "PICK_FILE" }
   | { id: string; op: "STOP" }
   | { id: string; op: "RUN"; rules: ExecutableExtractionRule[] }
+  | { id: string; op: "SHOW_SELECTORS"; highlights: SelectorHighlight[] }
   | { id: string; op: "URL" }
   | { id: string; op: "SELECTION" };
 
@@ -97,6 +104,15 @@ function isRemoteFileSourceCandidate(
   );
 }
 
+function isSelectorHighlight(value: unknown): value is SelectorHighlight {
+  return (
+    isRecord(value) &&
+    typeof value.id === "string" &&
+    typeof value.selector === "string" &&
+    value.selector.length > 0
+  );
+}
+
 export function isElementExtractionCandidate(
   value: unknown,
 ): value is ElementExtractionCandidate {
@@ -148,6 +164,9 @@ export function isPickerRequest(value: unknown): value is PickerRequest {
   }
 
   if (value.op === "RUN") return Array.isArray(value.rules);
+  if (value.op === "SHOW_SELECTORS") {
+    return Array.isArray(value.highlights) && value.highlights.every(isSelectorHighlight);
+  }
   return ["PICK", "PICK_FILE", "STOP", "URL", "SELECTION"].includes(value.op);
 }
 
