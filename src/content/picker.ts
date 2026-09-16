@@ -5,7 +5,9 @@ import {
   type PickerPortMessage,
   type PickerRpcValue,
   type PickerSelectionResponse,
+  type SelectorHighlight,
 } from "../shared/messaging/picker";
+import { selectorColor } from "../shared/selectorPalette";
 import { createRemotePdfSourceCandidate } from "../shared/sources/remoteFile";
 import type {
   AttributeExtraction,
@@ -229,12 +231,26 @@ if (!globalThis.__burbotPickerLoaded) {
   });
 
   browser.runtime.onConnect.addListener((port) => {
-    if (!["burbot-picker", "burbot-file-picker"].includes(port.name)) return;
+    if (
+      ![
+        "burbot-picker",
+        "burbot-file-picker",
+        "burbot-selector-highlights",
+      ].includes(port.name)
+    ) {
+      return;
+    }
 
     let picking = false;
     let filePicking = false;
     let overlay: HTMLDivElement | null = null;
     let timer: ReturnType<typeof setTimeout> | undefined;
+    let highlightFrame: number | null = null;
+    let highlighted: Array<{
+      selector: string;
+      element: Element;
+      overlay: HTMLDivElement;
+    }> = [];
 
     const send = (message: PickerPortMessage): void => {
       try {
@@ -243,6 +259,74 @@ if (!globalThis.__burbotPickerLoaded) {
         // The side panel can disappear while a page event is being handled.
       }
     };
+
+    function clearSelectorHighlights(): void {
+      if (highlightFrame !== null) cancelAnimationFrame(highlightFrame);
+      highlightFrame = null;
+      for (const entry of highlighted) entry.overlay.remove();
+      highlighted = [];
+    }
+
+    function positionSelectorHighlights(): void {
+      highlightFrame = null;
+      for (const entry of highlighted) {
+        if (!entry.element.isConnected) {
+          entry.overlay.hidden = true;
+          continue;
+        }
+        const rect = entry.element.getBoundingClientRect();
+        const visible = rect.width > 0 && rect.height > 0;
+        entry.overlay.hidden = !visible;
+        if (!visible) continue;
+        Object.assign(entry.overlay.style, {
+          top: `${rect.top}px`,
+          left: `${rect.left}px`,
+          width: `${rect.width}px`,
+          height: `${rect.height}px`,
+        });
+      }
+    }
+
+    function scheduleSelectorHighlightPosition(): void {
+      if (highlightFrame !== null) return;
+      highlightFrame = requestAnimationFrame(positionSelectorHighlights);
+    }
+
+    function showSelectorHighlights(highlights: SelectorHighlight[]): void {
+      clearSelectorHighlights();
+      const seen = new Set<string>();
+
+      for (const highlight of highlights) {
+        if (seen.has(highlight.selector)) continue;
+        seen.add(highlight.selector);
+
+        let elements: Element[];
+        try {
+          elements = Array.from(document.querySelectorAll(highlight.selector));
+        } catch {
+          continue;
+        }
+
+        const color = selectorColor(highlight.selector);
+        for (const element of elements) {
+          const selectorOverlay = document.createElement("div");
+          selectorOverlay.dataset.burbotSelectorHighlight = highlight.id;
+          selectorOverlay.style.cssText =
+            "position:fixed;pointer-events:none;z-index:2147483645;" +
+            "box-sizing:border-box;border-radius:4px;" +
+            `border:1.5px solid ${color.border};background:${color.fill};` +
+            `box-shadow:0 0 0 1px ${color.soft} inset;`;
+          document.documentElement.append(selectorOverlay);
+          highlighted.push({
+            selector: highlight.selector,
+            element,
+            overlay: selectorOverlay,
+          });
+        }
+      }
+
+      positionSelectorHighlights();
+    }
 
     function stop(): void {
       picking = false;
@@ -259,7 +343,8 @@ if (!globalThis.__burbotPickerLoaded) {
       overlay = document.createElement("div");
       overlay.style.cssText =
         "position:fixed;pointer-events:none;z-index:2147483647;" +
-        "box-sizing:border-box;border:2px solid #18a875;background:#18a87522;";
+        "box-sizing:border-box;border-radius:4px;border:2px solid #6f98bd;" +
+        "background:#6f98bd24;box-shadow:0 0 0 1px #ffffffaa inset;";
       document.documentElement.append(overlay);
       send({ event: "MODE", picking: true });
     }
@@ -289,6 +374,17 @@ if (!globalThis.__burbotPickerLoaded) {
         ? event.target.closest("a[href]") ?? event.target
         : event.target;
       const rect = target.getBoundingClientRect();
+
+      if (!filePicking) {
+        try {
+          const color = selectorColor(selectorFor(target));
+          overlay.style.borderColor = color.border;
+          overlay.style.background = color.fill;
+        } catch {
+          // Keep the default pastel picker color until a selector can be built.
+        }
+      }
+
       Object.assign(overlay.style, {
         top: `${rect.top}px`,
         left: `${rect.left}px`,
@@ -386,6 +482,11 @@ if (!globalThis.__burbotPickerLoaded) {
             });
             break;
 
+          case "SHOW_SELECTORS":
+            showSelectorHighlights(message.highlights);
+            value = true;
+            break;
+
           case "URL":
             value = location.href;
             break;
@@ -408,10 +509,13 @@ if (!globalThis.__burbotPickerLoaded) {
     document.addEventListener("keydown", key, true);
     document.addEventListener("pointerup", selected);
     document.addEventListener("keyup", selected);
+    window.addEventListener("scroll", scheduleSelectorHighlightPosition, true);
+    window.addEventListener("resize", scheduleSelectorHighlightPosition);
 
     port.onDisconnect.addListener(() => {
       if (timer !== undefined) clearTimeout(timer);
       overlay?.remove();
+      clearSelectorHighlights();
       document.removeEventListener("pointermove", draw, true);
       document.removeEventListener("pointerdown", block, true);
       document.removeEventListener("pointerup", block, true);
@@ -419,6 +523,8 @@ if (!globalThis.__burbotPickerLoaded) {
       document.removeEventListener("keydown", key, true);
       document.removeEventListener("pointerup", selected);
       document.removeEventListener("keyup", selected);
+      window.removeEventListener("scroll", scheduleSelectorHighlightPosition, true);
+      window.removeEventListener("resize", scheduleSelectorHighlightPosition);
     });
   });
 }
