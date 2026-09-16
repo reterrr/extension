@@ -96,6 +96,11 @@ async function saveRemoteState(state: LegacyStorageState): Promise<void> {
   if (!response.ok) throw new Error(await readError(response));
 }
 
+/** Read only the state currently committed to the SQLite file. */
+export async function loadCommittedState(): Promise<LegacyStorageState | null> {
+  return loadRemoteState();
+}
+
 export async function loadState(): Promise<LegacyStorageState> {
   const remote = await loadRemoteState();
   if (remote) {
