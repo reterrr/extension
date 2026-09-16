@@ -170,13 +170,46 @@ if (!globalThis.__burbotPickerLoaded) {
     }
   });
 
+  // Only one picker is allowed to own page-level mouse/keyboard listeners at a
+  // time. The workspace and the file-source UI use separate runtime ports, and
+  // previously each connection installed its own permanent document listeners.
+  // A leaked/stale port therefore multiplied pointer handlers indefinitely.
+  let stopActiveInteractiveSession: (() => void) | null = null;
+  let selectionPort: browser.runtime.Port | null = null;
+  let selectionSender: ((candidate: ElementExtractionCandidate) => void) | null = null;
+  let selectionTimer: ReturnType<typeof setTimeout> | undefined;
+
+  function scheduleSelectionCapture(): void {
+    if (!selectionSender || stopActiveInteractiveSession) return;
+    if (selectionTimer !== undefined) clearTimeout(selectionTimer);
+    selectionTimer = setTimeout(() => {
+      selectionTimer = undefined;
+      if (!selectionSender || stopActiveInteractiveSession) return;
+
+      const selection = window.getSelection();
+      if (!selection || selection.isCollapsed || !selection.rangeCount) return;
+
+      try {
+        const candidate = selectionCandidate();
+        if (candidate.options.length) selectionSender(candidate);
+      } catch {
+        // Explicit SELECTION RPC will surface a useful error if needed.
+      }
+    }, 0);
+  }
+
+  // Keep automatic selected-text capture, but install these listeners only once
+  // for the whole content runtime instead of once per connected picker port.
+  document.addEventListener("pointerup", scheduleSelectionCapture);
+  document.addEventListener("keyup", scheduleSelectionCapture);
+
   browser.runtime.onConnect.addListener((port) => {
     if (!["burbot-picker", "burbot-file-picker"].includes(port.name)) return;
 
     let picking = false;
     let filePicking = false;
     let overlay: HTMLDivElement | null = null;
-    let timer: ReturnType<typeof setTimeout> | undefined;
+    let listenersAttached = false;
 
     const send = (message: PickerPortMessage): void => {
       try {
@@ -186,43 +219,9 @@ if (!globalThis.__burbotPickerLoaded) {
       }
     };
 
-    function stop(): void {
-      picking = false;
-      filePicking = false;
-      overlay?.remove();
-      overlay = null;
-      send({ event: "MODE", picking: false });
-    }
-
-    function start(fileMode: boolean): void {
-      stop();
-      picking = true;
-      filePicking = fileMode;
-      overlay = document.createElement("div");
-      overlay.style.cssText =
-        "position:fixed;pointer-events:none;z-index:2147483647;" +
-        "box-sizing:border-box;border-radius:4px;border:2px solid #6f98bd;" +
-        "background:#6f98bd24;box-shadow:0 0 0 1px #ffffffaa inset;";
-      document.documentElement.append(overlay);
-      send({ event: "MODE", picking: true });
-    }
-
-    function fail(error: unknown): void {
-      send({ event: "ERROR", error: errorMessage(error) });
-    }
-
-    function captureSelection(): void {
-      if (picking) return;
-
-      const selection = window.getSelection();
-      if (!selection || selection.isCollapsed || !selection.rangeCount) return;
-
-      try {
-        const candidate = selectionCandidate();
-        if (candidate.options.length) send({ event: "CAPTURE", candidate });
-      } catch (error) {
-        fail(error);
-      }
+    if (port.name === "burbot-picker") {
+      selectionPort = port;
+      selectionSender = (candidate) => send({ event: "CAPTURE", candidate });
     }
 
     function draw(event: PointerEvent): void {
@@ -255,6 +254,10 @@ if (!globalThis.__burbotPickerLoaded) {
       if (!picking) return;
       event.preventDefault();
       event.stopImmediatePropagation();
+    }
+
+    function fail(error: unknown): void {
+      send({ event: "ERROR", error: errorMessage(error) });
     }
 
     function click(event: MouseEvent): void {
@@ -303,10 +306,59 @@ if (!globalThis.__burbotPickerLoaded) {
       }
     }
 
-    function selected(): void {
-      if (picking) return;
-      if (timer !== undefined) clearTimeout(timer);
-      timer = setTimeout(captureSelection, 0);
+    function attachInteractionListeners(): void {
+      if (listenersAttached) return;
+      listenersAttached = true;
+      document.addEventListener("pointermove", draw, true);
+      document.addEventListener("pointerdown", block, true);
+      document.addEventListener("pointerup", block, true);
+      document.addEventListener("click", click, true);
+      document.addEventListener("keydown", key, true);
+    }
+
+    function detachInteractionListeners(): void {
+      if (!listenersAttached) return;
+      listenersAttached = false;
+      document.removeEventListener("pointermove", draw, true);
+      document.removeEventListener("pointerdown", block, true);
+      document.removeEventListener("pointerup", block, true);
+      document.removeEventListener("click", click, true);
+      document.removeEventListener("keydown", key, true);
+    }
+
+    function stop(): void {
+      const wasInteractive = picking || listenersAttached || overlay !== null;
+      picking = false;
+      filePicking = false;
+      overlay?.remove();
+      overlay = null;
+      detachInteractionListeners();
+      if (stopActiveInteractiveSession === stop) {
+        stopActiveInteractiveSession = null;
+      }
+      if (wasInteractive) send({ event: "MODE", picking: false });
+    }
+
+    function start(fileMode: boolean): void {
+      if (
+        stopActiveInteractiveSession &&
+        stopActiveInteractiveSession !== stop
+      ) {
+        stopActiveInteractiveSession();
+      }
+
+      stop();
+      picking = true;
+      filePicking = fileMode;
+      overlay = document.createElement("div");
+      overlay.style.cssText =
+        "position:fixed;pointer-events:none;z-index:2147483647;" +
+        "box-sizing:border-box;border-radius:4px;border:2px solid #6f98bd;" +
+        "background:#6f98bd24;box-shadow:0 0 0 1px #ffffffaa inset;";
+      document.documentElement.append(overlay);
+      attachInteractionListeners();
+      stopActiveInteractiveSession = stop;
+      send({ event: "MODE", picking: true });
     }
 
     port.onMessage.addListener((message: unknown) => {
@@ -362,24 +414,16 @@ if (!globalThis.__burbotPickerLoaded) {
       }
     });
 
-    document.addEventListener("pointermove", draw, true);
-    document.addEventListener("pointerdown", block, true);
-    document.addEventListener("pointerup", block, true);
-    document.addEventListener("click", click, true);
-    document.addEventListener("keydown", key, true);
-    document.addEventListener("pointerup", selected);
-    document.addEventListener("keyup", selected);
-
     port.onDisconnect.addListener(() => {
-      if (timer !== undefined) clearTimeout(timer);
-      overlay?.remove();
-      document.removeEventListener("pointermove", draw, true);
-      document.removeEventListener("pointerdown", block, true);
-      document.removeEventListener("pointerup", block, true);
-      document.removeEventListener("click", click, true);
-      document.removeEventListener("keydown", key, true);
-      document.removeEventListener("pointerup", selected);
-      document.removeEventListener("keyup", selected);
+      stop();
+      if (selectionPort === port) {
+        selectionPort = null;
+        selectionSender = null;
+        if (selectionTimer !== undefined) {
+          clearTimeout(selectionTimer);
+          selectionTimer = undefined;
+        }
+      }
     });
   });
 }
