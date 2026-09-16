@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import "./geographyStyles";
 import "./fileSourceStyles";
+import "./commitStyles";
 import { CommitPanel } from "./CommitPanel";
 
 export function App() {
