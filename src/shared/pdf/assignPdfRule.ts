@@ -2,7 +2,13 @@ import type { CapturedExtractionInput } from "../types/extraction";
 import type {
   LegacyStorageState,
   LegacyStoredObject,
+  LegacyStoredRule,
 } from "../types/legacy-storage";
+
+type PdfCapturedExtractionInput = Extract<
+  CapturedExtractionInput,
+  { extraction: { type: "pdfText" } }
+>;
 
 export interface AssignPdfRuleMessage {
   op: "ASSIGN_PDF";
@@ -17,7 +23,7 @@ function assertPdfCandidate(
   state: LegacyStorageState,
   object: LegacyStoredObject,
   candidate: CapturedExtractionInput,
-): void {
+): asserts candidate is PdfCapturedExtractionInput {
   const extraction = candidate.extraction;
   if (extraction.type !== "pdfText") {
     throw new Error("Expected a PDF text extraction candidate.");
@@ -28,14 +34,19 @@ function assertPdfCandidate(
   if (!candidate.raw || candidate.raw.length > 100000) {
     throw new Error("Invalid PDF selection.");
   }
-  if (!Number.isSafeInteger(extraction.selector.pageNumber) || extraction.selector.pageNumber < 1) {
+  if (
+    !Number.isSafeInteger(extraction.selector.pageNumber) ||
+    extraction.selector.pageNumber < 1
+  ) {
     throw new Error("Invalid PDF page number.");
   }
   const quote = extraction.selector.quote;
   if (
     !quote ||
     !quote.exact ||
-    [quote.exact, quote.prefix, quote.suffix].some((part) => typeof part !== "string")
+    [quote.exact, quote.prefix, quote.suffix].some(
+      (part) => typeof part !== "string",
+    )
   ) {
     throw new Error("Invalid PDF text selector.");
   }
@@ -86,7 +97,7 @@ export function assignPdfRuleIntoState(
     (rule) => !BurbotCore.matches(rule, object.id, message.field, undefined),
   );
 
-  const rule = {
+  const rule: LegacyStoredRule = {
     id: uuid(),
     objectId: object.id,
     field: message.field,
@@ -98,9 +109,7 @@ export function assignPdfRuleIntoState(
   };
 
   if (String(input) !== message.candidate.raw) {
-    Object.assign(rule, {
-      transform: { sample: message.candidate.raw, value: input },
-    });
+    rule.transform = { sample: message.candidate.raw, value: input };
   }
 
   state.rules.push(rule);
