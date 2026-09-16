@@ -74,12 +74,33 @@ function occurrences(text: string, exact: string): number[] {
   return positions;
 }
 
-function resolveRange(index: IndexedText, highlight: ReviewHighlight): Range | null {
+function rangeAt(index: IndexedText, start: number, exactLength: number): Range | null {
+  if (exactLength <= 0) return null;
+  const startBoundary = index.starts[start];
+  const endBoundary = index.ends[start + exactLength - 1];
+  if (!startBoundary || !endBoundary) return null;
+
+  const range = document.createRange();
+  range.setStart(startBoundary.node, startBoundary.offset);
+  range.setEnd(endBoundary.node, endBoundary.offset);
+  return range;
+}
+
+/**
+ * Imported fact-projection snapshots often contain business facts concatenated
+ * in a canonical order rather than the real page's DOM order. Prefer exact
+ * prefix/suffix context when it survives on the live page. If it does not:
+ * - use the only exact occurrence when unique;
+ * - otherwise show every exact occurrence instead of silently losing the
+ *   evidence color. Review mode is visual provenance, not extraction, so it is
+ *   better to expose ambiguity than hide imported evidence altogether.
+ */
+function resolveRanges(index: IndexedText, highlight: ReviewHighlight): Range[] {
   const exact = clean(highlight.exact);
   const prefix = clean(highlight.prefix);
   const suffix = clean(highlight.suffix);
   const positions = occurrences(index.text, exact);
-  if (!positions.length) return null;
+  if (!positions.length || !exact) return [];
 
   const contextual = positions.filter((start) => {
     const end = start + exact.length;
@@ -87,21 +108,18 @@ function resolveRange(index: IndexedText, highlight: ReviewHighlight): Range | n
     const after = index.text.slice(end, end + suffix.length);
     return (!prefix || before.endsWith(prefix)) && (!suffix || after.startsWith(suffix));
   });
-  const selected = contextual.length === 1
-    ? contextual[0]
-    : positions.length === 1
-      ? positions[0]
-      : null;
-  if (selected === null || !exact) return null;
 
-  const startBoundary = index.starts[selected];
-  const endBoundary = index.ends[selected + exact.length - 1];
-  if (!startBoundary || !endBoundary) return null;
+  const selected =
+    contextual.length > 0
+      ? contextual
+      : positions.length === 1
+        ? positions
+        : positions;
 
-  const range = document.createRange();
-  range.setStart(startBoundary.node, startBoundary.offset);
-  range.setEnd(endBoundary.node, endBoundary.offset);
-  return range;
+  return selected.flatMap((start) => {
+    const range = rangeAt(index, start, exact.length);
+    return range ? [range] : [];
+  });
 }
 
 globalThis.__burbotImportReviewHighlighterDispose?.();
@@ -153,10 +171,13 @@ function show(highlights: ReviewHighlight[]): void {
 
   const root = document.body ?? document.documentElement;
   const index = canonicalText(root);
-  ranges = highlights.flatMap((highlight) => {
-    const range = resolveRange(index, highlight);
-    return range ? [{ range, id: highlight.id, colorKey: highlight.colorKey }] : [];
-  });
+  ranges = highlights.flatMap((highlight) =>
+    resolveRanges(index, highlight).map((range, occurrence) => ({
+      range,
+      id: `${highlight.id}:${occurrence}`,
+      colorKey: highlight.colorKey,
+    })),
+  );
   draw();
 }
 
