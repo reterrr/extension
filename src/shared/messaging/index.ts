@@ -1,4 +1,4 @@
-import type { BurbotState } from "../types/domain";
+import type { LegacyStorageState } from "../types/legacy-storage";
 
 export * from "./picker";
 
@@ -12,13 +12,13 @@ export type DataOperation =
   | "ADD_FUNDING"
   | "REMOVE_FUNDING";
 
-export interface DataResponse<T = BurbotState> {
+export interface DataResponse<T = LegacyStorageState> {
   ok: boolean;
   value?: T;
   error?: string;
 }
 
-export async function sendData<T = BurbotState>(
+export async function sendData<T = LegacyStorageState>(
   op: DataOperation,
   payload: Record<string, unknown> = {},
 ): Promise<T> {
