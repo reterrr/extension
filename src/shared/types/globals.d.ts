@@ -32,12 +32,12 @@ interface BurbotCoreApi {
   coerce(value: unknown, type: string): string | number;
   coerceField(
     value: unknown,
-    definition: BurbotFieldDefinition,
+    definition: Record<string, unknown>,
     state: LegacyStorageState,
   ): unknown;
   formatValue(
     value: unknown,
-    definition: BurbotFieldDefinition,
+    definition: Record<string, unknown>,
     state: LegacyStorageState,
   ): string;
   occurrences(text: string, part: string): number[];
@@ -79,6 +79,7 @@ interface BurbotSchemaEntry {
   primary?: string;
   fields?: Record<string, BurbotFieldDefinition>;
   geography?: boolean;
+  configuration?: boolean;
   [key: string]: unknown;
 }
 
@@ -97,11 +98,16 @@ interface BurbotGeographyApi {
   catalog: ReadonlyArray<BurbotGeographyCatalogEntry>;
 }
 
+interface BurbotFundingApi {
+  sizes: Readonly<Record<string, string>>;
+  fields: Readonly<Record<string, BurbotFieldDefinition>>;
+}
+
 declare global {
   var BurbotCore: BurbotCoreApi;
   var BurbotSchema: Record<string, BurbotSchemaEntry>;
   var BurbotGeography: BurbotGeographyApi;
-  var BurbotFunding: Record<string, unknown>;
+  var BurbotFunding: BurbotFundingApi;
   var BurbotDocuments: Record<string, unknown>;
   var __burbotPickerLoaded: boolean | undefined;
 }

@@ -6,8 +6,13 @@ import {
 } from "../shared/commits/draftStore";
 import {
   buildImportApprovalPlan,
+  editImportReviewFinancingField,
+  editImportReviewObjectField,
   importReviewView,
   markImportObjectApproved,
+  removeImportReviewFile,
+  removeImportReviewFinancing,
+  renameImportReviewFile,
 } from "../shared/import/review";
 import {
   clearImportReview,
@@ -17,6 +22,8 @@ import {
 import { stageImportReviewObject } from "../shared/import/stageReview";
 import { selectorColor } from "../shared/selectorPalette";
 import type {
+  ImportReviewEditorOption,
+  ImportReviewEditorType,
   ImportReviewSession,
   ImportReviewView,
 } from "../shared/types/importReview";
@@ -172,6 +179,76 @@ function groupLabel(type: string): string {
   return "Nabory";
 }
 
+interface ReviewEditorProps {
+  type: ImportReviewEditorType;
+  value: string;
+  options?: ImportReviewEditorOption[];
+  disabled?: boolean;
+  ariaLabel: string;
+  onSave(value: string): Promise<void>;
+}
+
+function ReviewEditor({
+  type,
+  value,
+  options,
+  disabled = false,
+  ariaLabel,
+  onSave,
+}: ReviewEditorProps) {
+  const [draft, setDraft] = useState(value);
+
+  useEffect(() => setDraft(value), [value]);
+
+  async function commit(next = draft) {
+    if (disabled || next === value) return;
+    await onSave(next);
+  }
+
+  if (type === "select") {
+    return (
+      <select
+        className="import-review-editor"
+        aria-label={ariaLabel}
+        value={draft}
+        disabled={disabled}
+        onChange={(event) => {
+          const next = event.currentTarget.value;
+          setDraft(next);
+          void commit(next);
+        }}
+      >
+        <option value="">Wybierz…</option>
+        {(options ?? []).map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+    );
+  }
+
+  return (
+    <input
+      className="import-review-editor"
+      aria-label={ariaLabel}
+      type={type}
+      step={type === "number" ? "any" : undefined}
+      value={draft}
+      disabled={disabled}
+      onChange={(event) => setDraft(event.currentTarget.value)}
+      onBlur={() => void commit()}
+      onKeyDown={(event) => {
+        if (event.key === "Enter") event.currentTarget.blur();
+        if (event.key === "Escape") {
+          setDraft(value);
+          event.currentTarget.blur();
+        }
+      }}
+    />
+  );
+}
+
 export function ImportReviewPanel() {
   const [session, setSession] = useState<ImportReviewSession | null>(null);
   const [mode, setMode] = useState<"workspace" | "review">("workspace");
@@ -224,6 +301,25 @@ export function ImportReviewPanel() {
     };
   }, [session, mode, view.selectedObjectId, view.evidence]);
 
+  async function persistReviewMutation(
+    mutate: (current: ImportReviewSession, now: string) => void,
+  ) {
+    if (!session) return;
+    setError("");
+    try {
+      const now = new Date().toISOString();
+      mutate(session, now);
+      await writeImportReview(session);
+      setSession({
+        ...session,
+        previewState: { ...session.previewState },
+      });
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+      throw cause;
+    }
+  }
+
   async function select(objectId: string) {
     if (!session) return;
     session.selectedObjectId = objectId;
@@ -274,7 +370,7 @@ export function ImportReviewPanel() {
         now,
       );
       await writeImportReview(session);
-      setSession({ ...session });
+      setSession({ ...session, previewState: { ...session.previewState } });
 
       window.dispatchEvent(new Event("burbot:commit-changed"));
       window.dispatchEvent(new CustomEvent("burbot:import-review-changed"));
@@ -316,12 +412,14 @@ export function ImportReviewPanel() {
   const selected = view.objects.find(
     (object) => object.id === view.selectedObjectId,
   );
+  const readOnly = selected?.status === "APPROVED";
   const sourceUrls = [
-    ...new Set(
-      view.evidence.flatMap((entry) =>
+    ...new Set([
+      ...view.evidence.flatMap((entry) =>
         entry.sourceUrl ? [entry.sourceUrl] : [],
       ),
-    ),
+      ...view.files.flatMap((file) => [file.sourcePageUrl, file.url]),
+    ]),
   ];
 
   return (
@@ -396,7 +494,17 @@ export function ImportReviewPanel() {
                           <small>
                             {object.status === "APPROVED"
                               ? "✓"
-                              : `${object.evidenceCount} evidence`}
+                              : [
+                                  object.evidenceCount
+                                    ? `${object.evidenceCount} ev`
+                                    : "",
+                                  object.fileCount ? `${object.fileCount} plik` : "",
+                                  object.financingCount
+                                    ? `${object.financingCount} fin.`
+                                    : "",
+                                ]
+                                  .filter(Boolean)
+                                  .join(" · ") || "do sprawdzenia"}
                           </small>
                         </button>
                       ))}
@@ -409,14 +517,19 @@ export function ImportReviewPanel() {
               {selected ? (
                 <>
                   <div className="import-review-object-title">
-                    <span className="eyebrow">{selected.type.toUpperCase()}</span>
-                    <h2>{selected.label}</h2>
+                    <div>
+                      <span className="eyebrow">{selected.type.toUpperCase()}</span>
+                      <h2>{selected.label}</h2>
+                    </div>
+                    {!readOnly && <span className="import-review-edit-badge">Edytowalne</span>}
                   </div>
+
                   {sourceUrls.length > 0 && (
                     <div className="import-review-sources">
                       {sourceUrls.map((url) => (
                         <button
                           key={url}
+                          type="button"
                           className="text-button"
                           onClick={() => void openSource(url)}
                         >
@@ -425,37 +538,67 @@ export function ImportReviewPanel() {
                       ))}
                     </div>
                   )}
-                  <div className="import-review-fields">
-                    {view.fields.map((field) => {
-                      const evidence = view.evidence.filter(
-                        (entry) => entry.field === field.field,
-                      );
-                      const hasSource = evidence.some((entry) => entry.sourceUrl);
-                      const color = field.evidenceCount
-                        ? selectorColor(evidenceColorKey(view, field.field))
-                        : null;
-                      return (
-                        <div
-                          key={field.field}
-                          className={field.evidenceCount ? "has-evidence" : ""}
-                          style={
-                            color
-                              ? {
-                                  borderLeftColor: color.border,
-                                  background: color.soft,
-                                  boxShadow: `inset 3px 0 0 ${color.border}`,
-                                }
-                              : undefined
-                          }
-                        >
-                          <small>{field.label}</small>
-                          <strong>{field.value}</strong>
-                          {field.evidenceCount > 0 && (
-                            <div className="import-review-field-meta">
-                              <span style={{ color: color?.border }}>
-                                {field.evidenceCount} evidence
-                              </span>
-                              {hasSource && (
+
+                  <section className="import-review-section">
+                    <div className="import-review-section-heading">
+                      <div>
+                        <span className="eyebrow">DANE OBIEKTU</span>
+                        <strong>{view.fields.length} pól</strong>
+                      </div>
+                      <small>Zmiana wartości usuwa evidence tego pola.</small>
+                    </div>
+                    <div className="import-review-fields">
+                      {view.fields.map((field) => {
+                        const evidence = view.evidence.filter(
+                          (entry) => entry.field === field.field,
+                        );
+                        const hasSource = evidence.some((entry) => entry.sourceUrl);
+                        const color = field.evidenceCount
+                          ? selectorColor(evidenceColorKey(view, field.field))
+                          : null;
+                        return (
+                          <div
+                            key={field.field}
+                            className={field.evidenceCount ? "has-evidence" : ""}
+                            style={
+                              color
+                                ? {
+                                    borderLeftColor: color.border,
+                                    background: color.soft,
+                                    boxShadow: `inset 3px 0 0 ${color.border}`,
+                                  }
+                                : undefined
+                            }
+                          >
+                            <div className="import-review-field-head">
+                              <small>{field.label}</small>
+                              {field.evidenceCount > 0 && (
+                                <span style={{ color: color?.border }}>
+                                  {field.evidenceCount} evidence
+                                </span>
+                              )}
+                            </div>
+                            <ReviewEditor
+                              type={field.editorType}
+                              value={field.editorValue}
+                              options={field.options}
+                              disabled={readOnly || busy}
+                              ariaLabel={field.label}
+                              onSave={(value) =>
+                                persistReviewMutation((current, now) =>
+                                  editImportReviewObjectField(
+                                    current,
+                                    selected.id,
+                                    field.field,
+                                    value,
+                                    now,
+                                  ),
+                                )
+                              }
+                            />
+                            {field.evidenceCount > 0 && hasSource && (
+                              <div className="import-review-field-meta">
+                                <span>{field.value}</span>
                                 <button
                                   type="button"
                                   className="import-review-source-button"
@@ -464,15 +607,147 @@ export function ImportReviewPanel() {
                                 >
                                   Pokaż w źródle ↗
                                 </button>
-                              )}
-                            </div>
-                          )}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </section>
+
+                  {view.files.length > 0 && (
+                    <section className="import-review-section">
+                      <div className="import-review-section-heading">
+                        <div>
+                          <span className="eyebrow">PLIKI</span>
+                          <strong>{view.files.length} przypiętych</strong>
                         </div>
-                      );
-                    })}
-                  </div>
+                        <small>AI wskazało te pliki jako źródła obiektu.</small>
+                      </div>
+                      <div className="import-review-files">
+                        {view.files.map((file) => (
+                          <div key={file.id} className="import-review-file-card">
+                            <ReviewEditor
+                              type="text"
+                              value={file.name}
+                              disabled={readOnly || busy}
+                              ariaLabel="Nazwa pliku"
+                              onSave={(value) =>
+                                persistReviewMutation((current, now) =>
+                                  renameImportReviewFile(
+                                    current,
+                                    selected.id,
+                                    file.id,
+                                    value,
+                                    now,
+                                  ),
+                                )
+                              }
+                            />
+                            <a href={file.url} target="_blank" rel="noreferrer">
+                              {file.url}
+                            </a>
+                            <div className="import-review-card-actions">
+                              <button
+                                type="button"
+                                className="text-button"
+                                onClick={() => void openSource(file.sourcePageUrl)}
+                              >
+                                Strona źródłowa ↗
+                              </button>
+                              <button
+                                type="button"
+                                className="text-button danger"
+                                disabled={readOnly || busy}
+                                onClick={() =>
+                                  void persistReviewMutation((current, now) =>
+                                    removeImportReviewFile(
+                                      current,
+                                      selected.id,
+                                      file.id,
+                                      now,
+                                    ),
+                                  )
+                                }
+                              >
+                                Usuń
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </section>
+                  )}
+
+                  {view.financing.length > 0 && (
+                    <section className="import-review-section">
+                      <div className="import-review-section-heading">
+                        <div>
+                          <span className="eyebrow">FINANSOWANIE</span>
+                          <strong>{view.financing.length} wariantów</strong>
+                        </div>
+                        <small>Wartości zostaną zapisane jako konfiguracja finansowania.</small>
+                      </div>
+                      <div className="import-review-financing">
+                        {view.financing.map((variant) => (
+                          <details key={variant.id} open className="import-review-finance-card">
+                            <summary>
+                              <span>
+                                {variant.companySizeLabel} · wariant {variant.variantNo}
+                              </span>
+                              <small>{variant.key}</small>
+                            </summary>
+                            <div className="import-review-finance-fields">
+                              {variant.fields.map((field) => (
+                                <label key={field.field}>
+                                  <small>{field.label}</small>
+                                  <ReviewEditor
+                                    type={field.editorType}
+                                    value={field.editorValue}
+                                    options={field.options}
+                                    disabled={readOnly || busy}
+                                    ariaLabel={`${variant.companySizeLabel}: ${field.label}`}
+                                    onSave={(value) =>
+                                      persistReviewMutation((current, now) =>
+                                        editImportReviewFinancingField(
+                                          current,
+                                          selected.id,
+                                          variant.id,
+                                          field.field,
+                                          value,
+                                          now,
+                                        ),
+                                      )
+                                    }
+                                  />
+                                </label>
+                              ))}
+                            </div>
+                            <button
+                              type="button"
+                              className="text-button danger import-review-remove-finance"
+                              disabled={readOnly || busy}
+                              onClick={() =>
+                                void persistReviewMutation((current, now) =>
+                                  removeImportReviewFinancing(
+                                    current,
+                                    selected.id,
+                                    variant.id,
+                                    now,
+                                  ),
+                                )
+                              }
+                            >
+                              Usuń wariant
+                            </button>
+                          </details>
+                        ))}
+                      </div>
+                    </section>
+                  )}
+
                   <p className="import-review-hint">
-                    Każde evidence jest dopasowywane do jednego najlepszego miejsca na stronie. „Pokaż w źródle” przewija bezpośrednio do evidence danego pola.
+                    Przed zatwierdzeniem możesz poprawić dane, pliki i finansowanie. Evidence pozostaje tylko przy wartościach, których ręcznie nie zmieniono.
                   </p>
                   <button
                     type="button"

@@ -1,13 +1,19 @@
 import { importDocumentIntoState } from "./format";
 import type {
+  ImportReviewEditorOption,
+  ImportReviewEditorType,
   ImportReviewEvidenceView,
   ImportReviewFieldView,
+  ImportReviewFileView,
+  ImportReviewFinancingFieldView,
+  ImportReviewFinancingView,
   ImportReviewSession,
   ImportReviewView,
 } from "../types/importReview";
 import type {
   ImportedEvidence,
   ImportedSource,
+  LegacyStoredFileSource,
   LegacyStoredObject,
 } from "../types/legacy-storage";
 
@@ -74,20 +80,73 @@ function selectedObject(session: ImportReviewSession): LegacyStoredObject | unde
   );
 }
 
+function editorOptions(
+  session: ImportReviewSession,
+  definition: Record<string, unknown> | undefined,
+): ImportReviewEditorOption[] | undefined {
+  if (!definition) return undefined;
+  if (definition.type === "reference") {
+    return session.previewState.objects
+      .filter((object) => object.type === definition.references)
+      .map((object) => ({ value: object.id, label: BurbotCore.displayName(object) }));
+  }
+  if (definition.type === "enum" && definition.options) {
+    return Object.entries(definition.options as Record<string, string>).map(
+      ([value, label]) => ({ value, label: String(label) }),
+    );
+  }
+  if (definition.type === "boolean") {
+    return [
+      { value: "true", label: "Tak" },
+      { value: "false", label: "Nie" },
+    ];
+  }
+  return undefined;
+}
+
+function editorType(definition: Record<string, unknown> | undefined): ImportReviewEditorType {
+  if (!definition) return "text";
+  if (["reference", "enum", "boolean"].includes(String(definition.type))) {
+    return "select";
+  }
+  if (definition.type === "date") return "date";
+  if (
+    ["integer", "number", "money", "percentage"].includes(
+      String(definition.type),
+    )
+  ) {
+    return "number";
+  }
+  return "text";
+}
+
+function editorValue(value: unknown): string {
+  if (value === undefined || value === null) return "";
+  return String(value);
+}
+
 function fieldViews(
   session: ImportReviewSession,
   object: LegacyStoredObject | undefined,
 ): ImportReviewFieldView[] {
   if (!object) return [];
   const fields = BurbotSchema[object.type]?.fields ?? {};
-  return Object.entries(object.values).map(([field, value]) => ({
-    field,
-    label: fields[field]?.label ?? field,
-    value: fields[field]
-      ? BurbotCore.formatValue(value, fields[field], session.previewState)
-      : String(value ?? ""),
-    evidenceCount: object.evidence?.[field]?.length ?? 0,
-  }));
+  return Object.entries(object.values).map(([field, value]) => {
+    const definition = fields[field] as Record<string, unknown> | undefined;
+    return {
+      field,
+      label: String(definition?.label ?? field),
+      value: definition
+        ? BurbotCore.formatValue(value, definition, session.previewState)
+        : String(value ?? ""),
+      editorType: editorType(definition),
+      editorValue: editorValue(value),
+      ...(editorOptions(session, definition)
+        ? { options: editorOptions(session, definition) }
+        : {}),
+      evidenceCount: object.evidence?.[field]?.length ?? 0,
+    };
+  });
 }
 
 function evidenceViews(
@@ -121,11 +180,77 @@ function evidenceViews(
   return result;
 }
 
+function fileViews(
+  session: ImportReviewSession,
+  object: LegacyStoredObject | undefined,
+): ImportReviewFileView[] {
+  if (!object) return [];
+  return (session.previewState.fileSources ?? [])
+    .filter((source) => source.objectId === object.id)
+    .map((source) => ({
+      id: source.id,
+      name: source.name,
+      url: source.url,
+      sourcePageUrl: source.sourcePageUrl,
+    }));
+}
+
+function financingFieldViews(
+  session: ImportReviewSession,
+  row: Record<string, unknown>,
+): ImportReviewFinancingFieldView[] {
+  return Object.entries(BurbotFunding.fields).map(([field, rawDefinition]) => {
+    const definition = rawDefinition as Record<string, unknown>;
+    const value = row[field];
+    return {
+      field,
+      label: String(definition.label ?? field),
+      value:
+        value === undefined
+          ? ""
+          : BurbotCore.formatValue(value, definition, session.previewState),
+      editorType: editorType(definition),
+      editorValue: editorValue(value),
+      ...(editorOptions(session, definition)
+        ? { options: editorOptions(session, definition) }
+        : {}),
+    };
+  });
+}
+
+function financingViews(
+  session: ImportReviewSession,
+  object: LegacyStoredObject | undefined,
+): ImportReviewFinancingView[] {
+  if (!object) return [];
+  return (session.previewState.financingRules ?? [])
+    .filter((row) => row.objectId === object.id)
+    .map((row) => {
+      const companySize = String(row.company_size ?? "");
+      return {
+        id: String(row.id),
+        key: String(row.importKey ?? row.id),
+        companySize,
+        companySizeLabel:
+          BurbotFunding.sizes[companySize] ?? companySize,
+        variantNo: Number(row.variant_no ?? 1),
+        fields: financingFieldViews(session, row),
+      };
+    });
+}
+
 export function importReviewView(
   session: ImportReviewSession | null,
 ): ImportReviewView {
   if (!session) {
-    return { active: false, objects: [], fields: [], evidence: [] };
+    return {
+      active: false,
+      objects: [],
+      fields: [],
+      evidence: [],
+      files: [],
+      financing: [],
+    };
   }
 
   const object = selectedObject(session);
@@ -142,6 +267,12 @@ export function importReviewView(
         (sum, entries) => sum + entries.length,
         0,
       ),
+      fileCount: (session.previewState.fileSources ?? []).filter(
+        (source) => source.objectId === entry.id,
+      ).length,
+      financingCount: (session.previewState.financingRules ?? []).filter(
+        (row) => row.objectId === entry.id,
+      ).length,
     }));
 
   const approvedCount = objects.filter((entry) => entry.status === "APPROVED").length;
@@ -156,7 +287,138 @@ export function importReviewView(
     objects,
     fields: fieldViews(session, object),
     evidence: evidenceViews(session, object),
+    files: fileViews(session, object),
+    financing: financingViews(session, object),
   };
+}
+
+function requirePendingObject(
+  session: ImportReviewSession,
+  objectId: string,
+): LegacyStoredObject {
+  const object = session.previewState.objects.find((entry) => entry.id === objectId);
+  if (!object) throw new Error("Imported object not found.");
+  if (session.statusByObjectId[objectId] === "APPROVED") {
+    throw new Error("Zatwierdzonego obiektu nie można już edytować w Import Review.");
+  }
+  return object;
+}
+
+function touch(session: ImportReviewSession, object: LegacyStoredObject, now: string): void {
+  object.updatedAt = now;
+  session.updatedAt = now;
+}
+
+export function editImportReviewObjectField(
+  session: ImportReviewSession,
+  objectId: string,
+  field: string,
+  input: string,
+  now: string,
+): void {
+  const object = requirePendingObject(session, objectId);
+  const schema = BurbotSchema[object.type];
+  const definition = schema?.fields?.[field];
+  if (!definition) throw new Error(`Unknown field ${object.type}.${field}.`);
+
+  let value: unknown = input;
+  if (definition.type === "reference") {
+    const target = session.previewState.objects.find((entry) => entry.id === input);
+    if (!target || target.type !== definition.references) {
+      throw new Error(`Wybierz poprawny obiekt typu ${definition.references}.`);
+    }
+    value = target.id;
+  }
+
+  object.values[field] = BurbotCore.coerceField(
+    value,
+    definition,
+    session.previewState,
+  );
+  if (field === schema.primary) object.label = String(object.values[field]);
+
+  // Once the reviewer changes a value manually, imported evidence no longer
+  // proves that value. Keeping it would make review visually misleading.
+  if (object.evidence?.[field]) {
+    delete object.evidence[field];
+    if (!Object.keys(object.evidence).length) delete object.evidence;
+  }
+  (object.manualFields ||= {})[field] = true;
+  touch(session, object, now);
+}
+
+export function editImportReviewFinancingField(
+  session: ImportReviewSession,
+  objectId: string,
+  financingId: string,
+  field: string,
+  input: string,
+  now: string,
+): void {
+  const object = requirePendingObject(session, objectId);
+  const row = (session.previewState.financingRules ?? []).find(
+    (entry) => entry.objectId === object.id && String(entry.id) === financingId,
+  );
+  if (!row) throw new Error("Wariant finansowania nie istnieje.");
+  const definition = BurbotFunding.fields[field];
+  if (!definition) throw new Error(`Unknown financing field ${field}.`);
+  row[field] = BurbotCore.coerceField(input, definition, session.previewState);
+  touch(session, object, now);
+}
+
+export function removeImportReviewFinancing(
+  session: ImportReviewSession,
+  objectId: string,
+  financingId: string,
+  now: string,
+): void {
+  const object = requirePendingObject(session, objectId);
+  const before = session.previewState.financingRules?.length ?? 0;
+  session.previewState.financingRules = (
+    session.previewState.financingRules ?? []
+  ).filter(
+    (entry) =>
+      !(entry.objectId === object.id && String(entry.id) === financingId),
+  );
+  if (session.previewState.financingRules.length === before) {
+    throw new Error("Wariant finansowania nie istnieje.");
+  }
+  touch(session, object, now);
+}
+
+export function renameImportReviewFile(
+  session: ImportReviewSession,
+  objectId: string,
+  fileId: string,
+  name: string,
+  now: string,
+): void {
+  const object = requirePendingObject(session, objectId);
+  const file = (session.previewState.fileSources ?? []).find(
+    (entry) => entry.objectId === object.id && entry.id === fileId,
+  );
+  if (!file) throw new Error("Plik nie istnieje.");
+  const cleaned = name.trim();
+  if (!cleaned) throw new Error("Nazwa pliku nie może być pusta.");
+  file.name = cleaned;
+  touch(session, object, now);
+}
+
+export function removeImportReviewFile(
+  session: ImportReviewSession,
+  objectId: string,
+  fileId: string,
+  now: string,
+): void {
+  const object = requirePendingObject(session, objectId);
+  const before = session.previewState.fileSources?.length ?? 0;
+  session.previewState.fileSources = (session.previewState.fileSources ?? []).filter(
+    (entry) => !(entry.objectId === object.id && entry.id === fileId),
+  );
+  if (session.previewState.fileSources.length === before) {
+    throw new Error("Plik nie istnieje.");
+  }
+  touch(session, object, now);
 }
 
 function referencedObjects(
@@ -231,6 +493,19 @@ function dependencyStub(target: LegacyStoredObject) {
   };
 }
 
+function importedSourceForFile(
+  file: LegacyStoredFileSource,
+  sources: ImportedSource[],
+): ImportedSource {
+  const source =
+    sources.find((entry) => entry.importKey === file.sourceImportKey) ??
+    sources.find((entry) => entry.type === "PDF" && entry.url === file.url);
+  if (!source?.url) {
+    throw new Error(`Could not resolve import source for file ${file.name}.`);
+  }
+  return source;
+}
+
 export function buildImportApprovalPlan(
   session: ImportReviewSession,
   objectId: string,
@@ -252,14 +527,32 @@ export function buildImportApprovalPlan(
     referencePatches.push({ field, targetObjectId });
   }
 
-  const sourceById = new Map(
-    (session.previewState.importSources ?? []).map((source) => [source.id, source]),
-  );
+  const importedSources = session.previewState.importSources ?? [];
+  const sourceById = new Map(importedSources.map((source) => [source.id, source]));
   const usedSourceIds = new Set(
     Object.values(object.evidence ?? {})
       .flat()
       .map((entry) => entry.sourceId),
   );
+
+  const selectedFiles = (session.previewState.fileSources ?? []).filter(
+    (file) => file.objectId === object.id,
+  );
+  const portableFiles = selectedFiles.map((file) => {
+    const source = importedSourceForFile(file, importedSources);
+    usedSourceIds.add(source.id);
+    const pageSource =
+      importedSources.find(
+        (entry) => entry.importKey === file.sourcePageImportKey,
+      ) ?? importedSources.find((entry) => entry.url === file.sourcePageUrl);
+    if (pageSource) usedSourceIds.add(pageSource.id);
+    return {
+      source: source.importKey,
+      ...(pageSource ? { source_page: pageSource.importKey } : {}),
+      name: file.name,
+    };
+  });
+
   const sources = [...usedSourceIds].map((sourceId) => {
     const source = sourceById.get(sourceId);
     if (!source) throw new Error(`Missing import source ${sourceId}.`);
@@ -273,6 +566,21 @@ export function buildImportApprovalPlan(
         ...(source.snapshot.contentHash ? { content_hash: source.snapshot.contentHash } : {}),
         ...(source.snapshot.parserVersion ? { parser_version: source.snapshot.parserVersion } : {}),
       },
+    };
+  });
+
+  const selectedFinancing = (session.previewState.financingRules ?? []).filter(
+    (row) => row.objectId === object.id,
+  );
+  const portableFinancing = selectedFinancing.map((row) => {
+    const data: Record<string, unknown> = {};
+    for (const field of Object.keys(BurbotFunding.fields)) {
+      if (Object.prototype.hasOwnProperty.call(row, field)) data[field] = row[field];
+    }
+    return {
+      key: String(row.importKey ?? row.id),
+      company_size: String(row.company_size),
+      data,
     };
   });
 
@@ -297,6 +605,10 @@ export function buildImportApprovalPlan(
           data: portableData(session, object),
           ...(object.evidence
             ? { evidence: portableEvidence(object, sourceById) }
+            : {}),
+          ...(portableFiles.length ? { files: portableFiles } : {}),
+          ...(portableFinancing.length
+            ? { financing: portableFinancing }
             : {}),
         },
       ],
