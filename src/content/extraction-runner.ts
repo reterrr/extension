@@ -38,9 +38,19 @@ function extractElementRule(
   rule: ExecutableElementExtractionRule,
   runtime: ExtractionRuntime,
 ): string {
+  const candidates = selectorCandidates(rule);
+
+  if (candidates.length === 1) {
+    const elements = runtime.selectAll(candidates[0]);
+    if (elements.length !== 1) {
+      throw new Error(`Selector matched ${elements.length} elements.`);
+    }
+    return runtime.readElement(elements[0], rule.extraction);
+  }
+
   const diagnostics: string[] = [];
 
-  for (const selector of selectorCandidates(rule)) {
+  for (const selector of candidates) {
     let elements: Element[];
     try {
       elements = runtime.selectAll(selector);
