@@ -1,9 +1,23 @@
 let initialized = false;
+let reconnectTimer: number | undefined;
+
+function isConnected(): boolean {
+  return document.getElementById("connection")?.textContent?.includes("· connected") ?? false;
+}
 
 function reconnectWorkspace(): void {
+  if (isConnected()) return;
   const connect = document.getElementById("connect");
   if (!(connect instanceof HTMLButtonElement) || connect.disabled) return;
   connect.click();
+}
+
+function scheduleReconnect(): void {
+  if (reconnectTimer !== undefined) window.clearTimeout(reconnectTimer);
+  reconnectTimer = window.setTimeout(() => {
+    reconnectTimer = undefined;
+    reconnectWorkspace();
+  }, 0);
 }
 
 export async function initObjectReconnectUi(): Promise<void> {
@@ -14,8 +28,6 @@ export async function initObjectReconnectUi(): Promise<void> {
   const windowId = currentWindow.id;
 
   // Objects focused from the commit panel are broadcast by the background.
-  // Reconnect after the focus message so the existing object can immediately
-  // capture values from the currently active tab.
   browser.runtime.onMessage.addListener((message: unknown) => {
     if (
       typeof message === "object" &&
@@ -24,21 +36,32 @@ export async function initObjectReconnectUi(): Promise<void> {
       (message as { windowId?: unknown }).windowId === windowId &&
       !(message as { error?: unknown }).error
     ) {
-      window.setTimeout(reconnectWorkspace, 0);
+      scheduleReconnect();
     }
     return undefined;
   });
 
-  // `Change object` is handled entirely inside workspace.js and therefore does
-  // not emit BURBOT_FOCUS. Reconnect explicitly after choosing an object there.
   document.addEventListener(
     "click",
     (event) => {
       const target = event.target;
       if (!(target instanceof Element)) return;
-      const option = target.closest("#object-options button");
-      if (!(option instanceof HTMLButtonElement) || option.disabled) return;
-      window.setTimeout(reconnectWorkspace, 0);
+
+      // `Change object` is handled entirely inside workspace.js and therefore
+      // does not emit BURBOT_FOCUS.
+      const objectOption = target.closest("#object-options button");
+      if (objectOption instanceof HTMLButtonElement && !objectOption.disabled) {
+        scheduleReconnect();
+        return;
+      }
+
+      // If an existing object was restored/focused while the workspace was
+      // disconnected, selecting any field should make capture usable instead
+      // of leaving all capture controls disabled.
+      const field = target.closest(".field-row");
+      if (field instanceof HTMLButtonElement && !field.disabled && !isConnected()) {
+        scheduleReconnect();
+      }
     },
     true,
   );
