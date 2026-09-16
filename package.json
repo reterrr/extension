@@ -8,11 +8,12 @@
     "dev": "node scripts/build.mjs --watch",
     "start": "npm run build && web-ext run --source-dir dist --target firefox-desktop",
     "typecheck": "tsc --noEmit",
-    "test": "npm run typecheck && node --test tests/extraction-contracts.test.mjs tests/geography-contracts.test.mjs tests/file-source-contracts.test.mjs",
+    "test": "npm run typecheck && node --test tests/extraction-contracts.test.mjs tests/geography-contracts.test.mjs tests/file-source-contracts.test.mjs tests/pdf-selector-contracts.test.mjs",
     "lint": "npm run build && npm run typecheck && web-ext lint --source-dir dist",
-    "format": "prettier --write src scripts tests/extraction-contracts.test.mjs tests/geography-contracts.test.mjs tests/file-source-contracts.test.mjs manifest.json package.json tsconfig.json README.md"
+    "format": "prettier --write src scripts tests/extraction-contracts.test.mjs tests/geography-contracts.test.mjs tests/file-source-contracts.test.mjs tests/pdf-selector-contracts.test.mjs manifest.json package.json tsconfig.json README.md"
   },
   "dependencies": {
+    "pdfjs-dist": "^6.3.289",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },
