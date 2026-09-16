@@ -12,6 +12,8 @@ export type DataOperation =
   | "DELETE"
   | "ADD_GEOGRAPHY"
   | "REMOVE_GEOGRAPHY"
+  | "ADD_FILE_SOURCE"
+  | "REMOVE_FILE_SOURCE"
   | "ADD_FUNDING"
   | "REMOVE_FUNDING";
 

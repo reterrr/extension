@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import "./geographyStyles";
+import "./fileSourceStyles";
 
 export function App() {
   useEffect(() => {
@@ -7,6 +8,7 @@ export function App() {
       import("./workspace.js"),
       import("./importUi"),
       import("./geographyUi").then(({ initGeographyUi }) => initGeographyUi()),
+      import("./fileSourcesUi").then(({ initFileSourcesUi }) => initFileSourcesUi()),
       import("./choiceEvidenceUi").then(({ initChoiceEvidenceUi }) =>
         initChoiceEvidenceUi(),
       ),
@@ -61,6 +63,26 @@ export function App() {
           </div>
 
           <div id="fields" />
+
+          <section id="file-sources-section" className="business-section" hidden>
+            <div className="section-heading">
+              <div>
+                <h2>Źródła plikowe</h2>
+                <p className="muted">
+                  Przypnij oryginalny link do pliku. Burbot nie zapisuje lokalnych ścieżek ani selektorów w PDF.
+                </p>
+              </div>
+            </div>
+            <div id="file-source-list" className="file-source-list" />
+            <div className="file-source-toolbar">
+              <button id="read-from-file" className="text-button" type="button">
+                Read from file
+              </button>
+            </div>
+            <p id="file-source-mode-hint" className="file-source-mode-hint" hidden>
+              Kliknij link do PDF na stronie. Esc anuluje tryb.
+            </p>
+          </section>
 
           <section id="geography-section" className="business-section" hidden>
             <div className="section-heading">

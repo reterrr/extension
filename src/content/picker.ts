@@ -6,6 +6,7 @@ import {
   type PickerRpcValue,
   type PickerSelectionResponse,
 } from "../shared/messaging/picker";
+import { createRemotePdfSourceCandidate } from "../shared/sources/remoteFile";
 import type {
   AttributeExtraction,
   SupportedExtractionAttribute,
@@ -228,9 +229,10 @@ if (!globalThis.__burbotPickerLoaded) {
   });
 
   browser.runtime.onConnect.addListener((port) => {
-    if (port.name !== "burbot-picker") return;
+    if (!["burbot-picker", "burbot-file-picker"].includes(port.name)) return;
 
     let picking = false;
+    let filePicking = false;
     let overlay: HTMLDivElement | null = null;
     let timer: ReturnType<typeof setTimeout> | undefined;
 
@@ -244,9 +246,22 @@ if (!globalThis.__burbotPickerLoaded) {
 
     function stop(): void {
       picking = false;
+      filePicking = false;
       overlay?.remove();
       overlay = null;
       send({ event: "MODE", picking: false });
+    }
+
+    function start(fileMode: boolean): void {
+      stop();
+      picking = true;
+      filePicking = fileMode;
+      overlay = document.createElement("div");
+      overlay.style.cssText =
+        "position:fixed;pointer-events:none;z-index:2147483647;" +
+        "box-sizing:border-box;border:2px solid #18a875;background:#18a87522;";
+      document.documentElement.append(overlay);
+      send({ event: "MODE", picking: true });
     }
 
     function fail(error: unknown): void {
@@ -270,7 +285,10 @@ if (!globalThis.__burbotPickerLoaded) {
     function draw(event: PointerEvent): void {
       if (!picking || !overlay || !(event.target instanceof Element)) return;
 
-      const rect = event.target.getBoundingClientRect();
+      const target = filePicking
+        ? event.target.closest("a[href]") ?? event.target
+        : event.target;
+      const rect = target.getBoundingClientRect();
       Object.assign(overlay.style, {
         top: `${rect.top}px`,
         left: `${rect.left}px`,
@@ -290,8 +308,27 @@ if (!globalThis.__burbotPickerLoaded) {
 
       block(event);
       const element = event.target instanceof Element ? event.target : null;
-      stop();
 
+      if (filePicking) {
+        try {
+          const link = element?.closest("a[href]");
+          if (!(link instanceof HTMLAnchorElement)) {
+            throw new Error("Click a link to a PDF file.");
+          }
+          const file = createRemotePdfSourceCandidate(
+            link.href,
+            location.href,
+            link.download || link.textContent,
+          );
+          stop();
+          send({ event: "FILE_CAPTURE", file });
+        } catch (error) {
+          fail(error);
+        }
+        return;
+      }
+
+      stop();
       try {
         const candidate = candidateFor(element);
 
@@ -326,14 +363,12 @@ if (!globalThis.__burbotPickerLoaded) {
 
         switch (message.op) {
           case "PICK":
-            stop();
-            picking = true;
-            overlay = document.createElement("div");
-            overlay.style.cssText =
-              "position:fixed;pointer-events:none;z-index:2147483647;" +
-              "box-sizing:border-box;border:2px solid #18a875;background:#18a87522;";
-            document.documentElement.append(overlay);
-            send({ event: "MODE", picking: true });
+            start(false);
+            value = true;
+            break;
+
+          case "PICK_FILE":
+            start(true);
             value = true;
             break;
 

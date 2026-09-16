@@ -4,11 +4,19 @@ import type {
   ExtractionSpec,
 } from "../types/extraction";
 import type { ElementExtractionCandidate } from "../types/picker";
+import type { RemoteFileSourceCandidate } from "../types/source";
 
-export type PickerOperation = "PICK" | "STOP" | "RUN" | "URL" | "SELECTION";
+export type PickerOperation =
+  | "PICK"
+  | "PICK_FILE"
+  | "STOP"
+  | "RUN"
+  | "URL"
+  | "SELECTION";
 
 export type PickerRequest =
   | { id: string; op: "PICK" }
+  | { id: string; op: "PICK_FILE" }
   | { id: string; op: "STOP" }
   | { id: string; op: "RUN"; rules: ExecutableExtractionRule[] }
   | { id: string; op: "URL" }
@@ -34,6 +42,7 @@ export type PickerRpcResponse =
 
 export type PickerEvent =
   | { event: "CAPTURE"; candidate: ElementExtractionCandidate }
+  | { event: "FILE_CAPTURE"; file: RemoteFileSourceCandidate }
   | { event: "MODE"; picking: boolean }
   | { event: "ERROR"; error: string };
 
@@ -74,6 +83,18 @@ function isExtractionSpec(value: unknown): value is ExtractionSpec {
   }
 
   return false;
+}
+
+function isRemoteFileSourceCandidate(
+  value: unknown,
+): value is RemoteFileSourceCandidate {
+  return (
+    isRecord(value) &&
+    value.fileType === "PDF" &&
+    typeof value.url === "string" &&
+    typeof value.sourcePageUrl === "string" &&
+    typeof value.name === "string"
+  );
 }
 
 export function isElementExtractionCandidate(
@@ -127,7 +148,7 @@ export function isPickerRequest(value: unknown): value is PickerRequest {
   }
 
   if (value.op === "RUN") return Array.isArray(value.rules);
-  return ["PICK", "STOP", "URL", "SELECTION"].includes(value.op);
+  return ["PICK", "PICK_FILE", "STOP", "URL", "SELECTION"].includes(value.op);
 }
 
 export function isPickerRpcResponse(value: unknown): value is PickerRpcResponse {
@@ -149,7 +170,9 @@ export function isPickerEvent(value: unknown): value is PickerEvent {
   if (value.event === "CAPTURE") {
     return isElementExtractionCandidate(value.candidate);
   }
-
+  if (value.event === "FILE_CAPTURE") {
+    return isRemoteFileSourceCandidate(value.file);
+  }
   if (value.event === "MODE") return typeof value.picking === "boolean";
   if (value.event === "ERROR") return typeof value.error === "string";
   return false;

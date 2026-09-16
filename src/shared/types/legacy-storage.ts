@@ -1,4 +1,5 @@
 import type { ExecutableExtractionRule } from "./extraction";
+import type { SourceFileType } from "./source";
 
 /**
  * Pre-SQLite browser.storage.local format.
@@ -56,6 +57,20 @@ export interface LegacyStoredGeography {
   value: string;
 }
 
+/**
+ * Temporary local representation of an object-level remote file source.
+ * The URL is intentionally remote-only: never `file:`, `blob:` or a filesystem path.
+ */
+export interface LegacyStoredFileSource {
+  id: string;
+  objectId: string;
+  fileType: SourceFileType;
+  url: string;
+  name: string;
+  sourcePageUrl: string;
+  addedAt: string;
+}
+
 export type LegacyStoredRule = ExecutableExtractionRule & {
   objectId: string;
   field: string;
@@ -73,6 +88,7 @@ export interface LegacyStorageState {
   objects: LegacyStoredObject[];
   rules: LegacyStoredRule[];
   geographies?: LegacyStoredGeography[];
+  fileSources?: LegacyStoredFileSource[];
   importSources?: ImportedSource[];
   financingRules?: Array<Record<string, unknown>>;
   documentRequirements?: Array<Record<string, unknown>>;

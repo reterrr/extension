@@ -20,6 +20,7 @@ interface PendingRequest {
 
 export interface PickerClient {
   request(op: "PICK"): Promise<boolean>;
+  request(op: "PICK_FILE"): Promise<boolean>;
   request(op: "STOP"): Promise<boolean>;
   request(op: "URL"): Promise<string>;
   request(op: "SELECTION"): Promise<ElementExtractionCandidate>;
@@ -42,6 +43,8 @@ function createRequest(
   switch (op) {
     case "PICK":
       return { id, op: "PICK" };
+    case "PICK_FILE":
+      return { id, op: "PICK_FILE" };
     case "STOP":
       return { id, op: "STOP" };
     case "URL":
@@ -67,6 +70,7 @@ class BrowserPickerClient implements PickerClient {
   }
 
   request(op: "PICK"): Promise<boolean>;
+  request(op: "PICK_FILE"): Promise<boolean>;
   request(op: "STOP"): Promise<boolean>;
   request(op: "URL"): Promise<string>;
   request(op: "SELECTION"): Promise<ElementExtractionCandidate>;
