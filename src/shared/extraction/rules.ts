@@ -12,10 +12,15 @@ export function createExtractionRule(
   candidate: ExtractionCandidate,
   option: ExtractionCandidateOption,
 ): ExtractionRule {
-  if (
-    option.extraction.type === "pageUrl" ||
-    option.extraction.type === "pdfText"
-  ) {
+  if (option.extraction.type === "pageUrl") {
+    return {
+      pageUrl: candidate.pageUrl,
+      selector: null,
+      extraction: option.extraction,
+    };
+  }
+
+  if (option.extraction.type === "pdfText") {
     return {
       pageUrl: candidate.pageUrl,
       selector: null,
