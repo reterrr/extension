@@ -7,6 +7,9 @@ export function App() {
       import("./workspace.js"),
       import("./importUi"),
       import("./geographyUi").then(({ initGeographyUi }) => initGeographyUi()),
+      import("./choiceEvidenceUi").then(({ initChoiceEvidenceUi }) =>
+        initChoiceEvidenceUi(),
+      ),
     ]);
   }, []);
 
