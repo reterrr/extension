@@ -62,10 +62,6 @@ async function writeStaticFiles() {
     resolve(root, "node_modules/pdfjs-dist/build/pdf.worker.mjs"),
     resolve(dist, "pdf.worker.mjs"),
   );
-  await cp(
-    resolve(root, "node_modules/sql.js/dist/sql-wasm.wasm"),
-    resolve(dist, "sql-wasm.wasm"),
-  );
 
   const pages = {
     sidepanel: ["Burbot workspace", "sidepanel.css"],
