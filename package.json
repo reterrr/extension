@@ -15,7 +15,8 @@
   "dependencies": {
     "pdfjs-dist": "^6.3.289",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "sql.js": "^1.14.2"
   },
   "devDependencies": {
     "@types/firefox-webext-browser": "^120.0.0",
