@@ -229,9 +229,6 @@ function syncOverlayRects(entry: HighlightEntry): void {
   }
 }
 
-// Replace an older injected highlighter in-place. This deliberately does not
-// share picker.ts's singleton guard, so rebuilding/reloading the extension can
-// update overlays on tabs that were already open.
 globalThis.__burbotSelectorHighlighterRuntime?.dispose();
 
 let frame: number | null = null;
@@ -265,13 +262,12 @@ function show(highlights: SelectorHighlight[]): void {
     let target: Element | Range | null = null;
 
     if (highlight.quote) {
-      // Prefer the resolved durable container, but if the page has rearranged
-      // its wrappers entirely, the quote itself can still identify the exact
-      // text globally.
+      // A selection highlight must always be an exact DOM Range. Falling back
+      // to the whole container is actively misleading: it suggests that Burbot
+      // captured text the user never selected.
       target =
         (element ? quoteRange(element, highlight.quote) : null) ??
-        quoteRange(pageRoot, highlight.quote) ??
-        element;
+        quoteRange(pageRoot, highlight.quote);
     } else {
       target = element;
     }
