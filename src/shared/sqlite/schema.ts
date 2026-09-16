@@ -23,9 +23,8 @@ CREATE TABLE IF NOT EXISTS workspace_objects (
   manual_fields_json TEXT
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS ux_workspace_objects_import_key
-ON workspace_objects(import_key)
-WHERE import_key IS NOT NULL;
+CREATE INDEX IF NOT EXISTS ix_workspace_objects_import_key
+ON workspace_objects(import_key);
 
 CREATE TABLE IF NOT EXISTS geography_groups (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
