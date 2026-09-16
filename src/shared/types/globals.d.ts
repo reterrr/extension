@@ -79,6 +79,7 @@ interface BurbotSchemaEntry {
   primary?: string;
   fields?: Record<string, BurbotFieldDefinition>;
   geography?: boolean;
+  configuration?: boolean;
   [key: string]: unknown;
 }
 
@@ -97,11 +98,16 @@ interface BurbotGeographyApi {
   catalog: ReadonlyArray<BurbotGeographyCatalogEntry>;
 }
 
+interface BurbotFundingApi {
+  sizes: Readonly<Record<string, string>>;
+  fields: Readonly<Record<string, BurbotFieldDefinition>>;
+}
+
 declare global {
   var BurbotCore: BurbotCoreApi;
   var BurbotSchema: Record<string, BurbotSchemaEntry>;
   var BurbotGeography: BurbotGeographyApi;
-  var BurbotFunding: Record<string, unknown>;
+  var BurbotFunding: BurbotFundingApi;
   var BurbotDocuments: Record<string, unknown>;
   var __burbotPickerLoaded: boolean | undefined;
 }
