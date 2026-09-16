@@ -47,6 +47,18 @@ export function createCapturedExtractionInput(
   option: ExtractionCandidateOption,
 ): CapturedExtractionInput {
   const rule = createExtractionRule(candidate, option);
+
+  if (rule.selector !== null && rule.selectorFallbacks?.length) {
+    return {
+      ...rule,
+      extraction: {
+        ...rule.extraction,
+        selectorFallbacks: rule.selectorFallbacks,
+      },
+      raw: option.raw,
+    } as CapturedExtractionInput;
+  }
+
   return { ...rule, raw: option.raw } as CapturedExtractionInput;
 }
 
