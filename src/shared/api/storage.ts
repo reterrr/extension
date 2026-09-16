@@ -1,12 +1,14 @@
 import { resetDatabase, sqliteDatabaseInfo } from "../sqlite/database";
 import { loadStateFromSqlite, saveStateToSqlite } from "../sqlite/stateRepository";
+import {
+  LEGACY_STORAGE_KEY,
+  SQLITE_REVISION_SIGNAL_KEY,
+} from "../storage/constants";
 import type { LegacyStorageState } from "../types/legacy-storage";
 
-/**
- * Pre-SQLite key. After migration this is only a UI/event mirror for existing
- * storage.onChanged listeners. SQLite is the source of truth.
- */
-export const STORAGE_KEY = "burbot:v1";
+/** Backward-compatible export used by migration/tests. */
+export const STORAGE_KEY = LEGACY_STORAGE_KEY;
+export { SQLITE_REVISION_SIGNAL_KEY };
 
 function assertLegacyState(value: unknown): asserts value is LegacyStorageState {
   const state = value as LegacyStorageState | undefined;
@@ -20,39 +22,43 @@ function assertLegacyState(value: unknown): asserts value is LegacyStorageState 
   }
 }
 
-async function updateUiMirror(state: LegacyStorageState): Promise<void> {
-  await browser.storage.local.set({ [STORAGE_KEY]: state });
+async function signalRevision(revision: number): Promise<void> {
+  await browser.storage.local.set({ [SQLITE_REVISION_SIGNAL_KEY]: revision });
 }
 
 export async function loadState(): Promise<LegacyStorageState> {
   const sqlite = await loadStateFromSqlite();
   if (sqlite) return sqlite;
 
-  const legacy = (await browser.storage.local.get(STORAGE_KEY))[STORAGE_KEY] as
-    | LegacyStorageState
-    | undefined;
+  const legacy = (await browser.storage.local.get(LEGACY_STORAGE_KEY))[
+    LEGACY_STORAGE_KEY
+  ] as LegacyStorageState | undefined;
 
   if (legacy) {
     assertLegacyState(legacy);
     await saveStateToSqlite(legacy);
-    await updateUiMirror(legacy);
+    await browser.storage.local.remove(LEGACY_STORAGE_KEY);
+    await signalRevision(legacy.revision);
     return legacy;
   }
 
   const empty = BurbotCore.empty() as LegacyStorageState;
   await saveStateToSqlite(empty);
-  await updateUiMirror(empty);
+  await signalRevision(empty.revision);
   return empty;
 }
 
 export async function saveState(state: LegacyStorageState): Promise<void> {
   await saveStateToSqlite(state);
-  await updateUiMirror(state);
+  await signalRevision(state.revision);
 }
 
 export async function resetWorkspaceStorage(): Promise<void> {
   await resetDatabase();
-  await browser.storage.local.remove(STORAGE_KEY);
+  await browser.storage.local.remove([
+    LEGACY_STORAGE_KEY,
+    SQLITE_REVISION_SIGNAL_KEY,
+  ]);
 }
 
 export async function workspaceStorageInfo(): Promise<{
