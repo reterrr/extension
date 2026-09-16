@@ -71,6 +71,10 @@ export interface LegacyStoredFileSource {
   name: string;
   sourcePageUrl: string;
   addedAt: string;
+  /** Present during portable-import review so approval can rebuild `files[].source`. */
+  sourceImportKey?: string;
+  /** Optional portable-import source key for the page where the file link was found. */
+  sourcePageImportKey?: string;
 }
 
 export type LegacyStoredRule = ExecutableExtractionRule & {
