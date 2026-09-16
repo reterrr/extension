@@ -2,7 +2,7 @@ import { useEffect } from "react";
 
 export function App() {
   useEffect(() => {
-    void import("./workspace.js");
+    void Promise.all([import("./workspace.js"), import("./importUi")]);
   }, []);
 
   return (
