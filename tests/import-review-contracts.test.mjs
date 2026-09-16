@@ -70,6 +70,12 @@ function documentFixture() {
         url: "https://example.test/project",
         snapshot: { text: sourceText },
       },
+      {
+        key: "project-regulations",
+        type: "PDF",
+        url: "https://example.test/files/regulamin.pdf",
+        snapshot: { text: "Regulamin projektu" },
+      },
     ],
     objects: [
       {
@@ -77,8 +83,32 @@ function documentFixture() {
         type: "project",
         data: { name: "Generator Kompetencji 3.0" },
         evidence: {
-          name: [{ source: "project-page", ...range(sourceText, "Generator Kompetencji 3.0") }],
+          name: [
+            {
+              source: "project-page",
+              ...range(sourceText, "Generator Kompetencji 3.0"),
+            },
+          ],
         },
+        files: [
+          {
+            source: "project-regulations",
+            source_page: "project-page",
+            name: "Regulamin projektu.pdf",
+          },
+        ],
+        financing: [
+          {
+            key: "micro-default",
+            company_size: "MICRO",
+            data: {
+              refund_percent: 80,
+              max_amount_pln: 100000,
+              own_contribution_form: "CASH",
+              notes: "Podstawowy wariant",
+            },
+          },
+        ],
       },
       {
         key: "recruitment-1",
@@ -88,14 +118,19 @@ function documentFixture() {
           project_id: { $ref: "project-1" },
         },
         evidence: {
-          external_number: [{ source: "project-page", ...range(sourceText, "Nabór 3/2026") }],
+          external_number: [
+            {
+              source: "project-page",
+              ...range(sourceText, "Nabór 3/2026"),
+            },
+          ],
         },
       },
     ],
   };
 }
 
-test("import starts as a separate review queue and exposes only the selected object's evidence", () => {
+test("import review exposes selected object evidence, file attachments and financing", () => {
   const uuid = ids();
   const session = reviewModule.createImportReviewSession(
     documentFixture(),
@@ -110,9 +145,94 @@ test("import starts as a separate review queue and exposes only the selected obj
   assert.equal(view.approvedCount, 0);
   assert.equal(view.objects.length, 2);
   assert.equal(view.objects[0].label, "Generator Kompetencji 3.0");
+  assert.equal(view.objects[0].fileCount, 1);
+  assert.equal(view.objects[0].financingCount, 1);
   assert.equal(view.evidence.length, 1);
   assert.equal(view.evidence[0].rawValue, "Generator Kompetencji 3.0");
   assert.equal(view.evidence[0].sourceUrl, "https://example.test/project");
+  assert.equal(view.files.length, 1);
+  assert.equal(view.files[0].name, "Regulamin projektu.pdf");
+  assert.equal(view.financing.length, 1);
+  assert.equal(view.financing[0].companySize, "MICRO");
+  assert.equal(
+    view.financing[0].fields.find((field) => field.field === "max_amount_pln")
+      ?.editorValue,
+    "100000",
+  );
+});
+
+test("review edits change staged data and invalidate stale object evidence", () => {
+  const uuid = ids();
+  const now = "2026-09-16T18:00:00.000Z";
+  const session = reviewModule.createImportReviewSession(
+    documentFixture(),
+    "generator.burbot-import.json",
+    uuid,
+    now,
+  );
+  const project = session.previewState.objects.find(
+    (object) => object.importKey === "project-1",
+  );
+  assert.ok(project);
+  const financing = session.previewState.financingRules.find(
+    (row) => row.objectId === project.id,
+  );
+  const file = session.previewState.fileSources.find(
+    (row) => row.objectId === project.id,
+  );
+  assert.ok(financing);
+  assert.ok(file);
+
+  reviewModule.editImportReviewObjectField(
+    session,
+    project.id,
+    "name",
+    "Generator Kompetencji 3.1",
+    now,
+  );
+  reviewModule.editImportReviewFinancingField(
+    session,
+    project.id,
+    String(financing.id),
+    "max_amount_pln",
+    "120000",
+    now,
+  );
+  reviewModule.renameImportReviewFile(
+    session,
+    project.id,
+    file.id,
+    "Regulamin po korekcie.pdf",
+    now,
+  );
+
+  const view = reviewModule.importReviewView(session);
+  assert.equal(view.objects[0].label, "Generator Kompetencji 3.1");
+  assert.equal(view.evidence.length, 0);
+  assert.equal(view.fields.find((field) => field.field === "name")?.evidenceCount, 0);
+  assert.equal(view.files[0].name, "Regulamin po korekcie.pdf");
+  assert.equal(
+    view.financing[0].fields.find((field) => field.field === "max_amount_pln")
+      ?.editorValue,
+    "120000",
+  );
+
+  const plan = reviewModule.buildImportApprovalPlan(session, project.id);
+  const staged = stageModule.stageImportReviewObject(
+    BurbotCore.empty(),
+    plan,
+    uuid,
+    now,
+  );
+  const stagedProject = staged.state.objects.find(
+    (object) => object.id === staged.stagedObjectId,
+  );
+  assert.ok(stagedProject);
+  assert.equal(stagedProject.values.name, "Generator Kompetencji 3.1");
+  assert.equal(staged.state.fileSources.length, 1);
+  assert.equal(staged.state.fileSources[0].name, "Regulamin po korekcie.pdf");
+  assert.equal(staged.state.financingRules.length, 1);
+  assert.equal(staged.state.financingRules[0].max_amount_pln, 120000);
 });
 
 test("referenced objects must be approved first and each approval stages only one real object", () => {
@@ -150,6 +270,8 @@ test("referenced objects must be approved first and each approval stages only on
   );
   assert.equal(stagedProject.state.objects.length, 1);
   assert.equal(stagedProject.state.objects[0].importKey, "project-1");
+  assert.equal(stagedProject.state.fileSources.length, 1);
+  assert.equal(stagedProject.state.financingRules.length, 1);
 
   reviewModule.markImportObjectApproved(
     session,
