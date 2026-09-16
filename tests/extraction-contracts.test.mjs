@@ -10,6 +10,7 @@ const root = resolve(fileURLToPath(new URL("..", import.meta.url)));
 let outputDir;
 let rulesModule;
 let runnerModule;
+let importModule;
 
 before(async () => {
   outputDir = await mkdtemp(join(tmpdir(), "burbot-extraction-"));
@@ -19,6 +20,9 @@ before(async () => {
     entryPoints: {
       rules: "src/shared/extraction/rules.ts",
       runner: "src/content/extraction-runner.ts",
+      schema: "src/shared/domain/schema.js",
+      core: "src/shared/domain/core.js",
+      format: "src/shared/import/format.ts",
     },
     outdir: outputDir,
     bundle: true,
@@ -30,6 +34,9 @@ before(async () => {
 
   rulesModule = await import(pathToFileURL(join(outputDir, "rules.js")).href);
   runnerModule = await import(pathToFileURL(join(outputDir, "runner.js")).href);
+  await import(pathToFileURL(join(outputDir, "schema.js")).href);
+  await import(pathToFileURL(join(outputDir, "core.js")).href);
+  importModule = await import(pathToFileURL(join(outputDir, "format.js")).href);
 });
 
 after(async () => {
@@ -172,4 +179,114 @@ test("RUN executes page URL rules without selecting the DOM", () => {
 
   assert.equal(selected, false);
   assert.deepEqual(results, [{ ruleId: "rule-url", raw: candidate.pageUrl }]);
+});
+
+test("import creates objects, resolves references and keeps evidence out of rules", () => {
+  let id = 0;
+  const sourceText = "🚀 Generator Kompetencji 3.0 — Nabór 3/2026";
+  const projectText = "Generator Kompetencji 3.0";
+  const recruitmentText = "Nabór 3/2026";
+  const projectStart = Array.from(sourceText).indexOf("G");
+  const recruitmentStart = Array.from(sourceText).indexOf("N");
+  const next = importModule.importDocumentIntoState(
+    BurbotCore.empty(),
+    {
+      version: 1,
+      offset_unit: "unicode_codepoint",
+      sources: [
+        {
+          key: "page",
+          type: "HTML",
+          url: "https://example.test/project",
+          snapshot: { text: sourceText },
+        },
+      ],
+      objects: [
+        {
+          key: "project-1",
+          type: "project",
+          data: { name: projectText, type: "B2B", status: "ACTIVE" },
+          evidence: {
+            name: [
+              {
+                source: "page",
+                char_start: projectStart,
+                char_end: projectStart + Array.from(projectText).length,
+                raw_value: projectText,
+              },
+            ],
+          },
+        },
+        {
+          key: "recruitment-1",
+          type: "recruitment",
+          data: {
+            external_number: recruitmentText,
+            project_id: { $ref: "project-1" },
+          },
+          evidence: {
+            external_number: [
+              {
+                source: "page",
+                char_start: recruitmentStart,
+                char_end: recruitmentStart + Array.from(recruitmentText).length,
+                raw_value: recruitmentText,
+              },
+            ],
+          },
+        },
+      ],
+    },
+    0,
+    () => `id-${++id}`,
+    "2026-09-16T08:00:00.000Z",
+  );
+
+  assert.equal(next.revision, 1);
+  assert.equal(next.objects.length, 2);
+  assert.equal(next.rules.length, 0);
+  assert.equal(next.objects[1].values.project_id, next.objects[0].id);
+  assert.equal(next.objects[0].evidence.name[0].rawValue, projectText);
+  assert.equal(next.importSources[0].snapshot.text, sourceText);
+});
+
+test("import rejects evidence whose range does not match raw_value", () => {
+  assert.throws(
+    () =>
+      importModule.importDocumentIntoState(
+        BurbotCore.empty(),
+        {
+          version: 1,
+          offset_unit: "unicode_codepoint",
+          sources: [
+            {
+              key: "page",
+              type: "HTML",
+              snapshot: { text: "ABC" },
+            },
+          ],
+          objects: [
+            {
+              key: "operator-1",
+              type: "operator",
+              data: { name: "ABC" },
+              evidence: {
+                name: [
+                  {
+                    source: "page",
+                    char_start: 0,
+                    char_end: 2,
+                    raw_value: "ABC",
+                  },
+                ],
+              },
+            },
+          ],
+        },
+        0,
+        () => "id",
+        "2026-09-16T08:00:00.000Z",
+      ),
+    /Evidence mismatch/,
+  );
 });
