@@ -98,3 +98,31 @@ test("new and edited objects are marked in commit projection", () => {
     ],
   );
 });
+
+test("deleted database objects remain visible in the draft as DELETED", () => {
+  const operator = {
+    id: "operator-1",
+    type: "operator",
+    label: "RARR",
+    values: { name: "RARR" },
+  };
+  const base = state([project, operator]);
+  const draft = {
+    id: "commit-3",
+    createdAt: "2026-09-16T10:00:00.000Z",
+    updatedAt: "2026-09-16T12:00:00.000Z",
+    baseRevision: 4,
+    baseState: structuredClone(base),
+    workingState: state([project], 5),
+  };
+
+  const view = session.commitSessionView(draft);
+  assert.equal(view.dirty, true);
+  assert.deepEqual(
+    view.objects.map(({ id, status }) => [id, status]),
+    [
+      ["project-1", "UNCHANGED"],
+      ["operator-1", "DELETED"],
+    ],
+  );
+});
