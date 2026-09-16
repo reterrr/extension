@@ -6,8 +6,10 @@ import { createCapturedExtractionInput } from "../shared/extraction/rules";
 import { discardStaleImportedEvidence } from "../shared/import/evidence";
 import { importDocumentIntoState } from "../shared/import/format";
 import { isPickerSelectionResponse } from "../shared/messaging/picker";
+import { createRemotePdfSourceCandidate } from "../shared/sources/remoteFile";
 import type { FocusPayload } from "../shared/types/domain";
 import type { CapturedExtractionInput } from "../shared/types/extraction";
+import type { LegacyStorageState } from "../shared/types/legacy-storage";
 
 const CREATE_TYPES = ["project", "recruitment", "operator"] as const;
 type CreateObjectType = (typeof CREATE_TYPES)[number];
@@ -20,6 +22,8 @@ const ALLOWED_WRITES = new Set<string>([
   "DELETE",
   "ADD_GEOGRAPHY",
   "REMOVE_GEOGRAPHY",
+  "ADD_FILE_SOURCE",
+  "REMOVE_FILE_SOURCE",
   "ADD_FUNDING",
   "REMOVE_FUNDING",
 ]);
@@ -65,6 +69,63 @@ async function broadcast(message: Record<string, unknown>): Promise<void> {
 async function focus(windowId: number, value: FocusPayload): Promise<void> {
   await browser.storage.session.set({ [focusKey(windowId)]: value });
   await broadcast({ type: "BURBOT_FOCUS", windowId, ...value });
+}
+
+function mutateFileSource(
+  original: LegacyStorageState,
+  message: Record<string, unknown>,
+  now: string,
+): LegacyStorageState {
+  if (message.expectedRevision !== original.revision) {
+    throw new Error(
+      "Data changed in another panel. Review the refreshed values and retry.",
+    );
+  }
+  if (typeof message.objectId !== "string") throw new Error("Choose an object.");
+
+  const state = JSON.parse(JSON.stringify(original)) as LegacyStorageState;
+  const object = state.objects.find((entry) => entry.id === message.objectId);
+  if (!object) throw new Error("Choose an object.");
+
+  if (message.op === "ADD_FILE_SOURCE") {
+    if (!isRecord(message.file)) throw new Error("Invalid file source.");
+    const file = createRemotePdfSourceCandidate(
+      String(message.file.url ?? ""),
+      String(message.file.sourcePageUrl ?? ""),
+      typeof message.file.name === "string" ? message.file.name : undefined,
+    );
+    const sources = (state.fileSources ||= []);
+    if (
+      sources.some(
+        (source) => source.objectId === object.id && source.url === file.url,
+      )
+    ) {
+      throw new Error("This PDF source is already attached to the object.");
+    }
+    sources.push({
+      id: crypto.randomUUID(),
+      objectId: object.id,
+      fileType: file.fileType,
+      url: file.url,
+      name: file.name,
+      sourcePageUrl: file.sourcePageUrl,
+      addedAt: now,
+    });
+  } else if (message.op === "REMOVE_FILE_SOURCE") {
+    if (typeof message.sourceId !== "string") throw new Error("Source id is required.");
+    const before = state.fileSources?.length ?? 0;
+    state.fileSources = (state.fileSources ?? []).filter(
+      (source) =>
+        !(source.id === message.sourceId && source.objectId === object.id),
+    );
+    if (state.fileSources.length === before) throw new Error("File source not found.");
+  } else {
+    throw new Error("Unknown file source operation.");
+  }
+
+  object.updatedAt = now;
+  state.revision++;
+  return state;
 }
 
 async function registerMenus(): Promise<void> {
@@ -239,7 +300,7 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
     }
 
     const now = new Date().toISOString();
-    let next;
+    let next: LegacyStorageState;
     if (message.op === "IMPORT") {
       next = importDocumentIntoState(
         state,
@@ -248,6 +309,11 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
         () => crypto.randomUUID(),
         now,
       );
+    } else if (
+      message.op === "ADD_FILE_SOURCE" ||
+      message.op === "REMOVE_FILE_SOURCE"
+    ) {
+      next = mutateFileSource(state, message, now);
     } else {
       next = BurbotCore.mutate(
         state,
@@ -255,6 +321,11 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
         () => crypto.randomUUID(),
         now,
       );
+      if (message.op === "DELETE" && typeof message.objectId === "string") {
+        next.fileSources = (next.fileSources ?? []).filter(
+          (source) => source.objectId !== message.objectId,
+        );
+      }
       discardStaleImportedEvidence(next, state, message);
     }
     await saveState(next);
