@@ -3,11 +3,21 @@ import type { LegacyStorageState } from "../types/legacy-storage";
 
 /**
  * Temporary UI mirror for existing storage.onChanged listeners.
- * Durable data lives only in the local SQLite file served by npm run db.
+ * SQLite on disk is the source of truth.
  */
 export const STORAGE_KEY = LEGACY_STORAGE_KEY;
 
 const DB_SERVICE_URL = "http://127.0.0.1:8765";
+
+export interface WorkspaceStorageInfo {
+  engine: "sqlite-file";
+  schemaVersion: number;
+  bytes: number;
+  path: string;
+  revision: number;
+  objects: number;
+  rules: number;
+}
 
 function assertLegacyState(value: unknown): asserts value is LegacyStorageState {
   const state = value as LegacyStorageState | undefined;
@@ -123,28 +133,11 @@ export async function resetWorkspaceStorage(): Promise<void> {
   await browser.storage.local.remove(LEGACY_STORAGE_KEY);
 }
 
-export async function workspaceStorageInfo(): Promise<{
-  engine: "sqlite-file";
-  schemaVersion: number;
-  bytes: number;
-  path: string;
-  revision: number;
-  objects: number;
-  rules: number;
-}> {
+export async function workspaceStorageInfo(): Promise<WorkspaceStorageInfo> {
   const response = await request("/info");
   if (!response.ok) throw new Error(await readError(response));
 
-  const value = (await response.json()) as {
-    engine?: unknown;
-    schemaVersion?: unknown;
-    bytes?: unknown;
-    path?: unknown;
-    revision?: unknown;
-    objects?: unknown;
-    rules?: unknown;
-  };
-
+  const value = (await response.json()) as Partial<WorkspaceStorageInfo>;
   if (
     value.engine !== "sqlite-file" ||
     typeof value.schemaVersion !== "number" ||
@@ -157,5 +150,5 @@ export async function workspaceStorageInfo(): Promise<{
     throw new Error("Invalid response from Burbot local DB service.");
   }
 
-  return value as Awaited<ReturnType<typeof workspaceStorageInfo>>;
+  return value as WorkspaceStorageInfo;
 }
