@@ -2,6 +2,7 @@ import type {
   ExecutableExtractionRule,
   ExtractionRuleRunResult,
   ExtractionSpec,
+  SelectionQuote,
 } from "../types/extraction";
 import type { ElementExtractionCandidate } from "../types/picker";
 import type { RemoteFileSourceCandidate } from "../types/source";
@@ -9,6 +10,8 @@ import type { RemoteFileSourceCandidate } from "../types/source";
 export interface SelectorHighlight {
   id: string;
   selector: string;
+  selectorFallbacks?: string[];
+  quote?: SelectionQuote;
 }
 
 export type PickerOperation =
@@ -68,6 +71,19 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
+function isSelectionQuote(value: unknown): value is SelectionQuote {
+  return (
+    isRecord(value) &&
+    typeof value.exact === "string" &&
+    typeof value.prefix === "string" &&
+    typeof value.suffix === "string"
+  );
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((entry) => typeof entry === "string");
+}
+
 function isExtractionSpec(value: unknown): value is ExtractionSpec {
   if (!isRecord(value) || typeof value.type !== "string") return false;
 
@@ -80,15 +96,7 @@ function isExtractionSpec(value: unknown): value is ExtractionSpec {
     );
   }
 
-  if (value.type === "selection") {
-    if (!isRecord(value.quote)) return false;
-    return (
-      typeof value.quote.exact === "string" &&
-      typeof value.quote.prefix === "string" &&
-      typeof value.quote.suffix === "string"
-    );
-  }
-
+  if (value.type === "selection") return isSelectionQuote(value.quote);
   return false;
 }
 
@@ -109,7 +117,9 @@ function isSelectorHighlight(value: unknown): value is SelectorHighlight {
     isRecord(value) &&
     typeof value.id === "string" &&
     typeof value.selector === "string" &&
-    value.selector.length > 0
+    value.selector.length > 0 &&
+    (value.selectorFallbacks === undefined || isStringArray(value.selectorFallbacks)) &&
+    (value.quote === undefined || isSelectionQuote(value.quote))
   );
 }
 
@@ -120,6 +130,7 @@ export function isElementExtractionCandidate(
     !isRecord(value) ||
     typeof value.pageUrl !== "string" ||
     typeof value.selector !== "string" ||
+    (value.selectorFallbacks !== undefined && !isStringArray(value.selectorFallbacks)) ||
     !Array.isArray(value.options)
   ) {
     return false;
