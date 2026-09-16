@@ -2,6 +2,7 @@ import "../shared/domain/schema.js";
 import "../shared/domain/core.js";
 import { loadState, saveState } from "../shared/api/storage";
 import { createCapturedExtractionInput } from "../shared/extraction/rules";
+import { importDocumentIntoState } from "../shared/import/format";
 import { isPickerSelectionResponse } from "../shared/messaging/picker";
 import type { FocusPayload } from "../shared/types/domain";
 import type { CapturedExtractionInput } from "../shared/types/extraction";
@@ -10,6 +11,7 @@ const CREATE_TYPES = ["project", "recruitment", "operator"] as const;
 type CreateObjectType = (typeof CREATE_TYPES)[number];
 
 const ALLOWED_WRITES = new Set<string>([
+  "IMPORT",
   "ASSIGN",
   "EDIT",
   "APPLY",
@@ -232,12 +234,22 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
       );
     }
 
-    const next = BurbotCore.mutate(
-      state,
-      message,
-      () => crypto.randomUUID(),
-      new Date().toISOString(),
-    );
+    const now = new Date().toISOString();
+    const next =
+      message.op === "IMPORT"
+        ? importDocumentIntoState(
+            state,
+            message.document,
+            message.expectedRevision,
+            () => crypto.randomUUID(),
+            now,
+          )
+        : BurbotCore.mutate(
+            state,
+            message,
+            () => crypto.randomUUID(),
+            now,
+          );
     await saveState(next);
     return next;
   });
