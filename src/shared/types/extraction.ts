@@ -70,7 +70,14 @@ interface ExtractionRuleBase {
 }
 
 export interface ElementExtractionRule extends ExtractionRuleBase {
+  /** Best CSS selector at capture time. */
   selector: string;
+  /**
+   * Additional selectors that matched the same element uniquely at capture
+   * time. They let the runner survive small DOM/layout changes without silently
+   * accepting an ambiguous selector.
+   */
+  selectorFallbacks?: string[];
   extraction: ElementExtractionSpec;
 }
 
