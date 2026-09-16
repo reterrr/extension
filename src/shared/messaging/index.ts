@@ -7,6 +7,7 @@ export type DataOperation =
   | "GET_FOCUS"
   | "IMPORT"
   | "ASSIGN"
+  | "ASSIGN_PDF"
   | "EDIT"
   | "APPLY"
   | "DELETE"
