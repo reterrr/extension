@@ -9,11 +9,20 @@ export type SupportedExtractionAttribute =
   | "alt"
   | "content";
 
-export interface TextExtraction {
+/**
+ * Compatibility mirror for the current legacy domain core, which copies the
+ * extraction object verbatim but reconstructs the rule envelope. The canonical
+ * rule-level location remains `selector` + `selectorFallbacks`.
+ */
+export interface WebLocatorMetadata {
+  selectorFallbacks?: string[];
+}
+
+export interface TextExtraction extends WebLocatorMetadata {
   type: "text";
 }
 
-export interface AttributeExtraction {
+export interface AttributeExtraction extends WebLocatorMetadata {
   type: "attribute";
   attribute: SupportedExtractionAttribute;
 }
@@ -24,7 +33,7 @@ export interface SelectionQuote {
   suffix: string;
 }
 
-export interface SelectionExtraction {
+export interface SelectionExtraction extends WebLocatorMetadata {
   type: "selection";
   quote: SelectionQuote;
 }
