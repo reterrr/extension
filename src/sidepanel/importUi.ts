@@ -1,26 +1,11 @@
-interface DataResponse<T = unknown> {
-  ok?: boolean;
-  value?: T;
-  error?: string;
-}
-
-interface StateSnapshot {
-  revision: number;
-  objects: unknown[];
-}
+import { createImportReviewSession, importReviewView } from "../shared/import/review";
+import {
+  readImportReview,
+  writeImportReview,
+} from "../shared/import/reviewStore";
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
-}
-
-async function data<T>(op: string, extra: Record<string, unknown> = {}): Promise<T> {
-  const result = (await browser.runtime.sendMessage({
-    type: "BURBOT_DATA",
-    op,
-    ...extra,
-  })) as DataResponse<T>;
-  if (!result?.ok) throw new Error(result?.error || "Storage is unavailable.");
-  return result.value as T;
 }
 
 const button = document.getElementById("import") as HTMLButtonElement | null;
@@ -36,18 +21,31 @@ if (button && input && notice) {
 
     button.disabled = true;
     notice.className = "";
-    notice.textContent = "Importing…";
+    notice.textContent = "Przygotowuję import do review…";
 
     try {
-      const importDocument = JSON.parse(await file.text()) as unknown;
-      const current = await data<StateSnapshot>("GET");
-      const beforeCount = current.objects.length;
-      const next = await data<StateSnapshot>("IMPORT", {
-        expectedRevision: current.revision,
-        document: importDocument,
-      });
-      const imported = Math.max(0, next.objects.length - beforeCount);
-      notice.textContent = `Imported ${imported} ${imported === 1 ? "object" : "objects"}.`;
+      const existing = await readImportReview();
+      if (
+        existing &&
+        !confirm("Masz już aktywny import review. Zastąpić go nowym plikiem?")
+      ) {
+        notice.textContent = "Import anulowany.";
+        return;
+      }
+
+      const document = JSON.parse(await file.text()) as unknown;
+      const session = createImportReviewSession(
+        document,
+        file.name,
+        () => crypto.randomUUID(),
+        new Date().toISOString(),
+      );
+      await writeImportReview(session);
+      const view = importReviewView(session);
+      notice.textContent = `Załadowano ${view.objects.length} obiektów do review. Nic nie trafiło jeszcze do commita.`;
+      window.dispatchEvent(
+        new CustomEvent("burbot:import-review-changed", { detail: { open: true } }),
+      );
     } catch (error) {
       notice.className = "error";
       notice.textContent = errorMessage(error);
