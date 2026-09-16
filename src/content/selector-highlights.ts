@@ -97,8 +97,10 @@ function canonicalText(root: Element): CanonicalText {
 
   for (let node = walker.nextNode(); node; node = walker.nextNode()) {
     if (!(node instanceof Text)) continue;
-    const value = node.data;
+    const parent = node.parentElement;
+    if (parent?.closest("script,style,noscript,template")) continue;
 
+    const value = node.data;
     for (let offset = 0; offset < value.length; offset += 1) {
       const character = value[offset];
       if (/\s/.test(character)) {
@@ -152,11 +154,12 @@ function quoteRange(root: Element, quote: SelectionQuote): Range | null {
     return before.endsWith(quote.prefix) && after.startsWith(quote.suffix);
   });
 
-  const selected = contextual.length === 1
-    ? contextual[0]
-    : positions.length === 1
-      ? positions[0]
-      : null;
+  const selected =
+    contextual.length === 1
+      ? contextual[0]
+      : positions.length === 1
+        ? positions[0]
+        : null;
   if (selected === null || quote.exact.length === 0) return null;
 
   const startBoundary = index.starts[selected];
@@ -185,7 +188,11 @@ function targetRects(target: Element | Range): DOMRect[] {
   return rect.width > 0 && rect.height > 0 ? [rect] : [];
 }
 
-function createOverlay(id: string, selector: string, exactText: boolean): HTMLDivElement {
+function createOverlay(
+  id: string,
+  selector: string,
+  exactText: boolean,
+): HTMLDivElement {
   const color = selectorColor(selector);
   const overlay = document.createElement("div");
   overlay.dataset.burbotSelectorHighlight = id;
@@ -251,14 +258,25 @@ function schedulePosition(): void {
 
 function show(highlights: SelectorHighlight[]): void {
   clear();
+  const pageRoot = document.body ?? document.documentElement;
 
   for (const highlight of highlights) {
     const element = resolveElement(highlight);
-    if (!element) continue;
+    let target: Element | Range | null = null;
 
-    const target = highlight.quote
-      ? quoteRange(element, highlight.quote) ?? element
-      : element;
+    if (highlight.quote) {
+      // Prefer the resolved durable container, but if the page has rearranged
+      // its wrappers entirely, the quote itself can still identify the exact
+      // text globally.
+      target =
+        (element ? quoteRange(element, highlight.quote) : null) ??
+        quoteRange(pageRoot, highlight.quote) ??
+        element;
+    } else {
+      target = element;
+    }
+
+    if (!target) continue;
 
     const entry: HighlightEntry = {
       id: highlight.id,
