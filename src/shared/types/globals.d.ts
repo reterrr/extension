@@ -44,6 +44,7 @@ interface BurbotGeographyCatalogEntry {
   type: string;
   value: string;
   label: string;
+  context?: string;
   search: string;
 }
 
