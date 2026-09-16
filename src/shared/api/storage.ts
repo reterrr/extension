@@ -1,10 +1,10 @@
-import type { BurbotState } from "../types/domain";
+import type { LegacyStorageState } from "../types/legacy-storage";
 
 export const STORAGE_KEY = "burbot:v1";
 
-export async function loadState(): Promise<BurbotState> {
+export async function loadState(): Promise<LegacyStorageState> {
   const saved = (await browser.storage.local.get(STORAGE_KEY))[STORAGE_KEY] as
-    | BurbotState
+    | LegacyStorageState
     | undefined;
 
   if (
@@ -16,9 +16,9 @@ export async function loadState(): Promise<BurbotState> {
     throw new Error("Unsupported stored data format.");
   }
 
-  return saved ?? (BurbotCore.empty() as BurbotState);
+  return saved ?? (BurbotCore.empty() as LegacyStorageState);
 }
 
-export async function saveState(state: BurbotState): Promise<void> {
+export async function saveState(state: LegacyStorageState): Promise<void> {
   await browser.storage.local.set({ [STORAGE_KEY]: state });
 }
