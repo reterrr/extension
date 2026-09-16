@@ -18,7 +18,11 @@ function labelOf(object: LegacyStoredObject): string {
 
 export function projectCommitObjects(draft: DraftCommit): CommitSessionObject[] {
   const baseById = new Map(draft.baseState.objects.map((object) => [object.id, object]));
-  return draft.workingState.objects.map((object) => {
+  const workingById = new Map(
+    draft.workingState.objects.map((object) => [object.id, object]),
+  );
+
+  const working = draft.workingState.objects.map((object) => {
     const base = baseById.get(object.id);
     return {
       id: object.id,
@@ -31,6 +35,20 @@ export function projectCommitObjects(draft: DraftCommit): CommitSessionObject[] 
           : "MODIFIED",
     } satisfies CommitSessionObject;
   });
+
+  const deleted = draft.baseState.objects
+    .filter((object) => !workingById.has(object.id))
+    .map(
+      (object) =>
+        ({
+          id: object.id,
+          type: object.type,
+          label: labelOf(object),
+          status: "DELETED",
+        }) satisfies CommitSessionObject,
+    );
+
+  return [...working, ...deleted];
 }
 
 export function commitSessionView(draft: DraftCommit | null): CommitSessionView {
