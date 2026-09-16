@@ -186,27 +186,69 @@ style.textContent = `
   .import-review-fields > div {
     position: relative;
     display: grid;
-    gap: 5px;
-    padding: 9px 10px;
+    gap: 3px;
+    padding: 0;
     border: 1px solid #e6ebe6;
     border-radius: 8px;
     background: #fcfdfc;
+    overflow: hidden;
+    transition: border-color .12s ease, box-shadow .12s ease, background .12s ease;
   }
   .import-review-fields > div.has-evidence {
     border-left: 3px solid #7ca58b;
-    padding-left: 8px;
   }
-  .import-review-field-head {
+  .import-review-fields > div.capture-selected,
+  .import-review-finance-field.capture-selected {
+    border-color: #7fa68b;
+    background: #f1f7f2;
+    box-shadow: 0 0 0 2px #7fa68b1f;
+  }
+  .import-review-field-select {
+    width: 100%;
+    min-height: 48px;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 8px;
+    gap: 10px;
+    padding: 8px 10px;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    text-align: left;
+    font: inherit;
+    cursor: pointer;
   }
-  .import-review-field-head small { color: #78867c; }
-  .import-review-field-head span {
-    font-size: 9px;
+  .import-review-field-select:hover:not(:disabled) {
+    background: #f4f8f4;
+  }
+  .import-review-field-select:disabled {
+    cursor: default;
+    opacity: .75;
+  }
+  .import-review-field-select .field-copy {
+    min-width: 0;
+    display: grid;
+    gap: 2px;
+  }
+  .import-review-field-select .field-label {
+    color: #78867c;
+    font-size: 10px;
+  }
+  .import-review-field-select .field-value {
+    color: #26342d;
+    font-size: 12px;
+    font-weight: 600;
+    overflow-wrap: anywhere;
+  }
+  .import-review-field-select .field-value.empty {
+    color: #97a198;
+    font-weight: 500;
+  }
+  .import-review-field-select .field-mark {
+    flex: 0 0 auto;
+    color: #6f9279;
+    font-size: 10px;
     font-weight: 700;
-    white-space: nowrap;
   }
   .import-review-editor {
     width: 100%;
@@ -237,6 +279,7 @@ style.textContent = `
     justify-content: space-between;
     gap: 8px;
     min-width: 0;
+    padding: 0 10px 6px;
   }
   .import-review-field-meta span {
     overflow: hidden;
@@ -306,20 +349,85 @@ style.textContent = `
     gap: 7px;
     padding: 0 9px 9px;
   }
-  .import-review-finance-fields label {
+  .import-review-finance-field {
+    min-width: 0;
     display: grid;
     gap: 3px;
-    min-width: 0;
+    padding: 8px;
+    border: 1px solid #e1e8e2;
+    border-radius: 7px;
+    background: #fff;
+    color: #26342d;
+    text-align: left;
+    font: inherit;
+    cursor: pointer;
   }
-  .import-review-finance-fields label > small {
+  .import-review-finance-field:hover:not(:disabled) {
+    background: #f3f7f3;
+  }
+  .import-review-finance-field:disabled {
+    cursor: default;
+    opacity: .72;
+  }
+  .import-review-finance-field small {
     color: #7a887f;
     font-size: 9px;
+  }
+  .import-review-finance-field strong {
+    font-size: 11px;
+    overflow-wrap: anywhere;
   }
   .import-review-remove-finance {
     margin: 0 9px 9px;
   }
   .text-button.danger {
     color: #9d4b4b;
+  }
+  .import-review-capture {
+    z-index: 5;
+    margin: 14px -14px 0;
+    border-top-color: #a9c6af;
+    border-bottom: 1px solid #dce7de;
+    background: #fff;
+  }
+  .import-review-capture .capture-heading-actions {
+    display: flex;
+    align-items: center;
+  }
+  .import-review-capture-source {
+    margin-bottom: 7px;
+  }
+  .import-review-capture .source-sample {
+    max-height: 72px;
+    overflow: auto;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+  .import-review-capture .hint {
+    min-height: 14px;
+    margin: 5px 0 8px;
+  }
+  .import-review-capture-save {
+    width: 100%;
+  }
+  .import-review-capture-details {
+    margin-top: 8px;
+  }
+  .import-review-capture-details summary {
+    color: #728077;
+    font-size: 10px;
+    cursor: pointer;
+  }
+  .import-review-capture-details pre {
+    max-height: 160px;
+    overflow: auto;
+    padding: 8px;
+    border-radius: 6px;
+    background: #f6f8f6;
+    color: #4d5d53;
+    font-size: 9px;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
   }
   .import-review-hint {
     margin: 12px 0;
