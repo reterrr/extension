@@ -39,7 +39,9 @@ export async function readActiveDraft(): Promise<DraftCommit | null> {
     const done = transactionDone(transaction);
     const value = await requestResult(transaction.objectStore(STORE).get(ACTIVE_KEY));
     await done;
-    return value ? (value as DraftCommit) : null;
+    return value
+      ? normalizeDraftWorkingRevision(value as DraftCommit)
+      : null;
   } finally {
     database.close();
   }
