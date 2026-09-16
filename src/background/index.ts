@@ -17,6 +17,8 @@ const ALLOWED_WRITES = new Set<string>([
   "EDIT",
   "APPLY",
   "DELETE",
+  "ADD_GEOGRAPHY",
+  "REMOVE_GEOGRAPHY",
   "ADD_FUNDING",
   "REMOVE_FUNDING",
 ]);
