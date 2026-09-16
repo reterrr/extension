@@ -21,6 +21,20 @@
     group: "Podstawowe",
     ...extra,
   });
+  const months = {
+    1: "Styczeń",
+    2: "Luty",
+    3: "Marzec",
+    4: "Kwiecień",
+    5: "Maj",
+    6: "Czerwiec",
+    7: "Lipiec",
+    8: "Sierpień",
+    9: "Wrzesień",
+    10: "Październik",
+    11: "Listopad",
+    12: "Grudzień",
+  };
 
   globalThis.BurbotSchema = Object.freeze({
     project: {
@@ -116,10 +130,10 @@
           min: 1000,
           max: 9999,
         }),
-        planowanyStartMiesiac: integer(
+        planowanyStartMiesiac: choice(
           "Planowany start — miesiąc",
-          "Termin planowany",
-          { min: 1, max: 12 },
+          months,
+          { numeric: true, group: "Termin planowany" },
         ),
         planowanyStartKwartal: choice(
           "Planowany start — kwartał",
@@ -131,10 +145,10 @@
           min: 1000,
           max: 9999,
         }),
-        planowanyKoniecMiesiac: integer(
+        planowanyKoniecMiesiac: choice(
           "Planowany koniec — miesiąc",
-          "Termin planowany",
-          { min: 1, max: 12 },
+          months,
+          { numeric: true, group: "Termin planowany" },
         ),
         planowanyKoniecKwartal: choice(
           "Planowany koniec — kwartał",
@@ -142,9 +156,9 @@
           { numeric: true, group: "Termin planowany" },
         ),
 
-        closed_status: text("Status zakończenia", "Zakończenie"),
-        status_reason: text("Powód statusu", "Zakończenie", { multiline: true }),
-        announcement_url: url("URL ogłoszenia"),
+        statusZakonczenia: text("Status zakończenia", "Zakończenie"),
+        powodStatusu: text("Powód statusu", "Zakończenie", { multiline: true }),
+        urlOgloszenia: url("URL ogłoszenia"),
 
         // Pre-typed-domain compatibility. Existing objects/rules keep working,
         // but these rows stay hidden unless they already contain data.
@@ -163,6 +177,18 @@
             { 1: "Q1", 2: "Q2", 3: "Q3", 4: "Q4" },
             { numeric: true, group: "Earlier captures" },
           ),
+          legacy: true,
+        },
+        closed_status: {
+          ...text("Stary status zakończenia", "Earlier captures"),
+          legacy: true,
+        },
+        status_reason: {
+          ...text("Stary powód statusu", "Earlier captures", { multiline: true }),
+          legacy: true,
+        },
+        announcement_url: {
+          ...url("Stary URL ogłoszenia", "Earlier captures"),
           legacy: true,
         },
       },
