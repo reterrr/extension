@@ -1,6 +1,8 @@
 import { useEffect } from "react";
 import "./geographyStyles";
 import "./fileSourceStyles";
+import "./commitStyles";
+import { CommitPanel } from "./CommitPanel";
 
 export function App() {
   useEffect(() => {
@@ -22,6 +24,7 @@ export function App() {
         <span className="brand">Burbot<span className="brand-dot">.</span></span>
         <span className="local-badge">EXTRACTION WORKSPACE</span>
       </header>
+      <CommitPanel />
       <div className="connection-bar">
         <span id="connection">Connect a webpage to begin</span>
         <div className="connection-actions">

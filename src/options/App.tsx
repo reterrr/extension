@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import {
-  loadState,
+  loadCommittedState,
   resetWorkspaceStorage,
   workspaceStorageInfo,
 } from "../shared/api/storage";
@@ -16,7 +16,7 @@ export function App() {
   async function refresh() {
     try {
       const [nextState, nextStorage] = await Promise.all([
-        loadState(),
+        loadCommittedState(),
         workspaceStorageInfo(),
       ]);
       setState(nextState);
@@ -32,7 +32,7 @@ export function App() {
   }, []);
 
   async function resetWorkspace() {
-    if (!confirm("Delete the complete Burbot SQLite workspace?")) return;
+    if (!confirm("Delete the complete Burbot SQLite workspace and any active draft commit?")) return;
     try {
       await resetWorkspaceStorage();
       await refresh();
@@ -48,6 +48,7 @@ export function App() {
         <h1>SQLite workspace</h1>
         <p className="ui-muted">
           Durable Burbot data is stored in a normal SQLite file managed by the local DB service.
+          Draft commits live separately in IndexedDB until committed.
         </p>
         <div className="ui-stat-grid">
           <div className="ui-stat"><strong>{state?.objects.length ?? 0}</strong><span>objects</span></div>

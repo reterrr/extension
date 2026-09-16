@@ -1,9 +1,10 @@
+import { clearActiveDraft } from "../commits/draftStore";
 import { LEGACY_STORAGE_KEY } from "../storage/constants";
 import type { LegacyStorageState } from "../types/legacy-storage";
 
 /**
  * Temporary UI mirror for existing storage.onChanged listeners.
- * SQLite on disk is the source of truth.
+ * SQLite on disk is the source of truth for committed data.
  */
 export const STORAGE_KEY = LEGACY_STORAGE_KEY;
 
@@ -71,7 +72,7 @@ async function readError(response: Response): Promise<string> {
   return response.statusText || `HTTP ${response.status}`;
 }
 
-async function updateUiCache(state: LegacyStorageState): Promise<void> {
+export async function publishUiState(state: LegacyStorageState): Promise<void> {
   await browser.storage.local.set({ [LEGACY_STORAGE_KEY]: state });
 }
 
@@ -95,10 +96,15 @@ async function saveRemoteState(state: LegacyStorageState): Promise<void> {
   if (!response.ok) throw new Error(await readError(response));
 }
 
+/** Read only the state currently committed to the SQLite file. */
+export async function loadCommittedState(): Promise<LegacyStorageState | null> {
+  return loadRemoteState();
+}
+
 export async function loadState(): Promise<LegacyStorageState> {
   const remote = await loadRemoteState();
   if (remote) {
-    await updateUiCache(remote);
+    await publishUiState(remote);
     return remote;
   }
 
@@ -110,19 +116,48 @@ export async function loadState(): Promise<LegacyStorageState> {
   if (legacy) {
     assertLegacyState(legacy);
     await saveRemoteState(legacy);
-    await updateUiCache(legacy);
+    await publishUiState(legacy);
     return legacy;
   }
 
   const empty = emptyState();
   await saveRemoteState(empty);
-  await updateUiCache(empty);
+  await publishUiState(empty);
   return empty;
 }
 
+/**
+ * Immediate write kept for initialization/migration utilities.
+ * Interactive workspace edits should go through a draft commit instead.
+ */
 export async function saveState(state: LegacyStorageState): Promise<void> {
   await saveRemoteState(state);
-  await updateUiCache(state);
+  await publishUiState(state);
+}
+
+/**
+ * Finalizes one staged commit. The database service already persists PUT /state
+ * as one SQLite transaction. We additionally verify that the committed state did
+ * not move since the draft was created.
+ */
+export async function commitState(
+  baseRevision: number,
+  workingState: LegacyStorageState,
+): Promise<LegacyStorageState> {
+  assertLegacyState(workingState);
+  const current = await loadRemoteState();
+  const currentRevision = current?.revision ?? 0;
+  if (currentRevision !== baseRevision) {
+    throw new Error(
+      `Commit conflict: SQLite is at revision ${currentRevision}, while this commit started from revision ${baseRevision}.`,
+    );
+  }
+
+  const committed = JSON.parse(JSON.stringify(workingState)) as LegacyStorageState;
+  committed.revision = baseRevision + 1;
+  await saveRemoteState(committed);
+  await publishUiState(committed);
+  return committed;
 }
 
 export async function resetWorkspaceStorage(): Promise<void> {
@@ -130,6 +165,7 @@ export async function resetWorkspaceStorage(): Promise<void> {
   if (!response.ok && response.status !== 204) {
     throw new Error(await readError(response));
   }
+  await clearActiveDraft();
   await browser.storage.local.remove(LEGACY_STORAGE_KEY);
 }
 
