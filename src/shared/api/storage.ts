@@ -129,29 +129,29 @@ export async function saveState(state: LegacyStorageState): Promise<void> {
   await publishUiState(state);
 }
 
+/**
+ * Finalizes one staged commit. The database service already persists PUT /state
+ * as one SQLite transaction. We additionally verify that the committed state did
+ * not move since the draft was created.
+ */
 export async function commitState(
   baseRevision: number,
-  state: LegacyStorageState,
-  commitId: string,
+  workingState: LegacyStorageState,
 ): Promise<LegacyStorageState> {
-  assertLegacyState(state);
-  const response = await request("/commit", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ baseRevision, commitId, state }),
-  });
-  if (!response.ok) {
-    const message = await readError(response);
-    if (response.status === 409) {
-      throw new Error(`Commit conflict: ${message}`);
-    }
-    throw new Error(message);
+  assertLegacyState(workingState);
+  const current = await loadRemoteState();
+  const currentRevision = current?.revision ?? 0;
+  if (currentRevision !== baseRevision) {
+    throw new Error(
+      `Commit conflict: SQLite is at revision ${currentRevision}, while this commit started from revision ${baseRevision}.`,
+    );
   }
 
-  const body = (await response.json()) as { state?: unknown };
-  assertLegacyState(body.state);
-  await publishUiState(body.state);
-  return body.state;
+  const committed = JSON.parse(JSON.stringify(workingState)) as LegacyStorageState;
+  committed.revision = baseRevision + 1;
+  await saveRemoteState(committed);
+  await publishUiState(committed);
+  return committed;
 }
 
 export async function resetWorkspaceStorage(): Promise<void> {
