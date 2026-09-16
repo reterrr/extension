@@ -1,3 +1,4 @@
+import { buildDurableSelectors, selectionContainer } from "./durable-selector";
 import { runExtractionRules } from "./extraction-runner";
 import {
   isPickerRequest,
@@ -5,7 +6,6 @@ import {
   type PickerPortMessage,
   type PickerRpcValue,
   type PickerSelectionResponse,
-  type SelectorHighlight,
 } from "../shared/messaging/picker";
 import { selectorColor } from "../shared/selectorPalette";
 import { createRemotePdfSourceCandidate } from "../shared/sources/remoteFile";
@@ -27,68 +27,6 @@ if (!globalThis.__burbotPickerLoaded) {
     return error instanceof Error ? error.message : String(error);
   }
 
-  function selectorFor(element: Element): string {
-    const unique = (selector: string): boolean => {
-      const nodes = document.querySelectorAll(selector);
-      return nodes.length === 1 && nodes[0] === element;
-    };
-
-    if (element.id) {
-      const id = `#${CSS.escape(element.id)}`;
-      if (unique(id)) return id;
-    }
-
-    for (const attr of ["data-testid", "data-test", "itemprop", "name"]) {
-      const value = element.getAttribute(attr);
-      if (!value) continue;
-
-      const selector = `${element.localName}[${attr}=${CSS.escape(value)}]`;
-      if (unique(selector)) return selector;
-    }
-
-    const classes = Array.from(element.classList)
-      .filter((className) => className.length < 70)
-      .slice(0, 3);
-
-    if (classes.length) {
-      const selector =
-        element.localName + classes.map((name) => `.${CSS.escape(name)}`).join("");
-      if (unique(selector)) return selector;
-    }
-
-    const path: string[] = [];
-
-    for (let node: Element | null = element; node; node = node.parentElement) {
-      let segment = CSS.escape(node.localName);
-
-      if (
-        node.id &&
-        document.querySelectorAll(`#${CSS.escape(node.id)}`).length === 1
-      ) {
-        path.unshift(`#${CSS.escape(node.id)}`);
-        const result = path.join(" > ");
-        if (unique(result)) return result;
-        path.shift();
-      }
-
-      const siblings = node.parentElement
-        ? Array.from(node.parentElement.children).filter(
-            (sibling) => sibling.localName === node.localName,
-          )
-        : [node];
-
-      if (siblings.length > 1) {
-        segment += `:nth-of-type(${siblings.indexOf(node) + 1})`;
-      }
-
-      path.unshift(segment);
-      const result = path.join(" > ");
-      if (unique(result)) return result;
-    }
-
-    throw new Error("Cannot create a unique selector.");
-  }
-
   function candidateFor(
     element: Element | null,
     range?: Range,
@@ -105,7 +43,7 @@ if (!globalThis.__burbotPickerLoaded) {
       throw new Error("Choose page content outside editable controls.");
     }
 
-    const selector = selectorFor(element);
+    const selectors = buildDurableSelectors(element);
     const options: ElementExtractionCandidateOption[] = [];
     const full = C.clean(element.textContent);
 
@@ -176,7 +114,10 @@ if (!globalThis.__burbotPickerLoaded) {
 
     return {
       pageUrl: location.href,
-      selector,
+      selector: selectors.primary,
+      ...(selectors.fallbacks.length
+        ? { selectorFallbacks: selectors.fallbacks }
+        : {}),
       options: options.filter((option) => option.raw.length <= 100000),
     };
   }
@@ -188,9 +129,7 @@ if (!globalThis.__burbotPickerLoaded) {
 
     if (selection && !selection.isCollapsed && selection.rangeCount) {
       const range = selection.getRangeAt(0);
-      const node = range.commonAncestorContainer;
-      const element = node instanceof Element ? node : node.parentElement;
-      lastSelection = candidateFor(element, range);
+      lastSelection = candidateFor(selectionContainer(range), range);
     }
 
     if (!lastSelection || lastSelection.pageUrl !== location.href) {
@@ -231,26 +170,12 @@ if (!globalThis.__burbotPickerLoaded) {
   });
 
   browser.runtime.onConnect.addListener((port) => {
-    if (
-      ![
-        "burbot-picker",
-        "burbot-file-picker",
-        "burbot-selector-highlights",
-      ].includes(port.name)
-    ) {
-      return;
-    }
+    if (!["burbot-picker", "burbot-file-picker"].includes(port.name)) return;
 
     let picking = false;
     let filePicking = false;
     let overlay: HTMLDivElement | null = null;
     let timer: ReturnType<typeof setTimeout> | undefined;
-    let highlightFrame: number | null = null;
-    let highlighted: Array<{
-      selector: string;
-      element: Element;
-      overlay: HTMLDivElement;
-    }> = [];
 
     const send = (message: PickerPortMessage): void => {
       try {
@@ -259,74 +184,6 @@ if (!globalThis.__burbotPickerLoaded) {
         // The side panel can disappear while a page event is being handled.
       }
     };
-
-    function clearSelectorHighlights(): void {
-      if (highlightFrame !== null) cancelAnimationFrame(highlightFrame);
-      highlightFrame = null;
-      for (const entry of highlighted) entry.overlay.remove();
-      highlighted = [];
-    }
-
-    function positionSelectorHighlights(): void {
-      highlightFrame = null;
-      for (const entry of highlighted) {
-        if (!entry.element.isConnected) {
-          entry.overlay.hidden = true;
-          continue;
-        }
-        const rect = entry.element.getBoundingClientRect();
-        const visible = rect.width > 0 && rect.height > 0;
-        entry.overlay.hidden = !visible;
-        if (!visible) continue;
-        Object.assign(entry.overlay.style, {
-          top: `${rect.top}px`,
-          left: `${rect.left}px`,
-          width: `${rect.width}px`,
-          height: `${rect.height}px`,
-        });
-      }
-    }
-
-    function scheduleSelectorHighlightPosition(): void {
-      if (highlightFrame !== null) return;
-      highlightFrame = requestAnimationFrame(positionSelectorHighlights);
-    }
-
-    function showSelectorHighlights(highlights: SelectorHighlight[]): void {
-      clearSelectorHighlights();
-      const seen = new Set<string>();
-
-      for (const highlight of highlights) {
-        if (seen.has(highlight.selector)) continue;
-        seen.add(highlight.selector);
-
-        let elements: Element[];
-        try {
-          elements = Array.from(document.querySelectorAll(highlight.selector));
-        } catch {
-          continue;
-        }
-
-        const color = selectorColor(highlight.selector);
-        for (const element of elements) {
-          const selectorOverlay = document.createElement("div");
-          selectorOverlay.dataset.burbotSelectorHighlight = highlight.id;
-          selectorOverlay.style.cssText =
-            "position:fixed;pointer-events:none;z-index:2147483645;" +
-            "box-sizing:border-box;border-radius:4px;" +
-            `border:1.5px solid ${color.border};background:${color.fill};` +
-            `box-shadow:0 0 0 1px ${color.soft} inset;`;
-          document.documentElement.append(selectorOverlay);
-          highlighted.push({
-            selector: highlight.selector,
-            element,
-            overlay: selectorOverlay,
-          });
-        }
-      }
-
-      positionSelectorHighlights();
-    }
 
     function stop(): void {
       picking = false;
@@ -377,7 +234,7 @@ if (!globalThis.__burbotPickerLoaded) {
 
       if (!filePicking) {
         try {
-          const color = selectorColor(selectorFor(target));
+          const color = selectorColor(buildDurableSelectors(target).primary);
           overlay.style.borderColor = color.border;
           overlay.style.background = color.fill;
         } catch {
@@ -482,8 +339,9 @@ if (!globalThis.__burbotPickerLoaded) {
             });
             break;
 
+          // Saved selector rendering has a dedicated content runtime now. Keep
+          // this for backward compatibility with an older sidepanel build.
           case "SHOW_SELECTORS":
-            showSelectorHighlights(message.highlights);
             value = true;
             break;
 
@@ -509,13 +367,10 @@ if (!globalThis.__burbotPickerLoaded) {
     document.addEventListener("keydown", key, true);
     document.addEventListener("pointerup", selected);
     document.addEventListener("keyup", selected);
-    window.addEventListener("scroll", scheduleSelectorHighlightPosition, true);
-    window.addEventListener("resize", scheduleSelectorHighlightPosition);
 
     port.onDisconnect.addListener(() => {
       if (timer !== undefined) clearTimeout(timer);
       overlay?.remove();
-      clearSelectorHighlights();
       document.removeEventListener("pointermove", draw, true);
       document.removeEventListener("pointerdown", block, true);
       document.removeEventListener("pointerup", block, true);
@@ -523,8 +378,6 @@ if (!globalThis.__burbotPickerLoaded) {
       document.removeEventListener("keydown", key, true);
       document.removeEventListener("pointerup", selected);
       document.removeEventListener("keyup", selected);
-      window.removeEventListener("scroll", scheduleSelectorHighlightPosition, true);
-      window.removeEventListener("resize", scheduleSelectorHighlightPosition);
     });
   });
 }
