@@ -34,11 +34,15 @@ if (!document.querySelector("style[data-burbot-file-sources]")) {
 .file-source-actions {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  flex-wrap: wrap;
   gap: 6px;
   margin-top: 6px;
   padding-top: 5px;
   border-top: 1px solid var(--line);
+}
+.file-source-actions .text-button {
+  padding-left: 0;
+  padding-right: 0;
 }
 .file-source-actions a {
   color: var(--green);
@@ -47,6 +51,9 @@ if (!document.querySelector("style[data-burbot-file-sources]")) {
 }
 .file-source-actions a:hover {
   text-decoration: underline;
+}
+.file-source-actions .danger {
+  margin-left: auto;
 }
 .file-source-toolbar {
   display: flex;
