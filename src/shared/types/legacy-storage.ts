@@ -76,6 +76,8 @@ export interface LegacyStoredFileSource {
 export type LegacyStoredRule = ExecutableExtractionRule & {
   objectId: string;
   field: string;
+  /** Present for durable DOM rules; absent for page URL / PDF rules. */
+  selectorFallbacks?: string[];
   sampleValue?: string;
   lastSampleValue?: string;
   lastExtractedAt?: string;
