@@ -15,6 +15,9 @@ export function App() {
       import("./choiceEvidenceUi").then(({ initChoiceEvidenceUi }) =>
         initChoiceEvidenceUi(),
       ),
+      import("./captureFeedbackUi").then(({ initCaptureFeedbackUi }) =>
+        initCaptureFeedbackUi(),
+      ),
     ]);
   }, []);
 
