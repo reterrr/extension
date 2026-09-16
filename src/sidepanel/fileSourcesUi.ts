@@ -14,9 +14,12 @@ const STORAGE_KEY = "burbot:v1";
 let initialized = false;
 let state = BurbotCore.empty() as LegacyStorageState;
 let activePageUrl = "";
+let activePageTabId: number | null = null;
 let port: browser.runtime.Port | null = null;
 let pickerClient: PickerClient | null = null;
 let filePicking = false;
+let fileModeStarting = false;
+let fileModeGeneration = 0;
 
 function $<T extends HTMLElement = HTMLElement>(id: string): T {
   const element = document.getElementById(id);
@@ -59,7 +62,9 @@ async function activeTab(): Promise<browser.tabs.Tab> {
 }
 
 async function refreshActivePage(): Promise<void> {
-  activePageUrl = (await activeTab()).url ?? "";
+  const tab = await activeTab();
+  activePageUrl = tab.url ?? "";
+  activePageTabId = tab.id ?? null;
 }
 
 function workspacePageUrl(): string {
@@ -101,6 +106,192 @@ function host(url: string): string {
   }
 }
 
+function closeConnection(
+  client: PickerClient | null,
+  connectedPort: browser.runtime.Port | null,
+): void {
+  client?.dispose();
+  try {
+    connectedPort?.disconnect();
+  } catch {
+    // Already disconnected.
+  }
+}
+
+function closeCurrentPickerConnection(): void {
+  const currentClient = pickerClient;
+  const currentPort = port;
+  pickerClient = null;
+  port = null;
+  closeConnection(currentClient, currentPort);
+  filePicking = false;
+}
+
+function disconnectPicker(): void {
+  fileModeGeneration++;
+  fileModeStarting = false;
+  closeCurrentPickerConnection();
+  renderMode();
+}
+
+async function attachFile(
+  object: LegacyStoredObject,
+  file: RemoteFileSourceCandidate,
+): Promise<void> {
+  await data("ADD_FILE_SOURCE", {
+    objectId: object.id,
+    file,
+  });
+  disconnectPicker();
+  notice(`Dodano źródło PDF: ${file.name}`);
+  render();
+}
+
+async function stopFileMode(): Promise<void> {
+  // Invalidate an in-flight start before touching the current connection.
+  fileModeGeneration++;
+  fileModeStarting = false;
+  const currentClient = pickerClient;
+  const currentPort = port;
+  pickerClient = null;
+  port = null;
+  filePicking = false;
+
+  try {
+    await currentClient?.request("STOP");
+  } catch {
+    // The tab may already have navigated away.
+  } finally {
+    closeConnection(currentClient, currentPort);
+    renderMode();
+  }
+}
+
+async function startFileMode(): Promise<void> {
+  if (fileModeStarting) return;
+
+  const object = chosenObject();
+  if (!object) throw new Error("Choose an object first.");
+
+  if (filePicking) {
+    await stopFileMode();
+    notice("Read from file mode cancelled.");
+    return;
+  }
+
+  fileModeStarting = true;
+  const token = ++fileModeGeneration;
+  renderMode();
+
+  try {
+    const tab = await activeTab();
+    if (token !== fileModeGeneration) return;
+    if (!tab.url) throw new Error("The active tab has no URL.");
+
+    const current = new URL(tab.url);
+    if (current.protocol === "file:") {
+      throw new Error(
+        "Local file paths are never stored. Open the original project page and pick its remote PDF link.",
+      );
+    }
+
+    if (isRemotePdfUrl(tab.url)) {
+      const file = createRemotePdfSourceCandidate(tab.url, tab.url);
+      await attachFile(object, file);
+      return;
+    }
+
+    if (current.protocol !== "http:" && current.protocol !== "https:") {
+      throw new Error("Open an HTTP(S) webpage containing the PDF link first.");
+    }
+    if (tab.id === undefined) throw new Error("The active tab cannot be connected.");
+
+    // Close an idle/stale file-picker connection before creating a new one.
+    closeCurrentPickerConnection();
+
+    // Use the same lightweight picker bundles as the normal workspace. Injecting
+    // content.js here reparsed the whole content entrypoint on every file-pick.
+    await browser.scripting.executeScript({
+      target: { tabId: tab.id },
+      files: ["core.js", "picker.js"],
+    });
+    if (token !== fileModeGeneration) return;
+
+    const connectedPort = browser.tabs.connect(tab.id, {
+      name: "burbot-file-picker",
+      frameId: 0,
+    });
+
+    const client = createPickerClient(connectedPort, (event) => {
+      if (token !== fileModeGeneration) return;
+
+      if (event.event === "FILE_CAPTURE") {
+        const selectedObject = chosenObject();
+        if (!selectedObject || selectedObject.id !== object.id) {
+          disconnectPicker();
+          notice("Object changed. Start Read from file again.", true);
+          return;
+        }
+
+        // Disable the button while the source is being persisted so another
+        // click cannot create a second picker connection for the same capture.
+        fileModeStarting = true;
+        filePicking = false;
+        renderMode();
+        void attachFile(object, event.file).catch((error: unknown) => {
+          disconnectPicker();
+          notice(error instanceof Error ? error.message : String(error), true);
+        });
+        return;
+      }
+
+      if (event.event === "ERROR") {
+        notice(event.error, true);
+        return;
+      }
+
+      if (event.event === "MODE") {
+        filePicking = event.picking;
+        renderMode();
+      }
+    });
+
+    if (token !== fileModeGeneration) {
+      closeConnection(client, connectedPort);
+      return;
+    }
+
+    port = connectedPort;
+    pickerClient = client;
+
+    connectedPort.onDisconnect.addListener(() => {
+      client.dispose();
+
+      // A late disconnect from an older port must never clear a newer picker.
+      if (port !== connectedPort || pickerClient !== client) return;
+      port = null;
+      pickerClient = null;
+      filePicking = false;
+      fileModeStarting = false;
+      renderMode();
+    });
+
+    await client.request("PICK_FILE");
+    if (token !== fileModeGeneration) {
+      closeConnection(client, connectedPort);
+      return;
+    }
+
+    filePicking = true;
+    notice("Read from file: click a PDF link on the webpage. Press Esc to cancel.");
+  } finally {
+    if (token === fileModeGeneration) {
+      fileModeStarting = false;
+      renderMode();
+    }
+  }
+}
+
 async function ensurePdfPermission(url: string): Promise<void> {
   const parsed = new URL(url);
   const origins = [`${parsed.origin}/*`];
@@ -131,120 +322,6 @@ async function openPdfReader(
   // explicit: Firefox's native PDF viewer is replaced by Burbot PDF Reader.
   await browser.tabs.update(tab.id, { url: url.href });
   notice("Burbot PDF Reader: zaznacz wartość w dokumencie dla aktywnego pola.");
-}
-
-function disconnectPicker(): void {
-  pickerClient?.dispose();
-  pickerClient = null;
-  const currentPort = port;
-  port = null;
-  try {
-    currentPort?.disconnect();
-  } catch {
-    // Already disconnected.
-  }
-  filePicking = false;
-  renderMode();
-}
-
-async function attachFile(
-  object: LegacyStoredObject,
-  file: RemoteFileSourceCandidate,
-): Promise<void> {
-  await data("ADD_FILE_SOURCE", {
-    objectId: object.id,
-    file,
-  });
-  disconnectPicker();
-  notice(`Dodano źródło PDF: ${file.name}`);
-  render();
-}
-
-async function stopFileMode(): Promise<void> {
-  try {
-    await pickerClient?.request("STOP");
-  } catch {
-    // The tab may already have navigated away.
-  }
-  disconnectPicker();
-}
-
-async function startFileMode(): Promise<void> {
-  const object = chosenObject();
-  if (!object) throw new Error("Choose an object first.");
-
-  if (filePicking) {
-    await stopFileMode();
-    notice("Read from file mode cancelled.");
-    return;
-  }
-
-  const tab = await activeTab();
-  if (!tab.url) throw new Error("The active tab has no URL.");
-
-  const current = new URL(tab.url);
-  if (current.protocol === "file:") {
-    throw new Error(
-      "Local file paths are never stored. Open the original project page and pick its remote PDF link.",
-    );
-  }
-
-  if (isRemotePdfUrl(tab.url)) {
-    const file = createRemotePdfSourceCandidate(tab.url, tab.url);
-    await attachFile(object, file);
-    return;
-  }
-
-  if (current.protocol !== "http:" && current.protocol !== "https:") {
-    throw new Error("Open an HTTP(S) webpage containing the PDF link first.");
-  }
-  if (tab.id === undefined) throw new Error("The active tab cannot be connected.");
-
-  disconnectPicker();
-  await browser.scripting.executeScript({
-    target: { tabId: tab.id },
-    files: ["content.js"],
-  });
-
-  port = browser.tabs.connect(tab.id, {
-    name: "burbot-file-picker",
-    frameId: 0,
-  });
-  pickerClient = createPickerClient(port, (event) => {
-    if (event.event === "FILE_CAPTURE") {
-      const selectedObject = chosenObject();
-      if (!selectedObject || selectedObject.id !== object.id) {
-        disconnectPicker();
-        notice("Object changed. Start Read from file again.", true);
-        return;
-      }
-      void attachFile(object, event.file).catch((error: unknown) => {
-        disconnectPicker();
-        notice(error instanceof Error ? error.message : String(error), true);
-      });
-      return;
-    }
-    if (event.event === "ERROR") {
-      notice(event.error, true);
-      return;
-    }
-    if (event.event === "MODE") {
-      filePicking = event.picking;
-      renderMode();
-    }
-  });
-
-  port.onDisconnect.addListener(() => {
-    port = null;
-    pickerClient = null;
-    filePicking = false;
-    renderMode();
-  });
-
-  await pickerClient.request("PICK_FILE");
-  filePicking = true;
-  renderMode();
-  notice("Read from file: click a PDF link on the webpage. Press Esc to cancel.");
 }
 
 function renderSource(source: LegacyStoredFileSource): HTMLElement {
@@ -314,8 +391,13 @@ function renderSource(source: LegacyStoredFileSource): HTMLElement {
 function renderMode(): void {
   const button = $("read-from-file") as HTMLButtonElement;
   const hint = $("file-source-mode-hint");
+  button.disabled = fileModeStarting;
   button.dataset.active = String(filePicking);
-  button.textContent = filePicking ? "Cancel file mode" : "Read from file";
+  button.textContent = fileModeStarting
+    ? "Starting…"
+    : filePicking
+      ? "Cancel file mode"
+      : "Read from file";
   hint.hidden = !filePicking;
 }
 
@@ -347,9 +429,10 @@ export async function initFileSourcesUi(): Promise<void> {
   initialized = true;
 
   $("read-from-file").onclick = () => {
-    void startFileMode().catch((error: unknown) =>
-      notice(error instanceof Error ? error.message : String(error), true),
-    );
+    void startFileMode().catch((error: unknown) => {
+      disconnectPicker();
+      notice(error instanceof Error ? error.message : String(error), true);
+    });
   };
 
   state = await data("GET");
@@ -383,7 +466,9 @@ export async function initFileSourcesUi(): Promise<void> {
       .then(render)
       .catch(() => undefined);
   });
-  browser.tabs.onUpdated.addListener((_id, change) => {
+
+  browser.tabs.onUpdated.addListener((id, change) => {
+    if (id !== activePageTabId) return;
     if (!change.url && change.status !== "loading") return;
     void stopFileMode()
       .then(refreshActivePage)
