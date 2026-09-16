@@ -1,19 +1,15 @@
 import { selectorColor } from "../shared/selectorPalette";
+import type { SelectorHighlight } from "../shared/messaging/picker";
 import type {
   LegacyStorageState,
   LegacyStoredObject,
   LegacyStoredRule,
 } from "../shared/types/legacy-storage";
-import type { SelectorHighlight } from "../shared/messaging/picker";
-import { createPickerClient, type PickerClient } from "./pickerRpc";
 
 const STORAGE_KEY = "burbot:v1";
 let initialized = false;
 let state = BurbotCore.empty() as LegacyStorageState;
 let activePageUrl = "";
-let client: PickerClient | null = null;
-let port: browser.runtime.Port | null = null;
-let connectedTabId: number | null = null;
 let syncQueued = false;
 
 async function data(): Promise<LegacyStorageState> {
@@ -44,12 +40,27 @@ function workspacePageUrl(): string {
   return connection.includes("· connected") ? activePageUrl : "";
 }
 
+function comparablePageUrl(value: string): string {
+  try {
+    const url = new URL(value);
+    url.hash = "";
+    if (url.pathname.length > 1) url.pathname = url.pathname.replace(/\/+$/, "");
+    return url.href;
+  } catch {
+    return value;
+  }
+}
+
+function samePage(left: string, right: string): boolean {
+  return comparablePageUrl(left) === comparablePageUrl(right);
+}
+
 function isLocal(object: LegacyStoredObject, pageUrl: string): boolean {
   return (
     !!pageUrl &&
-    (object.sourceUrl === pageUrl ||
+    (samePage(object.sourceUrl ?? "", pageUrl) ||
       state.rules.some(
-        (rule) => rule.objectId === object.id && rule.pageUrl === pageUrl,
+        (rule) => rule.objectId === object.id && samePage(rule.pageUrl, pageUrl),
       ))
   );
 }
@@ -75,7 +86,7 @@ function selectorRules(object: LegacyStoredObject | undefined): LegacyStoredRule
   return state.rules.filter(
     (rule) =>
       rule.objectId === object.id &&
-      rule.pageUrl === activePageUrl &&
+      samePage(rule.pageUrl, activePageUrl) &&
       typeof rule.selector === "string" &&
       rule.selector.length > 0,
   );
@@ -147,47 +158,29 @@ function colorSidebar(): void {
   }
 }
 
-function disconnect(): void {
-  client?.dispose();
-  client = null;
-  try {
-    port?.disconnect();
-  } catch {
-    // Already disconnected.
-  }
-  port = null;
-  connectedTabId = null;
-}
-
-async function ensureClient(tab: browser.tabs.Tab): Promise<PickerClient> {
-  if (tab.id === undefined) throw new Error("Active tab cannot be connected.");
-  if (client && connectedTabId === tab.id) return client;
-
-  disconnect();
+async function renderPageHighlights(
+  tabId: number,
+  highlights: SelectorHighlight[],
+): Promise<void> {
+  // Dedicated runtime: do not depend on the picker's singleton guard. This is
+  // important after an extension reload, when an already-open page may still
+  // contain an older picker instance.
   await browser.scripting.executeScript({
-    target: { tabId: tab.id },
-    files: ["core.js", "picker.js"],
+    target: { tabId },
+    files: ["selector-highlights.js"],
   });
 
-  port = browser.tabs.connect(tab.id, {
-    name: "burbot-selector-highlights",
-    frameId: 0,
+  await browser.tabs.sendMessage(tabId, {
+    type: "BURBOT_SHOW_SELECTOR_HIGHLIGHTS",
+    highlights,
   });
-  connectedTabId = tab.id;
-  client = createPickerClient(port, () => undefined);
-  port.onDisconnect.addListener(() => {
-    client = null;
-    port = null;
-    connectedTabId = null;
-  });
-  return client;
 }
 
 async function syncPage(): Promise<void> {
-  colorSidebar();
-
   const tab = await activeTab();
   activePageUrl = tab?.url ?? "";
+  colorSidebar();
+
   const protocol = (() => {
     try {
       return new URL(activePageUrl).protocol;
@@ -197,28 +190,24 @@ async function syncPage(): Promise<void> {
   })();
 
   if (!tab || tab.id === undefined || !["http:", "https:"].includes(protocol)) {
-    disconnect();
     return;
   }
 
   const object = chosenObject();
-  const rules = selectorRules(object);
   const highlights: SelectorHighlight[] = [];
   const seen = new Set<string>();
 
-  for (const rule of rules) {
+  for (const rule of selectorRules(object)) {
     if (typeof rule.selector !== "string" || seen.has(rule.selector)) continue;
     seen.add(rule.selector);
     highlights.push({ id: String(rule.id), selector: rule.selector });
   }
 
-  if (!highlights.length && !client) return;
-
   try {
-    const pageClient = await ensureClient(tab);
-    await pageClient.request("SHOW_SELECTORS", { highlights });
+    // Send an empty list too: switching objects/pages must clear stale overlays.
+    await renderPageHighlights(tab.id, highlights);
   } catch {
-    disconnect();
+    // Highlighting is visual only. Never make capture/extraction depend on it.
   }
 }
 
@@ -255,9 +244,7 @@ export async function initSelectorHighlightsUi(): Promise<void> {
     (event) => {
       const target = event.target;
       if (!(target instanceof Element)) return;
-      if (target.closest(".field-row, #object-options button")) {
-        queueMicrotask(colorSidebar);
-      }
+      if (target.closest(".field-row, #object-options button")) queueSync();
     },
     true,
   );
@@ -275,6 +262,5 @@ export async function initSelectorHighlightsUi(): Promise<void> {
     if (change.url || change.status === "complete") queueSync();
   });
 
-  window.addEventListener("pagehide", disconnect);
   await syncPage();
 }
