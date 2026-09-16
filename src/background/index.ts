@@ -2,6 +2,7 @@ import "../shared/domain/schema.js";
 import "../shared/domain/core.js";
 import { loadState, saveState } from "../shared/api/storage";
 import { createCapturedExtractionInput } from "../shared/extraction/rules";
+import { discardStaleImportedEvidence } from "../shared/import/evidence";
 import { importDocumentIntoState } from "../shared/import/format";
 import { isPickerSelectionResponse } from "../shared/messaging/picker";
 import type { FocusPayload } from "../shared/types/domain";
@@ -235,21 +236,24 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
     }
 
     const now = new Date().toISOString();
-    const next =
-      message.op === "IMPORT"
-        ? importDocumentIntoState(
-            state,
-            message.document,
-            message.expectedRevision,
-            () => crypto.randomUUID(),
-            now,
-          )
-        : BurbotCore.mutate(
-            state,
-            message,
-            () => crypto.randomUUID(),
-            now,
-          );
+    let next;
+    if (message.op === "IMPORT") {
+      next = importDocumentIntoState(
+        state,
+        message.document,
+        message.expectedRevision,
+        () => crypto.randomUUID(),
+        now,
+      );
+    } else {
+      next = BurbotCore.mutate(
+        state,
+        message,
+        () => crypto.randomUUID(),
+        now,
+      );
+      discardStaleImportedEvidence(next, state, message);
+    }
     await saveState(next);
     return next;
   });
