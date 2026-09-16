@@ -1,3 +1,4 @@
+import { clearActiveDraft } from "../commits/draftStore";
 import { LEGACY_STORAGE_KEY } from "../storage/constants";
 import type { LegacyStorageState } from "../types/legacy-storage";
 
@@ -159,6 +160,7 @@ export async function resetWorkspaceStorage(): Promise<void> {
   if (!response.ok && response.status !== 204) {
     throw new Error(await readError(response));
   }
+  await clearActiveDraft();
   await browser.storage.local.remove(LEGACY_STORAGE_KEY);
 }
 
