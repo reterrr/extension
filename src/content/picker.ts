@@ -336,6 +336,13 @@ if (!globalThis.__burbotPickerLoaded) {
               selectAll: (selector) => Array.from(document.querySelectorAll(selector)),
               readElement: (element, extraction) =>
                 C.readElement(element, extraction),
+              readSelectionFromPage: (extraction) =>
+                C.selectedText(
+                  document.body?.textContent ??
+                    document.documentElement.textContent ??
+                    "",
+                  extraction.quote,
+                ),
             });
             break;
 
