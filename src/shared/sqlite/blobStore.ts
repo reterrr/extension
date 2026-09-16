@@ -33,8 +33,9 @@ export async function readSqliteBytes(): Promise<Uint8Array | null> {
   const database = await openDatabase();
   try {
     const transaction = database.transaction(STORE_NAME, "readonly");
+    const done = transactionDone(transaction);
     const value = await requestResult(transaction.objectStore(STORE_NAME).get(MAIN_KEY));
-    await transactionDone(transaction);
+    await done;
     if (value === undefined || value === null) return null;
     if (value instanceof Uint8Array) return value;
     if (value instanceof ArrayBuffer) return new Uint8Array(value);
@@ -51,8 +52,9 @@ export async function writeSqliteBytes(bytes: Uint8Array): Promise<void> {
   const database = await openDatabase();
   try {
     const transaction = database.transaction(STORE_NAME, "readwrite");
+    const done = transactionDone(transaction);
     transaction.objectStore(STORE_NAME).put(bytes, MAIN_KEY);
-    await transactionDone(transaction);
+    await done;
   } finally {
     database.close();
   }
@@ -62,8 +64,9 @@ export async function deleteSqliteBytes(): Promise<void> {
   const database = await openDatabase();
   try {
     const transaction = database.transaction(STORE_NAME, "readwrite");
+    const done = transactionDone(transaction);
     transaction.objectStore(STORE_NAME).delete(MAIN_KEY);
-    await transactionDone(transaction);
+    await done;
   } finally {
     database.close();
   }
