@@ -42,6 +42,7 @@ const configs = [
       core: "src/shared/domain/core.js",
       picker: "src/content/picker.ts",
       "selector-highlights": "src/content/selector-highlights.ts",
+      "import-review-highlights": "src/content/import-review-highlights.ts",
     },
   },
 ];
