@@ -41,7 +41,7 @@ export function App() {
               <details id="more">
                 <summary aria-label="Object actions">•••</summary>
                 <div className="popover menu">
-                  <button id="export">Export JSON</button>
+                  <button id="export">Export workspace state</button>
                   <button id="delete" className="danger">Delete object</button>
                 </div>
               </details>
