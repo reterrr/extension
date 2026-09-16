@@ -185,7 +185,7 @@ export function App() {
       <section id="capture-area" className="capture-area" hidden aria-label="Aktywne wydzielanie pola">
         <div className="capture-heading">
           <span>
-            <small>WYDZIElANIE</small><strong id="active-label" />
+            <small>WYDZIELANIE</small><strong id="active-label" />
             <span id="active-context" className="muted" />
           </span>
           <span className="capture-heading-actions">
