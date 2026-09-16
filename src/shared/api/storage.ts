@@ -21,6 +21,20 @@ function assertLegacyState(value: unknown): asserts value is LegacyStorageState 
   }
 }
 
+function emptyState(): LegacyStorageState {
+  return {
+    version: 1,
+    revision: 0,
+    objects: [],
+    rules: [],
+    geographies: [],
+    fileSources: [],
+    importSources: [],
+    financingRules: [],
+    documentRequirements: [],
+  };
+}
+
 async function updateUiCache(state: LegacyStorageState): Promise<void> {
   await browser.storage.local.set({ [LEGACY_STORAGE_KEY]: state });
 }
@@ -40,7 +54,7 @@ export async function loadState(): Promise<LegacyStorageState> {
     return legacy;
   }
 
-  const empty = BurbotCore.empty() as LegacyStorageState;
+  const empty = emptyState();
   await saveStateToSqlite(empty);
   await updateUiCache(empty);
   return empty;
