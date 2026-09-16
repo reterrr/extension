@@ -30,6 +30,7 @@ export type ExtractionCandidateOption =
 export interface ElementExtractionCandidate {
   pageUrl: string;
   selector: string;
+  selectorFallbacks?: string[];
   options: ElementExtractionCandidateOption[];
 }
 
