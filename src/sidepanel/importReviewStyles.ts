@@ -152,12 +152,34 @@ style.textContent = `
     font-weight: 600;
     overflow-wrap: anywhere;
   }
-  .import-review-fields span {
-    position: absolute;
-    top: 7px;
-    right: 8px;
+  .import-review-field-meta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-top: 5px;
+    min-width: 0;
+  }
+  .import-review-field-meta span {
+    position: static;
     color: #6d8a76;
     font-size: 10px;
+    white-space: nowrap;
+  }
+  .import-review-source-button {
+    border: 0;
+    background: transparent;
+    padding: 2px 0;
+    font: inherit;
+    font-size: 10px;
+    font-weight: 650;
+    cursor: pointer;
+    white-space: nowrap;
+    opacity: .88;
+  }
+  .import-review-source-button:hover {
+    text-decoration: underline;
+    opacity: 1;
   }
   .import-review-hint {
     margin: 12px 0;
