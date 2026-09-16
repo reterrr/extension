@@ -97,7 +97,9 @@ function ObjectGroup({
                 >
                   <span className="commit-object-label">{object.label}</span>
                   {badge && (
-                    <span className={`commit-status commit-status-${object.status.toLowerCase()}`}>
+                    <span
+                      className={`commit-status commit-status-${object.status.toLowerCase()}`}
+                    >
                       {badge}
                     </span>
                   )}
@@ -138,8 +140,13 @@ export function CommitPanel() {
       }
       return undefined;
     };
+    const localChanged = () => void refresh();
     browser.runtime.onMessage.addListener(listener);
-    return () => browser.runtime.onMessage.removeListener(listener);
+    window.addEventListener("burbot:commit-changed", localChanged);
+    return () => {
+      browser.runtime.onMessage.removeListener(listener);
+      window.removeEventListener("burbot:commit-changed", localChanged);
+    };
   }, []);
 
   const groups = useMemo(() => {

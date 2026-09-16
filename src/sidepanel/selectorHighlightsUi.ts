@@ -19,19 +19,14 @@ async function data(): Promise<LegacyStorageState> {
     expectedRevision: state.revision,
   })) as { ok?: boolean; value?: LegacyStorageState };
 
-  if (!response?.ok || !response.value) {
-    throw new Error("Storage is unavailable.");
-  }
+  if (!response?.ok || !response.value) throw new Error("Storage is unavailable.");
   state = response.value;
   return state;
 }
 
 async function activeTab(): Promise<browser.tabs.Tab | undefined> {
   const currentWindow = await browser.windows.getCurrent();
-  const tabs = await browser.tabs.query({
-    active: true,
-    windowId: currentWindow.id,
-  });
+  const tabs = await browser.tabs.query({ active: true, windowId: currentWindow.id });
   return tabs[0];
 }
 
@@ -56,25 +51,13 @@ function samePage(left: string, right: string): boolean {
 }
 
 function isLocal(object: LegacyStoredObject, pageUrl: string): boolean {
-  return (
-    !!pageUrl &&
-    (samePage(object.sourceUrl ?? "", pageUrl) ||
-      state.rules.some(
-        (rule) => rule.objectId === object.id && samePage(rule.pageUrl, pageUrl),
-      ))
-  );
+  return !!pageUrl && (samePage(object.sourceUrl ?? "", pageUrl) || state.rules.some((rule) => rule.objectId === object.id && samePage(rule.pageUrl, pageUrl)));
 }
 
-/** Mirrors workspace.js object-switcher ordering while objectId is still private there. */
 function chosenObject(): LegacyStoredObject | undefined {
-  const buttons = Array.from(
-    document.querySelectorAll<HTMLButtonElement>("#object-options button"),
-  );
-  const activeIndex = buttons.findIndex(
-    (button) => button.getAttribute("aria-current") === "true",
-  );
+  const buttons = Array.from(document.querySelectorAll<HTMLButtonElement>("#object-options button"));
+  const activeIndex = buttons.findIndex((button) => button.getAttribute("aria-current") === "true");
   if (activeIndex < 0) return state.objects.at(-1);
-
   const pageUrl = workspacePageUrl();
   const local = state.objects.filter((object) => isLocal(object, pageUrl));
   const saved = state.objects.filter((object) => !isLocal(object, pageUrl));
@@ -83,43 +66,20 @@ function chosenObject(): LegacyStoredObject | undefined {
 
 function selectorRules(object: LegacyStoredObject | undefined): LegacyStoredRule[] {
   if (!object) return [];
-  return state.rules.filter(
-    (rule) =>
-      rule.objectId === object.id &&
-      samePage(rule.pageUrl, activePageUrl) &&
-      typeof rule.selector === "string" &&
-      rule.selector.length > 0,
-  );
+  return state.rules.filter((rule) => rule.objectId === object.id && samePage(rule.pageUrl, activePageUrl) && typeof rule.selector === "string" && rule.selector.length > 0);
 }
 
 function ruleTargetKey(rule: LegacyStoredRule): string {
   return BurbotCore.targetKey(rule.target);
 }
 
-function matchingRule(
-  object: LegacyStoredObject,
-  field: string,
-  targetKey: string,
-): LegacyStoredRule | undefined {
-  return state.rules.find(
-    (rule) =>
-      rule.objectId === object.id &&
-      rule.field === field &&
-      ruleTargetKey(rule) === targetKey &&
-      typeof rule.selector === "string" &&
-      rule.selector.length > 0,
-  );
+function matchingRule(object: LegacyStoredObject, field: string, targetKey: string): LegacyStoredRule | undefined {
+  return state.rules.find((rule) => rule.objectId === object.id && rule.field === field && ruleTargetKey(rule) === targetKey && typeof rule.selector === "string" && rule.selector.length > 0);
 }
 
 function ruleFallbacks(rule: LegacyStoredRule): string[] {
   if (rule.selectorFallbacks?.length) return rule.selectorFallbacks;
-  if (
-    rule.extraction.type === "text" ||
-    rule.extraction.type === "selection" ||
-    rule.extraction.type === "attribute"
-  ) {
-    return rule.extraction.selectorFallbacks ?? [];
-  }
+  if (rule.extraction.type === "text" || rule.extraction.type === "selection" || rule.extraction.type === "attribute") return rule.extraction.selectorFallbacks ?? [];
   return [];
 }
 
@@ -139,140 +99,79 @@ function clearSelectorVariables(element: HTMLElement): void {
 function colorSidebar(): void {
   const object = chosenObject();
   const rows = document.querySelectorAll<HTMLElement>(".field-row");
-
   for (const row of rows) {
     clearSelectorVariables(row);
     if (!object) continue;
-
     const field = row.dataset.field;
     const target = row.dataset.target ?? "";
     if (!field) continue;
-
     const rule = matchingRule(object, field, target);
-    if (rule && typeof rule.selector === "string") {
-      setSelectorVariables(row, rule.selector);
-    }
+    if (rule && typeof rule.selector === "string") setSelectorVariables(row, rule.selector);
   }
-
   const details = document.getElementById("rule-details");
   if (!(details instanceof HTMLElement)) return;
   clearSelectorVariables(details);
-
   const selected = document.querySelector<HTMLElement>(".field-row.selected");
   if (!selected || !object || !selected.dataset.field) return;
-  const rule = matchingRule(
-    object,
-    selected.dataset.field,
-    selected.dataset.target ?? "",
-  );
-  if (rule && typeof rule.selector === "string") {
-    setSelectorVariables(details, rule.selector);
-  }
+  const rule = matchingRule(object, selected.dataset.field, selected.dataset.target ?? "");
+  if (rule && typeof rule.selector === "string") setSelectorVariables(details, rule.selector);
 }
 
-async function renderPageHighlights(
-  tabId: number,
-  highlights: SelectorHighlight[],
-): Promise<void> {
-  await browser.scripting.executeScript({
-    target: { tabId },
-    files: ["selector-highlights.js"],
-  });
-
-  await browser.tabs.sendMessage(tabId, {
-    type: "BURBOT_SHOW_SELECTOR_HIGHLIGHTS",
-    highlights,
-  });
+async function renderPageHighlights(tabId: number, highlights: SelectorHighlight[]): Promise<void> {
+  await browser.scripting.executeScript({ target: { tabId }, files: ["selector-highlights.js"] });
+  await browser.tabs.sendMessage(tabId, { type: "BURBOT_SHOW_SELECTOR_HIGHLIGHTS", highlights });
 }
 
 async function syncPage(): Promise<void> {
   const tab = await activeTab();
   activePageUrl = tab?.url ?? "";
   colorSidebar();
+  let protocol = "";
+  try { protocol = new URL(activePageUrl).protocol; } catch {}
+  if (!tab || tab.id === undefined || !["http:", "https:"].includes(protocol)) return;
 
-  const protocol = (() => {
-    try {
-      return new URL(activePageUrl).protocol;
-    } catch {
-      return "";
-    }
-  })();
-
-  if (!tab || tab.id === undefined || !["http:", "https:"].includes(protocol)) {
+  if (document.documentElement.classList.contains("import-review-mode")) {
+    try { await renderPageHighlights(tab.id, []); } catch {}
     return;
   }
 
   const object = chosenObject();
   const highlights: SelectorHighlight[] = [];
   const seen = new Set<string>();
-
   for (const rule of selectorRules(object)) {
     if (typeof rule.selector !== "string") continue;
-    const quote =
-      rule.extraction.type === "selection" ? rule.extraction.quote : undefined;
-    const key = [
-      rule.selector,
-      quote?.exact ?? "",
-      quote?.prefix ?? "",
-      quote?.suffix ?? "",
-    ].join("\u0000");
+    const quote = rule.extraction.type === "selection" ? rule.extraction.quote : undefined;
+    const key = [rule.selector, quote?.exact ?? "", quote?.prefix ?? "", quote?.suffix ?? ""].join("\u0000");
     if (seen.has(key)) continue;
     seen.add(key);
-
     const fallbacks = ruleFallbacks(rule);
-    highlights.push({
-      id: String(rule.id),
-      selector: rule.selector,
-      ...(fallbacks.length ? { selectorFallbacks: fallbacks } : {}),
-      ...(quote ? { quote } : {}),
-    });
+    highlights.push({ id: String(rule.id), selector: rule.selector, ...(fallbacks.length ? { selectorFallbacks: fallbacks } : {}), ...(quote ? { quote } : {}) });
   }
-
-  try {
-    await renderPageHighlights(tab.id, highlights);
-  } catch {
-    // Highlighting is visual only. Never make capture/extraction depend on it.
-  }
+  try { await renderPageHighlights(tab.id, highlights); } catch {}
 }
 
 function queueSync(): void {
   if (syncQueued) return;
   syncQueued = true;
-  queueMicrotask(() => {
-    syncQueued = false;
-    void syncPage();
-  });
+  queueMicrotask(() => { syncQueued = false; void syncPage(); });
 }
 
 export async function initSelectorHighlightsUi(): Promise<void> {
   if (initialized) return;
   initialized = true;
-
   await data();
   const tab = await activeTab();
   activePageUrl = tab?.url ?? "";
-
   const workspace = document.getElementById("workspace");
   if (workspace) {
     const observer = new MutationObserver(queueSync);
-    observer.observe(workspace, {
-      childList: true,
-      subtree: true,
-      attributes: true,
-      attributeFilter: ["aria-current", "hidden"],
-    });
+    observer.observe(workspace, { childList: true, subtree: true, attributes: true, attributeFilter: ["aria-current", "hidden"] });
   }
-
-  document.addEventListener(
-    "click",
-    (event) => {
-      const target = event.target;
-      if (!(target instanceof Element)) return;
-      if (target.closest(".field-row, #object-options button")) queueSync();
-    },
-    true,
-  );
-
+  document.addEventListener("click", (event) => {
+    const target = event.target;
+    if (target instanceof Element && target.closest(".field-row, #object-options button")) queueSync();
+  }, true);
+  window.addEventListener("burbot:selector-highlights-refresh", queueSync);
   browser.storage.onChanged.addListener((changes, area) => {
     if (area !== "local") return;
     const next = changes[STORAGE_KEY]?.newValue as LegacyStorageState | undefined;
@@ -280,11 +179,7 @@ export async function initSelectorHighlightsUi(): Promise<void> {
     state = next;
     queueSync();
   });
-
   browser.tabs.onActivated.addListener(queueSync);
-  browser.tabs.onUpdated.addListener((_tabId, change) => {
-    if (change.url || change.status === "complete") queueSync();
-  });
-
+  browser.tabs.onUpdated.addListener((_tabId, change) => { if (change.url || change.status === "complete") queueSync(); });
   await syncPage();
 }
