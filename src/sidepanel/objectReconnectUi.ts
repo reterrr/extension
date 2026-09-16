@@ -1,3 +1,6 @@
+import "./selectorHighlightStyles";
+import { initSelectorHighlightsUi } from "./selectorHighlightsUi";
+
 let initialized = false;
 let reconnectTimer: number | undefined;
 
@@ -23,6 +26,8 @@ function scheduleReconnect(): void {
 export async function initObjectReconnectUi(): Promise<void> {
   if (initialized) return;
   initialized = true;
+
+  void initSelectorHighlightsUi().catch(() => undefined);
 
   const currentWindow = await browser.windows.getCurrent();
   const windowId = currentWindow.id;
