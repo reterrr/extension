@@ -1,4 +1,7 @@
-import type { BurbotObject, BurbotState } from "../types/domain";
+import type {
+  LegacyStorageState,
+  LegacyStoredObject,
+} from "../types/legacy-storage";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -8,25 +11,30 @@ function isObjectTarget(value: unknown): boolean {
   return !isRecord(value) || value.kind === undefined || value.kind === "object";
 }
 
-function clearField(object: BurbotObject | undefined, field: unknown): void {
+function clearField(
+  object: LegacyStoredObject | undefined,
+  field: unknown,
+): void {
   if (!object?.evidence || typeof field !== "string") return;
   delete object.evidence[field];
   if (Object.keys(object.evidence).length === 0) delete object.evidence;
 }
 
-/**
- * Imported evidence proves the imported value. If that object field is later
- * edited or re-extracted, the old span must not remain attached to the new value.
- */
+/** Compatibility behavior for the pre-SQLite imported snapshot. */
 export function discardStaleImportedEvidence(
-  next: BurbotState,
-  previous: BurbotState,
+  next: LegacyStorageState,
+  previous: LegacyStorageState,
   message: Record<string, unknown>,
 ): void {
   const objectId = typeof message.objectId === "string" ? message.objectId : undefined;
-  const object = objectId ? next.objects.find((entry) => entry.id === objectId) : undefined;
+  const object = objectId
+    ? next.objects.find((entry) => entry.id === objectId)
+    : undefined;
 
-  if ((message.op === "ASSIGN" || message.op === "EDIT") && isObjectTarget(message.target)) {
+  if (
+    (message.op === "ASSIGN" || message.op === "EDIT") &&
+    isObjectTarget(message.target)
+  ) {
     clearField(object, message.field);
     return;
   }
