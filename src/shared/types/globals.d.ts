@@ -49,10 +49,10 @@ interface BurbotGeographyCatalogEntry {
 }
 
 interface BurbotGeographyApi {
-  types: Record<string, string>;
-  roles: Record<string, string>;
-  fields: Record<string, BurbotFieldDefinition>;
-  catalog: BurbotGeographyCatalogEntry[];
+  types: Readonly<Record<string, string>>;
+  roles: Readonly<Record<string, string>>;
+  fields: Readonly<Record<string, BurbotFieldDefinition>>;
+  catalog: ReadonlyArray<BurbotGeographyCatalogEntry>;
 }
 
 declare global {
