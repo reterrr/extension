@@ -2,7 +2,11 @@ import { useEffect } from "react";
 
 export function App() {
   useEffect(() => {
-    void Promise.all([import("./workspace.js"), import("./importUi")]);
+    void Promise.all([
+      import("./workspace.js"),
+      import("./importUi"),
+      import("./geographyUi").then(({ initGeographyUi }) => initGeographyUi()),
+    ]);
   }, []);
 
   return (
