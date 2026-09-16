@@ -72,8 +72,19 @@ async function readError(response: Response): Promise<string> {
   return response.statusText || `HTTP ${response.status}`;
 }
 
+/**
+ * Best-effort compatibility mirror for the legacy sidepanel listeners.
+ *
+ * A failure here must never invalidate a draft already persisted in IndexedDB
+ * or a state already committed to SQLite. The authoritative stores are the
+ * active IndexedDB draft and the local SQLite file respectively.
+ */
 export async function publishUiState(state: LegacyStorageState): Promise<void> {
-  await browser.storage.local.set({ [LEGACY_STORAGE_KEY]: state });
+  try {
+    await browser.storage.local.set({ [LEGACY_STORAGE_KEY]: state });
+  } catch (cause) {
+    console.warn("Could not update the legacy Burbot UI mirror.", cause);
+  }
 }
 
 async function loadRemoteState(): Promise<LegacyStorageState | null> {
