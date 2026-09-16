@@ -1,14 +1,13 @@
 import { resetDatabase, sqliteDatabaseInfo } from "../sqlite/database";
 import { loadStateFromSqlite, saveStateToSqlite } from "../sqlite/stateRepository";
-import {
-  LEGACY_STORAGE_KEY,
-  SQLITE_REVISION_SIGNAL_KEY,
-} from "../storage/constants";
+import { LEGACY_STORAGE_KEY } from "../storage/constants";
 import type { LegacyStorageState } from "../types/legacy-storage";
 
-/** Backward-compatible export used by migration/tests. */
+/**
+ * Compatibility cache for existing storage.onChanged listeners.
+ * SQLite is always read first and remains the source of truth.
+ */
 export const STORAGE_KEY = LEGACY_STORAGE_KEY;
-export { SQLITE_REVISION_SIGNAL_KEY };
 
 function assertLegacyState(value: unknown): asserts value is LegacyStorageState {
   const state = value as LegacyStorageState | undefined;
@@ -22,8 +21,8 @@ function assertLegacyState(value: unknown): asserts value is LegacyStorageState 
   }
 }
 
-async function signalRevision(revision: number): Promise<void> {
-  await browser.storage.local.set({ [SQLITE_REVISION_SIGNAL_KEY]: revision });
+async function updateUiCache(state: LegacyStorageState): Promise<void> {
+  await browser.storage.local.set({ [LEGACY_STORAGE_KEY]: state });
 }
 
 export async function loadState(): Promise<LegacyStorageState> {
@@ -37,28 +36,24 @@ export async function loadState(): Promise<LegacyStorageState> {
   if (legacy) {
     assertLegacyState(legacy);
     await saveStateToSqlite(legacy);
-    await browser.storage.local.remove(LEGACY_STORAGE_KEY);
-    await signalRevision(legacy.revision);
+    await updateUiCache(legacy);
     return legacy;
   }
 
   const empty = BurbotCore.empty() as LegacyStorageState;
   await saveStateToSqlite(empty);
-  await signalRevision(empty.revision);
+  await updateUiCache(empty);
   return empty;
 }
 
 export async function saveState(state: LegacyStorageState): Promise<void> {
   await saveStateToSqlite(state);
-  await signalRevision(state.revision);
+  await updateUiCache(state);
 }
 
 export async function resetWorkspaceStorage(): Promise<void> {
   await resetDatabase();
-  await browser.storage.local.remove([
-    LEGACY_STORAGE_KEY,
-    SQLITE_REVISION_SIGNAL_KEY,
-  ]);
+  await browser.storage.local.remove(LEGACY_STORAGE_KEY);
 }
 
 export async function workspaceStorageInfo(): Promise<{
