@@ -10,7 +10,7 @@ interface BurbotFieldDefinition {
 
 interface BurbotCoreApi {
   clean(value: unknown): string;
-  coerce(value: unknown, type: string): unknown;
+  coerce(value: unknown, type: string): string | number;
   coerceField(
     value: unknown,
     definition: BurbotFieldDefinition,
