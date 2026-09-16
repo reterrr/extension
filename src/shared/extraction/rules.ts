@@ -47,21 +47,6 @@ export function createCapturedExtractionInput(
   option: ExtractionCandidateOption,
 ): CapturedExtractionInput {
   const rule = createExtractionRule(candidate, option);
-
-  if (rule.selector !== null && rule.selectorFallbacks?.length) {
-    // The current legacy domain core reconstructs the rule envelope but copies
-    // `extraction` verbatim. Mirror the fallback list there so it survives that
-    // boundary until the core is removed in favor of typed repositories.
-    return {
-      ...rule,
-      extraction: {
-        ...rule.extraction,
-        selectorFallbacks: rule.selectorFallbacks,
-      },
-      raw: option.raw,
-    } as CapturedExtractionInput;
-  }
-
   return { ...rule, raw: option.raw } as CapturedExtractionInput;
 }
 
