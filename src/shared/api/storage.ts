@@ -2,7 +2,10 @@ import { resetDatabase, sqliteDatabaseInfo } from "../sqlite/database";
 import { loadStateFromSqlite, saveStateToSqlite } from "../sqlite/stateRepository";
 import type { LegacyStorageState } from "../types/legacy-storage";
 
-/** Old pre-SQLite key, used only for one-time migration. */
+/**
+ * Pre-SQLite key. After migration this is only a UI/event mirror for existing
+ * storage.onChanged listeners. SQLite is the source of truth.
+ */
 export const STORAGE_KEY = "burbot:v1";
 
 function assertLegacyState(value: unknown): asserts value is LegacyStorageState {
@@ -17,6 +20,10 @@ function assertLegacyState(value: unknown): asserts value is LegacyStorageState 
   }
 }
 
+async function updateUiMirror(state: LegacyStorageState): Promise<void> {
+  await browser.storage.local.set({ [STORAGE_KEY]: state });
+}
+
 export async function loadState(): Promise<LegacyStorageState> {
   const sqlite = await loadStateFromSqlite();
   if (sqlite) return sqlite;
@@ -28,17 +35,19 @@ export async function loadState(): Promise<LegacyStorageState> {
   if (legacy) {
     assertLegacyState(legacy);
     await saveStateToSqlite(legacy);
-    await browser.storage.local.remove(STORAGE_KEY);
+    await updateUiMirror(legacy);
     return legacy;
   }
 
   const empty = BurbotCore.empty() as LegacyStorageState;
   await saveStateToSqlite(empty);
+  await updateUiMirror(empty);
   return empty;
 }
 
 export async function saveState(state: LegacyStorageState): Promise<void> {
   await saveStateToSqlite(state);
+  await updateUiMirror(state);
 }
 
 export async function resetWorkspaceStorage(): Promise<void> {
