@@ -33,8 +33,12 @@ export function App() {
 
   async function resetWorkspace() {
     if (!confirm("Delete the complete Burbot SQLite workspace?")) return;
-    await resetWorkspaceStorage();
-    browser.runtime.reload();
+    try {
+      await resetWorkspaceStorage();
+      await refresh();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    }
   }
 
   return (
@@ -43,7 +47,7 @@ export function App() {
         <p className="ui-eyebrow">BURBOT OPTIONS</p>
         <h1>SQLite workspace</h1>
         <p className="ui-muted">
-          Business data, extraction rules, geography and file sources are persisted in a local SQLite database. Firefox local storage is only a temporary UI event mirror.
+          Durable Burbot data is stored in a normal SQLite file managed by the local DB service.
         </p>
         <div className="ui-stat-grid">
           <div className="ui-stat"><strong>{state?.objects.length ?? 0}</strong><span>objects</span></div>
@@ -52,6 +56,9 @@ export function App() {
           <div className="ui-stat"><strong>{storage?.schemaVersion ?? 0}</strong><span>schema</span></div>
           <div className="ui-stat"><strong>{storage ? `${Math.ceil(storage.bytes / 1024)} KB` : "—"}</strong><span>SQLite file</span></div>
         </div>
+        {storage?.path && (
+          <p className="ui-muted"><strong>Database:</strong> {storage.path}</p>
+        )}
         <div className="ui-actions">
           <button onClick={() => void refresh()}>Refresh</button>
           <button className="danger" onClick={() => void resetWorkspace()}>Reset SQLite workspace</button>

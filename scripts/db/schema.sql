@@ -1,11 +1,15 @@
-export const SQLITE_SCHEMA_VERSION = 1;
-
-export const SQLITE_SCHEMA_V1 = `
 PRAGMA foreign_keys = ON;
 
 CREATE TABLE IF NOT EXISTS app_meta (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS workspace_state (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  revision INTEGER NOT NULL,
+  state_json TEXT NOT NULL,
+  updated_at TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS workspace_objects (
@@ -199,4 +203,3 @@ CREATE TABLE IF NOT EXISTS document_requirements (
 );
 
 PRAGMA user_version = 1;
-`;
