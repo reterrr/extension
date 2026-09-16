@@ -158,3 +158,47 @@ test("ambiguous primary selector does not block a unique fallback", () => {
 
   assert.deepEqual(results, [{ ruleId: "rule-ambiguous", raw: "stable" }]);
 });
+
+test("selection quote survives a complete DOM wrapper change", () => {
+  const extraction = {
+    type: "selection",
+    quote: {
+      exact: "FEPK.07.09-IP.01-0014/23-00",
+      prefix: "numer ",
+      suffix: " z dnia",
+    },
+  };
+  let globalFallbackCalled = false;
+
+  const results = runnerModule.runExtractionRules(
+    [
+      {
+        id: "rule-selection-global",
+        pageUrl,
+        selector: "#old-wrapper > span:nth-of-type(2)",
+        selectorFallbacks: ["#also-gone"],
+        extraction,
+      },
+    ],
+    {
+      pageUrl,
+      selectAll: () => [],
+      readElement: () => {
+        throw new Error("should not read a missing element");
+      },
+      readSelectionFromPage: (received) => {
+        globalFallbackCalled = true;
+        assert.deepEqual(received, extraction);
+        return "FEPK.07.09-IP.01-0014/23-00";
+      },
+    },
+  );
+
+  assert.equal(globalFallbackCalled, true);
+  assert.deepEqual(results, [
+    {
+      ruleId: "rule-selection-global",
+      raw: "FEPK.07.09-IP.01-0014/23-00",
+    },
+  ]);
+});
