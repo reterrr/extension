@@ -4,8 +4,9 @@ interface DataResponse<T = unknown> {
   error?: string;
 }
 
-interface StateRevision {
+interface StateSnapshot {
   revision: number;
+  objects: unknown[];
 }
 
 function errorMessage(error: unknown): string {
@@ -38,17 +39,14 @@ if (button && input && notice) {
     notice.textContent = "Importing…";
 
     try {
-      const document = JSON.parse(await file.text()) as unknown;
-      const current = await data<StateRevision>("GET");
-      const beforeCount = Array.isArray((current as { objects?: unknown[] }).objects)
-        ? (current as { objects: unknown[] }).objects.length
-        : 0;
-      const next = await data<StateRevision & { objects?: unknown[] }>("IMPORT", {
+      const importDocument = JSON.parse(await file.text()) as unknown;
+      const current = await data<StateSnapshot>("GET");
+      const beforeCount = current.objects.length;
+      const next = await data<StateSnapshot>("IMPORT", {
         expectedRevision: current.revision,
-        document,
+        document: importDocument,
       });
-      const afterCount = Array.isArray(next.objects) ? next.objects.length : beforeCount;
-      const imported = Math.max(0, afterCount - beforeCount);
+      const imported = Math.max(0, next.objects.length - beforeCount);
       notice.textContent = `Imported ${imported} ${imported === 1 ? "object" : "objects"}.`;
     } catch (error) {
       notice.className = "error";
