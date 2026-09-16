@@ -18,6 +18,9 @@ export function App() {
       import("./captureFeedbackUi").then(({ initCaptureFeedbackUi }) =>
         initCaptureFeedbackUi(),
       ),
+      import("./objectReconnectUi").then(({ initObjectReconnectUi }) =>
+        initObjectReconnectUi(),
+      ),
     ]);
   }, []);
 
