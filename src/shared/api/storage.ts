@@ -3,7 +3,7 @@ import type { LegacyStorageState } from "../types/legacy-storage";
 
 /**
  * Temporary UI mirror for existing storage.onChanged listeners.
- * SQLite on disk is the source of truth.
+ * SQLite on disk is the source of truth for committed data.
  */
 export const STORAGE_KEY = LEGACY_STORAGE_KEY;
 
@@ -71,7 +71,7 @@ async function readError(response: Response): Promise<string> {
   return response.statusText || `HTTP ${response.status}`;
 }
 
-async function updateUiCache(state: LegacyStorageState): Promise<void> {
+export async function publishUiState(state: LegacyStorageState): Promise<void> {
   await browser.storage.local.set({ [LEGACY_STORAGE_KEY]: state });
 }
 
@@ -98,7 +98,7 @@ async function saveRemoteState(state: LegacyStorageState): Promise<void> {
 export async function loadState(): Promise<LegacyStorageState> {
   const remote = await loadRemoteState();
   if (remote) {
-    await updateUiCache(remote);
+    await publishUiState(remote);
     return remote;
   }
 
@@ -110,19 +110,48 @@ export async function loadState(): Promise<LegacyStorageState> {
   if (legacy) {
     assertLegacyState(legacy);
     await saveRemoteState(legacy);
-    await updateUiCache(legacy);
+    await publishUiState(legacy);
     return legacy;
   }
 
   const empty = emptyState();
   await saveRemoteState(empty);
-  await updateUiCache(empty);
+  await publishUiState(empty);
   return empty;
 }
 
+/**
+ * Immediate write kept for initialization/migration utilities.
+ * Interactive workspace edits should go through a draft commit instead.
+ */
 export async function saveState(state: LegacyStorageState): Promise<void> {
   await saveRemoteState(state);
-  await updateUiCache(state);
+  await publishUiState(state);
+}
+
+export async function commitState(
+  baseRevision: number,
+  state: LegacyStorageState,
+  commitId: string,
+): Promise<LegacyStorageState> {
+  assertLegacyState(state);
+  const response = await request("/commit", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ baseRevision, commitId, state }),
+  });
+  if (!response.ok) {
+    const message = await readError(response);
+    if (response.status === 409) {
+      throw new Error(`Commit conflict: ${message}`);
+    }
+    throw new Error(message);
+  }
+
+  const body = (await response.json()) as { state?: unknown };
+  assertLegacyState(body.state);
+  await publishUiState(body.state);
+  return body.state;
 }
 
 export async function resetWorkspaceStorage(): Promise<void> {
