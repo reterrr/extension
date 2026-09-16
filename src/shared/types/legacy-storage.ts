@@ -47,6 +47,15 @@ export interface LegacyStoredObject {
   manualFields?: Record<string, boolean>;
 }
 
+/** Temporary local representation until geography is persisted in SQLite tables. */
+export interface LegacyStoredGeography {
+  id: string;
+  objectId: string;
+  type: string;
+  role: string;
+  value: string;
+}
+
 export type LegacyStoredRule = ExecutableExtractionRule & {
   objectId: string;
   field: string;
@@ -63,6 +72,7 @@ export interface LegacyStorageState {
   revision: number;
   objects: LegacyStoredObject[];
   rules: LegacyStoredRule[];
+  geographies?: LegacyStoredGeography[];
   importSources?: ImportedSource[];
   financingRules?: Array<Record<string, unknown>>;
   documentRequirements?: Array<Record<string, unknown>>;
