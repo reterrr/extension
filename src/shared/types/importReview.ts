@@ -1,6 +1,7 @@
 import type { LegacyStorageState } from "./legacy-storage";
 
 export type ImportReviewObjectStatus = "PENDING" | "APPROVED";
+export type ImportReviewEditorType = "text" | "number" | "date" | "select";
 
 export interface ImportReviewSession {
   id: string;
@@ -14,10 +15,18 @@ export interface ImportReviewSession {
   selectedObjectId: string | null;
 }
 
+export interface ImportReviewEditorOption {
+  value: string;
+  label: string;
+}
+
 export interface ImportReviewFieldView {
   field: string;
   label: string;
   value: string;
+  editorType: ImportReviewEditorType;
+  editorValue: string;
+  options?: ImportReviewEditorOption[];
   evidenceCount: number;
 }
 
@@ -33,6 +42,31 @@ export interface ImportReviewEvidenceView {
   suffix: string;
 }
 
+export interface ImportReviewFileView {
+  id: string;
+  name: string;
+  url: string;
+  sourcePageUrl: string;
+}
+
+export interface ImportReviewFinancingFieldView {
+  field: string;
+  label: string;
+  value: string;
+  editorType: ImportReviewEditorType;
+  editorValue: string;
+  options?: ImportReviewEditorOption[];
+}
+
+export interface ImportReviewFinancingView {
+  id: string;
+  key: string;
+  companySize: string;
+  companySizeLabel: string;
+  variantNo: number;
+  fields: ImportReviewFinancingFieldView[];
+}
+
 export interface ImportReviewObjectView {
   id: string;
   type: string;
@@ -40,6 +74,8 @@ export interface ImportReviewObjectView {
   status: ImportReviewObjectStatus;
   fieldCount: number;
   evidenceCount: number;
+  fileCount: number;
+  financingCount: number;
 }
 
 export interface ImportReviewView {
@@ -53,4 +89,6 @@ export interface ImportReviewView {
   objects: ImportReviewObjectView[];
   fields: ImportReviewFieldView[];
   evidence: ImportReviewEvidenceView[];
+  files: ImportReviewFileView[];
+  financing: ImportReviewFinancingView[];
 }
