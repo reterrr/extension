@@ -1,15 +1,15 @@
 import { useEffect, useState } from "react";
 import { STORAGE_KEY } from "../shared/api/storage";
-import type { BurbotState } from "../shared/types/domain";
+import type { LegacyStorageState } from "../shared/types/legacy-storage";
 
 export function App() {
-  const [state, setState] = useState<BurbotState | null>(null);
+  const [state, setState] = useState<LegacyStorageState | null>(null);
   const [error, setError] = useState("");
 
   async function refresh() {
     try {
       const stored = (await browser.storage.local.get(STORAGE_KEY))[STORAGE_KEY] as
-        | BurbotState
+        | LegacyStorageState
         | undefined;
       setState(stored ?? null);
       setError("");
@@ -32,12 +32,12 @@ export function App() {
     <main className="ui-page">
       <section className="ui-card">
         <p className="ui-eyebrow">BURBOT OPTIONS</p>
-        <h1>Local workspace</h1>
+        <h1>Legacy local workspace</h1>
         <p className="ui-muted">
-          This build stores extraction data locally in Firefox. No backend connection is configured here.
+          This panel still shows the pre-SQLite Firefox snapshot used only during migration.
         </p>
         <div className="ui-stat-grid">
-          <div className="ui-stat"><strong>{state?.objects.length ?? 0}</strong><span>objects</span></div>
+          <div className="ui-stat"><strong>{state?.objects.length ?? 0}</strong><span>legacy objects</span></div>
           <div className="ui-stat"><strong>{state?.rules.length ?? 0}</strong><span>rules</span></div>
           <div className="ui-stat"><strong>{state?.revision ?? 0}</strong><span>revision</span></div>
         </div>
