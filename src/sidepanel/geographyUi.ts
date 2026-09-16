@@ -103,9 +103,9 @@ function matchingCatalog(type: string, query: string) {
     .filter((entry) => entry.type === type)
     .filter((entry) => {
       if (!needle) return true;
-      return normalizeSearch(`${entry.label} ${entry.value} ${entry.search}`).includes(
-        needle,
-      );
+      return normalizeSearch(
+        `${entry.label} ${entry.context ?? ""} ${entry.value} ${entry.search}`,
+      ).includes(needle);
     })
     .slice(0, 20);
 }
@@ -141,13 +141,10 @@ async function captureSelectedText(
     type: "BURBOT_SELECTION",
   });
 
-  if (!isPickerSelectionResponse(response) || !response.ok) {
-    throw new Error(
-      isPickerSelectionResponse(response)
-        ? response.error
-        : "Select text on the page first.",
-    );
+  if (!isPickerSelectionResponse(response)) {
+    throw new Error("Select text on the page first.");
   }
+  if (!response.ok) throw new Error(response.error);
 
   const option = response.value.options.find(
     (candidate) => candidate.extraction.type === "selection",
@@ -271,7 +268,12 @@ function renderSearch(object: LegacyStoredObject): void {
     const title = document.createElement("strong");
     title.textContent = entry.label;
     const meta = document.createElement("small");
-    meta.textContent = BurbotGeography.types[entry.type] ?? entry.type;
+    meta.textContent = [
+      BurbotGeography.types[entry.type] ?? entry.type,
+      entry.context,
+    ]
+      .filter(Boolean)
+      .join(" · ");
     button.append(title, meta);
 
     button.onclick = () => {
