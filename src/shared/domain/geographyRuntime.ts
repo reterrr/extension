@@ -17,10 +17,14 @@ export interface GeographyCatalogEntry {
     | "MIASTO_NA_PRAWACH_POWIATU";
   value: string;
   label: string;
+  context?: string;
   search: string;
 }
 
-const powiatKeyPrefixes = Object.keys(Powiat).sort((a, b) => b.length - a.length);
+const powiatByKey = Powiat as unknown as Record<string, string>;
+const powiatKeyPrefixes = Object.keys(powiatByKey).sort(
+  (a, b) => b.length - a.length,
+);
 
 function titleCase(value: string): string {
   return value
@@ -32,43 +36,70 @@ function lastSegment(value: string): string {
   return value.split("|").at(-1) ?? value;
 }
 
-function humanizeGminaKey(key: string): string {
+function parentContext(value: string): string | undefined {
+  const parts = value.split("|");
+  if (parts.length < 3) return undefined;
+  return parts.slice(0, -1).filter((part) => part !== "powiat" && part !== "miasto").join(" · ");
+}
+
+function gminaMetadata(key: string): { label: string; context?: string } {
   const suffixless = key
     .replace(/_MIEJSKO_WIEJSKA$/, "")
     .replace(/_MIEJSKA$/, "")
     .replace(/_WIEJSKA$/, "");
-  const powiatPrefix = powiatKeyPrefixes.find((prefix) =>
+  const powiatKey = powiatKeyPrefixes.find((prefix) =>
     suffixless.startsWith(`${prefix}_`),
   );
-  const locality = powiatPrefix
-    ? suffixless.slice(powiatPrefix.length + 1)
+  const locality = powiatKey
+    ? suffixless.slice(powiatKey.length + 1)
     : suffixless;
-  return titleCase(locality.replaceAll("_", " "));
+  const powiatValue = powiatKey ? powiatByKey[powiatKey] : undefined;
+
+  return {
+    label: titleCase(locality.replaceAll("_", " ")),
+    context: powiatValue
+      ? `${lastSegment(powiatValue)} · ${powiatValue.split("|")[0]}`
+      : undefined,
+  };
 }
 
 function simpleEntries(
   type: GeographyCatalogEntry["type"],
   values: object,
-  label: (key: string, value: string) => string = (_key, value) => value,
+  metadata: (
+    key: string,
+    value: string,
+  ) => Pick<GeographyCatalogEntry, "label" | "context"> = (_key, value) => ({
+    label: value,
+  }),
 ): GeographyCatalogEntry[] {
-  return Object.entries(values as Record<string, string>).map(([key, value]) => ({
-    type,
-    value,
-    label: label(key, value),
-    search: `${key} ${value}`,
-  }));
+  return Object.entries(values as Record<string, string>).map(([key, value]) => {
+    const presentation = metadata(key, value);
+    return {
+      type,
+      value,
+      ...presentation,
+      search: `${key} ${value} ${presentation.label} ${presentation.context ?? ""}`,
+    };
+  });
 }
 
 export const geographyCatalog: GeographyCatalogEntry[] = [
   ...simpleEntries("POLSKA", Polska),
   ...simpleEntries("WOJEWODZTWO", Wojewodztwo),
   ...simpleEntries("PODREGION", Podregion),
-  ...simpleEntries("POWIAT", Powiat, (_key, value) => lastSegment(value)),
-  ...simpleEntries("GMINA", Gmina, (key) => humanizeGminaKey(key)),
+  ...simpleEntries("POWIAT", Powiat, (_key, value) => ({
+    label: lastSegment(value),
+    context: parentContext(value),
+  })),
+  ...simpleEntries("GMINA", Gmina, (key) => gminaMetadata(key)),
   ...simpleEntries(
     "MIASTO_NA_PRAWACH_POWIATU",
     MiastoNaPrawachPowiatu,
-    (_key, value) => lastSegment(value),
+    (_key, value) => ({
+      label: lastSegment(value),
+      context: parentContext(value),
+    }),
   ),
 ];
 
