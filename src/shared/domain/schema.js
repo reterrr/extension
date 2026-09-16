@@ -1,42 +1,62 @@
 // Hardcoded business definitions and presentation hints; never a schema editor.
 (() => {
-  const text = (label, group = "Overview", extra = {}) => ({
+  const text = (label, group = "Podstawowe", extra = {}) => ({
     label,
     type: "string",
     group,
     ...extra,
   });
-  const date = (label) => ({ label, type: "date", group: "Dates" });
-  const url = (label) => ({ label, type: "url", group: "Sources" });
+  const date = (label, group = "Daty") => ({ label, type: "date", group });
+  const url = (label, group = "Źródła") => ({ label, type: "url", group });
+  const integer = (label, group = "Podstawowe", extra = {}) => ({
+    label,
+    type: "integer",
+    group,
+    ...extra,
+  });
   const choice = (label, options, extra = {}) => ({
     label,
     type: "enum",
     options,
-    group: "Overview",
+    group: "Podstawowe",
     ...extra,
   });
+
   globalThis.BurbotSchema = Object.freeze({
     project: {
-      label: "Project",
+      label: "Projekt",
       primary: "name",
       configuration: true,
+      geography: true,
       fields: {
-        name: text("Name"),
-        type: choice("Project type", { B2B: "B2B", B2C: "B2C" }),
+        name: text("Nazwa"),
+        type: choice("Typ projektu", { B2B: "B2B", B2C: "B2C" }),
         status: choice(
-          "Status",
+          "Status projektu",
           {
-            ACTIVE: "Active",
-            CLOSED: "Closed",
-            SUSPENDED: "Suspended",
-            PLANNED: "Planned",
+            PLANOWANY: "Planowany",
+            AKTYWNY: "Aktywny",
+            ZAWIESZONY: "Zawieszony",
+            ZAKONCZONY: "Zakończony",
           },
-          { default: "PLANNED" },
+          {
+            default: "PLANOWANY",
+            aliases: {
+              PLANNED: "PLANOWANY",
+              ACTIVE: "AKTYWNY",
+              SUSPENDED: "ZAWIESZONY",
+              CLOSED: "ZAKONCZONY",
+              Planned: "PLANOWANY",
+              Active: "AKTYWNY",
+              Suspended: "ZAWIESZONY",
+              Closed: "ZAKONCZONY",
+            },
+          },
         ),
-        number: text("Project number"),
-        start_date: date("Start date"),
-        end_date: date("End date"),
-        announcements_site_url: url("Announcements page"),
+        number: text("Numer projektu"),
+        start_date: date("Data rozpoczęcia projektu"),
+        end_date: date("Data zakończenia projektu"),
+        announcements_site_url: url("Strona naborów"),
         amount: {
           label: "Previously captured amount",
           type: "number",
@@ -45,69 +65,123 @@
         },
       },
     },
+
     recruitment: {
-      label: "Recruitment",
+      label: "Nabór",
       primary: "external_number",
       configuration: true,
+      geography: true,
       fields: {
-        external_number: text("Recruitment number / name"),
+        external_number: text("Numer / nazwa naboru"),
         project_id: {
-          label: "Project",
+          label: "Projekt",
           type: "reference",
           references: "project",
-          group: "Overview",
+          group: "Podstawowe",
         },
-        sequence_number: {
-          label: "Sequence number",
-          type: "integer",
-          min: 1,
-          group: "Overview",
-        },
-        year: {
-          label: "Year",
-          type: "integer",
-          min: 1000,
-          max: 9999,
-          group: "Overview",
-        },
-        // The supplied model omits RecruitmentStatus and ClosedStatus enum members.
-        // Keep these open text until the authoritative values are available.
-        status: text("Status", "Overview", {
-          default: "ANNOUNCED",
-          labels: { ANNOUNCED: "Announced" },
-        }),
-        start_date: date("Start date"),
-        end_date: date("End date"),
-        announced_year: {
-          label: "Announcement year",
-          type: "integer",
-          min: 1000,
-          max: 9999,
-          group: "Dates",
-        },
-        announced_quarter: choice(
-          "Announcement quarter",
-          { 1: "Q1", 2: "Q2", 3: "Q3", 4: "Q4" },
-          { numeric: true, group: "Dates" },
+        sequence_number: integer("Numer kolejny", "Podstawowe", { min: 1 }),
+        year: integer("Rok", "Podstawowe", { min: 1000, max: 9999 }),
+        status: choice(
+          "Status naboru",
+          {
+            PLANOWANY: "Planowany",
+            OGLOSZONY: "Ogłoszony",
+            AKTYWNY: "Aktywny",
+            ZAWIESZONY: "Zawieszony",
+            ZAKONCZONY: "Zakończony",
+          },
+          {
+            default: "OGLOSZONY",
+            aliases: {
+              PLANNED: "PLANOWANY",
+              ANNOUNCED: "OGLOSZONY",
+              ACTIVE: "AKTYWNY",
+              SUSPENDED: "ZAWIESZONY",
+              CLOSED: "ZAKONCZONY",
+              Planned: "PLANOWANY",
+              Announced: "OGLOSZONY",
+              Active: "AKTYWNY",
+              Suspended: "ZAWIESZONY",
+              Closed: "ZAKONCZONY",
+            },
+          },
         ),
-        closed_status: text("Closure outcome", "Closure"),
-        status_reason: text("Status reason", "Closure", { multiline: true }),
-        announcement_url: url("Announcement page"),
+
+        dataRozpoczeciaOd: date("Data rozpoczęcia — od", "Termin rzeczywisty"),
+        dataRozpoczeciaDo: date("Data rozpoczęcia — do", "Termin rzeczywisty"),
+        dataZakonczeniaOd: date("Data zakończenia — od", "Termin rzeczywisty"),
+        dataZakonczeniaDo: date("Data zakończenia — do", "Termin rzeczywisty"),
+
+        planowanyStartRok: integer("Planowany start — rok", "Termin planowany", {
+          min: 1000,
+          max: 9999,
+        }),
+        planowanyStartMiesiac: integer(
+          "Planowany start — miesiąc",
+          "Termin planowany",
+          { min: 1, max: 12 },
+        ),
+        planowanyStartKwartal: choice(
+          "Planowany start — kwartał",
+          { 1: "Q1", 2: "Q2", 3: "Q3", 4: "Q4" },
+          { numeric: true, group: "Termin planowany" },
+        ),
+
+        planowanyKoniecRok: integer("Planowany koniec — rok", "Termin planowany", {
+          min: 1000,
+          max: 9999,
+        }),
+        planowanyKoniecMiesiac: integer(
+          "Planowany koniec — miesiąc",
+          "Termin planowany",
+          { min: 1, max: 12 },
+        ),
+        planowanyKoniecKwartal: choice(
+          "Planowany koniec — kwartał",
+          { 1: "Q1", 2: "Q2", 3: "Q3", 4: "Q4" },
+          { numeric: true, group: "Termin planowany" },
+        ),
+
+        closed_status: text("Status zakończenia", "Zakończenie"),
+        status_reason: text("Powód statusu", "Zakończenie", { multiline: true }),
+        announcement_url: url("URL ogłoszenia"),
+
+        // Pre-typed-domain compatibility. Existing objects/rules keep working,
+        // but these rows stay hidden unless they already contain data.
+        start_date: { ...date("Stara data rozpoczęcia", "Earlier captures"), legacy: true },
+        end_date: { ...date("Stara data zakończenia", "Earlier captures"), legacy: true },
+        announced_year: {
+          ...integer("Stary rok ogłoszenia", "Earlier captures", {
+            min: 1000,
+            max: 9999,
+          }),
+          legacy: true,
+        },
+        announced_quarter: {
+          ...choice(
+            "Stary kwartał ogłoszenia",
+            { 1: "Q1", 2: "Q2", 3: "Q3", 4: "Q4" },
+            { numeric: true, group: "Earlier captures" },
+          ),
+          legacy: true,
+        },
       },
     },
+
     operator: {
       label: "Operator",
       primary: "name",
       fields: {
-        name: text("Name"),
-        nip: { label: "NIP", type: "nip", group: "Overview" },
+        name: text("Nazwa"),
+        nip: { label: "NIP", type: "nip", group: "Podstawowe" },
         website: { ...url("Website"), legacy: true },
         email: text("Email", "Earlier captures", { legacy: true }),
       },
     },
+
     // Keep existing records and rule keys intact. New creation uses recruitment.
     nabor: {
-      label: "Recruitment",
+      label: "Nabór (legacy)",
       primary: "title",
       legacy: true,
       fields: {
@@ -119,6 +193,7 @@
       },
     },
   });
+
   globalThis.BurbotFunding = Object.freeze({
     sizes: { MICRO: "Micro", SMALL: "Small", MEDIUM: "Medium", LARGE: "Large" },
     fields: {
@@ -133,6 +208,7 @@
       notes: text("Notes", "Funding", { multiline: true }),
     },
   });
+
   globalThis.BurbotDocuments = Object.freeze({
     fields: {
       requirement: choice("Requirement", {
@@ -164,31 +240,13 @@
       ["psf_promise_agreement", "Umowa promesa PSF"],
       ["de_minimis_aid_application", "Wniosek o udzielenie pomocy de minimis"],
       ["psf_refund_application", "Wniosek o refundację PSF"],
-      [
-        "service_completion_certificate",
-        "Zaświadczenie o zakończeniu udziału w usłudze rozwojowej",
-      ],
-      [
-        "no_eu_funding_declaration",
-        "Oświadczenie o braku aplikowania o środki UE",
-      ],
-      [
-        "psf_service_settlement_application",
-        "Wniosek o rozliczenie usługi rozwojowej (PSF)",
-      ],
+      ["service_completion_certificate", "Zaświadczenie o zakończeniu udziału w usłudze rozwojowej"],
+      ["no_eu_funding_declaration", "Oświadczenie o braku aplikowania o środki UE"],
+      ["psf_service_settlement_application", "Wniosek o rozliczenie usługi rozwojowej (PSF)"],
       ["pur_part_2", "PUR cz. II"],
-      [
-        "fgsa_green_10_17_application",
-        "Formularz zgłoszeniowy 10.17 Zielony (FGSA)",
-      ],
-      [
-        "arr_czestochowa_6_6_application",
-        "Formularz zgłoszeniowy 6.6 osoby dorosłe",
-      ],
-      [
-        "lok_postgraduate_agreement",
-        "Umowa uczestnika — studia podyplomowe (LOK)",
-      ],
+      ["fgsa_green_10_17_application", "Formularz zgłoszeniowy 10.17 Zielony (FGSA)"],
+      ["arr_czestochowa_6_6_application", "Formularz zgłoszeniowy 6.6 osoby dorosłe"],
+      ["lok_postgraduate_agreement", "Umowa uczestnika — studia podyplomowe (LOK)"],
       ["lok_training_agreement", "Umowa uczestnika — usługa szkoleniowa (LOK)"],
       ["pur_part_1", "PUR cz. I — Plan Usług Rozwojowych"],
       ["other", "Inne dokumenty"],
