@@ -5,7 +5,13 @@
       .trim();
   const own = (object, key) =>
     Object.prototype.hasOwnProperty.call(object, key);
-  const empty = () => ({ version: 1, revision: 0, objects: [], rules: [] });
+  const empty = () => ({
+    version: 1,
+    revision: 0,
+    objects: [],
+    rules: [],
+    geographies: [],
+  });
 
   function coerce(raw, type) {
     const text = clean(raw);
@@ -35,38 +41,31 @@
           value.lastIndexOf(",") > value.lastIndexOf(".") ? "," : ".";
         const group = decimal === "," ? "." : ",";
         const pieces = value.split(decimal);
-
         if (pieces.length !== 2 || !/^\d+$/.test(pieces[1]))
           throw Error("Invalid number.");
-
         const groups = pieces[0].split(group);
         if (
           !/^\d{1,3}$/.test(groups[0]) ||
           groups.slice(1).some((g) => !/^\d{3}$/.test(g))
         )
           throw Error("Invalid thousands grouping.");
-
         value = groups.join("") + "." + pieces[1];
       } else {
         const separator = value.includes(",") ? "," : ".";
         const parts = value.split(separator);
-
         if (parts.length > 2) {
           if (
             !/^\d{1,3}$/.test(parts[0]) ||
             parts.slice(1).some((g) => !/^\d{3}$/.test(g))
           )
             throw Error("Invalid thousands grouping.");
-
           value = parts.join("");
         } else if (parts.length === 2) {
           if (!/^\d+$/.test(parts[1])) throw Error("Invalid decimal number.");
-
           if (/^\d{1,3}$/.test(parts[0]) && parts[1].length === 3)
             throw Error(
               "Ambiguous number. Use spaces for thousands, e.g. 1 234.",
             );
-
           value = integer(parts[0]) + "." + parts[1];
         } else {
           value = integer(value);
@@ -79,7 +78,6 @@
         Math.abs(number) > Number.MAX_SAFE_INTEGER
       )
         throw Error("Number is outside the supported range.");
-
       return number;
     }
 
@@ -87,16 +85,12 @@
       const match =
         /^(\d{4})-(\d{2})-(\d{2})$/.exec(text) ||
         /^(\d{2})[./](\d{2})[./](\d{4})$/.exec(text);
-
       if (!match) throw Error("Use YYYY-MM-DD or DD.MM.YYYY.");
-
       const [year, month, day] =
         match[1].length === 4
           ? match.slice(1).map(Number)
           : [Number(match[3]), Number(match[2]), Number(match[1])];
-
       const date = new Date(Date.UTC(year, month - 1, day));
-
       if (
         year < 1000 ||
         date.getUTCFullYear() !== year ||
@@ -104,7 +98,6 @@
         date.getUTCDate() !== day
       )
         throw Error("Invalid calendar date.");
-
       return date.toISOString().slice(0, 10);
     }
 
@@ -114,7 +107,6 @@
   function occurrences(text, part) {
     const positions = [];
     if (!part) return positions;
-
     for (
       let index = text.indexOf(part);
       index !== -1;
@@ -124,7 +116,6 @@
       if (positions.length > 200)
         throw Error("Text context is too repetitive. Pick a smaller element.");
     }
-
     return positions;
   }
 
@@ -136,50 +127,36 @@
       : [0];
     const ends = suffix ? occurrences(text, suffix) : [text.length];
     const pairs = [];
-
-    for (const start of starts) {
-      for (const end of ends) {
-        if (end >= start) pairs.push([start, end]);
-      }
-    }
-
+    for (const start of starts)
+      for (const end of ends) if (end >= start) pairs.push([start, end]);
     if (pairs.length !== 1)
       throw Error(
         "Selection context changed or is ambiguous. Select it again.",
       );
-
     const [start, end] = pairs[0];
     const result = clean(text.slice(start, end));
-
     if (!result) throw Error("Selected text is now empty.");
     return result;
   }
 
   function readElement(element, extraction) {
     if (extraction.type === "text") return clean(element.textContent);
-
     if (extraction.type === "selection")
       return selectedText(element.textContent, extraction.quote);
-
     if (extraction.type === "attribute") {
       const attr = extraction.attribute;
-
       if (
         !["href", "src", "datetime", "title", "alt", "content"].includes(attr)
       )
         throw Error("Unsupported attribute.");
-
       const target = attr === "href" ? element.closest("a[href]") : element;
       const raw = target?.getAttribute(attr);
-
       if (raw === null || raw === undefined)
         throw Error("Attribute is missing: " + attr);
-
       return ["href", "src"].includes(attr)
         ? new URL(raw, element.baseURI).href
         : raw;
     }
-
     throw Error("Unsupported extraction method.");
   }
 
@@ -200,45 +177,74 @@
     rule.field === field &&
     targetKey(rule.target) === targetKey(target);
 
+  function enumAlias(definition, text) {
+    if (!definition.aliases) return text;
+    const alias = Object.entries(definition.aliases).find(
+      ([key]) => key.toLowerCase() === text.toLowerCase(),
+    );
+    return alias ? String(alias[1]) : text;
+  }
+
+  function geographyEntry(value) {
+    const text = clean(value).toLowerCase();
+    return globalThis.BurbotGeography?.catalog?.find(
+      (entry) =>
+        String(entry.value).toLowerCase() === text ||
+        String(entry.label).toLowerCase() === text,
+    );
+  }
+
   function coerceField(raw, definition, state) {
-    const text = clean(raw);
+    let text = clean(raw);
     if (!text) throw Error("Choose or enter a value.");
     if (text.length > 100000) throw Error("Value is too long.");
     const type = definition.type;
+
     if (type === "enum") {
+      text = enumAlias(definition, text);
       const entry = Object.entries(definition.options).find(
         ([key, label]) =>
           key.toLowerCase() === text.toLowerCase() ||
-          label.toLowerCase() === text.toLowerCase(),
+          String(label).toLowerCase() === text.toLowerCase(),
       );
       if (!entry) throw Error("Choose one of the available options.");
       return definition.numeric ? Number(entry[0]) : entry[0];
     }
+
+    if (type === "geography") {
+      const entry = geographyEntry(text);
+      if (!entry) throw Error("Choose a geography value from search results.");
+      return entry.value;
+    }
+
     if (type === "boolean") {
       if (/^(true|yes|tak|1|auto|auto-fill)$/i.test(text)) return true;
       if (/^(false|no|nie|0)$/i.test(text)) return false;
       throw Error("Choose Yes or No.");
     }
+
     if (type === "reference") {
       const objects = state.objects.filter(
         (o) => o.type === definition.references,
       );
       const exactId = objects.find((o) => o.id === text);
       if (exactId) return exactId.id;
-      const matches = objects.filter(
+      const named = objects.filter(
         (o) => displayName(o).toLowerCase() === text.toLowerCase(),
       );
-      if (matches.length !== 1)
+      if (named.length !== 1)
         throw Error(
           "Choose an existing project. Create it from the page first if needed.",
         );
-      return matches[0].id;
+      return named[0].id;
     }
+
     if (type === "nip") {
       const nip = text.replace(/[\s-]/g, "");
       if (!/^\d{10}$/.test(nip)) throw Error("NIP must contain 10 digits.");
       return nip;
     }
+
     if (["money", "percentage", "integer"].includes(type)) {
       const currency = /(PLN|EUR|USD|zł|€|\$)\s*$/i.exec(text);
       if (currency && (type !== "money" || !/^(PLN|zł)$/i.test(currency[1])))
@@ -261,20 +267,27 @@
         throw Error("Value must be between " + min + " and " + max + ".");
       return value;
     }
+
     return coerce(raw, type);
   }
 
   function formatValue(value, definition, state) {
-    if (!hasValue(value)) return "Not captured";
+    if (!hasValue(value)) return "Nie ustawiono";
     if (definition.type === "reference") {
       const object = state.objects.find((o) => o.id === value);
-      return object ? displayName(object) : "Project unavailable";
+      return object ? displayName(object) : "Projekt niedostępny";
     }
+    if (definition.type === "geography")
+      return geographyEntry(value)?.label || String(value);
     if (definition.options?.[value]) return definition.options[value];
+    if (definition.aliases?.[value]) {
+      const current = definition.aliases[value];
+      return definition.options?.[current] || String(current);
+    }
     if (definition.labels?.[value]) return definition.labels[value];
-    if (definition.type === "boolean") return value ? "Yes" : "No";
+    if (definition.type === "boolean") return value ? "Tak" : "Nie";
     if (definition.type === "date" && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
-      return new Intl.DateTimeFormat("en-GB", {
+      return new Intl.DateTimeFormat("pl-PL", {
         day: "numeric",
         month: "short",
         year: "numeric",
@@ -303,35 +316,45 @@
   function fieldContext(state, object, field, target, createDocument) {
     let fields = globalThis.BurbotSchema[object.type]?.fields,
       values = object.values;
+
     if (target && target.kind !== "object") {
-      if (!globalThis.BurbotSchema[object.type]?.configuration)
-        throw Error("This object has no business configuration.");
-      if (target.kind === "funding") {
-        values = (state.financingRules || []).find(
-          (r) => r.id === target.id && r.objectId === object.id,
+      if (target.kind === "geography") {
+        values = (state.geographies || []).find(
+          (row) => row.id === target.id && row.objectId === object.id,
         );
-        fields = globalThis.BurbotFunding.fields;
-        if (!values) throw Error("Funding variant no longer exists.");
-      } else if (target.kind === "document") {
-        if (
-          !globalThis.BurbotDocuments.catalog.some((d) => d.key === target.id)
-        )
-          throw Error("Unknown document.");
-        values = (state.documentRequirements || []).find(
-          (r) => r.document_type_key === target.id && r.objectId === object.id,
-        );
-        if (!values && createDocument) {
-          values = {
-            id: createDocument(),
-            objectId: object.id,
-            document_type_key: target.id,
-          };
-          (state.documentRequirements ||= []).push(values);
-        }
-        values ||= {};
-        fields = globalThis.BurbotDocuments.fields;
-      } else throw Error("Unknown field target.");
+        fields = globalThis.BurbotGeography?.fields;
+        if (!values) throw Error("Geography entry no longer exists.");
+      } else {
+        if (!globalThis.BurbotSchema[object.type]?.configuration)
+          throw Error("This object has no business configuration.");
+        if (target.kind === "funding") {
+          values = (state.financingRules || []).find(
+            (r) => r.id === target.id && r.objectId === object.id,
+          );
+          fields = globalThis.BurbotFunding.fields;
+          if (!values) throw Error("Funding variant no longer exists.");
+        } else if (target.kind === "document") {
+          if (
+            !globalThis.BurbotDocuments.catalog.some((d) => d.key === target.id)
+          )
+            throw Error("Unknown document.");
+          values = (state.documentRequirements || []).find(
+            (r) => r.document_type_key === target.id && r.objectId === object.id,
+          );
+          if (!values && createDocument) {
+            values = {
+              id: createDocument(),
+              objectId: object.id,
+              document_type_key: target.id,
+            };
+            (state.documentRequirements ||= []).push(values);
+          }
+          values ||= {};
+          fields = globalThis.BurbotDocuments.fields;
+        } else throw Error("Unknown field target.");
+      }
     }
+
     if (!fields || !own(fields, field)) throw Error("Unknown field.");
     return { values, definition: fields[field] };
   }
@@ -428,6 +451,7 @@
         "Data changed in another panel. Review the refreshed values and retry.",
       );
     const state = JSON.parse(JSON.stringify(original));
+
     if (message.op === "CREATE_FROM_SELECTION") {
       if (!["project", "recruitment", "operator"].includes(message.objectType))
         throw Error("Unknown object type.");
@@ -445,9 +469,8 @@
         createdAt: now,
         updatedAt: now,
       };
-      for (const [key, definition] of Object.entries(schema.fields)) {
+      for (const [key, definition] of Object.entries(schema.fields))
         if (own(definition, "default")) object.values[key] = definition.default;
-      }
       object.values[schema.primary] = initial;
       state.objects.push(object);
       if (message.candidate) {
@@ -463,14 +486,16 @@
           uuid,
           now,
         );
-      } else
+      } else {
         object.creationNote =
           "Value saved from your selection. Select " +
           schema.fields[schema.primary].label +
           " to teach its extraction rule.";
+      }
     } else {
       const object = state.objects.find((o) => o.id === message.objectId);
       if (!object) throw Error("Choose an object.");
+
       if (message.op === "DELETE") {
         state.objects = state.objects.filter((o) => o.id !== object.id);
         state.rules = state.rules.filter((r) => r.objectId !== object.id);
@@ -482,7 +507,10 @@
           state.documentRequirements = state.documentRequirements.filter(
             (r) => r.objectId !== object.id,
           );
-        // Do not silently remove other objects' references; their UI shows an unavailable project.
+        if (state.geographies)
+          state.geographies = state.geographies.filter(
+            (row) => row.objectId !== object.id,
+          );
       } else if (message.op === "ASSIGN") {
         assign(state, object, message, uuid, now);
       } else if (message.op === "EDIT") {
@@ -531,6 +559,54 @@
           rule.lastExtractedAt = now;
         }
         object.updatedAt = now;
+      } else if (message.op === "ADD_GEOGRAPHY") {
+        if (!globalThis.BurbotSchema[object.type]?.geography)
+          throw Error("Geography is supported only for projects and recruitments.");
+        if (!globalThis.BurbotGeography)
+          throw Error("Geography catalog is unavailable.");
+        if (!own(globalThis.BurbotGeography.types, message.geographyType))
+          throw Error("Unknown geography type.");
+        if (!own(globalThis.BurbotGeography.roles, message.geographyRole))
+          throw Error("Unknown geography role.");
+        const entry = geographyEntry(message.value);
+        if (!entry || entry.type !== message.geographyType)
+          throw Error("Choose a geography value matching the selected type.");
+        const rows = (state.geographies ||= []);
+        if (
+          rows.some(
+            (row) =>
+              row.objectId === object.id &&
+              row.type === message.geographyType &&
+              row.role === message.geographyRole &&
+              row.value === entry.value,
+          )
+        )
+          throw Error("This geography condition is already added.");
+        rows.push({
+          id: uuid(),
+          objectId: object.id,
+          type: message.geographyType,
+          role: message.geographyRole,
+          value: entry.value,
+        });
+        object.updatedAt = now;
+      } else if (message.op === "REMOVE_GEOGRAPHY") {
+        fieldContext(state, object, "value", {
+          kind: "geography",
+          id: message.geographyId,
+        });
+        state.geographies = (state.geographies || []).filter(
+          (row) => !(row.id === message.geographyId && row.objectId === object.id),
+        );
+        state.rules = state.rules.filter(
+          (rule) =>
+            !(
+              rule.objectId === object.id &&
+              rule.target?.kind === "geography" &&
+              rule.target.id === message.geographyId
+            ),
+        );
+        object.updatedAt = now;
       } else if (message.op === "ADD_FUNDING") {
         if (
           !globalThis.BurbotSchema[object.type]?.configuration ||
@@ -574,8 +650,11 @@
             ),
         );
         object.updatedAt = now;
-      } else throw Error("Unknown operation.");
+      } else {
+        throw Error("Unknown operation.");
+      }
     }
+
     state.revision++;
     return state;
   }
