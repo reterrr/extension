@@ -33,12 +33,36 @@ export interface PageUrlExtraction {
   type: "pageUrl";
 }
 
+/**
+ * Selector inside a canonical PDF text page.
+ *
+ * `pageNumber` is 1-based. The quote is evaluated against the canonical text
+ * produced by Burbot's PDF text extractor for that page.
+ */
+export interface PdfTextSelector {
+  pageNumber: number;
+  quote: SelectionQuote;
+}
+
+/**
+ * Durable PDF extraction strategy. `sourceId` points to a stored remote PDF
+ * source; no local file path and no DOM/CSS selector is involved.
+ */
+export interface PdfTextExtraction {
+  type: "pdfText";
+  sourceId: string;
+  selector: PdfTextSelector;
+}
+
 export type ElementExtractionSpec =
   | TextExtraction
   | AttributeExtraction
   | SelectionExtraction;
 
-export type ExtractionSpec = ElementExtractionSpec | PageUrlExtraction;
+export type ExtractionSpec =
+  | ElementExtractionSpec
+  | PageUrlExtraction
+  | PdfTextExtraction;
 
 interface ExtractionRuleBase {
   id?: ExtractionRuleId;
@@ -55,11 +79,19 @@ export interface PageUrlExtractionRule extends ExtractionRuleBase {
   extraction: PageUrlExtraction;
 }
 
+export interface PdfTextExtractionRule extends ExtractionRuleBase {
+  selector: null;
+  extraction: PdfTextExtraction;
+}
+
 /**
  * Durable extraction definition. `raw` is intentionally absent: raw text is an
  * execution result, not part of the rule definition.
  */
-export type ExtractionRule = ElementExtractionRule | PageUrlExtractionRule;
+export type ExtractionRule =
+  | ElementExtractionRule
+  | PageUrlExtractionRule
+  | PdfTextExtractionRule;
 
 export type ExecutableElementExtractionRule = Omit<
   ElementExtractionRule,
@@ -71,9 +103,15 @@ export type ExecutablePageUrlExtractionRule = Omit<
   "id"
 > & { id: RuntimeExtractionRuleId };
 
+export type ExecutablePdfTextExtractionRule = Omit<
+  PdfTextExtractionRule,
+  "id"
+> & { id: RuntimeExtractionRuleId };
+
 export type ExecutableExtractionRule =
   | ExecutableElementExtractionRule
-  | ExecutablePageUrlExtractionRule;
+  | ExecutablePageUrlExtractionRule
+  | ExecutablePdfTextExtractionRule;
 
 /**
  * Local-only payload consumed by the current storage/domain compatibility layer.
@@ -82,7 +120,8 @@ export type ExecutableExtractionRule =
  */
 export type CapturedExtractionInput =
   | (Omit<ElementExtractionRule, "id"> & { raw: string })
-  | (Omit<PageUrlExtractionRule, "id"> & { raw: string });
+  | (Omit<PageUrlExtractionRule, "id"> & { raw: string })
+  | (Omit<PdfTextExtractionRule, "id"> & { raw: string });
 
 export type ExtractionRuleRunResult =
   | {
