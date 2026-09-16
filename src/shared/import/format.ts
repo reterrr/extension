@@ -13,6 +13,7 @@ const IMPORTABLE_OBJECT_TYPES = new Set<LegacyObjectType>([
   "operator",
 ]);
 const IMPORT_SOURCE_TYPES = new Set<ImportSourceType>(["HTML", "PDF", "XLSX"]);
+const FUNDING_SIZES = new Set(["MICRO", "SMALL", "MEDIUM", "LARGE"]);
 
 interface ImportReference {
   $ref: string;
@@ -40,11 +41,25 @@ interface ImportEvidence {
   normalized_value?: unknown;
 }
 
+interface ImportFileAttachment {
+  source: string;
+  source_page?: string;
+  name?: string;
+}
+
+interface ImportFinancingVariant {
+  key: string;
+  company_size: string;
+  data: Record<string, unknown>;
+}
+
 interface ImportObject {
   key: string;
   type: LegacyObjectType;
   data: Record<string, unknown>;
   evidence?: Record<string, ImportEvidence[]>;
+  files?: ImportFileAttachment[];
+  financing?: ImportFinancingVariant[];
 }
 
 interface BurbotImportV1 {
@@ -78,6 +93,48 @@ function uniqueByKey<T extends { key: string }>(items: T[], label: string): void
   }
 }
 
+function parseEvidenceMap(
+  value: unknown,
+  path: string,
+): Record<string, ImportEvidence[]> | undefined {
+  if (value === undefined) return undefined;
+  if (!isRecord(value)) throw new Error(`${path} must be an object.`);
+
+  const evidence: Record<string, ImportEvidence[]> = {};
+  for (const [field, entries] of Object.entries(value)) {
+    if (!Array.isArray(entries)) {
+      throw new Error(`${path}.${field} must be an array.`);
+    }
+    evidence[field] = entries.map((entry, evidenceIndex) => {
+      const evidencePath = `${path}.${field}[${evidenceIndex}]`;
+      if (!isRecord(entry)) throw new Error(`${evidencePath} must be an object.`);
+      const charStart = entry.char_start;
+      const charEnd = entry.char_end;
+      if (!Number.isInteger(charStart) || Number(charStart) < 0) {
+        throw new Error(`${evidencePath}.char_start must be a non-negative integer.`);
+      }
+      if (!Number.isInteger(charEnd) || Number(charEnd) <= Number(charStart)) {
+        throw new Error(`${evidencePath}.char_end must be greater than char_start.`);
+      }
+      return {
+        source: requiredString(entry.source, `${evidencePath}.source`),
+        char_start: Number(charStart),
+        char_end: Number(charEnd),
+        raw_value:
+          typeof entry.raw_value === "string"
+            ? entry.raw_value
+            : (() => {
+                throw new Error(`${evidencePath}.raw_value must be a string.`);
+              })(),
+        ...(Object.prototype.hasOwnProperty.call(entry, "normalized_value")
+          ? { normalized_value: entry.normalized_value }
+          : {}),
+      };
+    });
+  }
+  return evidence;
+}
+
 function parseDocument(input: unknown): BurbotImportV1 {
   if (!isRecord(input)) throw new Error("Import must be a JSON object.");
   if (input.version !== 1) throw new Error("Only Burbot import version 1 is supported.");
@@ -100,14 +157,20 @@ function parseDocument(input: unknown): BurbotImportV1 {
     if (url !== undefined) BurbotCore.coerce(url, "url");
     if (!isRecord(raw.snapshot)) throw new Error(`${path}.snapshot must be an object.`);
     const snapshot: ImportSnapshot = {
-      text: typeof raw.snapshot.text === "string" ? raw.snapshot.text : (() => {
-        throw new Error(`${path}.snapshot.text must be a string.`);
-      })(),
+      text:
+        typeof raw.snapshot.text === "string"
+          ? raw.snapshot.text
+          : (() => {
+              throw new Error(`${path}.snapshot.text must be a string.`);
+            })(),
       captured_at: optionalString(raw.snapshot.captured_at, `${path}.snapshot.captured_at`),
       content_hash: optionalString(raw.snapshot.content_hash, `${path}.snapshot.content_hash`),
       parser_version: optionalString(raw.snapshot.parser_version, `${path}.snapshot.parser_version`),
     };
-    if (snapshot.captured_at !== undefined && Number.isNaN(Date.parse(snapshot.captured_at))) {
+    if (
+      snapshot.captured_at !== undefined &&
+      Number.isNaN(Date.parse(snapshot.captured_at))
+    ) {
       throw new Error(`${path}.snapshot.captured_at must be an ISO date-time.`);
     }
     return { key, type, url, snapshot };
@@ -122,40 +185,49 @@ function parseDocument(input: unknown): BurbotImportV1 {
       throw new Error(`${path}.type must be project, recruitment or operator.`);
     }
     if (!isRecord(raw.data)) throw new Error(`${path}.data must be an object.`);
-    let evidence: Record<string, ImportEvidence[]> | undefined;
-    if (raw.evidence !== undefined) {
-      if (!isRecord(raw.evidence)) throw new Error(`${path}.evidence must be an object.`);
-      evidence = {};
-      for (const [field, entries] of Object.entries(raw.evidence)) {
-        if (!Array.isArray(entries)) {
-          throw new Error(`${path}.evidence.${field} must be an array.`);
-        }
-        evidence[field] = entries.map((entry, evidenceIndex) => {
-          const evidencePath = `${path}.evidence.${field}[${evidenceIndex}]`;
-          if (!isRecord(entry)) throw new Error(`${evidencePath} must be an object.`);
-          const charStart = entry.char_start;
-          const charEnd = entry.char_end;
-          if (!Number.isInteger(charStart) || Number(charStart) < 0) {
-            throw new Error(`${evidencePath}.char_start must be a non-negative integer.`);
-          }
-          if (!Number.isInteger(charEnd) || Number(charEnd) <= Number(charStart)) {
-            throw new Error(`${evidencePath}.char_end must be greater than char_start.`);
-          }
-          return {
-            source: requiredString(entry.source, `${evidencePath}.source`),
-            char_start: Number(charStart),
-            char_end: Number(charEnd),
-            raw_value: typeof entry.raw_value === "string" ? entry.raw_value : (() => {
-              throw new Error(`${evidencePath}.raw_value must be a string.`);
-            })(),
-            ...(Object.prototype.hasOwnProperty.call(entry, "normalized_value")
-              ? { normalized_value: entry.normalized_value }
-              : {}),
-          };
-        });
-      }
+
+    const evidence = parseEvidenceMap(raw.evidence, `${path}.evidence`);
+
+    let files: ImportFileAttachment[] | undefined;
+    if (raw.files !== undefined) {
+      if (!Array.isArray(raw.files)) throw new Error(`${path}.files must be an array.`);
+      files = raw.files.map((entry, fileIndex) => {
+        const filePath = `${path}.files[${fileIndex}]`;
+        if (!isRecord(entry)) throw new Error(`${filePath} must be an object.`);
+        return {
+          source: requiredString(entry.source, `${filePath}.source`),
+          source_page: optionalString(entry.source_page, `${filePath}.source_page`),
+          name: optionalString(entry.name, `${filePath}.name`),
+        };
+      });
     }
-    return { key, type, data: raw.data, evidence };
+
+    let financing: ImportFinancingVariant[] | undefined;
+    if (raw.financing !== undefined) {
+      if (!Array.isArray(raw.financing)) {
+        throw new Error(`${path}.financing must be an array.`);
+      }
+      financing = raw.financing.map((entry, financeIndex) => {
+        const financePath = `${path}.financing[${financeIndex}]`;
+        if (!isRecord(entry)) throw new Error(`${financePath} must be an object.`);
+        const companySize = requiredString(
+          entry.company_size,
+          `${financePath}.company_size`,
+        );
+        if (!FUNDING_SIZES.has(companySize)) {
+          throw new Error(`${financePath}.company_size must be MICRO, SMALL, MEDIUM or LARGE.`);
+        }
+        if (!isRecord(entry.data)) throw new Error(`${financePath}.data must be an object.`);
+        return {
+          key: requiredString(entry.key, `${financePath}.key`),
+          company_size: companySize,
+          data: entry.data,
+        };
+      });
+      uniqueByKey(financing, `${path} financing`);
+    }
+
+    return { key, type, data: raw.data, evidence, files, financing };
   });
 
   uniqueByKey(sources, "source");
@@ -169,6 +241,49 @@ function isReference(value: unknown): value is ImportReference {
 
 function codepointSlice(text: string, start: number, end: number): string {
   return Array.from(text).slice(start, end).join("");
+}
+
+function fileNameFromUrl(url: string): string {
+  try {
+    const pathname = new URL(url).pathname;
+    const name = decodeURIComponent(pathname.split("/").filter(Boolean).at(-1) ?? "");
+    return name || "document.pdf";
+  } catch {
+    return "document.pdf";
+  }
+}
+
+function storeEvidence(
+  itemKey: string,
+  field: string,
+  entries: ImportEvidence[],
+  sourceByKey: Map<string, ImportedSource>,
+): ImportedEvidence[] {
+  const storedEntries: ImportedEvidence[] = [];
+  for (const entry of entries) {
+    const source = sourceByKey.get(entry.source);
+    if (!source) throw new Error(`Unknown evidence source: ${entry.source}.`);
+    const textLength = Array.from(source.snapshot.text).length;
+    if (entry.char_end > textLength) {
+      throw new Error(`Evidence range for ${itemKey}.${field} is outside source ${entry.source}.`);
+    }
+    const actual = codepointSlice(source.snapshot.text, entry.char_start, entry.char_end);
+    if (actual !== entry.raw_value) {
+      throw new Error(
+        `Evidence mismatch for ${itemKey}.${field}: source text at [${entry.char_start}, ${entry.char_end}) does not equal raw_value.`,
+      );
+    }
+    storedEntries.push({
+      sourceId: source.id,
+      charStart: entry.char_start,
+      charEnd: entry.char_end,
+      rawValue: entry.raw_value,
+      ...(Object.prototype.hasOwnProperty.call(entry, "normalized_value")
+        ? { normalizedValue: entry.normalized_value }
+        : {}),
+    });
+  }
+  return storedEntries;
 }
 
 export function importDocumentIntoState(
@@ -209,7 +324,9 @@ export function importDocumentIntoState(
 
   for (const item of document.objects) {
     const schema = BurbotSchema[item.type];
-    if (!schema?.primary || !schema.fields) throw new Error(`No schema for object type ${item.type}.`);
+    if (!schema?.primary || !schema.fields) {
+      throw new Error(`No schema for object type ${item.type}.`);
+    }
     if (!Object.prototype.hasOwnProperty.call(item.data, schema.primary)) {
       throw new Error(`objects.${item.key}.data.${schema.primary} is required.`);
     }
@@ -264,38 +381,84 @@ export function importDocumentIntoState(
 
     object.label = String(object.values[schema.primary!]);
 
-    if (!item.evidence) continue;
-    for (const [field, entries] of Object.entries(item.evidence)) {
-      if (!schema.fields?.[field]) throw new Error(`Unknown evidence field ${item.type}.${field}.`);
-      if (!Object.prototype.hasOwnProperty.call(item.data, field)) {
-        throw new Error(`Evidence for ${item.key}.${field} requires a value in data.`);
-      }
-      const storedEntries: ImportedEvidence[] = [];
-      for (const entry of entries) {
-        const source = sourceByKey.get(entry.source);
-        if (!source) throw new Error(`Unknown evidence source: ${entry.source}.`);
-        const textLength = Array.from(source.snapshot.text).length;
-        if (entry.char_end > textLength) {
-          throw new Error(`Evidence range for ${item.key}.${field} is outside source ${entry.source}.`);
+    if (item.evidence) {
+      for (const [field, entries] of Object.entries(item.evidence)) {
+        if (!schema.fields?.[field]) {
+          throw new Error(`Unknown evidence field ${item.type}.${field}.`);
         }
-        const actual = codepointSlice(source.snapshot.text, entry.char_start, entry.char_end);
-        if (actual !== entry.raw_value) {
+        if (!Object.prototype.hasOwnProperty.call(item.data, field)) {
+          throw new Error(`Evidence for ${item.key}.${field} requires a value in data.`);
+        }
+        const storedEntries = storeEvidence(item.key, field, entries, sourceByKey);
+        if (storedEntries.length) {
+          (object.evidence ||= {})[field] = storedEntries;
+          const source = sourceByKey.get(entries[0]?.source ?? "");
+          if (!object.sourceUrl && source?.url) object.sourceUrl = source.url;
+        }
+      }
+    }
+
+    if (item.files?.length) {
+      for (const [fileIndex, file] of item.files.entries()) {
+        const source = sourceByKey.get(file.source);
+        if (!source) throw new Error(`Unknown file source: ${file.source}.`);
+        if (source.type !== "PDF" || !source.url) {
           throw new Error(
-            `Evidence mismatch for ${item.key}.${field}: source text at [${entry.char_start}, ${entry.char_end}) does not equal raw_value.`,
+            `objects.${item.key}.files[${fileIndex}].source must reference a PDF source with an HTTP(S) URL.`,
           );
         }
-        storedEntries.push({
-          sourceId: source.id,
-          charStart: entry.char_start,
-          charEnd: entry.char_end,
-          rawValue: entry.raw_value,
-          ...(Object.prototype.hasOwnProperty.call(entry, "normalized_value")
-            ? { normalizedValue: entry.normalized_value }
-            : {}),
+        const pageSource = file.source_page
+          ? sourceByKey.get(file.source_page)
+          : undefined;
+        if (file.source_page && !pageSource) {
+          throw new Error(`Unknown file source page: ${file.source_page}.`);
+        }
+        if (file.source_page && !pageSource?.url) {
+          throw new Error(
+            `objects.${item.key}.files[${fileIndex}].source_page must reference a source with a URL.`,
+          );
+        }
+        (state.fileSources ||= []).push({
+          id: uuid(),
+          objectId: object.id,
+          fileType: "PDF",
+          url: source.url,
+          name: file.name ?? fileNameFromUrl(source.url),
+          sourcePageUrl: pageSource?.url ?? object.sourceUrl ?? source.url,
+          addedAt: now,
+          sourceImportKey: source.importKey,
+          ...(pageSource ? { sourcePageImportKey: pageSource.importKey } : {}),
         });
-        if (!object.sourceUrl && source.url) object.sourceUrl = source.url;
       }
-      if (storedEntries.length) (object.evidence ||= {})[field] = storedEntries;
+    }
+
+    if (item.financing?.length) {
+      if (!schema.configuration) {
+        throw new Error(`Object type ${item.type} does not support financing configuration.`);
+      }
+      const variantsPerSize = new Map<string, number>();
+      for (const variant of item.financing) {
+        const row: Record<string, unknown> = {
+          id: uuid(),
+          objectId: object.id,
+          importKey: variant.key,
+          company_size: variant.company_size,
+          variant_no: (variantsPerSize.get(variant.company_size) ?? 0) + 1,
+          own_contribution_form: "UNSPECIFIED",
+        };
+        variantsPerSize.set(variant.company_size, Number(row.variant_no));
+
+        for (const [field, rawValue] of Object.entries(variant.data)) {
+          const definition = BurbotFunding.fields[field];
+          if (!definition) {
+            throw new Error(
+              `Unknown financing field ${field} in ${item.key}.${variant.key}.`,
+            );
+          }
+          row[field] = BurbotCore.coerceField(rawValue, definition, state);
+        }
+        (state.financingRules ||= []).push(row);
+      }
     }
   }
 
