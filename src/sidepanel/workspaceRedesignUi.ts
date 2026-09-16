@@ -86,7 +86,7 @@ function enhanceFieldGroups(): void {
     details.dataset.sectionKey = title;
 
     const remembered = fieldSectionOpen.get(title);
-    details.open = selected || remembered ?? index === 0;
+    details.open = selected || (remembered ?? index === 0);
     fieldSectionOpen.set(title, details.open);
 
     const summary = document.createElement("summary");
@@ -158,9 +158,6 @@ function enhanceFunding(): void {
     (sum, group) => sum + group.querySelectorAll(".field-row.is-missing").length,
     0,
   );
-  const configuredGroups = groups.filter(
-    (group) => group.querySelectorAll(".variant").length > 0,
-  ).length;
 
   const status = $("funding-status");
   if (status) {
@@ -177,6 +174,7 @@ function enhanceFunding(): void {
 
   const selectedGroup = groups.find((group) => group.querySelector(".field-row.selected"));
   const labels = groups.map(fundingGroupLabel);
+
   if (selectedGroup) {
     activeFundingSize = fundingGroupLabel(selectedGroup, groups.indexOf(selectedGroup));
   } else if (!labels.includes(activeFundingSize)) {
@@ -185,11 +183,9 @@ function enhanceFunding(): void {
         group.querySelectorAll(".variant").length > 0 &&
         group.querySelectorAll(".field-row.is-missing").length > 0,
     );
-    activeFundingSize = preferred
-      ? fundingGroupLabel(preferred, groups.indexOf(preferred))
-      : configuredGroups
-        ? fundingGroupLabel(groups.find((group) => group.querySelector(".variant"))!, groups.findIndex((group) => group.querySelector(".variant")))
-        : labels[0];
+    const firstConfigured = groups.find((group) => group.querySelector(".variant"));
+    const fallback = preferred ?? firstConfigured ?? groups[0];
+    activeFundingSize = fundingGroupLabel(fallback, groups.indexOf(fallback));
   }
 
   const tabs = document.createElement("div");
@@ -278,7 +274,23 @@ function enhanceDocuments(): void {
   if (panel && root.querySelector(".field-row.selected")) panel.open = true;
 }
 
+function translateObjectProgress(): void {
+  const progress = $("progress");
+  if (progress) {
+    const match = progress.textContent?.match(/(\d+)\s*\/\s*(\d+)\s*fields?\s*completed/i);
+    if (match) setText(progress, `${match[1]}/${match[2]} pól uzupełnionych`);
+  }
+
+  const ruleCount = $("rule-count");
+  if (ruleCount) {
+    const match = ruleCount.textContent?.match(/(\d+)\s*rules?/i);
+    if (match) setText(ruleCount, `${match[1]} reguł`);
+  }
+}
+
 function enhanceStaticStatuses(): void {
+  translateObjectProgress();
+
   const fileRows = document.querySelectorAll("#file-source-list .file-source-row").length;
   const fileStatus = $("file-source-count");
   if (fileStatus) {
