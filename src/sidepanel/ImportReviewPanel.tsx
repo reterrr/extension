@@ -1,4 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
+import { publishUiState } from "../shared/api/storage";
+import {
+  readActiveDraft,
+  writeActiveDraft,
+} from "../shared/commits/draftStore";
 import {
   buildImportApprovalPlan,
   importReviewView,
@@ -9,28 +14,8 @@ import {
   readImportReview,
   writeImportReview,
 } from "../shared/import/reviewStore";
+import { stageImportReviewObject } from "../shared/import/stageReview";
 import type { ImportReviewSession, ImportReviewView } from "../shared/types/importReview";
-import type { LegacyStorageState } from "../shared/types/legacy-storage";
-
-type DataResponse<T> = { ok?: boolean; value?: T; error?: string };
-
-async function data<T>(op: string, payload: Record<string, unknown> = {}): Promise<T> {
-  const response = (await browser.runtime.sendMessage({
-    type: "BURBOT_DATA",
-    op,
-    ...payload,
-  })) as DataResponse<T>;
-  if (!response?.ok) throw new Error(response?.error ?? "Workspace operation failed.");
-  return response.value as T;
-}
-
-async function commitActive(): Promise<boolean> {
-  const response = (await browser.runtime.sendMessage({
-    type: "BURBOT_COMMIT",
-    op: "GET",
-  })) as DataResponse<{ active: boolean }>;
-  return Boolean(response?.ok && response.value?.active);
-}
 
 async function activeTab(): Promise<browser.tabs.Tab | undefined> {
   const window = await browser.windows.getCurrent();
@@ -142,7 +127,10 @@ export function ImportReviewPanel() {
 
     void sendReviewHighlights(view);
     const sync = () => void sendReviewHighlights(view);
-    const updated = (_tabId: number, change: browser.tabs._OnUpdatedChangeInfo) => {
+    const updated = (
+      _tabId: number,
+      change: { url?: string; status?: string },
+    ) => {
       if (change.url || change.status === "complete") sync();
     };
     browser.tabs.onActivated.addListener(sync);
@@ -169,60 +157,36 @@ export function ImportReviewPanel() {
     setBusy(true);
     setError("");
     try {
-      if (!(await commitActive())) {
+      const draft = await readActiveDraft();
+      if (!draft) {
         throw new Error("Najpierw rozpocznij New commit w zakładce Workspace.");
       }
 
       const previewId = session.selectedObjectId;
       const plan = buildImportApprovalPlan(session, previewId);
-      let state = await data<LegacyStorageState>("GET");
-      const beforeCount = state.objects.length;
-
-      state = await data<LegacyStorageState>("IMPORT", {
-        expectedRevision: state.revision,
-        document: plan.document,
-      });
-
-      const imported = state.objects.slice(beforeCount);
-      const selected = imported.find(
-        (object) => object.importKey === plan.selectedImportKey,
+      const now = new Date().toISOString();
+      const staged = stageImportReviewObject(
+        draft.workingState,
+        plan,
+        () => crypto.randomUUID(),
+        now,
       );
-      if (!selected) {
-        throw new Error("Nie udało się odnaleźć zatwierdzonego obiektu w commicie.");
-      }
 
-      for (const patch of plan.referencePatches) {
-        const targetId = session.approvedObjectIdByImportKey[patch.targetImportKey];
-        if (!targetId) {
-          throw new Error(`Brak zatwierdzonej referencji ${patch.targetImportKey}.`);
-        }
-        state = await data<LegacyStorageState>("EDIT", {
-          expectedRevision: state.revision,
-          objectId: selected.id,
-          field: patch.field,
-          value: targetId,
-        });
-      }
-
-      for (const importKey of plan.temporaryDependencyImportKeys) {
-        const temporary = imported.find(
-          (object) => object.importKey === importKey && object.id !== selected.id,
-        );
-        if (!temporary) continue;
-        state = await data<LegacyStorageState>("DELETE", {
-          expectedRevision: state.revision,
-          objectId: temporary.id,
-        });
-      }
+      draft.workingState = staged.state;
+      draft.updatedAt = now;
+      await writeActiveDraft(draft);
+      await publishUiState(draft.workingState);
 
       markImportObjectApproved(
         session,
         previewId,
-        selected.id,
-        new Date().toISOString(),
+        staged.stagedObjectId,
+        now,
       );
       await writeImportReview(session);
       setSession({ ...session });
+
+      window.dispatchEvent(new Event("burbot:commit-changed"));
       window.dispatchEvent(new CustomEvent("burbot:import-review-changed"));
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
