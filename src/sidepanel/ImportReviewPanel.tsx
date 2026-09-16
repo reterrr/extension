@@ -263,10 +263,7 @@ function captureKey(target: CaptureTarget | null): string {
     : `financing:${target.financingId}:${target.field}`;
 }
 
-function capturedDraft(
-  target: CaptureTarget,
-  raw: string,
-): string {
+function capturedDraft(target: CaptureTarget, raw: string): string {
   if (target.editorType !== "select") return raw;
   const normalized = BurbotCore.clean(raw).toLocaleLowerCase("pl-PL");
   return (
@@ -374,6 +371,8 @@ export function ImportReviewPanel() {
   const pickerPortRef = useRef<browser.runtime.Port | null>(null);
   const pickerTabIdRef = useRef<number | null>(null);
   const pickerGenerationRef = useRef(0);
+  const captureTargetRef = useRef<CaptureTarget | null>(null);
+  captureTargetRef.current = captureTarget;
   const view = useMemo(() => importReviewView(session), [session]);
 
   function closePickerConnection(): void {
@@ -393,16 +392,36 @@ export function ImportReviewPanel() {
     setPickerConnecting(false);
   }
 
+  function acceptCapture(candidate: ExtractionCandidate): void {
+    const target = captureTargetRef.current;
+    if (!target) {
+      setError("Najpierw wybierz pole w Import Review.");
+      return;
+    }
+    let index = 0;
+    const wantsUrl =
+      /(^|_|\b)url($|_|\b)/i.test(target.field) || /url/i.test(target.label);
+    if (wantsUrl) {
+      const href = candidate.options.findIndex(
+        (option) =>
+          option.extraction.type === "attribute" &&
+          option.extraction.attribute === "href",
+      );
+      if (href >= 0) index = href;
+    }
+    setCaptureCandidate(candidate);
+    setCaptureMethodIndex(index);
+    setCaptureDraft(capturedDraft(target, candidate.options[index]?.raw ?? ""));
+    setCaptureNotice("Sprawdź przechwyconą wartość i zapisz ją do review.");
+  }
+
   async function ensurePicker(): Promise<PickerClient> {
     const tab = await activeTab();
     if (!tab?.id || !tab.url || !/^https?:/.test(tab.url)) {
       throw new Error("Otwórz stronę HTTP(S), z której chcesz wydzielić wartość.");
     }
 
-    if (
-      pickerClientRef.current &&
-      pickerTabIdRef.current === tab.id
-    ) {
+    if (pickerClientRef.current && pickerTabIdRef.current === tab.id) {
       return pickerClientRef.current;
     }
 
@@ -429,9 +448,7 @@ export function ImportReviewPanel() {
         if (token !== pickerGenerationRef.current) return;
         if (message.event === "CAPTURE") {
           setPicking(false);
-          setCaptureCandidate(message.candidate);
-          setCaptureMethodIndex(0);
-          setCaptureNotice("Sprawdź przechwyconą wartość i zapisz ją do review.");
+          acceptCapture(message.candidate);
         } else if (message.event === "MODE") {
           setPicking(message.picking);
         } else if (message.event === "ERROR") {
@@ -468,30 +485,6 @@ export function ImportReviewPanel() {
     } catch {
       closePickerConnection();
     }
-  }
-
-  function acceptCapture(candidate: ExtractionCandidate): void {
-    if (!captureTarget) {
-      setError("Najpierw wybierz pole w Import Review.");
-      return;
-    }
-    let index = 0;
-    const wantsUrl = /(^|_|\b)url($|_|\b)/i.test(captureTarget.field) ||
-      /url/i.test(captureTarget.label);
-    if (wantsUrl) {
-      const href = candidate.options.findIndex(
-        (option) =>
-          option.extraction.type === "attribute" &&
-          option.extraction.attribute === "href",
-      );
-      if (href >= 0) index = href;
-    }
-    setCaptureCandidate(candidate);
-    setCaptureMethodIndex(index);
-    setCaptureDraft(
-      capturedDraft(captureTarget, candidate.options[index]?.raw ?? ""),
-    );
-    setCaptureNotice("Sprawdź przechwyconą wartość i zapisz ją do review.");
   }
 
   async function refresh(open = false) {
@@ -640,9 +633,7 @@ export function ImportReviewPanel() {
   function nextCaptureTarget(current: CaptureTarget): CaptureTarget | null {
     if (current.kind === "object") {
       const index = view.fields.findIndex((field) => field.field === current.field);
-      const next = view.fields
-        .slice(index + 1)
-        .find((field) => !field.editorValue);
+      const next = view.fields.slice(index + 1).find((field) => !field.editorValue);
       return next && view.selectedObjectId
         ? targetFromObjectField(view.selectedObjectId, next)
         : null;
@@ -653,9 +644,7 @@ export function ImportReviewPanel() {
     );
     if (!variant) return null;
     const index = variant.fields.findIndex((field) => field.field === current.field);
-    const next = variant.fields
-      .slice(index + 1)
-      .find((field) => !field.editorValue);
+    const next = variant.fields.slice(index + 1).find((field) => !field.editorValue);
     return next && view.selectedObjectId
       ? targetFromFinancingField(
           view.selectedObjectId,
@@ -679,7 +668,10 @@ export function ImportReviewPanel() {
         const option = captureCandidate.options[captureMethodIndex];
         if (!option) throw new Error("Wybierz sposób odczytu wartości.");
         const client = await ensurePicker();
-        if (comparableUrl(await client.request("URL")) !== comparableUrl(captureCandidate.pageUrl)) {
+        if (
+          comparableUrl(await client.request("URL")) !==
+          comparableUrl(captureCandidate.pageUrl)
+        ) {
           throw new Error("Strona zmieniła się. Wydziel wartość ponownie.");
         }
         if (currentTarget.kind === "object") {
@@ -932,7 +924,9 @@ export function ImportReviewPanel() {
                       <span className="eyebrow">{selected.type.toUpperCase()}</span>
                       <h2>{selected.label}</h2>
                     </div>
-                    {!readOnly && <span className="import-review-edit-badge">Workspace mode</span>}
+                    {!readOnly && (
+                      <span className="import-review-edit-badge">Workspace mode</span>
+                    )}
                   </div>
 
                   {sourceUrls.length > 0 && (
@@ -996,7 +990,11 @@ export function ImportReviewPanel() {
                             >
                               <span className="field-copy">
                                 <span className="field-label">{field.label}</span>
-                                <span className={`field-value${field.editorValue ? "" : " empty"}`}>
+                                <span
+                                  className={`field-value${
+                                    field.editorValue ? "" : " empty"
+                                  }`}
+                                >
                                   {field.value}
                                 </span>
                               </span>
@@ -1100,11 +1098,17 @@ export function ImportReviewPanel() {
                           <span className="eyebrow">FINANSOWANIE</span>
                           <strong>{view.financing.length} wariantów</strong>
                         </div>
-                        <small>Kliknij pole finansowania, aby wydzielić je z tej samej strony.</small>
+                        <small>
+                          Kliknij pole finansowania, aby wydzielić je z tej samej strony.
+                        </small>
                       </div>
                       <div className="import-review-financing">
                         {view.financing.map((variant) => (
-                          <details key={variant.id} open className="import-review-finance-card">
+                          <details
+                            key={variant.id}
+                            open
+                            className="import-review-finance-card"
+                          >
                             <summary>
                               <span>
                                 {variant.companySizeLabel} · wariant {variant.variantNo}
@@ -1119,7 +1123,9 @@ export function ImportReviewPanel() {
                                     key={field.field}
                                     type="button"
                                     className={`import-review-finance-field${
-                                      key === selectedCaptureKey ? " capture-selected" : ""
+                                      key === selectedCaptureKey
+                                        ? " capture-selected"
+                                        : ""
                                     }`}
                                     disabled={readOnly || busy}
                                     onClick={() =>
@@ -1292,7 +1298,9 @@ export function ImportReviewPanel() {
                   )}
 
                   <p className="import-review-hint">
-                    Import Review używa teraz tego samego flow co Workspace: wybierz pole, wydziel element lub zaznaczenie albo wpisz wartość ręcznie, a dopiero potem zatwierdź obiekt.
+                    Import Review używa teraz tego samego flow co Workspace: wybierz pole,
+                    wydziel element lub zaznaczenie albo wpisz wartość ręcznie, a dopiero
+                    potem zatwierdź obiekt.
                   </p>
                   <button
                     type="button"
