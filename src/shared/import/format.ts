@@ -1,13 +1,13 @@
 import type {
-  BurbotObject,
-  BurbotState,
   ImportSourceType,
   ImportedEvidence,
   ImportedSource,
-  ObjectType,
-} from "../types/domain";
+  LegacyObjectType,
+  LegacyStorageState,
+  LegacyStoredObject,
+} from "../types/legacy-storage";
 
-const IMPORTABLE_OBJECT_TYPES = new Set<ObjectType>([
+const IMPORTABLE_OBJECT_TYPES = new Set<LegacyObjectType>([
   "project",
   "recruitment",
   "operator",
@@ -42,7 +42,7 @@ interface ImportEvidence {
 
 interface ImportObject {
   key: string;
-  type: ObjectType;
+  type: LegacyObjectType;
   data: Record<string, unknown>;
   evidence?: Record<string, ImportEvidence[]>;
 }
@@ -117,7 +117,7 @@ function parseDocument(input: unknown): BurbotImportV1 {
     const path = `objects[${index}]`;
     if (!isRecord(raw)) throw new Error(`${path} must be an object.`);
     const key = requiredString(raw.key, `${path}.key`);
-    const type = raw.type as ObjectType;
+    const type = raw.type as LegacyObjectType;
     if (!IMPORTABLE_OBJECT_TYPES.has(type)) {
       throw new Error(`${path}.type must be project, recruitment or operator.`);
     }
@@ -172,18 +172,18 @@ function codepointSlice(text: string, start: number, end: number): string {
 }
 
 export function importDocumentIntoState(
-  original: BurbotState,
+  original: LegacyStorageState,
   input: unknown,
   expectedRevision: unknown,
   uuid: () => string,
   now: string,
-): BurbotState {
+): LegacyStorageState {
   if (expectedRevision !== original.revision) {
     throw new Error("Data changed in another panel. Review the refreshed values and retry.");
   }
 
   const document = parseDocument(input);
-  const state = JSON.parse(JSON.stringify(original)) as BurbotState;
+  const state = JSON.parse(JSON.stringify(original)) as LegacyStorageState;
   const sourceByKey = new Map<string, ImportedSource>();
 
   for (const source of document.sources) {
@@ -205,7 +205,7 @@ export function importDocumentIntoState(
   }
 
   const objectIdByKey = new Map<string, string>();
-  const importedByKey = new Map<string, BurbotObject>();
+  const importedByKey = new Map<string, LegacyStoredObject>();
 
   for (const item of document.objects) {
     const schema = BurbotSchema[item.type];
@@ -221,7 +221,7 @@ export function importDocumentIntoState(
 
     const id = uuid();
     objectIdByKey.set(item.key, id);
-    const object: BurbotObject = {
+    const object: LegacyStoredObject = {
       id,
       type: item.type,
       importKey: item.key,
