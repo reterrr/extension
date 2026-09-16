@@ -19,8 +19,6 @@ export interface ImportReviewFieldView {
   label: string;
   value: string;
   evidenceCount: number;
-  /** Stable selector-style color shared with matching page evidence. */
-  colorKey?: string;
 }
 
 export interface ImportReviewEvidenceView {
@@ -30,8 +28,6 @@ export interface ImportReviewEvidenceView {
   rawValue: string;
   sourceUrl?: string;
   sourceType: string;
-  /** Stable identity of the imported evidence span: source + offsets. */
-  colorKey: string;
   exact: string;
   prefix: string;
   suffix: string;
