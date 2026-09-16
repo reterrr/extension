@@ -7,12 +7,20 @@ import type {
 } from "../types/importReview";
 import type {
   ImportedEvidence,
-  LegacyStorageState,
+  ImportedSource,
   LegacyStoredObject,
 } from "../types/legacy-storage";
 
-function clone<T>(value: T): T {
-  return JSON.parse(JSON.stringify(value)) as T;
+interface ApprovalReferencePatch {
+  field: string;
+  targetImportKey: string;
+}
+
+export interface ImportApprovalPlan {
+  document: unknown;
+  selectedImportKey: string;
+  referencePatches: ApprovalReferencePatch[];
+  temporaryDependencyImportKeys: string[];
 }
 
 function quoteContext(text: string, evidence: ImportedEvidence) {
@@ -54,6 +62,7 @@ export function createImportReviewSession(
     statusByObjectId: Object.fromEntries(
       objectOrder.map((objectId) => [objectId, "PENDING"]),
     ),
+    approvedObjectIdByImportKey: {},
     selectedObjectId: objectOrder[0] ?? null,
   };
 }
@@ -150,80 +159,161 @@ export function importReviewView(
   };
 }
 
-function importedDependencyIds(
+function referencedObjects(
   session: ImportReviewSession,
   object: LegacyStoredObject,
-): string[] {
+): Array<{ field: string; target: LegacyStoredObject }> {
   const fields = BurbotSchema[object.type]?.fields ?? {};
-  const importedIds = new Set(session.previewState.objects.map((entry) => entry.id));
-  const result: string[] = [];
+  const result: Array<{ field: string; target: LegacyStoredObject }> = [];
   for (const [field, definition] of Object.entries(fields)) {
     if (definition.type !== "reference") continue;
     const value = object.values[field];
-    if (typeof value === "string" && importedIds.has(value)) result.push(value);
+    if (typeof value !== "string") continue;
+    const target = session.previewState.objects.find((entry) => entry.id === value);
+    if (target) result.push({ field, target });
   }
   return result;
 }
 
-export function approveImportReviewObject(
+function portableEvidence(
+  object: LegacyStoredObject,
+  sourceById: Map<string, ImportedSource>,
+) {
+  if (!object.evidence) return undefined;
+  const evidence: Record<string, Array<Record<string, unknown>>> = {};
+  for (const [field, entries] of Object.entries(object.evidence)) {
+    evidence[field] = entries.map((entry) => {
+      const source = sourceById.get(entry.sourceId);
+      if (!source) throw new Error(`Missing import source ${entry.sourceId}.`);
+      return {
+        source: source.importKey,
+        char_start: entry.charStart,
+        char_end: entry.charEnd,
+        raw_value: entry.rawValue,
+        ...(Object.prototype.hasOwnProperty.call(entry, "normalizedValue")
+          ? { normalized_value: entry.normalizedValue }
+          : {}),
+      };
+    });
+  }
+  return evidence;
+}
+
+function portableData(
   session: ImportReviewSession,
-  original: LegacyStorageState,
+  object: LegacyStoredObject,
+): Record<string, unknown> {
+  const fields = BurbotSchema[object.type]?.fields ?? {};
+  const data: Record<string, unknown> = {};
+  for (const [field, value] of Object.entries(object.values)) {
+    const definition = fields[field];
+    if (definition?.type === "reference" && typeof value === "string") {
+      const target = session.previewState.objects.find((entry) => entry.id === value);
+      if (!target?.importKey) throw new Error(`Could not resolve imported reference ${field}.`);
+      data[field] = { $ref: target.importKey };
+    } else {
+      data[field] = value;
+    }
+  }
+  return data;
+}
+
+function dependencyStub(target: LegacyStoredObject) {
+  const schema = BurbotSchema[target.type];
+  const primary = schema?.primary;
+  if (!primary) throw new Error(`No primary field for ${target.type}.`);
+  return {
+    key: target.importKey,
+    type: target.type,
+    data: { [primary]: target.values[primary] },
+  };
+}
+
+export function buildImportApprovalPlan(
+  session: ImportReviewSession,
   objectId: string,
-  now: string,
-): LegacyStorageState {
+): ImportApprovalPlan {
+  const object = session.previewState.objects.find((entry) => entry.id === objectId);
+  if (!object?.importKey) throw new Error("Imported object not found.");
   if (session.statusByObjectId[objectId] === "APPROVED") {
     throw new Error("This imported object is already approved.");
   }
-  const candidate = session.previewState.objects.find((object) => object.id === objectId);
-  if (!candidate) throw new Error("Imported object not found.");
 
-  if (
-    candidate.importKey &&
-    original.objects.some(
-      (object) => object.importKey === candidate.importKey && object.type === candidate.type,
-    )
-  ) {
-    throw new Error(`Object ${candidate.importKey} is already present in the commit.`);
-  }
-
-  const missingDependencies = importedDependencyIds(session, candidate).filter(
-    (dependencyId) => !original.objects.some((object) => object.id === dependencyId),
-  );
-  if (missingDependencies.length) {
-    const dependency = session.previewState.objects.find(
-      (object) => object.id === missingDependencies[0],
-    );
-    throw new Error(
-      `Approve referenced object “${dependency ? BurbotCore.displayName(dependency) : missingDependencies[0]}” first.`,
-    );
-  }
-
-  const next = clone(original);
-  const staged = clone(candidate);
-  staged.updatedAt = now;
-  next.objects.push(staged);
-
-  const requiredSourceIds = new Set(
-    Object.values(staged.evidence ?? {})
-      .flat()
-      .map((evidence) => evidence.sourceId),
-  );
-  const existingSourceIds = new Set(
-    (next.importSources ?? []).map((source) => source.id),
-  );
-  for (const source of session.previewState.importSources ?? []) {
-    if (requiredSourceIds.has(source.id) && !existingSourceIds.has(source.id)) {
-      (next.importSources ||= []).push(clone(source));
-      existingSourceIds.add(source.id);
+  const references = referencedObjects(session, object);
+  for (const { target } of references) {
+    if (!target.importKey || !session.approvedObjectIdByImportKey[target.importKey]) {
+      throw new Error(`Approve referenced object “${BurbotCore.displayName(target)}” first.`);
     }
   }
 
-  session.statusByObjectId[objectId] = "APPROVED";
+  const sourceById = new Map(
+    (session.previewState.importSources ?? []).map((source) => [source.id, source]),
+  );
+  const usedSourceIds = new Set(
+    Object.values(object.evidence ?? {})
+      .flat()
+      .map((entry) => entry.sourceId),
+  );
+  const sources = [...usedSourceIds].map((sourceId) => {
+    const source = sourceById.get(sourceId);
+    if (!source) throw new Error(`Missing import source ${sourceId}.`);
+    return {
+      key: source.importKey,
+      type: source.type,
+      ...(source.url ? { url: source.url } : {}),
+      snapshot: {
+        text: source.snapshot.text,
+        ...(source.snapshot.capturedAt ? { captured_at: source.snapshot.capturedAt } : {}),
+        ...(source.snapshot.contentHash ? { content_hash: source.snapshot.contentHash } : {}),
+        ...(source.snapshot.parserVersion ? { parser_version: source.snapshot.parserVersion } : {}),
+      },
+    };
+  });
+
+  const dependencyMap = new Map<string, LegacyStoredObject>();
+  for (const { target } of references) {
+    if (target.importKey) dependencyMap.set(target.importKey, target);
+  }
+
+  return {
+    selectedImportKey: object.importKey,
+    referencePatches: references.map(({ field, target }) => ({
+      field,
+      targetImportKey: target.importKey!,
+    })),
+    temporaryDependencyImportKeys: [...dependencyMap.keys()],
+    document: {
+      version: 1,
+      offset_unit: "unicode_codepoint",
+      sources,
+      objects: [
+        ...[...dependencyMap.values()].map(dependencyStub),
+        {
+          key: object.importKey,
+          type: object.type,
+          data: portableData(session, object),
+          ...(object.evidence
+            ? { evidence: portableEvidence(object, sourceById) }
+            : {}),
+        },
+      ],
+    },
+  };
+}
+
+export function markImportObjectApproved(
+  session: ImportReviewSession,
+  previewObjectId: string,
+  stagedObjectId: string,
+  now: string,
+): void {
+  const object = session.previewState.objects.find((entry) => entry.id === previewObjectId);
+  if (!object?.importKey) throw new Error("Imported object not found.");
+  session.statusByObjectId[previewObjectId] = "APPROVED";
+  session.approvedObjectIdByImportKey[object.importKey] = stagedObjectId;
   session.updatedAt = now;
   session.selectedObjectId =
     session.objectOrder.find(
       (id) => session.statusByObjectId[id] !== "APPROVED",
-    ) ?? objectId;
-
-  return next;
+    ) ?? previewObjectId;
 }
