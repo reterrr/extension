@@ -15,6 +15,7 @@ export interface AssignPdfRuleMessage {
   expectedRevision: number;
   objectId: string;
   field: string;
+  target?: { kind: string; id: string };
   value?: unknown;
   candidate: CapturedExtractionInput;
 }
@@ -87,14 +88,21 @@ export function assignPdfRuleIntoState(
     state,
     object,
     message.field,
-    undefined,
+    message.target,
+    uuid,
   );
   const input = message.value ?? message.candidate.raw;
   const value = BurbotCore.coerceField(input, definition, state);
   values[message.field] = value;
 
   state.rules = state.rules.filter(
-    (rule) => !BurbotCore.matches(rule, object.id, message.field, undefined),
+    (rule) =>
+      !BurbotCore.matches(
+        rule,
+        object.id,
+        message.field,
+        message.target,
+      ),
   );
 
   const rule: LegacyStoredRule = {
@@ -107,21 +115,26 @@ export function assignPdfRuleIntoState(
     sampleValue: message.candidate.raw,
     createdAt: now,
   };
+  if (message.target) rule.target = message.target;
 
   if (String(input) !== message.candidate.raw) {
     rule.transform = { sample: message.candidate.raw, value: input };
   }
 
   state.rules.push(rule);
-  if (object.manualFields) delete object.manualFields[message.field];
-  if (object.evidence) {
-    delete object.evidence[message.field];
-    if (Object.keys(object.evidence).length === 0) delete object.evidence;
+
+  if (!message.target) {
+    if (object.manualFields) delete object.manualFields[message.field];
+    if (object.evidence) {
+      delete object.evidence[message.field];
+      if (Object.keys(object.evidence).length === 0) delete object.evidence;
+    }
+
+    if (message.field === BurbotSchema[object.type]?.primary) {
+      object.label = String(value);
+    }
   }
 
-  if (message.field === BurbotSchema[object.type]?.primary) {
-    object.label = String(value);
-  }
   object.updatedAt = now;
   state.revision += 1;
   return state;
