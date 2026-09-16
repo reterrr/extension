@@ -27,7 +27,7 @@ export async function initObjectReconnectUi(): Promise<void> {
   if (initialized) return;
   initialized = true;
 
-  await initSelectorHighlightsUi();
+  void initSelectorHighlightsUi().catch(() => undefined);
 
   const currentWindow = await browser.windows.getCurrent();
   const windowId = currentWindow.id;
