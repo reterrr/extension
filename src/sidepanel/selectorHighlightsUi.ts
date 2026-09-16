@@ -198,9 +198,26 @@ async function syncPage(): Promise<void> {
   const seen = new Set<string>();
 
   for (const rule of selectorRules(object)) {
-    if (typeof rule.selector !== "string" || seen.has(rule.selector)) continue;
-    seen.add(rule.selector);
-    highlights.push({ id: String(rule.id), selector: rule.selector });
+    if (typeof rule.selector !== "string") continue;
+    const quote =
+      rule.extraction.type === "selection" ? rule.extraction.quote : undefined;
+    const key = [
+      rule.selector,
+      quote?.exact ?? "",
+      quote?.prefix ?? "",
+      quote?.suffix ?? "",
+    ].join("\u0000");
+    if (seen.has(key)) continue;
+    seen.add(key);
+
+    highlights.push({
+      id: String(rule.id),
+      selector: rule.selector,
+      ...(rule.selectorFallbacks?.length
+        ? { selectorFallbacks: rule.selectorFallbacks }
+        : {}),
+      ...(quote ? { quote } : {}),
+    });
   }
 
   try {
