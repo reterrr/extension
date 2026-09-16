@@ -28,6 +28,52 @@ function isElementRule(
   return ["text", "selection", "attribute"].includes(rule.extraction.type);
 }
 
+function selectorCandidates(rule: ExecutableElementExtractionRule): string[] {
+  return Array.from(
+    new Set([rule.selector, ...(rule.selectorFallbacks ?? [])].filter(Boolean)),
+  );
+}
+
+function extractElementRule(
+  rule: ExecutableElementExtractionRule,
+  runtime: ExtractionRuntime,
+): string {
+  const diagnostics: string[] = [];
+
+  for (const selector of selectorCandidates(rule)) {
+    let elements: Element[];
+    try {
+      elements = runtime.selectAll(selector);
+    } catch {
+      diagnostics.push(`${selector}: invalid`);
+      continue;
+    }
+
+    if (elements.length !== 1) {
+      diagnostics.push(`${selector}: ${elements.length} matches`);
+      continue;
+    }
+
+    try {
+      const raw = runtime.readElement(elements[0], rule.extraction);
+      if (!raw || raw.length > 100000) {
+        diagnostics.push(`${selector}: empty/too large`);
+        continue;
+      }
+      return raw;
+    } catch (error) {
+      diagnostics.push(`${selector}: ${errorMessage(error)}`);
+    }
+  }
+
+  const detail = diagnostics.slice(0, 3).join("; ");
+  throw new Error(
+    detail
+      ? `Could not resolve durable selector. ${detail}`
+      : "Could not resolve durable selector.",
+  );
+}
+
 export function runExtractionRules(
   rules: ExecutableExtractionRule[],
   runtime: ExtractionRuntime,
@@ -47,13 +93,7 @@ export function runExtractionRules(
       if (isPageUrlRule(rule)) {
         raw = runtime.pageUrl;
       } else if (isElementRule(rule)) {
-        const elements = runtime.selectAll(rule.selector);
-
-        if (elements.length !== 1) {
-          throw new Error(`Selector matched ${elements.length} elements.`);
-        }
-
-        raw = runtime.readElement(elements[0], rule.extraction);
+        raw = extractElementRule(rule, runtime);
       } else {
         throw new Error("Unsupported webpage extraction rule.");
       }
