@@ -35,6 +35,9 @@ export function createExtractionRule(
   return {
     pageUrl: candidate.pageUrl,
     selector: candidate.selector,
+    ...(candidate.selectorFallbacks?.length
+      ? { selectorFallbacks: candidate.selectorFallbacks }
+      : {}),
     extraction: option.extraction,
   };
 }
@@ -45,12 +48,21 @@ export function createCapturedExtractionInput(
 ): CapturedExtractionInput {
   const rule = createExtractionRule(candidate, option);
 
-  return {
-    pageUrl: rule.pageUrl,
-    selector: rule.selector,
-    extraction: rule.extraction,
-    raw: option.raw,
-  } as CapturedExtractionInput;
+  if (rule.selector !== null && rule.selectorFallbacks?.length) {
+    // The current legacy domain core reconstructs the rule envelope but copies
+    // `extraction` verbatim. Mirror the fallback list there so it survives that
+    // boundary until the core is removed in favor of typed repositories.
+    return {
+      ...rule,
+      extraction: {
+        ...rule.extraction,
+        selectorFallbacks: rule.selectorFallbacks,
+      },
+      raw: option.raw,
+    } as CapturedExtractionInput;
+  }
+
+  return { ...rule, raw: option.raw } as CapturedExtractionInput;
 }
 
 export function createPageUrlCandidate(

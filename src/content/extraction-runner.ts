@@ -4,12 +4,14 @@ import type {
   ExecutableExtractionRule,
   ExecutablePageUrlExtractionRule,
   ExtractionRuleRunResult,
+  SelectionExtraction,
 } from "../shared/types/extraction";
 
 export interface ExtractionRuntime {
   pageUrl: string;
   selectAll(selector: string): Element[];
   readElement(element: Element, extraction: ElementExtractionSpec): string;
+  readSelectionFromPage?(extraction: SelectionExtraction): string;
 }
 
 function errorMessage(error: unknown): string {
@@ -26,6 +28,93 @@ function isElementRule(
   rule: ExecutableExtractionRule,
 ): rule is ExecutableElementExtractionRule {
   return ["text", "selection", "attribute"].includes(rule.extraction.type);
+}
+
+function selectorCandidates(rule: ExecutableElementExtractionRule): string[] {
+  const fallbacks =
+    rule.selectorFallbacks ?? rule.extraction.selectorFallbacks ?? [];
+  return Array.from(new Set([rule.selector, ...fallbacks].filter(Boolean)));
+}
+
+function globalSelectionFallback(
+  rule: ExecutableElementExtractionRule,
+  runtime: ExtractionRuntime,
+): string | null {
+  if (
+    rule.extraction.type !== "selection" ||
+    !runtime.readSelectionFromPage
+  ) {
+    return null;
+  }
+
+  try {
+    const raw = runtime.readSelectionFromPage(rule.extraction);
+    return raw && raw.length <= 100000 ? raw : null;
+  } catch {
+    return null;
+  }
+}
+
+function extractElementRule(
+  rule: ExecutableElementExtractionRule,
+  runtime: ExtractionRuntime,
+): string {
+  const candidates = selectorCandidates(rule);
+
+  if (candidates.length === 1) {
+    const elements = runtime.selectAll(candidates[0]);
+    if (elements.length === 1) {
+      try {
+        return runtime.readElement(elements[0], rule.extraction);
+      } catch (error) {
+        const fallback = globalSelectionFallback(rule, runtime);
+        if (fallback !== null) return fallback;
+        throw error;
+      }
+    }
+
+    const fallback = globalSelectionFallback(rule, runtime);
+    if (fallback !== null) return fallback;
+    throw new Error(`Selector matched ${elements.length} elements.`);
+  }
+
+  const diagnostics: string[] = [];
+
+  for (const selector of candidates) {
+    let elements: Element[];
+    try {
+      elements = runtime.selectAll(selector);
+    } catch {
+      diagnostics.push(`${selector}: invalid`);
+      continue;
+    }
+
+    if (elements.length !== 1) {
+      diagnostics.push(`${selector}: ${elements.length} matches`);
+      continue;
+    }
+
+    try {
+      const raw = runtime.readElement(elements[0], rule.extraction);
+      if (!raw || raw.length > 100000) {
+        diagnostics.push(`${selector}: empty/too large`);
+        continue;
+      }
+      return raw;
+    } catch (error) {
+      diagnostics.push(`${selector}: ${errorMessage(error)}`);
+    }
+  }
+
+  const fallback = globalSelectionFallback(rule, runtime);
+  if (fallback !== null) return fallback;
+
+  const detail = diagnostics.slice(0, 3).join("; ");
+  throw new Error(
+    detail
+      ? `Could not resolve durable selector. ${detail}`
+      : "Could not resolve durable selector.",
+  );
 }
 
 export function runExtractionRules(
@@ -47,13 +136,7 @@ export function runExtractionRules(
       if (isPageUrlRule(rule)) {
         raw = runtime.pageUrl;
       } else if (isElementRule(rule)) {
-        const elements = runtime.selectAll(rule.selector);
-
-        if (elements.length !== 1) {
-          throw new Error(`Selector matched ${elements.length} elements.`);
-        }
-
-        raw = runtime.readElement(elements[0], rule.extraction);
+        raw = extractElementRule(rule, runtime);
       } else {
         throw new Error("Unsupported webpage extraction rule.");
       }

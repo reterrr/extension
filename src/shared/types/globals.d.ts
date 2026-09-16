@@ -3,7 +3,7 @@ import type {
   LegacyStoredObject,
   LegacyStoredRule,
 } from "./legacy-storage";
-import type { ElementExtractionSpec } from "./extraction";
+import type { ElementExtractionSpec, SelectionQuote } from "./extraction";
 
 interface BurbotFieldDefinition {
   label?: string;
@@ -41,6 +41,7 @@ interface BurbotCoreApi {
     state: LegacyStorageState,
   ): string;
   occurrences(text: string, part: string): number[];
+  selectedText(text: string, quote: SelectionQuote): string;
   readElement(element: Element, extraction: ElementExtractionSpec): string;
   empty(): LegacyStorageState;
   hasValue(value: unknown): boolean;
