@@ -7,9 +7,18 @@ declare module "sql.js" {
     values: SqlValue[][];
   }
 
+  export interface Statement {
+    bind(values?: BindParams): boolean;
+    step(): boolean;
+    getAsObject(params?: BindParams): Record<string, SqlValue>;
+    reset(): void;
+    free(): boolean;
+  }
+
   export interface Database {
     run(sql: string, params?: BindParams): Database;
-    exec(sql: string, params?: BindParams): QueryExecResult[];
+    exec(sql: string): QueryExecResult[];
+    prepare(sql: string, params?: BindParams): Statement;
     export(): Uint8Array;
     close(): void;
   }
