@@ -9,7 +9,7 @@ export interface DraftCommit {
   workingState: LegacyStorageState;
 }
 
-export type CommitObjectStatus = "UNCHANGED" | "MODIFIED" | "NEW";
+export type CommitObjectStatus = "UNCHANGED" | "MODIFIED" | "NEW" | "DELETED";
 
 export interface CommitSessionObject {
   id: string;
