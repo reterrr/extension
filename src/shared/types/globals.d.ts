@@ -1,4 +1,4 @@
-import type { BurbotState } from "./domain";
+import type { LegacyStorageState } from "./legacy-storage";
 import type { ElementExtractionSpec } from "./extraction";
 
 interface BurbotFieldDefinition {
@@ -16,17 +16,17 @@ interface BurbotCoreApi {
   coerceField(
     value: unknown,
     definition: BurbotFieldDefinition,
-    state: BurbotState,
+    state: LegacyStorageState,
   ): unknown;
   occurrences(text: string, part: string): number[];
   readElement(element: Element, extraction: ElementExtractionSpec): string;
-  empty(): BurbotState;
+  empty(): LegacyStorageState;
   mutate(
-    state: BurbotState,
+    state: LegacyStorageState,
     message: unknown,
     uuid: () => string,
     now: string,
-  ): BurbotState;
+  ): LegacyStorageState;
 }
 
 interface BurbotSchemaEntry {
