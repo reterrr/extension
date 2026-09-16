@@ -1,3 +1,21 @@
+import type {
+  Gmina,
+  MiastoNaPrawachPowiatu,
+  Podregion,
+  Polska,
+  Powiat,
+  Wojewodztwo,
+} from "./geography";
+
+export {
+  Gmina,
+  MiastoNaPrawachPowiatu,
+  Podregion,
+  Polska,
+  Powiat,
+  Wojewodztwo,
+} from "./geography";
+
 // ============================================================
 // ENUMY
 // ============================================================
@@ -40,26 +58,6 @@ export enum RolaGeografii {
   OBEJMUJE = "OBEJMUJE",
   WYKLUCZA = "WYKLUCZA",
 }
-
-// ============================================================
-// WARTOSCI GEOGRAFICZNE
-// ============================================================
-
-export enum Polska {
-  POLSKA = "POLSKA",
-}
-
-export enum Wojewodztwo {
-  PODKARPACKIE = "PODKARPACKIE",
-  MAZOWIECKIE = "MAZOWIECKIE",
-  MALOPOLSKIE = "MALOPOLSKIE",
-  // TODO: pelny slownik przed seedem SQLite.
-}
-
-export enum Podregion {}
-export enum Powiat {}
-export enum Gmina {}
-export enum MiastoNaPrawachPowiatu {}
 
 // ============================================================
 // FRONT / DOMAIN DTO

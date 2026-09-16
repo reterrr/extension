@@ -1,4 +1,5 @@
 import "../shared/domain/schema.js";
+import "../shared/domain/geographyRuntime";
 import "../shared/domain/core.js";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";

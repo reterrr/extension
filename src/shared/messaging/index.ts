@@ -5,10 +5,13 @@ export * from "./picker";
 export type DataOperation =
   | "GET"
   | "GET_FOCUS"
+  | "IMPORT"
   | "ASSIGN"
   | "EDIT"
   | "APPLY"
   | "DELETE"
+  | "ADD_GEOGRAPHY"
+  | "REMOVE_GEOGRAPHY"
   | "ADD_FUNDING"
   | "REMOVE_FUNDING";
 
