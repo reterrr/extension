@@ -284,10 +284,10 @@ browser.action.onClicked.addListener((tab) => {
 });
 
 browser.runtime.onMessage.addListener((message: unknown, sender) => {
+  const extensionRoot = browser.runtime.getURL("");
   if (
     sender.id !== browser.runtime.id ||
-    sender.tab ||
-    !sender.url?.startsWith(browser.runtime.getURL("")) ||
+    !sender.url?.startsWith(extensionRoot) ||
     !isRecord(message) ||
     message.type !== "BURBOT_DATA"
   ) {
