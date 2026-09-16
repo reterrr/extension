@@ -1,181 +1,263 @@
 // ============================================================
-// Shared primitives
+// ENUMY
 // ============================================================
 
-/** Stored as YYYY-MM-DD in SQLite and used in the frontend unchanged. */
-export type ISODate = string;
-
-export enum ProjectType {
+export enum TypProjektu {
   B2B = "B2B",
   B2C = "B2C",
 }
 
-export enum ProjectStatus {
-  ACTIVE = "ACTIVE",
-  CLOSED = "CLOSED",
-  SUSPENDED = "SUSPENDED",
-  PLANNED = "PLANNED",
+export enum StatusProjektu {
+  PLANOWANY = "PLANOWANY",
+  AKTYWNY = "AKTYWNY",
+  ZAWIESZONY = "ZAWIESZONY",
+  ZAKONCZONY = "ZAKONCZONY",
 }
 
-export enum RecruitmentStatus {
-  PLANNED = "PLANNED",
-  ANNOUNCED = "ANNOUNCED",
-  ACTIVE = "ACTIVE",
-  SUSPENDED = "SUSPENDED",
-  CLOSED = "CLOSED",
+export enum StatusNaboru {
+  PLANOWANY = "PLANOWANY",
+  OGLOSZONY = "OGLOSZONY",
+  AKTYWNY = "AKTYWNY",
+  ZAWIESZONY = "ZAWIESZONY",
+  ZAKONCZONY = "ZAKONCZONY",
 }
 
-export enum RecruitmentClosedStatus {
-  END_DATE_EXCEEDED = "END_DATE_EXCEEDED",
-  BUDGET_EXHAUSTED = "BUDGET_EXHAUSTED",
-  CANCELLED = "CANCELLED",
-  OTHER = "OTHER",
+export enum TypOperatora {
+  GLOWNY = "GLOWNY",
+  DODATKOWY = "DODATKOWY",
 }
 
-export enum OperatorType {
-  MAIN = "MAIN",
-  SECOND = "SECOND",
-}
-
-export enum GeographyType {
+export enum TypGeografii {
+  POLSKA = "POLSKA",
   WOJEWODZTWO = "WOJEWODZTWO",
   PODREGION = "PODREGION",
   POWIAT = "POWIAT",
   GMINA = "GMINA",
-  MIASTO_POWIAT = "MIASTO_POWIAT",
+  MIASTO_NA_PRAWACH_POWIATU = "MIASTO_NA_PRAWACH_POWIATU",
 }
 
-export enum GeographyRole {
-  INCLUDE = "INCLUDE",
-  EXCLUDE = "EXCLUDE",
+export enum RolaGeografii {
+  OBEJMUJE = "OBEJMUJE",
+  WYKLUCZA = "WYKLUCZA",
 }
 
 // ============================================================
-// Front types
+// WARTOSCI GEOGRAFICZNE
 // ============================================================
 
-/**
- * Frontend aggregate for a project.
- *
- * Unlike the SQLite row type, relations are already expanded so the UI does not
- * need to know about join tables.
- */
-export interface Project {
-  id: bigint;
-  type: ProjectType;
-  name: string;
-  number: string | null;
-  status: ProjectStatus;
-  startDate: ISODate | null;
-  endDate: ISODate | null;
-  announcementsSiteUrl: string | null;
-
-  operators: ProjectOperator[];
-  recruitments: Recruitment[];
-  geographyGroups: ProjectGeographyGroup[];
+export enum Polska {
+  POLSKA = "POLSKA",
 }
 
-export interface Recruitment {
+export enum Wojewodztwo {
+  PODKARPACKIE = "PODKARPACKIE",
+  MAZOWIECKIE = "MAZOWIECKIE",
+  MALOPOLSKIE = "MALOPOLSKIE",
+  // TODO: uzupelnic pelny slownik przed seedem SQLite.
+}
+
+// Slowniki ponizej zostana uzupelnione z oficjalnego zbioru geografii.
+export enum Podregion {}
+export enum Powiat {}
+export enum Gmina {}
+export enum MiastoNaPrawachPowiatu {}
+
+// ============================================================
+// FRONT / DOMAIN DTO
+// Tylko Projekt, Operator i Nabor sa glownymi DTO domenowymi frontendu.
+// ============================================================
+
+export interface Projekt {
   id: bigint;
-  projectId: bigint;
-  externalNumber: string | null;
-  sequenceNumber: number | null;
-  year: number | null;
-  status: RecruitmentStatus;
-  startDate: ISODate | null;
-  endDate: ISODate | null;
-  announcedYear: number | null;
-  announcedQuarter: 1 | 2 | 3 | 4 | null;
-  closedStatus: RecruitmentClosedStatus | null;
-  statusReason: string | null;
-  announcementUrl: string | null;
+
+  typ: TypProjektu;
+  nazwa: string;
+  numer: string | null;
+  status: StatusProjektu;
+
+  dataRozpoczecia: string | null;
+  dataZakonczenia: string | null;
+
+  urlNaborow: string | null;
+
+  /** Typ operatora opisuje relacje projekt-operator, nie samego operatora. */
+  operatorzy: OperatorProjektu[];
+  geografia: GeografiaProjektu[];
 }
 
 export interface Operator {
   id: bigint;
-  name: string;
+  nazwa: string;
   nip: string | null;
 }
 
-export interface ProjectOperator {
-  operatorType: OperatorType;
-  operator: Operator;
-}
+export type OperatorProjektu = Operator & {
+  typOperatora: TypOperatora;
+};
 
-export interface ProjectGeographyGroup {
+export interface Nabor {
   id: bigint;
-  geographies: ProjectGeography[];
-}
+  projekt: Projekt;
 
-export interface ProjectGeography {
-  id: bigint;
-  type: GeographyType;
-  role: GeographyRole;
-  name: string;
+  numerZewnetrzny: string | null;
+  numerKolejny: number | null;
+  rok: number | null;
+
+  status: StatusNaboru;
+
+  /** Dokladna data ma od === do; zakres moze miec rozne granice. */
+  dataRozpoczeciaOd: string | null;
+  dataRozpoczeciaDo: string | null;
+
+  dataZakonczeniaOd: string | null;
+  dataZakonczeniaDo: string | null;
+
+  /** Przyblizony termin, np. listopad 2026 albo IV kwartal 2026. */
+  planowanyStartRok: number | null;
+  planowanyStartMiesiac: number | null;
+  planowanyStartKwartal: 1 | 2 | 3 | 4 | null;
+
+  planowanyKoniecRok: number | null;
+  planowanyKoniecMiesiac: number | null;
+  planowanyKoniecKwartal: 1 | 2 | 3 | 4 | null;
+
+  statusZakonczenia: string | null;
+  powodStatusu: string | null;
+
+  urlOgloszenia: string | null;
+
+  geografia: GeografiaNaboru[];
 }
 
 // ============================================================
-// SQLite table row types
+// FRONT - GEOGRAFIA
 // ============================================================
 
-/** One row from `projects`. */
-export interface Projects {
-  id: bigint;
-  type: ProjectType;
-  name: string;
-  number: string | null;
-  status: ProjectStatus;
-  startDate: ISODate | null;
-  endDate: ISODate | null;
-  announcementsSiteUrl: string | null;
+export type WartoscGeografii =
+  | Polska
+  | Wojewodztwo
+  | Podregion
+  | Powiat
+  | Gmina
+  | MiastoNaPrawachPowiatu;
+
+export interface GeografiaProjektu {
+  typ: TypGeografii;
+  rola: RolaGeografii;
+  wartosc: WartoscGeografii;
 }
 
-/** One row from `recruitments`. */
-export interface Recruitments {
-  id: bigint;
-  projectId: bigint;
-  externalNumber: string | null;
-  sequenceNumber: number | null;
-  year: number | null;
-  status: RecruitmentStatus;
-  startDate: ISODate | null;
-  endDate: ISODate | null;
-  announcedYear: number | null;
-  announcedQuarter: 1 | 2 | 3 | 4 | null;
-  closedStatus: RecruitmentClosedStatus | null;
-  statusReason: string | null;
-  announcementUrl: string | null;
+export interface GeografiaNaboru {
+  typ: TypGeografii;
+  rola: RolaGeografii;
+  wartosc: WartoscGeografii;
 }
 
-/** One row from `operators`. */
-export interface Operators {
+// ============================================================
+// SQLITE ROW TYPES
+// Te typy reprezentuja jeden rekord tabeli, nie DTO frontendu.
+// ============================================================
+
+export interface ProjektRow {
   id: bigint;
-  name: string;
+
+  typ: TypProjektu;
+  nazwa: string;
+  numer: string | null;
+  status: StatusProjektu;
+
+  dataRozpoczecia: string | null;
+  dataZakonczenia: string | null;
+
+  urlNaborow: string | null;
+  grupaGeografiiId: bigint | null;
+}
+
+export interface NaborRow {
+  id: bigint;
+  projektId: bigint;
+
+  numerZewnetrzny: string | null;
+  numerKolejny: number | null;
+  rok: number | null;
+
+  status: StatusNaboru;
+
+  dataRozpoczeciaOd: string | null;
+  dataRozpoczeciaDo: string | null;
+  dataZakonczeniaOd: string | null;
+  dataZakonczeniaDo: string | null;
+
+  planowanyStartRok: number | null;
+  planowanyStartMiesiac: number | null;
+  planowanyStartKwartal: 1 | 2 | 3 | 4 | null;
+
+  planowanyKoniecRok: number | null;
+  planowanyKoniecMiesiac: number | null;
+  planowanyKoniecKwartal: 1 | 2 | 3 | 4 | null;
+
+  statusZakonczenia: string | null;
+  powodStatusu: string | null;
+
+  urlOgloszenia: string | null;
+  grupaGeografiiId: bigint | null;
+}
+
+export interface OperatorRow {
+  id: bigint;
+  nazwa: string;
   nip: string | null;
 }
 
-/** One row from `projects_operators`. */
-export interface ProjectsOperators {
+export interface ProjektOperatorRow {
   id: bigint;
-  projectId: bigint;
+  projektId: bigint;
   operatorId: bigint;
-  operatorType: OperatorType;
+  typOperatora: TypOperatora;
 }
 
-/**
- * A geography group belongs to a project. Every geography row inside the group
- * is evaluated together when building the project's geographic scope.
- */
-export interface GeographyGroup {
+// ============================================================
+// SQLITE - GEOGRAFIA
+// ============================================================
+
+export interface GrupaGeografiiRow {
   id: bigint;
-  projectId: bigint;
 }
 
-/** One row from `geography`. */
-export interface Geography {
+export interface GeografiaRow {
   id: bigint;
-  geographyGroupId: bigint;
-  type: GeographyType;
-  role: GeographyRole;
-  name: string;
+  grupaGeografiiId: bigint;
+  typ: TypGeografii;
+  rola: RolaGeografii;
+  obiektGeografiiId: bigint;
+}
+
+export interface PolskaRow {
+  id: bigint;
+  wartosc: Polska;
+}
+
+export interface WojewodztwoRow {
+  id: bigint;
+  wartosc: Wojewodztwo;
+}
+
+export interface PodregionRow {
+  id: bigint;
+  wartosc: Podregion;
+}
+
+export interface PowiatRow {
+  id: bigint;
+  wartosc: Powiat;
+}
+
+export interface GminaRow {
+  id: bigint;
+  wartosc: Gmina;
+}
+
+export interface MiastoNaPrawachPowiatuRow {
+  id: bigint;
+  wartosc: MiastoNaPrawachPowiatu;
 }
