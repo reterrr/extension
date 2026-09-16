@@ -1,9 +1,15 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { publishUiState } from "../shared/api/storage";
 import {
   readActiveDraft,
   writeActiveDraft,
 } from "../shared/commits/draftStore";
+import { createPageUrlCandidate } from "../shared/extraction/rules";
+import {
+  captureImportReviewFinancingField,
+  captureImportReviewObjectField,
+  type ImportReviewCaptureResult,
+} from "../shared/import/reviewCapture";
 import {
   buildImportApprovalPlan,
   editImportReviewFinancingField,
@@ -24,9 +30,13 @@ import { selectorColor } from "../shared/selectorPalette";
 import type {
   ImportReviewEditorOption,
   ImportReviewEditorType,
+  ImportReviewFieldView,
+  ImportReviewFinancingFieldView,
   ImportReviewSession,
   ImportReviewView,
 } from "../shared/types/importReview";
+import type { ExtractionCandidate } from "../shared/types/picker";
+import { createPickerClient, type PickerClient } from "./pickerRpc";
 
 async function activeTab(): Promise<browser.tabs.Tab | undefined> {
   const window = await browser.windows.getCurrent();
@@ -182,7 +192,6 @@ function groupLabel(type: string): string {
 interface ReviewEditorProps {
   type: ImportReviewEditorType;
   value: string;
-  options?: ImportReviewEditorOption[];
   disabled?: boolean;
   ariaLabel: string;
   onSave(value: string): Promise<void>;
@@ -191,7 +200,6 @@ interface ReviewEditorProps {
 function ReviewEditor({
   type,
   value,
-  options,
   disabled = false,
   ariaLabel,
   onSave,
@@ -200,44 +208,20 @@ function ReviewEditor({
 
   useEffect(() => setDraft(value), [value]);
 
-  async function commit(next = draft) {
-    if (disabled || next === value) return;
-    await onSave(next);
-  }
-
-  if (type === "select") {
-    return (
-      <select
-        className="import-review-editor"
-        aria-label={ariaLabel}
-        value={draft}
-        disabled={disabled}
-        onChange={(event) => {
-          const next = event.currentTarget.value;
-          setDraft(next);
-          void commit(next);
-        }}
-      >
-        <option value="">Wybierz…</option>
-        {(options ?? []).map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
-    );
+  async function commit() {
+    if (disabled || draft === value) return;
+    await onSave(draft);
   }
 
   return (
     <input
       className="import-review-editor"
       aria-label={ariaLabel}
-      type={type}
-      step={type === "number" ? "any" : undefined}
+      type={type === "date" ? "date" : "text"}
       value={draft}
       disabled={disabled}
       onChange={(event) => setDraft(event.currentTarget.value)}
-      onBlur={() => void commit()}
+      onBlur={() => void commit().catch(() => setDraft(value))}
       onKeyDown={(event) => {
         if (event.key === "Enter") event.currentTarget.blur();
         if (event.key === "Escape") {
@@ -249,12 +233,266 @@ function ReviewEditor({
   );
 }
 
+type CaptureTarget =
+  | {
+      kind: "object";
+      objectId: string;
+      field: string;
+      label: string;
+      context: string;
+      editorType: ImportReviewEditorType;
+      editorValue: string;
+      options?: ImportReviewEditorOption[];
+    }
+  | {
+      kind: "financing";
+      objectId: string;
+      financingId: string;
+      field: string;
+      label: string;
+      context: string;
+      editorType: ImportReviewEditorType;
+      editorValue: string;
+      options?: ImportReviewEditorOption[];
+    };
+
+function captureKey(target: CaptureTarget | null): string {
+  if (!target) return "";
+  return target.kind === "object"
+    ? `object:${target.field}`
+    : `financing:${target.financingId}:${target.field}`;
+}
+
+function capturedDraft(
+  target: CaptureTarget,
+  raw: string,
+): string {
+  if (target.editorType !== "select") return raw;
+  const normalized = BurbotCore.clean(raw).toLocaleLowerCase("pl-PL");
+  return (
+    target.options?.find(
+      (option) =>
+        BurbotCore.clean(option.value).toLocaleLowerCase("pl-PL") === normalized ||
+        BurbotCore.clean(option.label).toLocaleLowerCase("pl-PL") === normalized,
+    )?.value ?? ""
+  );
+}
+
+interface CaptureValueControlProps {
+  target: CaptureTarget;
+  value: string;
+  disabled: boolean;
+  onChange(value: string): void;
+}
+
+function CaptureValueControl({
+  target,
+  value,
+  disabled,
+  onChange,
+}: CaptureValueControlProps) {
+  if (target.editorType === "select") {
+    return (
+      <select
+        className="import-review-editor"
+        value={value}
+        disabled={disabled}
+        onChange={(event) => onChange(event.currentTarget.value)}
+      >
+        <option value="">Wybierz…</option>
+        {(target.options ?? []).map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+    );
+  }
+
+  return (
+    <input
+      className="import-review-editor"
+      type={target.editorType === "date" ? "date" : "text"}
+      inputMode={target.editorType === "number" ? "decimal" : undefined}
+      value={value}
+      disabled={disabled}
+      onChange={(event) => onChange(event.currentTarget.value)}
+    />
+  );
+}
+
+function targetFromObjectField(
+  objectId: string,
+  field: ImportReviewFieldView,
+): CaptureTarget {
+  return {
+    kind: "object",
+    objectId,
+    field: field.field,
+    label: field.label,
+    context: "Dane obiektu",
+    editorType: field.editorType,
+    editorValue: field.editorValue,
+    ...(field.options ? { options: field.options } : {}),
+  };
+}
+
+function targetFromFinancingField(
+  objectId: string,
+  financingId: string,
+  companySizeLabel: string,
+  variantNo: number,
+  field: ImportReviewFinancingFieldView,
+): CaptureTarget {
+  return {
+    kind: "financing",
+    objectId,
+    financingId,
+    field: field.field,
+    label: field.label,
+    context: `${companySizeLabel} · wariant ${variantNo}`,
+    editorType: field.editorType,
+    editorValue: field.editorValue,
+    ...(field.options ? { options: field.options } : {}),
+  };
+}
+
 export function ImportReviewPanel() {
   const [session, setSession] = useState<ImportReviewSession | null>(null);
   const [mode, setMode] = useState<"workspace" | "review">("workspace");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [captureTarget, setCaptureTarget] = useState<CaptureTarget | null>(null);
+  const [captureCandidate, setCaptureCandidate] =
+    useState<ExtractionCandidate | null>(null);
+  const [captureMethodIndex, setCaptureMethodIndex] = useState(0);
+  const [captureDraft, setCaptureDraft] = useState("");
+  const [captureNotice, setCaptureNotice] = useState("");
+  const [picking, setPicking] = useState(false);
+  const [pickerConnecting, setPickerConnecting] = useState(false);
+  const pickerClientRef = useRef<PickerClient | null>(null);
+  const pickerPortRef = useRef<browser.runtime.Port | null>(null);
+  const pickerTabIdRef = useRef<number | null>(null);
+  const pickerGenerationRef = useRef(0);
   const view = useMemo(() => importReviewView(session), [session]);
+
+  function closePickerConnection(): void {
+    pickerGenerationRef.current++;
+    const client = pickerClientRef.current;
+    const port = pickerPortRef.current;
+    pickerClientRef.current = null;
+    pickerPortRef.current = null;
+    pickerTabIdRef.current = null;
+    client?.dispose(new Error("Page connection changed. Try again."));
+    try {
+      port?.disconnect();
+    } catch {
+      // Already disconnected.
+    }
+    setPicking(false);
+    setPickerConnecting(false);
+  }
+
+  async function ensurePicker(): Promise<PickerClient> {
+    const tab = await activeTab();
+    if (!tab?.id || !tab.url || !/^https?:/.test(tab.url)) {
+      throw new Error("Otwórz stronę HTTP(S), z której chcesz wydzielić wartość.");
+    }
+
+    if (
+      pickerClientRef.current &&
+      pickerTabIdRef.current === tab.id
+    ) {
+      return pickerClientRef.current;
+    }
+
+    closePickerConnection();
+    setPickerConnecting(true);
+    const token = ++pickerGenerationRef.current;
+    try {
+      await browser.scripting.executeScript({
+        target: { tabId: tab.id },
+        files: ["core.js", "picker.js"],
+      });
+      if (token !== pickerGenerationRef.current) {
+        throw new Error("Połączenie ze stroną zmieniło się.");
+      }
+
+      // picker.ts already accepts this lightweight port name. Review uses an
+      // explicit SELECTION RPC, so it does not compete with Workspace's
+      // automatic selected-text sender.
+      const port = browser.tabs.connect(tab.id, {
+        name: "burbot-file-picker",
+        frameId: 0,
+      });
+      const client = createPickerClient(port, (message) => {
+        if (token !== pickerGenerationRef.current) return;
+        if (message.event === "CAPTURE") {
+          setPicking(false);
+          setCaptureCandidate(message.candidate);
+          setCaptureMethodIndex(0);
+          setCaptureNotice("Sprawdź przechwyconą wartość i zapisz ją do review.");
+        } else if (message.event === "MODE") {
+          setPicking(message.picking);
+        } else if (message.event === "ERROR") {
+          setError(message.error);
+        }
+      });
+
+      pickerClientRef.current = client;
+      pickerPortRef.current = port;
+      pickerTabIdRef.current = tab.id;
+      port.onDisconnect.addListener(() => {
+        if (pickerPortRef.current !== port) return;
+        client.dispose();
+        pickerClientRef.current = null;
+        pickerPortRef.current = null;
+        pickerTabIdRef.current = null;
+        setPicking(false);
+        setPickerConnecting(false);
+      });
+      return client;
+    } finally {
+      if (token === pickerGenerationRef.current) setPickerConnecting(false);
+    }
+  }
+
+  async function stopInteractivePicker(): Promise<void> {
+    const client = pickerClientRef.current;
+    if (!client) {
+      setPicking(false);
+      return;
+    }
+    try {
+      await client.request("STOP");
+    } catch {
+      closePickerConnection();
+    }
+  }
+
+  function acceptCapture(candidate: ExtractionCandidate): void {
+    if (!captureTarget) {
+      setError("Najpierw wybierz pole w Import Review.");
+      return;
+    }
+    let index = 0;
+    const wantsUrl = /(^|_|\b)url($|_|\b)/i.test(captureTarget.field) ||
+      /url/i.test(captureTarget.label);
+    if (wantsUrl) {
+      const href = candidate.options.findIndex(
+        (option) =>
+          option.extraction.type === "attribute" &&
+          option.extraction.attribute === "href",
+      );
+      if (href >= 0) index = href;
+    }
+    setCaptureCandidate(candidate);
+    setCaptureMethodIndex(index);
+    setCaptureDraft(
+      capturedDraft(captureTarget, candidate.options[index]?.raw ?? ""),
+    );
+    setCaptureNotice("Sprawdź przechwyconą wartość i zapisz ją do review.");
+  }
 
   async function refresh(open = false) {
     const next = await readImportReview();
@@ -277,6 +515,9 @@ export function ImportReviewPanel() {
     document.documentElement.classList.toggle("import-review-mode", reviewing);
 
     if (!reviewing) {
+      closePickerConnection();
+      setCaptureTarget(null);
+      setCaptureCandidate(null);
       void clearPageReviewHighlights().finally(() => {
         window.dispatchEvent(new Event("burbot:selector-highlights-refresh"));
       });
@@ -285,18 +526,28 @@ export function ImportReviewPanel() {
 
     void sendReviewHighlights(view);
     const sync = () => void sendReviewHighlights(view);
+    const invalidatePicker = () => closePickerConnection();
     const updated = (
-      _tabId: number,
+      tabId: number,
       change: { url?: string; status?: string },
     ) => {
       if (change.url || change.status === "complete") sync();
+      if (
+        pickerTabIdRef.current === tabId &&
+        (change.url || change.status === "loading")
+      ) {
+        invalidatePicker();
+      }
     };
     browser.tabs.onActivated.addListener(sync);
+    browser.tabs.onActivated.addListener(invalidatePicker);
     browser.tabs.onUpdated.addListener(updated);
 
     return () => {
       browser.tabs.onActivated.removeListener(sync);
+      browser.tabs.onActivated.removeListener(invalidatePicker);
       browser.tabs.onUpdated.removeListener(updated);
+      closePickerConnection();
       document.documentElement.classList.remove("import-review-mode");
     };
   }, [session, mode, view.selectedObjectId, view.evidence]);
@@ -322,10 +573,25 @@ export function ImportReviewPanel() {
 
   async function select(objectId: string) {
     if (!session) return;
+    await stopInteractivePicker();
     session.selectedObjectId = objectId;
     session.updatedAt = new Date().toISOString();
     await writeImportReview(session);
     setSession({ ...session });
+    setCaptureTarget(null);
+    setCaptureCandidate(null);
+    setCaptureNotice("");
+    setError("");
+  }
+
+  function selectCaptureTarget(target: CaptureTarget): void {
+    if (busy) return;
+    void stopInteractivePicker();
+    setCaptureTarget(target);
+    setCaptureCandidate(null);
+    setCaptureMethodIndex(0);
+    setCaptureDraft(target.editorValue);
+    setCaptureNotice("Możesz wpisać wartość ręcznie albo wydzielić ją z aktywnej strony.");
     setError("");
   }
 
@@ -338,11 +604,149 @@ export function ImportReviewPanel() {
     }
   }
 
+  async function togglePick() {
+    if (!captureTarget) return;
+    setError("");
+    try {
+      const client = await ensurePicker();
+      await client.request(picking ? "STOP" : "PICK");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    }
+  }
+
+  async function useSelection() {
+    if (!captureTarget) return;
+    setError("");
+    try {
+      const client = await ensurePicker();
+      acceptCapture(await client.request("SELECTION"));
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    }
+  }
+
+  async function usePageUrl() {
+    if (!captureTarget) return;
+    setError("");
+    try {
+      const client = await ensurePicker();
+      acceptCapture(createPageUrlCandidate(await client.request("URL")));
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    }
+  }
+
+  function nextCaptureTarget(current: CaptureTarget): CaptureTarget | null {
+    if (current.kind === "object") {
+      const index = view.fields.findIndex((field) => field.field === current.field);
+      const next = view.fields
+        .slice(index + 1)
+        .find((field) => !field.editorValue);
+      return next && view.selectedObjectId
+        ? targetFromObjectField(view.selectedObjectId, next)
+        : null;
+    }
+
+    const variant = view.financing.find(
+      (entry) => entry.id === current.financingId,
+    );
+    if (!variant) return null;
+    const index = variant.fields.findIndex((field) => field.field === current.field);
+    const next = variant.fields
+      .slice(index + 1)
+      .find((field) => !field.editorValue);
+    return next && view.selectedObjectId
+      ? targetFromFinancingField(
+          view.selectedObjectId,
+          variant.id,
+          variant.companySizeLabel,
+          variant.variantNo,
+          next,
+        )
+      : null;
+  }
+
+  async function saveCapture() {
+    if (!session || !captureTarget) return;
+    setBusy(true);
+    setError("");
+    let captureResult: ImportReviewCaptureResult | null = null;
+    const currentTarget = captureTarget;
+    try {
+      const now = new Date().toISOString();
+      if (captureCandidate) {
+        const option = captureCandidate.options[captureMethodIndex];
+        if (!option) throw new Error("Wybierz sposób odczytu wartości.");
+        const client = await ensurePicker();
+        if (comparableUrl(await client.request("URL")) !== comparableUrl(captureCandidate.pageUrl)) {
+          throw new Error("Strona zmieniła się. Wydziel wartość ponownie.");
+        }
+        if (currentTarget.kind === "object") {
+          captureResult = captureImportReviewObjectField(
+            session,
+            currentTarget.objectId,
+            currentTarget.field,
+            captureDraft,
+            captureCandidate.pageUrl,
+            option.raw,
+            now,
+          );
+        } else {
+          captureResult = captureImportReviewFinancingField(
+            session,
+            currentTarget.objectId,
+            currentTarget.financingId,
+            currentTarget.field,
+            captureDraft,
+            now,
+          );
+        }
+      } else if (currentTarget.kind === "object") {
+        editImportReviewObjectField(
+          session,
+          currentTarget.objectId,
+          currentTarget.field,
+          captureDraft,
+          now,
+        );
+      } else {
+        editImportReviewFinancingField(
+          session,
+          currentTarget.objectId,
+          currentTarget.financingId,
+          currentTarget.field,
+          captureDraft,
+          now,
+        );
+      }
+
+      await writeImportReview(session);
+      setSession({ ...session, previewState: { ...session.previewState } });
+      setCaptureCandidate(null);
+      setCaptureMethodIndex(0);
+      setCaptureNotice(
+        captureResult?.evidenceMessage ?? "Wartość zapisana ręcznie w Import Review.",
+      );
+
+      const next = nextCaptureTarget(currentTarget);
+      if (next) {
+        setCaptureTarget(next);
+        setCaptureDraft(next.editorValue);
+      }
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function approve() {
     if (!session?.selectedObjectId) return;
     setBusy(true);
     setError("");
     try {
+      await stopInteractivePicker();
       const draft = await readActiveDraft();
       if (!draft) {
         throw new Error("Najpierw rozpocznij New commit w zakładce Workspace.");
@@ -371,6 +775,8 @@ export function ImportReviewPanel() {
       );
       await writeImportReview(session);
       setSession({ ...session, previewState: { ...session.previewState } });
+      setCaptureTarget(null);
+      setCaptureCandidate(null);
 
       window.dispatchEvent(new Event("burbot:commit-changed"));
       window.dispatchEvent(new CustomEvent("burbot:import-review-changed"));
@@ -391,9 +797,12 @@ export function ImportReviewPanel() {
     ) {
       return;
     }
+    closePickerConnection();
     await clearImportReview();
     setSession(null);
     setMode("workspace");
+    setCaptureTarget(null);
+    setCaptureCandidate(null);
     await clearPageReviewHighlights();
     window.dispatchEvent(new Event("burbot:selector-highlights-refresh"));
   }
@@ -419,8 +828,10 @@ export function ImportReviewPanel() {
         entry.sourceUrl ? [entry.sourceUrl] : [],
       ),
       ...view.files.flatMap((file) => [file.sourcePageUrl, file.url]),
-    ]),
+    ].filter(Boolean)),
   ];
+  const selectedCaptureKey = captureKey(captureTarget);
+  const selectedOption = captureCandidate?.options[captureMethodIndex];
 
   return (
     <section className="import-review-shell">
@@ -521,7 +932,7 @@ export function ImportReviewPanel() {
                       <span className="eyebrow">{selected.type.toUpperCase()}</span>
                       <h2>{selected.label}</h2>
                     </div>
-                    {!readOnly && <span className="import-review-edit-badge">Edytowalne</span>}
+                    {!readOnly && <span className="import-review-edit-badge">Workspace mode</span>}
                   </div>
 
                   {sourceUrls.length > 0 && (
@@ -545,7 +956,7 @@ export function ImportReviewPanel() {
                         <span className="eyebrow">DANE OBIEKTU</span>
                         <strong>{view.fields.length} pól</strong>
                       </div>
-                      <small>Zmiana wartości usuwa evidence tego pola.</small>
+                      <small>Kliknij pole i pracuj dokładnie jak w Workspace.</small>
                     </div>
                     <div className="import-review-fields">
                       {view.fields.map((field) => {
@@ -556,10 +967,13 @@ export function ImportReviewPanel() {
                         const color = field.evidenceCount
                           ? selectorColor(evidenceColorKey(view, field.field))
                           : null;
+                        const key = `object:${field.field}`;
                         return (
                           <div
                             key={field.field}
-                            className={field.evidenceCount ? "has-evidence" : ""}
+                            className={`${field.evidenceCount ? "has-evidence " : ""}${
+                              key === selectedCaptureKey ? "capture-selected" : ""
+                            }`}
                             style={
                               color
                                 ? {
@@ -570,43 +984,43 @@ export function ImportReviewPanel() {
                                 : undefined
                             }
                           >
-                            <div className="import-review-field-head">
-                              <small>{field.label}</small>
-                              {field.evidenceCount > 0 && (
-                                <span style={{ color: color?.border }}>
-                                  {field.evidenceCount} evidence
-                                </span>
-                              )}
-                            </div>
-                            <ReviewEditor
-                              type={field.editorType}
-                              value={field.editorValue}
-                              options={field.options}
+                            <button
+                              type="button"
+                              className="import-review-field-select"
                               disabled={readOnly || busy}
-                              ariaLabel={field.label}
-                              onSave={(value) =>
-                                persistReviewMutation((current, now) =>
-                                  editImportReviewObjectField(
-                                    current,
-                                    selected.id,
-                                    field.field,
-                                    value,
-                                    now,
-                                  ),
+                              onClick={() =>
+                                selectCaptureTarget(
+                                  targetFromObjectField(selected.id, field),
                                 )
                               }
-                            />
-                            {field.evidenceCount > 0 && hasSource && (
+                            >
+                              <span className="field-copy">
+                                <span className="field-label">{field.label}</span>
+                                <span className={`field-value${field.editorValue ? "" : " empty"}`}>
+                                  {field.value}
+                                </span>
+                              </span>
+                              <span className="field-mark">
+                                {field.editorValue ? "✓" : "Brak"}
+                              </span>
+                            </button>
+                            {(field.evidenceCount > 0 || hasSource) && (
                               <div className="import-review-field-meta">
-                                <span>{field.value}</span>
-                                <button
-                                  type="button"
-                                  className="import-review-source-button"
-                                  style={{ color: color?.border }}
-                                  onClick={() => void showFieldSource(field.field)}
-                                >
-                                  Pokaż w źródle ↗
-                                </button>
+                                <span style={{ color: color?.border }}>
+                                  {field.evidenceCount
+                                    ? `${field.evidenceCount} evidence`
+                                    : ""}
+                                </span>
+                                {hasSource && (
+                                  <button
+                                    type="button"
+                                    className="import-review-source-button"
+                                    style={{ color: color?.border }}
+                                    onClick={() => void showFieldSource(field.field)}
+                                  >
+                                    Pokaż w źródle ↗
+                                  </button>
+                                )}
                               </div>
                             )}
                           </div>
@@ -686,7 +1100,7 @@ export function ImportReviewPanel() {
                           <span className="eyebrow">FINANSOWANIE</span>
                           <strong>{view.financing.length} wariantów</strong>
                         </div>
-                        <small>Wartości zostaną zapisane jako konfiguracja finansowania.</small>
+                        <small>Kliknij pole finansowania, aby wydzielić je z tej samej strony.</small>
                       </div>
                       <div className="import-review-financing">
                         {view.financing.map((variant) => (
@@ -698,30 +1112,33 @@ export function ImportReviewPanel() {
                               <small>{variant.key}</small>
                             </summary>
                             <div className="import-review-finance-fields">
-                              {variant.fields.map((field) => (
-                                <label key={field.field}>
-                                  <small>{field.label}</small>
-                                  <ReviewEditor
-                                    type={field.editorType}
-                                    value={field.editorValue}
-                                    options={field.options}
+                              {variant.fields.map((field) => {
+                                const key = `financing:${variant.id}:${field.field}`;
+                                return (
+                                  <button
+                                    key={field.field}
+                                    type="button"
+                                    className={`import-review-finance-field${
+                                      key === selectedCaptureKey ? " capture-selected" : ""
+                                    }`}
                                     disabled={readOnly || busy}
-                                    ariaLabel={`${variant.companySizeLabel}: ${field.label}`}
-                                    onSave={(value) =>
-                                      persistReviewMutation((current, now) =>
-                                        editImportReviewFinancingField(
-                                          current,
+                                    onClick={() =>
+                                      selectCaptureTarget(
+                                        targetFromFinancingField(
                                           selected.id,
                                           variant.id,
-                                          field.field,
-                                          value,
-                                          now,
+                                          variant.companySizeLabel,
+                                          variant.variantNo,
+                                          field,
                                         ),
                                       )
                                     }
-                                  />
-                                </label>
-                              ))}
+                                  >
+                                    <small>{field.label}</small>
+                                    <strong>{field.value || "Nie ustawiono"}</strong>
+                                  </button>
+                                );
+                              })}
                             </div>
                             <button
                               type="button"
@@ -746,8 +1163,136 @@ export function ImportReviewPanel() {
                     </section>
                   )}
 
+                  {!readOnly && captureTarget && (
+                    <section
+                      className="capture-area import-review-capture"
+                      aria-label="Aktywne wydzielanie pola z Import Review"
+                    >
+                      <div className="capture-heading">
+                        <span>
+                          <small>WYDZIELANIE</small>
+                          <strong>{captureTarget.label}</strong>
+                          <span className="muted">{captureTarget.context}</span>
+                        </span>
+                        <span className="capture-heading-actions">
+                          <button
+                            type="button"
+                            className="icon-button"
+                            aria-label="Zamknij wydzielanie"
+                            onClick={() => {
+                              void stopInteractivePicker();
+                              setCaptureTarget(null);
+                              setCaptureCandidate(null);
+                              setCaptureNotice("");
+                            }}
+                          >
+                            ×
+                          </button>
+                        </span>
+                      </div>
+
+                      <div className="capture-tools">
+                        <button
+                          type="button"
+                          disabled={busy || pickerConnecting}
+                          onClick={() => void togglePick()}
+                        >
+                          {pickerConnecting
+                            ? "Łączenie…"
+                            : picking
+                              ? "Anuluj picker"
+                              : "Wybierz element"}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={busy || pickerConnecting}
+                          onClick={() => void useSelection()}
+                        >
+                          Użyj zaznaczenia
+                        </button>
+                        <button
+                          type="button"
+                          disabled={busy || pickerConnecting}
+                          onClick={() => void usePageUrl()}
+                        >
+                          Użyj URL strony
+                        </button>
+                      </div>
+
+                      {captureCandidate && (
+                        <div className="import-review-capture-source">
+                          <label htmlFor="import-review-capture-method">
+                            Odczytaj ze strony
+                          </label>
+                          <select
+                            id="import-review-capture-method"
+                            value={String(captureMethodIndex)}
+                            disabled={busy}
+                            onChange={(event) => {
+                              const index = Number(event.currentTarget.value);
+                              setCaptureMethodIndex(index);
+                              setCaptureDraft(
+                                capturedDraft(
+                                  captureTarget,
+                                  captureCandidate.options[index]?.raw ?? "",
+                                ),
+                              );
+                            }}
+                          >
+                            {captureCandidate.options.map((option, index) => (
+                              <option key={`${option.label}:${index}`} value={index}>
+                                {option.label}
+                              </option>
+                            ))}
+                          </select>
+                          <div className="source-sample">
+                            {selectedOption?.raw ?? ""}
+                          </div>
+                        </div>
+                      )}
+
+                      <label htmlFor="import-review-capture-value">Wartość</label>
+                      <div id="import-review-capture-value">
+                        <CaptureValueControl
+                          target={captureTarget}
+                          value={captureDraft}
+                          disabled={busy}
+                          onChange={setCaptureDraft}
+                        />
+                      </div>
+                      <p className="hint">{captureNotice}</p>
+                      <button
+                        type="button"
+                        className="primary import-review-capture-save"
+                        disabled={busy || !captureDraft}
+                        onClick={() => void saveCapture()}
+                      >
+                        {captureCandidate
+                          ? "Zapisz wydzielenie i przejdź dalej"
+                          : "Zapisz wartość i przejdź dalej"}
+                      </button>
+
+                      {captureCandidate && (
+                        <details className="import-review-capture-details">
+                          <summary>Szczegóły przechwycenia</summary>
+                          <pre>
+                            {JSON.stringify(
+                              {
+                                pageUrl: captureCandidate.pageUrl,
+                                selector: captureCandidate.selector,
+                                extraction: selectedOption?.extraction,
+                              },
+                              null,
+                              2,
+                            )}
+                          </pre>
+                        </details>
+                      )}
+                    </section>
+                  )}
+
                   <p className="import-review-hint">
-                    Przed zatwierdzeniem możesz poprawić dane, pliki i finansowanie. Evidence pozostaje tylko przy wartościach, których ręcznie nie zmieniono.
+                    Import Review używa teraz tego samego flow co Workspace: wybierz pole, wydziel element lub zaznaczenie albo wpisz wartość ręcznie, a dopiero potem zatwierdź obiekt.
                   </p>
                   <button
                     type="button"
