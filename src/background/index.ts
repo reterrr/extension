@@ -1,7 +1,13 @@
 import "../shared/domain/schema.js";
 import "../shared/domain/geographyRuntime";
 import "../shared/domain/core.js";
-import { loadState, saveState } from "../shared/api/storage";
+import { commitState, loadState, publishUiState } from "../shared/api/storage";
+import {
+  clearActiveDraft,
+  readActiveDraft,
+  writeActiveDraft,
+} from "../shared/commits/draftStore";
+import { commitSessionView } from "../shared/commits/session";
 import { createCapturedExtractionInput } from "../shared/extraction/rules";
 import { discardStaleImportedEvidence } from "../shared/import/evidence";
 import { importDocumentIntoState } from "../shared/import/format";
@@ -11,6 +17,7 @@ import {
   type AssignPdfRuleMessage,
 } from "../shared/pdf/assignPdfRule";
 import { createRemotePdfSourceCandidate } from "../shared/sources/remoteFile";
+import type { DraftCommit } from "../shared/types/commit";
 import type { FocusPayload } from "../shared/types/domain";
 import type { CapturedExtractionInput } from "../shared/types/extraction";
 import type { LegacyStorageState } from "../shared/types/legacy-storage";
@@ -67,6 +74,10 @@ function enqueue<T>(work: () => Promise<T>): Promise<T> {
   return task;
 }
 
+function cloneState(state: LegacyStorageState): LegacyStorageState {
+  return JSON.parse(JSON.stringify(state)) as LegacyStorageState;
+}
+
 async function broadcast(message: Record<string, unknown>): Promise<void> {
   await browser.runtime.sendMessage(message).catch(() => undefined);
 }
@@ -74,6 +85,36 @@ async function broadcast(message: Record<string, unknown>): Promise<void> {
 async function focus(windowId: number, value: FocusPayload): Promise<void> {
   await browser.storage.session.set({ [focusKey(windowId)]: value });
   await broadcast({ type: "BURBOT_FOCUS", windowId, ...value });
+}
+
+async function notifyCommitChanged(): Promise<void> {
+  await broadcast({ type: "BURBOT_COMMIT_CHANGED" });
+}
+
+async function workspaceState(): Promise<LegacyStorageState> {
+  const draft = await readActiveDraft();
+  if (draft) return draft.workingState;
+  return loadState();
+}
+
+async function requireDraft(): Promise<DraftCommit> {
+  const draft = await readActiveDraft();
+  if (!draft) {
+    throw new Error('Start with "New commit" before changing objects.');
+  }
+  return draft;
+}
+
+async function saveDraftState(
+  draft: DraftCommit,
+  state: LegacyStorageState,
+): Promise<LegacyStorageState> {
+  draft.workingState = state;
+  draft.updatedAt = new Date().toISOString();
+  await writeActiveDraft(draft);
+  await publishUiState(state);
+  await notifyCommitChanged();
+  return state;
 }
 
 function mutateFileSource(
@@ -88,7 +129,7 @@ function mutateFileSource(
   }
   if (typeof message.objectId !== "string") throw new Error("Choose an object.");
 
-  const state = JSON.parse(JSON.stringify(original)) as LegacyStorageState;
+  const state = cloneState(original);
   const object = state.objects.find((entry) => entry.id === message.objectId);
   if (!object) throw new Error("Choose an object.");
 
@@ -216,6 +257,56 @@ async function captureInitialSelection(
   }
 }
 
+async function captureCurrentSelection(tabId: number): Promise<{
+  text: string;
+  candidate: CapturedExtractionInput;
+  pageUrl: string;
+} | null> {
+  await browser.scripting.executeScript({
+    target: { tabId },
+    files: ["content.js"],
+  });
+  const result: unknown = await browser.tabs.sendMessage(
+    tabId,
+    { type: "BURBOT_SELECTION" },
+    { frameId: 0 },
+  );
+  if (!isPickerSelectionResponse(result) || !result.ok) return null;
+  const option = result.value.options.find(
+    (entry) => entry.extraction.type === "selection" && BurbotCore.clean(entry.raw),
+  );
+  if (!option) return null;
+  const candidate = createCapturedExtractionInput(result.value, option);
+  return {
+    text: option.raw,
+    candidate,
+    pageUrl: candidate.pageUrl,
+  };
+}
+
+async function createObjectInDraft(
+  draft: DraftCommit,
+  objectType: CreateObjectType,
+  initialValue: string,
+  sourceUrl: string,
+  candidate: CapturedExtractionInput | null,
+): Promise<LegacyStorageState> {
+  const next = BurbotCore.mutate(
+    draft.workingState,
+    {
+      op: "CREATE_FROM_SELECTION",
+      expectedRevision: draft.workingState.revision,
+      objectType,
+      initialValue,
+      sourceUrl,
+      candidate,
+    },
+    () => crypto.randomUUID(),
+    new Date().toISOString(),
+  );
+  return saveDraftState(draft, next);
+}
+
 browser.contextMenus.onClicked.addListener((info, tab) => {
   if (!tab) return;
 
@@ -239,23 +330,15 @@ browser.contextMenus.onClicked.addListener((info, tab) => {
   const captured = captureInitialSelection(info, tab);
 
   void enqueue(async () => {
+    const draft = await requireDraft();
     const candidate = await captured;
-    const state = await loadState();
-    const next = BurbotCore.mutate(
-      state,
-      {
-        op: "CREATE_FROM_SELECTION",
-        expectedRevision: state.revision,
-        objectType,
-        initialValue: selectionText,
-        sourceUrl,
-        candidate,
-      },
-      () => crypto.randomUUID(),
-      new Date().toISOString(),
+    const next = await createObjectInDraft(
+      draft,
+      objectType,
+      selectionText,
+      sourceUrl,
+      candidate,
     );
-
-    await saveState(next);
     const object = next.objects[next.objects.length - 1];
     await focus(windowId, {
       objectId: object.id,
@@ -263,7 +346,7 @@ browser.contextMenus.onClicked.addListener((info, tab) => {
       stamp: crypto.randomUUID(),
       note:
         object.creationNote ??
-        "Object created. Choose the next field to capture.",
+        "Object staged in the active commit. Choose the next field to capture.",
     });
     await opening;
   }).catch((error: unknown) => {
@@ -288,11 +371,117 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
   if (
     sender.id !== browser.runtime.id ||
     !sender.url?.startsWith(extensionRoot) ||
-    !isRecord(message) ||
-    message.type !== "BURBOT_DATA"
+    !isRecord(message)
   ) {
     return undefined;
   }
+
+  if (message.type === "BURBOT_COMMIT") {
+    const task = enqueue(async () => {
+      if (message.op === "GET") {
+        return commitSessionView(await readActiveDraft());
+      }
+
+      if (message.op === "NEW") {
+        if (await readActiveDraft()) {
+          throw new Error("A commit is already in progress.");
+        }
+        const baseState = await loadState();
+        const now = new Date().toISOString();
+        const draft: DraftCommit = {
+          id: crypto.randomUUID(),
+          createdAt: now,
+          updatedAt: now,
+          baseRevision: baseState.revision,
+          baseState: cloneState(baseState),
+          workingState: cloneState(baseState),
+        };
+        await writeActiveDraft(draft);
+        await publishUiState(draft.workingState);
+        await notifyCommitChanged();
+        return commitSessionView(draft);
+      }
+
+      if (message.op === "COMMIT") {
+        const draft = await requireDraft();
+        if (JSON.stringify(draft.baseState) === JSON.stringify(draft.workingState)) {
+          throw new Error("There are no staged changes to commit.");
+        }
+        const committed = await commitState(draft.baseRevision, draft.workingState);
+        await clearActiveDraft();
+        await notifyCommitChanged();
+        return { session: commitSessionView(null), state: committed };
+      }
+
+      if (message.op === "DISCARD") {
+        await requireDraft();
+        await clearActiveDraft();
+        const committed = await loadState();
+        await publishUiState(committed);
+        await notifyCommitChanged();
+        return { session: commitSessionView(null), state: committed };
+      }
+
+      if (message.op === "FOCUS") {
+        if (typeof message.windowId !== "number" || typeof message.objectId !== "string") {
+          throw new Error("Window and object are required.");
+        }
+        const state = await workspaceState();
+        if (!state.objects.some((object) => object.id === message.objectId)) {
+          throw new Error("Object not found in the active workspace.");
+        }
+        await focus(message.windowId, {
+          objectId: message.objectId,
+          stamp: crypto.randomUUID(),
+        });
+        return commitSessionView(await readActiveDraft());
+      }
+
+      if (message.op === "CREATE_OBJECT") {
+        const objectType = String(message.objectType ?? "");
+        if (!isCreateObjectType(objectType) || typeof message.windowId !== "number") {
+          throw new Error("Choose a valid object type.");
+        }
+        const draft = await requireDraft();
+        const tabs = await browser.tabs.query({
+          active: true,
+          windowId: message.windowId,
+        });
+        const tab = tabs[0];
+        if (!tab?.id || !tab.url?.startsWith("http")) {
+          throw new Error("Open a webpage and select the object name first.");
+        }
+        const selection = await captureCurrentSelection(tab.id);
+        if (!selection || !BurbotCore.clean(selection.text)) {
+          throw new Error("Select the new object name on the webpage first.");
+        }
+        const next = await createObjectInDraft(
+          draft,
+          objectType,
+          selection.text,
+          selection.pageUrl,
+          selection.candidate,
+        );
+        const object = next.objects[next.objects.length - 1];
+        await focus(message.windowId, {
+          objectId: object.id,
+          tabId: tab.id,
+          stamp: crypto.randomUUID(),
+          note: "New object staged in this commit.",
+        });
+        return commitSessionView(await readActiveDraft());
+      }
+
+      throw new Error("Unknown commit operation.");
+    });
+
+    return task.then(
+      (value) => ({ ok: true, value }),
+      (error: unknown) => ({ ok: false, error: errorMessage(error) }),
+    );
+  }
+
+  if (message.type !== "BURBOT_DATA") return undefined;
 
   const task = enqueue(async () => {
     if (message.op === "GET_FOCUS") {
@@ -304,8 +493,7 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
       return (await browser.storage.session.get(key))[key] ?? null;
     }
 
-    const state = await loadState();
-    if (message.op === "GET") return state;
+    if (message.op === "GET") return workspaceState();
 
     if (typeof message.op !== "string" || !ALLOWED_WRITES.has(message.op)) {
       throw new Error(
@@ -313,6 +501,8 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
       );
     }
 
+    const draft = await requireDraft();
+    const state = draft.workingState;
     const now = new Date().toISOString();
     let next: LegacyStorageState;
     if (message.op === "IMPORT") {
@@ -349,8 +539,7 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
       }
       discardStaleImportedEvidence(next, state, message);
     }
-    await saveState(next);
-    return next;
+    return saveDraftState(draft, next);
   });
 
   return task.then(
