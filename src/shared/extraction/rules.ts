@@ -12,7 +12,10 @@ export function createExtractionRule(
   candidate: ExtractionCandidate,
   option: ExtractionCandidateOption,
 ): ExtractionRule {
-  if (option.extraction.type === "pageUrl") {
+  if (
+    option.extraction.type === "pageUrl" ||
+    option.extraction.type === "pdfText"
+  ) {
     return {
       pageUrl: candidate.pageUrl,
       selector: null,
@@ -37,21 +40,12 @@ export function createCapturedExtractionInput(
 ): CapturedExtractionInput {
   const rule = createExtractionRule(candidate, option);
 
-  if (rule.selector === null) {
-    return {
-      pageUrl: rule.pageUrl,
-      selector: null,
-      extraction: rule.extraction,
-      raw: option.raw,
-    };
-  }
-
   return {
     pageUrl: rule.pageUrl,
     selector: rule.selector,
     extraction: rule.extraction,
     raw: option.raw,
-  };
+  } as CapturedExtractionInput;
 }
 
 export function createPageUrlCandidate(
