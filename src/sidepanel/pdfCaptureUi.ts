@@ -292,8 +292,11 @@ function sourceByUrl(url: string): LegacyStoredFileSource | undefined {
 async function ensurePdfPermission(url: string): Promise<void> {
   const parsed = new URL(url);
   const origins = [`${parsed.origin}/*`];
-  if (await browser.permissions.contains({ origins })) return;
-  if (!(await browser.permissions.request({ origins }))) {
+
+  // permissions.request() must be invoked directly from the user's click.
+  // Do not await permissions.contains() first: Firefox may drop user activation.
+  const granted = await browser.permissions.request({ origins });
+  if (!granted) {
     throw new Error("Burbot potrzebuje dostępu do hosta PDF, aby odczytać jego tekst.");
   }
 }
