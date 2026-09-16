@@ -11,10 +11,17 @@ type ReviewHighlight = {
 type ReviewMessage = {
   type: "BURBOT_SHOW_IMPORT_REVIEW_HIGHLIGHTS";
   highlights: ReviewHighlight[];
+  focusId?: string;
 };
 
 type Boundary = { node: Text; offset: number };
 type IndexedText = { text: string; starts: Boundary[]; ends: Boundary[] };
+type ResolvedRange = {
+  range: Range;
+  id: string;
+  colorKey: string;
+  focused: boolean;
+};
 
 declare global {
   var __burbotImportReviewHighlighterDispose: (() => void) | undefined;
@@ -86,46 +93,110 @@ function rangeAt(index: IndexedText, start: number, exactLength: number): Range 
   return range;
 }
 
+function commonSuffixLength(left: string, right: string, limit = 96): number {
+  const max = Math.min(left.length, right.length, limit);
+  let length = 0;
+  while (
+    length < max &&
+    left[left.length - 1 - length] === right[right.length - 1 - length]
+  ) {
+    length += 1;
+  }
+  return length;
+}
+
+function commonPrefixLength(left: string, right: string, limit = 96): number {
+  const max = Math.min(left.length, right.length, limit);
+  let length = 0;
+  while (length < max && left[length] === right[length]) length += 1;
+  return length;
+}
+
+function usefulTokens(value: string): string[] {
+  return clean(value)
+    .toLocaleLowerCase("pl")
+    .split(/[^\p{L}\p{N}/.-]+/u)
+    .filter((token) => token.length >= 3 || /\d/.test(token))
+    .slice(-10);
+}
+
+function tokenOverlapScore(windowText: string, context: string): number {
+  const haystack = windowText.toLocaleLowerCase("pl");
+  return usefulTokens(context).reduce(
+    (score, token, index) =>
+      score + (haystack.includes(token) ? Math.min(24, token.length * 2 + index) : 0),
+    0,
+  );
+}
+
+function semanticScore(element: Element | null): number {
+  if (!element) return 0;
+  let score = 0;
+  const tag = element.tagName.toLowerCase();
+  if (/^h[1-3]$/.test(tag) || element.closest("h1,h2,h3")) score += 45;
+  if (element.closest("main,article,[role='main'],.entry-content,.post-content,.page-content,.content-area")) {
+    score += 25;
+  }
+  if (element.closest("p,li,td,th,dt,dd")) score += 8;
+  if (element.closest("nav,header,footer,aside,[role='navigation'],.menu,.sidebar,.breadcrumb,.breadcrumbs")) {
+    score -= 45;
+  }
+  if (element.closest("a") && !element.closest("h1,h2,h3")) score -= 5;
+  const rect = element.getBoundingClientRect();
+  if (rect.width > 0 && rect.height > 0) score += 4;
+  return score;
+}
+
 /**
- * Imported fact-projection snapshots often contain business facts concatenated
- * in a canonical order rather than the real page's DOM order. Prefer exact
- * prefix/suffix context when it survives on the live page. If it does not:
- * - use the only exact occurrence when unique;
- * - otherwise show every exact occurrence instead of silently losing the
- *   evidence color. Review mode is visual provenance, not extraction, so it is
- *   better to expose ambiguity than hide imported evidence altogether.
+ * Fact-projection snapshots preserve the evidence text and nearby business
+ * facts, but not necessarily the live DOM order. Resolve exactly one best live
+ * occurrence instead of painting every repeated string on the page.
+ *
+ * Ranking prefers:
+ * 1. exact prefix/suffix context when it survives;
+ * 2. partial nearby context/token similarity;
+ * 3. semantic main-content/headline locations over navigation/sidebar copies.
  */
-function resolveRanges(index: IndexedText, highlight: ReviewHighlight): Range[] {
+function resolveBestRange(index: IndexedText, highlight: ReviewHighlight): Range | null {
   const exact = clean(highlight.exact);
   const prefix = clean(highlight.prefix);
   const suffix = clean(highlight.suffix);
   const positions = occurrences(index.text, exact);
-  if (!positions.length || !exact) return [];
+  if (!positions.length || !exact) return null;
+  if (positions.length === 1) return rangeAt(index, positions[0], exact.length);
 
-  const contextual = positions.filter((start) => {
+  let bestStart: number | null = null;
+  let bestScore = Number.NEGATIVE_INFINITY;
+
+  for (const start of positions) {
     const end = start + exact.length;
-    const before = index.text.slice(Math.max(0, start - prefix.length), start);
-    const after = index.text.slice(end, end + suffix.length);
-    return (!prefix || before.endsWith(prefix)) && (!suffix || after.startsWith(suffix));
-  });
+    const before = index.text.slice(Math.max(0, start - 180), start);
+    const after = index.text.slice(end, Math.min(index.text.length, end + 180));
+    const exactPrefix = Boolean(prefix) && before.endsWith(prefix);
+    const exactSuffix = Boolean(suffix) && after.startsWith(suffix);
 
-  const selected =
-    contextual.length > 0
-      ? contextual
-      : positions.length === 1
-        ? positions
-        : positions;
+    let score = 0;
+    if (exactPrefix) score += 4000;
+    if (exactSuffix) score += 4000;
+    score += commonSuffixLength(before, prefix) * 7;
+    score += commonPrefixLength(after, suffix) * 7;
+    score += tokenOverlapScore(before, prefix) * 3;
+    score += tokenOverlapScore(after, suffix) * 3;
+    score += semanticScore(index.starts[start]?.node.parentElement ?? null);
 
-  return selected.flatMap((start) => {
-    const range = rangeAt(index, start, exact.length);
-    return range ? [range] : [];
-  });
+    if (score > bestScore) {
+      bestScore = score;
+      bestStart = start;
+    }
+  }
+
+  return bestStart === null ? null : rangeAt(index, bestStart, exact.length);
 }
 
 globalThis.__burbotImportReviewHighlighterDispose?.();
 
 let overlays: HTMLDivElement[] = [];
-let ranges: Array<{ range: Range; id: string; colorKey: string }> = [];
+let ranges: ResolvedRange[] = [];
 let frame: number | null = null;
 
 function clear(): void {
@@ -147,11 +218,16 @@ function draw(): void {
       if (rect.width <= 0 || rect.height <= 0) continue;
       const overlay = document.createElement("div");
       overlay.dataset.burbotImportReviewHighlight = entry.id;
+      overlay.dataset.burbotImportReviewFocused = entry.focused ? "true" : "false";
       overlay.style.cssText =
         "position:fixed;pointer-events:none;z-index:2147483646;box-sizing:border-box;" +
         `top:${rect.top}px;left:${rect.left}px;width:${rect.width}px;height:${rect.height}px;` +
-        `border:1.5px solid ${color.border};background:${color.fill};` +
-        `box-shadow:0 0 0 1px ${color.soft} inset;border-radius:2px;`;
+        `border:${entry.focused ? 2.5 : 1.5}px solid ${color.border};background:${color.fill};` +
+        `box-shadow:${
+          entry.focused
+            ? `0 0 0 4px ${color.soft},0 0 0 1px ${color.border} inset`
+            : `0 0 0 1px ${color.soft} inset`
+        };border-radius:2px;`;
       document.documentElement.append(overlay);
       overlays.push(overlay);
     }
@@ -163,7 +239,18 @@ function schedule(): void {
   frame = requestAnimationFrame(draw);
 }
 
-function show(highlights: ReviewHighlight[]): void {
+function scrollToFocused(): void {
+  const focused = ranges.find((entry) => entry.focused);
+  if (!focused) return;
+  const element =
+    focused.range.startContainer instanceof Element
+      ? focused.range.startContainer
+      : focused.range.startContainer.parentElement;
+  element?.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
+  window.setTimeout(schedule, 120);
+}
+
+function show(highlights: ReviewHighlight[], focusId?: string): void {
   clear();
   document
     .querySelectorAll<HTMLElement>("[data-burbot-selector-highlight]")
@@ -171,14 +258,21 @@ function show(highlights: ReviewHighlight[]): void {
 
   const root = document.body ?? document.documentElement;
   const index = canonicalText(root);
-  ranges = highlights.flatMap((highlight) =>
-    resolveRanges(index, highlight).map((range, occurrence) => ({
-      range,
-      id: `${highlight.id}:${occurrence}`,
-      colorKey: highlight.colorKey,
-    })),
-  );
+  ranges = highlights.flatMap((highlight) => {
+    const range = resolveBestRange(index, highlight);
+    return range
+      ? [
+          {
+            range,
+            id: highlight.id,
+            colorKey: highlight.colorKey,
+            focused: highlight.id === focusId,
+          },
+        ]
+      : [];
+  });
   draw();
+  if (focusId) scrollToFocused();
 }
 
 const listener = (message: unknown): undefined | Promise<{ ok: true }> => {
@@ -189,8 +283,8 @@ const listener = (message: unknown): undefined | Promise<{ ok: true }> => {
   ) {
     return undefined;
   }
-  const highlights = (message as ReviewMessage).highlights;
-  show(Array.isArray(highlights) ? highlights : []);
+  const payload = message as ReviewMessage;
+  show(Array.isArray(payload.highlights) ? payload.highlights : [], payload.focusId);
   return Promise.resolve({ ok: true });
 };
 
