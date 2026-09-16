@@ -15,6 +15,7 @@ import {
   writeImportReview,
 } from "../shared/import/reviewStore";
 import { stageImportReviewObject } from "../shared/import/stageReview";
+import { selectorColor } from "../shared/selectorPalette";
 import type { ImportReviewSession, ImportReviewView } from "../shared/types/importReview";
 
 async function activeTab(): Promise<browser.tabs.Tab | undefined> {
@@ -34,6 +35,10 @@ function comparableUrl(value: string): string {
   }
 }
 
+function evidenceColorKey(view: ImportReviewView, field: string): string {
+  return `${view.selectedObjectId}:${field}`;
+}
+
 async function sendReviewHighlights(view: ImportReviewView): Promise<void> {
   const tab = await activeTab();
   if (!tab?.id || !tab.url || !/^https?:/.test(tab.url)) return;
@@ -46,7 +51,7 @@ async function sendReviewHighlights(view: ImportReviewView): Promise<void> {
       exact: entry.exact,
       prefix: entry.prefix,
       suffix: entry.suffix,
-      colorKey: `${view.selectedObjectId}:${entry.field}`,
+      colorKey: evidenceColorKey(view, entry.field),
     }));
 
   try {
@@ -331,21 +336,37 @@ export function ImportReviewPanel() {
                     </div>
                   )}
                   <div className="import-review-fields">
-                    {view.fields.map((field) => (
-                      <div
-                        key={field.field}
-                        className={field.evidenceCount ? "has-evidence" : ""}
-                      >
-                        <small>{field.label}</small>
-                        <strong>{field.value}</strong>
-                        {field.evidenceCount > 0 && (
-                          <span>{field.evidenceCount} evidence</span>
-                        )}
-                      </div>
-                    ))}
+                    {view.fields.map((field) => {
+                      const color = field.evidenceCount
+                        ? selectorColor(evidenceColorKey(view, field.field))
+                        : null;
+                      return (
+                        <div
+                          key={field.field}
+                          className={field.evidenceCount ? "has-evidence" : ""}
+                          style={
+                            color
+                              ? {
+                                  borderLeftColor: color.border,
+                                  background: color.soft,
+                                  boxShadow: `inset 3px 0 0 ${color.border}`,
+                                }
+                              : undefined
+                          }
+                        >
+                          <small>{field.label}</small>
+                          <strong>{field.value}</strong>
+                          {field.evidenceCount > 0 && (
+                            <span style={{ color: color?.border }}>
+                              {field.evidenceCount} evidence
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                   <p className="import-review-hint">
-                    Na stronie podświetlane są wyłącznie evidence aktualnie wybranego obiektu.
+                    Kolor pola odpowiada kolorowi jego evidence na stronie. Pokazywane są wyłącznie evidence aktualnie wybranego obiektu.
                   </p>
                   <button
                     type="button"
