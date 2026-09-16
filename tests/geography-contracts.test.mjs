@@ -68,7 +68,7 @@ test("legacy status values normalize to typed Polish domain values", () => {
   assert.equal(BurbotCore.coerceField("Aktywny", definition, state), "AKTYWNY");
 });
 
-test("typed recruitment date range and planned-date fields are exposed", () => {
+test("typed recruitment fields are exposed with choice controls where appropriate", () => {
   const fields = BurbotSchema.recruitment.fields;
 
   for (const key of [
@@ -82,9 +82,19 @@ test("typed recruitment date range and planned-date fields are exposed", () => {
     "planowanyKoniecRok",
     "planowanyKoniecMiesiac",
     "planowanyKoniecKwartal",
+    "statusZakonczenia",
+    "powodStatusu",
+    "urlOgloszenia",
   ]) {
     assert.ok(fields[key], `missing recruitment field ${key}`);
   }
+
+  assert.equal(fields.status.type, "enum");
+  assert.equal(fields.planowanyStartMiesiac.type, "enum");
+  assert.equal(fields.planowanyKoniecMiesiac.type, "enum");
+  assert.equal(fields.planowanyStartKwartal.type, "enum");
+  assert.equal(fields.planowanyKoniecKwartal.type, "enum");
+  assert.equal(Object.keys(fields.planowanyStartMiesiac.options).length, 12);
 });
 
 test("geography is selected first and page text is stored as supporting evidence rule", () => {
