@@ -45,6 +45,7 @@ async function currentWindowId(): Promise<number> {
 function statusLabel(status: CommitSessionObject["status"]): string | null {
   if (status === "NEW") return "NEW";
   if (status === "MODIFIED") return "MODIFIED";
+  if (status === "DELETED") return "DELETED";
   return null;
 }
 
@@ -85,12 +86,13 @@ function ObjectGroup({
           <div className="commit-object-list">
             {objects.map((object) => {
               const badge = statusLabel(object.status);
+              const deleted = object.status === "DELETED";
               return (
                 <button
                   key={object.id}
                   type="button"
-                  className="commit-object-row"
-                  disabled={busy}
+                  className={`commit-object-row${deleted ? " commit-object-deleted" : ""}`}
+                  disabled={busy || deleted}
                   onClick={() => void onFocus(object.id)}
                 >
                   <span className="commit-object-label">{object.label}</span>
@@ -143,7 +145,7 @@ export function CommitPanel() {
   const groups = useMemo(() => {
     const sort = (items: CommitSessionObject[]) =>
       [...items].sort((a, b) => {
-        const rank = { NEW: 0, MODIFIED: 1, UNCHANGED: 2 } as const;
+        const rank = { NEW: 0, MODIFIED: 1, DELETED: 2, UNCHANGED: 3 } as const;
         return rank[a.status] - rank[b.status] || a.label.localeCompare(b.label, "pl");
       });
     return {
@@ -226,7 +228,7 @@ export function CommitPanel() {
           <span className="commit-eyebrow">ACTIVE COMMIT</span>
           <strong>Commit {session.id?.slice(0, 8)}</strong>
           <small>
-            baza r{session.baseRevision} · {stagedObjectCount} zmienionych/nowych obiektów
+            baza r{session.baseRevision} · {stagedObjectCount} zmian obiektowych
           </small>
         </div>
         <span className={session.dirty ? "commit-dirty" : "commit-clean"}>
