@@ -10,6 +10,7 @@ export interface ImportReviewSession {
   previewState: LegacyStorageState;
   objectOrder: string[];
   statusByObjectId: Record<string, ImportReviewObjectStatus>;
+  approvedObjectIdByImportKey: Record<string, string>;
   selectedObjectId: string | null;
 }
 
