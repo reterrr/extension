@@ -76,7 +76,10 @@ test("PDF selector resolves the same value from canonical page text", () => {
 });
 
 test("ambiguous PDF selections are rejected before rule persistence", () => {
-  const text = "Limit: 80%. Inny limit: 80%.";
+  const prefix = "A".repeat(90);
+  const suffix = "B".repeat(90);
+  const block = `${prefix}80%${suffix}`;
+  const text = `${block}${block}`;
   const first = text.indexOf("80%");
 
   assert.throws(
