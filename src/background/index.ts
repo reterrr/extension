@@ -1,4 +1,5 @@
 import "../shared/domain/schema.js";
+import "../shared/domain/geographyRuntime";
 import "../shared/domain/core.js";
 import { loadState, saveState } from "../shared/api/storage";
 import { createCapturedExtractionInput } from "../shared/extraction/rules";
@@ -17,6 +18,8 @@ const ALLOWED_WRITES = new Set<string>([
   "EDIT",
   "APPLY",
   "DELETE",
+  "ADD_GEOGRAPHY",
+  "REMOVE_GEOGRAPHY",
   "ADD_FUNDING",
   "REMOVE_FUNDING",
 ]);
