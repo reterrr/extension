@@ -1,3 +1,4 @@
+import { normalizeDraftWorkingRevision } from "./normalize";
 import type { DraftCommit } from "../types/commit";
 
 const DB_NAME = "burbot-commits";
@@ -38,13 +39,16 @@ export async function readActiveDraft(): Promise<DraftCommit | null> {
     const done = transactionDone(transaction);
     const value = await requestResult(transaction.objectStore(STORE).get(ACTIVE_KEY));
     await done;
-    return value ? (value as DraftCommit) : null;
+    return value
+      ? normalizeDraftWorkingRevision(value as DraftCommit)
+      : null;
   } finally {
     database.close();
   }
 }
 
 export async function writeActiveDraft(draft: DraftCommit): Promise<void> {
+  normalizeDraftWorkingRevision(draft);
   const database = await openDatabase();
   try {
     const transaction = database.transaction(STORE, "readwrite");

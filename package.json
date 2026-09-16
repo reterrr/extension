@@ -9,9 +9,9 @@
     "db": "node scripts/db-server.mjs",
     "start": "npm run build && web-ext run --source-dir dist --target firefox-desktop",
     "typecheck": "tsc --noEmit",
-    "test": "npm run typecheck && node --test tests/extraction-contracts.test.mjs tests/geography-contracts.test.mjs tests/file-source-contracts.test.mjs tests/pdf-selector-contracts.test.mjs tests/pdf-assignment-contracts.test.mjs tests/sqlite-schema-contracts.test.mjs tests/commit-session-contracts.test.mjs",
+    "test": "npm run typecheck && node --test tests/extraction-contracts.test.mjs tests/geography-contracts.test.mjs tests/file-source-contracts.test.mjs tests/pdf-selector-contracts.test.mjs tests/pdf-assignment-contracts.test.mjs tests/sqlite-schema-contracts.test.mjs tests/commit-session-contracts.test.mjs tests/draft-revision-contracts.test.mjs",
     "lint": "npm run build && npm run typecheck && web-ext lint --source-dir dist",
-    "format": "prettier --write src scripts tests/extraction-contracts.test.mjs tests/geography-contracts.test.mjs tests/file-source-contracts.test.mjs tests/pdf-selector-contracts.test.mjs tests/pdf-assignment-contracts.test.mjs tests/sqlite-schema-contracts.test.mjs tests/commit-session-contracts.test.mjs manifest.json package.json tsconfig.json README.md"
+    "format": "prettier --write src scripts tests/extraction-contracts.test.mjs tests/geography-contracts.test.mjs tests/file-source-contracts.test.mjs tests/pdf-selector-contracts.test.mjs tests/pdf-assignment-contracts.test.mjs tests/sqlite-schema-contracts.test.mjs tests/commit-session-contracts.test.mjs tests/draft-revision-contracts.test.mjs manifest.json package.json tsconfig.json README.md"
   },
   "dependencies": {
     "better-sqlite3": "^13.0.3",
