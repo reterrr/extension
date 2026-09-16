@@ -13,6 +13,16 @@ export function stageImportReviewObject(
   uuid: () => string,
   now: string,
 ): StagedImportReviewResult {
+  if (
+    original.objects.some(
+      (object) => object.importKey === plan.selectedImportKey,
+    )
+  ) {
+    throw new Error(
+      `Imported object ${plan.selectedImportKey} is already present in the active commit.`,
+    );
+  }
+
   const beforeIds = new Set(original.objects.map((object) => object.id));
   let state = importDocumentIntoState(
     original,
