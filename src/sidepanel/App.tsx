@@ -51,7 +51,39 @@ export function App() {
             </div>
             <progress id="progress-bar" value={0} max={1} aria-label="Fields completed" />
           </div>
+
           <div id="fields" />
+
+          <section id="geography-section" className="business-section" hidden>
+            <div className="section-heading">
+              <div>
+                <h2>Geografia</h2>
+                <p className="muted">Zakres projektu lub naboru. Wartość wybierasz ze słownika; tekst ze strony może być potwierdzeniem.</p>
+              </div>
+            </div>
+            <div id="geography-list" />
+            <details id="geography-add" className="geography-add">
+              <summary className="text-button">+ Dodaj geografię</summary>
+              <div className="geography-form">
+                <label htmlFor="geography-role">Rola</label>
+                <select id="geography-role" />
+
+                <label htmlFor="geography-type">Typ</label>
+                <select id="geography-type" />
+
+                <label htmlFor="geography-search">Wyszukaj</label>
+                <input
+                  id="geography-search"
+                  type="search"
+                  autoComplete="off"
+                  placeholder="np. Mazowieckie"
+                />
+                <div id="geography-results" className="geography-results" />
+                <p id="geography-help" className="hint" />
+              </div>
+            </details>
+          </section>
+
           <section id="funding-section" className="business-section" hidden>
             <h2>Funding</h2>
             <div id="funding" />
