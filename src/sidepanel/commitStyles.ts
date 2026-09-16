@@ -140,6 +140,10 @@ if (!document.querySelector("style[data-burbot-commit-panel]")) {
 .commit-object-row:hover {
   border-color: var(--line);
 }
+.commit-object-row.commit-object-deleted {
+  opacity: .72;
+  text-decoration: line-through;
+}
 .commit-object-label {
   flex: 1;
   overflow: hidden;
@@ -154,6 +158,11 @@ if (!document.querySelector("style[data-burbot-commit-panel]")) {
 .commit-status-modified {
   background: #e7eef7;
   color: #315678;
+}
+.commit-status-deleted {
+  background: #f7e4e4;
+  color: #8b4141;
+  text-decoration: none;
 }
 .commit-hint {
   margin-top: 7px;
