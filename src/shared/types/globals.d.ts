@@ -5,6 +5,9 @@ interface BurbotFieldDefinition {
   type: string;
   default?: unknown;
   references?: string;
+  options?: Record<string, string>;
+  aliases?: Record<string, string>;
+  numeric?: boolean;
   [key: string]: unknown;
 }
 
@@ -33,12 +36,28 @@ interface BurbotSchemaEntry {
   label: string;
   primary?: string;
   fields?: Record<string, BurbotFieldDefinition>;
+  geography?: boolean;
   [key: string]: unknown;
+}
+
+interface BurbotGeographyCatalogEntry {
+  type: string;
+  value: string;
+  label: string;
+  search: string;
+}
+
+interface BurbotGeographyApi {
+  types: Record<string, string>;
+  roles: Record<string, string>;
+  fields: Record<string, BurbotFieldDefinition>;
+  catalog: BurbotGeographyCatalogEntry[];
 }
 
 declare global {
   var BurbotCore: BurbotCoreApi;
   var BurbotSchema: Record<string, BurbotSchemaEntry>;
+  var BurbotGeography: BurbotGeographyApi;
   var BurbotFunding: Record<string, unknown>;
   var BurbotDocuments: Record<string, unknown>;
   var __burbotPickerLoaded: boolean | undefined;
