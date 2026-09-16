@@ -1,8 +1,23 @@
 import type { BurbotState } from "./domain";
 import type { ElementExtractionSpec } from "./extraction";
 
+interface BurbotFieldDefinition {
+  type: string;
+  default?: unknown;
+  references?: string;
+  [key: string]: unknown;
+}
+
 interface BurbotCoreApi {
   clean(value: unknown): string;
+  coerce(value: unknown, type: "url" | "string" | "date"): string;
+  coerce(value: unknown, type: "number"): number;
+  coerce(value: unknown, type: string): string | number;
+  coerceField(
+    value: unknown,
+    definition: BurbotFieldDefinition,
+    state: BurbotState,
+  ): unknown;
   occurrences(text: string, part: string): number[];
   readElement(element: Element, extraction: ElementExtractionSpec): string;
   empty(): BurbotState;
@@ -16,6 +31,8 @@ interface BurbotCoreApi {
 
 interface BurbotSchemaEntry {
   label: string;
+  primary?: string;
+  fields?: Record<string, BurbotFieldDefinition>;
   [key: string]: unknown;
 }
 

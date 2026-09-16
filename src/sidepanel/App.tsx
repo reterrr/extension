@@ -2,7 +2,7 @@ import { useEffect } from "react";
 
 export function App() {
   useEffect(() => {
-    void import("./workspace.js");
+    void Promise.all([import("./workspace.js"), import("./importUi")]);
   }, []);
 
   return (
@@ -13,7 +13,11 @@ export function App() {
       </header>
       <div className="connection-bar">
         <span id="connection">Connect a webpage to begin</span>
-        <button id="connect" className="text-button">Connect</button>
+        <div className="connection-actions">
+          <input id="import-file" type="file" accept="application/json,.json" hidden />
+          <button id="import" className="text-button">Import JSON</button>
+          <button id="connect" className="text-button">Connect</button>
+        </div>
       </div>
       <main>
         <section id="empty" className="empty-state">
@@ -37,7 +41,7 @@ export function App() {
               <details id="more">
                 <summary aria-label="Object actions">•••</summary>
                 <div className="popover menu">
-                  <button id="export">Export JSON</button>
+                  <button id="export">Export workspace state</button>
                   <button id="delete" className="danger">Delete object</button>
                 </div>
               </details>
