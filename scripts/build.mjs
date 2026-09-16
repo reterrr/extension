@@ -24,6 +24,7 @@ const configs = [
     entryPoints: {
       background: "src/background/index.ts",
       content: "src/content/index.ts",
+      "pdf-reader": "src/pdf-reader/bootstrap.ts",
     },
   },
   {
@@ -52,12 +53,21 @@ async function writeStaticFiles() {
     resolve(root, "src/sidepanel/styles.css"),
     resolve(dist, "sidepanel.css"),
   );
+  await cp(
+    resolve(root, "src/pdf-reader/styles.css"),
+    resolve(dist, "pdf-reader.css"),
+  );
   await cp(resolve(root, "src/shared/ui.css"), resolve(dist, "ui.css"));
+  await cp(
+    resolve(root, "node_modules/pdfjs-dist/build/pdf.worker.mjs"),
+    resolve(dist, "pdf.worker.mjs"),
+  );
 
   const pages = {
     sidepanel: ["Burbot workspace", "sidepanel.css"],
     popup: ["Burbot", "ui.css"],
     options: ["Burbot options", "ui.css"],
+    "pdf-reader": ["Burbot PDF Reader", "pdf-reader.css"],
   };
 
   for (const [name, [title, stylesheet]] of Object.entries(pages)) {

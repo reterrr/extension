@@ -13,6 +13,7 @@
     }
   },
   "permissions": ["storage", "activeTab", "scripting", "contextMenus"],
+  "optional_host_permissions": ["http://*/*", "https://*/*"],
   "background": {
     "scripts": ["background.js"]
   },

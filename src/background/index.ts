@@ -6,6 +6,10 @@ import { createCapturedExtractionInput } from "../shared/extraction/rules";
 import { discardStaleImportedEvidence } from "../shared/import/evidence";
 import { importDocumentIntoState } from "../shared/import/format";
 import { isPickerSelectionResponse } from "../shared/messaging/picker";
+import {
+  assignPdfRuleIntoState,
+  type AssignPdfRuleMessage,
+} from "../shared/pdf/assignPdfRule";
 import { createRemotePdfSourceCandidate } from "../shared/sources/remoteFile";
 import type { FocusPayload } from "../shared/types/domain";
 import type { CapturedExtractionInput } from "../shared/types/extraction";
@@ -17,6 +21,7 @@ type CreateObjectType = (typeof CREATE_TYPES)[number];
 const ALLOWED_WRITES = new Set<string>([
   "IMPORT",
   "ASSIGN",
+  "ASSIGN_PDF",
   "EDIT",
   "APPLY",
   "DELETE",
@@ -113,12 +118,21 @@ function mutateFileSource(
     });
   } else if (message.op === "REMOVE_FILE_SOURCE") {
     if (typeof message.sourceId !== "string") throw new Error("Source id is required.");
+    const sourceId = message.sourceId;
     const before = state.fileSources?.length ?? 0;
     state.fileSources = (state.fileSources ?? []).filter(
-      (source) =>
-        !(source.id === message.sourceId && source.objectId === object.id),
+      (source) => !(source.id === sourceId && source.objectId === object.id),
     );
     if (state.fileSources.length === before) throw new Error("File source not found.");
+
+    state.rules = state.rules.filter(
+      (rule) =>
+        !(
+          rule.objectId === object.id &&
+          rule.extraction.type === "pdfText" &&
+          rule.extraction.sourceId === sourceId
+        ),
+    );
   } else {
     throw new Error("Unknown file source operation.");
   }
@@ -270,10 +284,10 @@ browser.action.onClicked.addListener((tab) => {
 });
 
 browser.runtime.onMessage.addListener((message: unknown, sender) => {
+  const extensionRoot = browser.runtime.getURL("");
   if (
     sender.id !== browser.runtime.id ||
-    sender.tab ||
-    !sender.url?.startsWith(browser.runtime.getURL("")) ||
+    !sender.url?.startsWith(extensionRoot) ||
     !isRecord(message) ||
     message.type !== "BURBOT_DATA"
   ) {
@@ -314,6 +328,13 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
       message.op === "REMOVE_FILE_SOURCE"
     ) {
       next = mutateFileSource(state, message, now);
+    } else if (message.op === "ASSIGN_PDF") {
+      next = assignPdfRuleIntoState(
+        state,
+        message as unknown as AssignPdfRuleMessage,
+        () => crypto.randomUUID(),
+        now,
+      );
     } else {
       next = BurbotCore.mutate(
         state,
