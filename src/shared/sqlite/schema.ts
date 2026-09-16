@@ -45,7 +45,7 @@ CREATE TABLE IF NOT EXISTS projects (
   geography_group_id INTEGER,
   FOREIGN KEY (id) REFERENCES workspace_objects(db_id) ON DELETE CASCADE,
   FOREIGN KEY (object_id) REFERENCES workspace_objects(object_id) ON DELETE CASCADE,
-  FOREIGN KEY (geography_group_id) REFERENCES geography_groups(id)
+  FOREIGN KEY (geography_group_id) REFERENCES geography_groups(id) ON DELETE SET NULL
 );
 
 CREATE TABLE IF NOT EXISTS operators (
@@ -82,7 +82,7 @@ CREATE TABLE IF NOT EXISTS recruitments (
   FOREIGN KEY (id) REFERENCES workspace_objects(db_id) ON DELETE CASCADE,
   FOREIGN KEY (object_id) REFERENCES workspace_objects(object_id) ON DELETE CASCADE,
   FOREIGN KEY (project_id) REFERENCES projects(id),
-  FOREIGN KEY (geography_group_id) REFERENCES geography_groups(id)
+  FOREIGN KEY (geography_group_id) REFERENCES geography_groups(id) ON DELETE SET NULL
 );
 
 CREATE TABLE IF NOT EXISTS projects_operators (
