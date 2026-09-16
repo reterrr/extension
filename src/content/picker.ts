@@ -1,5 +1,6 @@
 import { buildDurableSelectors, selectionContainer } from "./durable-selector";
 import { runExtractionRules } from "./extraction-runner";
+import { readSelectionFromDocument } from "./selection-fallback";
 import {
   isPickerRequest,
   isPickerSelectionRequest,
@@ -336,13 +337,7 @@ if (!globalThis.__burbotPickerLoaded) {
               selectAll: (selector) => Array.from(document.querySelectorAll(selector)),
               readElement: (element, extraction) =>
                 C.readElement(element, extraction),
-              readSelectionFromPage: (extraction) =>
-                C.selectedText(
-                  document.body?.textContent ??
-                    document.documentElement.textContent ??
-                    "",
-                  extraction.quote,
-                ),
+              readSelectionFromPage: readSelectionFromDocument,
             });
             break;
 
