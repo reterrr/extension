@@ -2,10 +2,12 @@ import type { ExecutableExtractionRule } from "./extraction";
 import type { SourceFileType } from "./source";
 
 /**
- * Pre-SQLite browser.storage.local format.
+ * Compatibility projection consumed by the existing workspace UI/domain engine.
  *
- * This file exists only to keep the current extension working during migration.
- * New frontend/domain code must use Projekt / Operator / Nabor from business.ts.
+ * SQLite is the durable source of truth. The repository layer reconstructs this
+ * shape while the sidepanel is being migrated to typed Projekt / Operator /
+ * Nabor repositories. browser.storage.local may temporarily mirror this shape
+ * only to wake existing storage.onChanged listeners.
  */
 export type LegacyObjectType = "project" | "recruitment" | "operator" | "nabor";
 export type ImportSourceType = "HTML" | "PDF" | "XLSX";
@@ -48,7 +50,7 @@ export interface LegacyStoredObject {
   manualFields?: Record<string, boolean>;
 }
 
-/** Temporary local representation until geography is persisted in SQLite tables. */
+/** Compatibility shape for geography rows exposed to the current UI. */
 export interface LegacyStoredGeography {
   id: string;
   objectId: string;
@@ -58,7 +60,7 @@ export interface LegacyStoredGeography {
 }
 
 /**
- * Temporary local representation of an object-level remote file source.
+ * Compatibility shape for an object-level remote file source.
  * The URL is intentionally remote-only: never `file:`, `blob:` or a filesystem path.
  */
 export interface LegacyStoredFileSource {

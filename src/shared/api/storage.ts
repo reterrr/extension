@@ -1,24 +1,83 @@
+import { resetDatabase, sqliteDatabaseInfo } from "../sqlite/database";
+import { loadStateFromSqlite, saveStateToSqlite } from "../sqlite/stateRepository";
+import { LEGACY_STORAGE_KEY } from "../storage/constants";
 import type { LegacyStorageState } from "../types/legacy-storage";
 
-export const STORAGE_KEY = "burbot:v1";
+/**
+ * Compatibility cache for existing storage.onChanged listeners.
+ * SQLite is always read first and remains the source of truth.
+ */
+export const STORAGE_KEY = LEGACY_STORAGE_KEY;
 
-export async function loadState(): Promise<LegacyStorageState> {
-  const saved = (await browser.storage.local.get(STORAGE_KEY))[STORAGE_KEY] as
-    | LegacyStorageState
-    | undefined;
-
+function assertLegacyState(value: unknown): asserts value is LegacyStorageState {
+  const state = value as LegacyStorageState | undefined;
   if (
-    saved &&
-    (saved.version !== 1 ||
-      !Array.isArray(saved.objects) ||
-      !Array.isArray(saved.rules))
+    !state ||
+    state.version !== 1 ||
+    !Array.isArray(state.objects) ||
+    !Array.isArray(state.rules)
   ) {
     throw new Error("Unsupported stored data format.");
   }
+}
 
-  return saved ?? (BurbotCore.empty() as LegacyStorageState);
+function emptyState(): LegacyStorageState {
+  return {
+    version: 1,
+    revision: 0,
+    objects: [],
+    rules: [],
+    geographies: [],
+    fileSources: [],
+    importSources: [],
+    financingRules: [],
+    documentRequirements: [],
+  };
+}
+
+async function updateUiCache(state: LegacyStorageState): Promise<void> {
+  await browser.storage.local.set({ [LEGACY_STORAGE_KEY]: state });
+}
+
+export async function loadState(): Promise<LegacyStorageState> {
+  const sqlite = await loadStateFromSqlite();
+  if (sqlite) return sqlite;
+
+  const legacy = (await browser.storage.local.get(LEGACY_STORAGE_KEY))[
+    LEGACY_STORAGE_KEY
+  ] as LegacyStorageState | undefined;
+
+  if (legacy) {
+    assertLegacyState(legacy);
+    await saveStateToSqlite(legacy);
+    await updateUiCache(legacy);
+    return legacy;
+  }
+
+  const empty = emptyState();
+  await saveStateToSqlite(empty);
+  await updateUiCache(empty);
+  return empty;
 }
 
 export async function saveState(state: LegacyStorageState): Promise<void> {
-  await browser.storage.local.set({ [STORAGE_KEY]: state });
+  await saveStateToSqlite(state);
+  await updateUiCache(state);
+}
+
+export async function resetWorkspaceStorage(): Promise<void> {
+  await resetDatabase();
+  await browser.storage.local.remove(LEGACY_STORAGE_KEY);
+}
+
+export async function workspaceStorageInfo(): Promise<{
+  engine: "sqlite-wasm";
+  schemaVersion: number;
+  bytes: number;
+}> {
+  const info = await sqliteDatabaseInfo();
+  return {
+    engine: "sqlite-wasm",
+    ...info,
+  };
 }
