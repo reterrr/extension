@@ -32,12 +32,12 @@ interface BurbotCoreApi {
   coerce(value: unknown, type: string): string | number;
   coerceField(
     value: unknown,
-    definition: BurbotFieldDefinition,
+    definition: Record<string, unknown>,
     state: LegacyStorageState,
   ): unknown;
   formatValue(
     value: unknown,
-    definition: BurbotFieldDefinition,
+    definition: Record<string, unknown>,
     state: LegacyStorageState,
   ): string;
   occurrences(text: string, part: string): number[];
