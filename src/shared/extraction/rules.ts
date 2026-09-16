@@ -35,6 +35,9 @@ export function createExtractionRule(
   return {
     pageUrl: candidate.pageUrl,
     selector: candidate.selector,
+    ...(candidate.selectorFallbacks?.length
+      ? { selectorFallbacks: candidate.selectorFallbacks }
+      : {}),
     extraction: option.extraction,
   };
 }
@@ -44,13 +47,7 @@ export function createCapturedExtractionInput(
   option: ExtractionCandidateOption,
 ): CapturedExtractionInput {
   const rule = createExtractionRule(candidate, option);
-
-  return {
-    pageUrl: rule.pageUrl,
-    selector: rule.selector,
-    extraction: rule.extraction,
-    raw: option.raw,
-  } as CapturedExtractionInput;
+  return { ...rule, raw: option.raw } as CapturedExtractionInput;
 }
 
 export function createPageUrlCandidate(
