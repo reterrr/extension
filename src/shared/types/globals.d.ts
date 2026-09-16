@@ -1,14 +1,28 @@
-import type { LegacyStorageState } from "./legacy-storage";
+import type {
+  LegacyStorageState,
+  LegacyStoredObject,
+  LegacyStoredRule,
+} from "./legacy-storage";
 import type { ElementExtractionSpec } from "./extraction";
 
 interface BurbotFieldDefinition {
+  label?: string;
   type: string;
   default?: unknown;
   references?: string;
   options?: Record<string, string>;
   aliases?: Record<string, string>;
   numeric?: boolean;
+  legacy?: boolean;
+  multiline?: boolean;
+  min?: number;
+  max?: number;
   [key: string]: unknown;
+}
+
+interface BurbotFieldContext {
+  values: Record<string, any>;
+  definition: BurbotFieldDefinition;
 }
 
 interface BurbotCoreApi {
@@ -21,9 +35,36 @@ interface BurbotCoreApi {
     definition: BurbotFieldDefinition,
     state: LegacyStorageState,
   ): unknown;
+  formatValue(
+    value: unknown,
+    definition: BurbotFieldDefinition,
+    state: LegacyStorageState,
+  ): string;
   occurrences(text: string, part: string): number[];
   readElement(element: Element, extraction: ElementExtractionSpec): string;
   empty(): LegacyStorageState;
+  hasValue(value: unknown): boolean;
+  displayName(object: LegacyStoredObject): string;
+  targetKey(target?: { kind: string; id: string }): string;
+  matches(
+    rule: LegacyStoredRule,
+    objectId: string,
+    field: string,
+    target?: { kind: string; id: string },
+  ): boolean;
+  fieldContext(
+    state: LegacyStorageState,
+    object: LegacyStoredObject,
+    field: string,
+    target?: { kind: string; id: string },
+    createDocument?: () => string,
+  ): BurbotFieldContext;
+  ruleValue(
+    state: LegacyStorageState,
+    object: LegacyStoredObject,
+    rule: LegacyStoredRule,
+    raw: string,
+  ): unknown;
   mutate(
     state: LegacyStorageState,
     message: unknown,
