@@ -2,10 +2,7 @@ import type { DraftCommit, CommitSessionObject, CommitSessionView } from "../typ
 import type { LegacyStoredObject } from "../types/legacy-storage";
 
 function stableObject(value: LegacyStoredObject | undefined): string {
-  if (!value) return "";
-  const copy = JSON.parse(JSON.stringify(value)) as Record<string, unknown>;
-  delete copy.updatedAt;
-  return JSON.stringify(copy);
+  return value ? JSON.stringify(value) : "";
 }
 
 function labelOf(object: LegacyStoredObject): string {
