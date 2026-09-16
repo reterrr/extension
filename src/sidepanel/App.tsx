@@ -9,6 +9,7 @@ export function App() {
       import("./importUi"),
       import("./geographyUi").then(({ initGeographyUi }) => initGeographyUi()),
       import("./fileSourcesUi").then(({ initFileSourcesUi }) => initFileSourcesUi()),
+      import("./pdfCaptureUi").then(({ initPdfCaptureUi }) => initPdfCaptureUi()),
       import("./choiceEvidenceUi").then(({ initChoiceEvidenceUi }) =>
         initChoiceEvidenceUi(),
       ),
@@ -69,7 +70,7 @@ export function App() {
               <div>
                 <h2>Źródła plikowe</h2>
                 <p className="muted">
-                  Przypnij oryginalny link do pliku. Burbot nie zapisuje lokalnych ścieżek ani selektorów w PDF.
+                  Przypnij oryginalny link do pliku. Dla PDF Burbot buduje selektory tekstowe względem numeru strony i kontekstu zaznaczenia.
                 </p>
               </div>
             </div>
