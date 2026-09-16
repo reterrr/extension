@@ -29,9 +29,9 @@ function isElementRule(
 }
 
 function selectorCandidates(rule: ExecutableElementExtractionRule): string[] {
-  return Array.from(
-    new Set([rule.selector, ...(rule.selectorFallbacks ?? [])].filter(Boolean)),
-  );
+  const fallbacks =
+    rule.selectorFallbacks ?? rule.extraction.selectorFallbacks ?? [];
+  return Array.from(new Set([rule.selector, ...fallbacks].filter(Boolean)));
 }
 
 function extractElementRule(
