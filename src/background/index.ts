@@ -311,7 +311,7 @@ browser.contextMenus.onClicked.addListener((info, tab) => {
   if (!tab) return;
 
   const objectType = String(info.menuItemId).replace(/^burbot-create-/, "");
-  const selectionText = info.selectionText;
+  const selectionText = info.selectionText ?? "";
   const sourceUrl = info.frameUrl ?? info.pageUrl ?? tab.url;
 
   if (
@@ -448,10 +448,16 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
           windowId: message.windowId,
         });
         const tab = tabs[0];
-        if (!tab?.id || !tab.url?.startsWith("http")) {
+        if (
+          !tab ||
+          tab.id === undefined ||
+          !tab.url ||
+          (!tab.url.startsWith("http://") && !tab.url.startsWith("https://"))
+        ) {
           throw new Error("Open a webpage and select the object name first.");
         }
-        const selection = await captureCurrentSelection(tab.id);
+        const tabId = tab.id;
+        const selection = await captureCurrentSelection(tabId);
         if (!selection || !BurbotCore.clean(selection.text)) {
           throw new Error("Select the new object name on the webpage first.");
         }
@@ -465,7 +471,7 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
         const object = next.objects[next.objects.length - 1];
         await focus(message.windowId, {
           objectId: object.id,
-          tabId: tab.id,
+          tabId,
           stamp: crypto.randomUUID(),
           note: "New object staged in this commit.",
         });
