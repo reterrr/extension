@@ -101,16 +101,16 @@ function host(url: string): string {
   }
 }
 
-function originPermission(url: string): string {
-  const parsed = new URL(url);
-  return `${parsed.origin}/*`;
-}
-
 async function ensurePdfPermission(url: string): Promise<void> {
-  const origins = [originPermission(url)];
-  if (await browser.permissions.contains({ origins })) return;
-  if (!(await browser.permissions.request({ origins }))) {
-    throw new Error("Burbot needs access to this PDF host to read its text.");
+  const parsed = new URL(url);
+  const origins = [`${parsed.origin}/*`];
+
+  // Call request() directly from the click handler call stack. Firefox may
+  // reject permission requests after an earlier await because user activation
+  // is no longer guaranteed to be preserved.
+  const granted = await browser.permissions.request({ origins });
+  if (!granted) {
+    throw new Error("Burbot potrzebuje dostępu do hosta PDF, aby odczytać jego tekst.");
   }
 }
 
@@ -119,10 +119,18 @@ async function openPdfReader(
   source: LegacyStoredFileSource,
 ): Promise<void> {
   await ensurePdfPermission(source.url);
+
+  const tab = await activeTab();
+  if (tab.id === undefined) throw new Error("Brak aktywnej karty.");
+
   const url = new URL(browser.runtime.getURL("pdf-reader.html"));
   url.searchParams.set("objectId", object.id);
   url.searchParams.set("sourceId", source.id);
-  await browser.tabs.create({ url: url.href });
+
+  // Reuse the current tab deliberately. That makes the mode transition
+  // explicit: Firefox's native PDF viewer is replaced by Burbot PDF Reader.
+  await browser.tabs.update(tab.id, { url: url.href });
+  notice("Burbot PDF Reader: zaznacz wartość w dokumencie dla aktywnego pola.");
 }
 
 function disconnectPicker(): void {
@@ -263,6 +271,9 @@ function renderSource(source: LegacyStoredFileSource): HTMLElement {
       notice("Choose the object that owns this PDF first.", true);
       return;
     }
+
+    // This handler is the single source of truth for launching the PDF reader.
+    // Do not proxy/intercept it from another sidepanel module.
     void openPdfReader(object, source).catch((error: unknown) =>
       notice(error instanceof Error ? error.message : String(error), true),
     );
