@@ -131,7 +131,7 @@ Every range is validated against the exact canonical `snapshot.text`. For exampl
           {
             "source": "project-page",
             "char_start": 8,
-            "char_end": 34,
+            "char_end": 33,
             "raw_value": "Generator Kompetencji 3.0"
           }
         ]
