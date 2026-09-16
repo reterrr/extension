@@ -111,6 +111,18 @@ function matchingRule(
   );
 }
 
+function ruleFallbacks(rule: LegacyStoredRule): string[] {
+  if (rule.selectorFallbacks?.length) return rule.selectorFallbacks;
+  if (
+    rule.extraction.type === "text" ||
+    rule.extraction.type === "selection" ||
+    rule.extraction.type === "attribute"
+  ) {
+    return rule.extraction.selectorFallbacks ?? [];
+  }
+  return [];
+}
+
 function setSelectorVariables(element: HTMLElement, selector: string): void {
   const color = selectorColor(selector);
   element.classList.add("has-selector-color");
@@ -162,9 +174,6 @@ async function renderPageHighlights(
   tabId: number,
   highlights: SelectorHighlight[],
 ): Promise<void> {
-  // Dedicated runtime: do not depend on the picker's singleton guard. This is
-  // important after an extension reload, when an already-open page may still
-  // contain an older picker instance.
   await browser.scripting.executeScript({
     target: { tabId },
     files: ["selector-highlights.js"],
@@ -210,18 +219,16 @@ async function syncPage(): Promise<void> {
     if (seen.has(key)) continue;
     seen.add(key);
 
+    const fallbacks = ruleFallbacks(rule);
     highlights.push({
       id: String(rule.id),
       selector: rule.selector,
-      ...(rule.selectorFallbacks?.length
-        ? { selectorFallbacks: rule.selectorFallbacks }
-        : {}),
+      ...(fallbacks.length ? { selectorFallbacks: fallbacks } : {}),
       ...(quote ? { quote } : {}),
     });
   }
 
   try {
-    // Send an empty list too: switching objects/pages must clear stale overlays.
     await renderPageHighlights(tab.id, highlights);
   } catch {
     // Highlighting is visual only. Never make capture/extraction depend on it.
