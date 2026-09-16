@@ -1,9 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { publishUiState } from "../shared/api/storage";
-import {
-  readActiveDraft,
-  writeActiveDraft,
-} from "../shared/commits/draftStore";
+import { readActiveDraft, writeActiveDraft } from "../shared/commits/draftStore";
 import { createPageUrlCandidate } from "../shared/extraction/rules";
 import {
   captureImportReviewFinancingField,
@@ -59,18 +56,12 @@ function evidenceColorKey(view: ImportReviewView, field: string): string {
   return `${view.selectedObjectId}:${field}`;
 }
 
-async function sendReviewHighlights(
-  view: ImportReviewView,
-  focusId?: string,
-): Promise<void> {
+async function sendReviewHighlights(view: ImportReviewView, focusId?: string): Promise<void> {
   const tab = await activeTab();
   if (!tab?.id || !tab.url || !/^https?:/.test(tab.url)) return;
-
   const activeUrl = comparableUrl(tab.url);
   const highlights = view.evidence
-    .filter(
-      (entry) => entry.sourceUrl && comparableUrl(entry.sourceUrl) === activeUrl,
-    )
+    .filter((entry) => entry.sourceUrl && comparableUrl(entry.sourceUrl) === activeUrl)
     .map((entry) => ({
       id: entry.id,
       exact: entry.exact,
@@ -78,7 +69,6 @@ async function sendReviewHighlights(
       suffix: entry.suffix,
       colorKey: evidenceColorKey(view, entry.field),
     }));
-
   try {
     await browser.scripting.executeScript({
       target: { tabId: tab.id },
@@ -90,7 +80,7 @@ async function sendReviewHighlights(
       ...(focusId ? { focusId } : {}),
     });
   } catch {
-    // Evidence remains visible in the sidepanel if the page blocks injection.
+    // Sidepanel evidence remains available when page injection is unavailable.
   }
 }
 
@@ -107,7 +97,7 @@ async function clearPageReviewHighlights(): Promise<void> {
       highlights: [],
     });
   } catch {
-    // Visual review is best-effort.
+    // Best effort.
   }
 }
 
@@ -123,11 +113,9 @@ async function waitForTabReady(
   ) {
     return;
   }
-
   await new Promise<void>((resolve) => {
     let done = false;
     let timer: number | undefined;
-
     const finish = () => {
       if (done) return;
       done = true;
@@ -135,7 +123,6 @@ async function waitForTabReady(
       browser.tabs.onUpdated.removeListener(listener);
       resolve();
     };
-
     const listener = (
       changedTabId: number,
       change: { status?: string; url?: string },
@@ -143,14 +130,10 @@ async function waitForTabReady(
     ) => {
       if (changedTabId !== tabId) return;
       const url = change.url ?? tab.url ?? "";
-      if (
-        change.status === "complete" &&
-        comparableUrl(url) === comparableUrl(expectedUrl)
-      ) {
+      if (change.status === "complete" && comparableUrl(url) === comparableUrl(expectedUrl)) {
         finish();
       }
     };
-
     browser.tabs.onUpdated.addListener(listener);
     timer = window.setTimeout(finish, timeoutMs);
   });
@@ -161,25 +144,19 @@ async function openSource(url: string): Promise<void> {
   if (tab?.id !== undefined) await browser.tabs.update(tab.id, { url });
 }
 
-async function focusFieldSource(
-  view: ImportReviewView,
-  field: string,
-): Promise<void> {
+async function focusFieldSource(view: ImportReviewView, field: string): Promise<void> {
   const evidence = view.evidence.find(
     (entry) => entry.field === field && Boolean(entry.sourceUrl),
   );
   if (!evidence?.sourceUrl) {
     throw new Error("To pole nie ma źródła, do którego można przejść.");
   }
-
   const tab = await activeTab();
   if (!tab?.id) throw new Error("Nie udało się odnaleźć aktywnej karty.");
-
   if (comparableUrl(tab.url ?? "") !== comparableUrl(evidence.sourceUrl)) {
     await browser.tabs.update(tab.id, { url: evidence.sourceUrl });
     await waitForTabReady(tab.id, evidence.sourceUrl);
   }
-
   await sendReviewHighlights(view, evidence.id);
 }
 
@@ -187,6 +164,67 @@ function groupLabel(type: string): string {
   if (type === "project") return "Projekty";
   if (type === "operator") return "Operatorzy";
   return "Nabory";
+}
+
+function editorType(definition: Record<string, unknown>): ImportReviewEditorType {
+  if (["reference", "enum", "boolean"].includes(String(definition.type))) return "select";
+  if (definition.type === "date") return "date";
+  if (["integer", "number", "money", "percentage"].includes(String(definition.type))) {
+    return "number";
+  }
+  return "text";
+}
+
+function editorOptions(
+  session: ImportReviewSession,
+  definition: Record<string, unknown>,
+): ImportReviewEditorOption[] | undefined {
+  if (definition.type === "reference") {
+    return session.previewState.objects
+      .filter((object) => object.type === definition.references)
+      .map((object) => ({ value: object.id, label: BurbotCore.displayName(object) }));
+  }
+  if (definition.type === "enum" && definition.options) {
+    return Object.entries(definition.options as Record<string, string>).map(
+      ([value, label]) => ({ value, label: String(label) }),
+    );
+  }
+  if (definition.type === "boolean") {
+    return [
+      { value: "true", label: "Tak" },
+      { value: "false", label: "Nie" },
+    ];
+  }
+  return undefined;
+}
+
+function completeObjectFields(
+  session: ImportReviewSession,
+  objectId: string,
+  importedFields: ImportReviewFieldView[],
+): ImportReviewFieldView[] {
+  const object = session.previewState.objects.find((entry) => entry.id === objectId);
+  if (!object) return importedFields;
+  const schemaFields = BurbotSchema[object.type]?.fields ?? {};
+  const imported = new Map(importedFields.map((field) => [field.field, field]));
+  return Object.entries(schemaFields)
+    .filter(([field, definition]) => !definition.legacy || BurbotCore.hasValue(object.values[field]))
+    .map(([field, definition]) => {
+      const existing = imported.get(field);
+      if (existing) return existing;
+      const rawDefinition = definition as unknown as Record<string, unknown>;
+      const value = object.values[field];
+      const options = editorOptions(session, rawDefinition);
+      return {
+        field,
+        label: String(definition.label ?? field),
+        value: BurbotCore.formatValue(value, definition, session.previewState),
+        editorType: editorType(rawDefinition),
+        editorValue: value === undefined || value === null ? "" : String(value),
+        ...(options ? { options } : {}),
+        evidenceCount: object.evidence?.[field]?.length ?? 0,
+      };
+    });
 }
 
 interface ReviewEditorProps {
@@ -197,22 +235,13 @@ interface ReviewEditorProps {
   onSave(value: string): Promise<void>;
 }
 
-function ReviewEditor({
-  type,
-  value,
-  disabled = false,
-  ariaLabel,
-  onSave,
-}: ReviewEditorProps) {
+function ReviewEditor({ type, value, disabled = false, ariaLabel, onSave }: ReviewEditorProps) {
   const [draft, setDraft] = useState(value);
-
   useEffect(() => setDraft(value), [value]);
-
   async function commit() {
     if (disabled || draft === value) return;
     await onSave(draft);
   }
-
   return (
     <input
       className="import-review-editor"
@@ -275,19 +304,17 @@ function capturedDraft(target: CaptureTarget, raw: string): string {
   );
 }
 
-interface CaptureValueControlProps {
-  target: CaptureTarget;
-  value: string;
-  disabled: boolean;
-  onChange(value: string): void;
-}
-
 function CaptureValueControl({
   target,
   value,
   disabled,
   onChange,
-}: CaptureValueControlProps) {
+}: {
+  target: CaptureTarget;
+  value: string;
+  disabled: boolean;
+  onChange(value: string): void;
+}) {
   if (target.editorType === "select") {
     return (
       <select
@@ -305,7 +332,6 @@ function CaptureValueControl({
       </select>
     );
   }
-
   return (
     <input
       className="import-review-editor"
@@ -318,10 +344,7 @@ function CaptureValueControl({
   );
 }
 
-function targetFromObjectField(
-  objectId: string,
-  field: ImportReviewFieldView,
-): CaptureTarget {
+function targetFromObjectField(objectId: string, field: ImportReviewFieldView): CaptureTarget {
   return {
     kind: "object",
     objectId,
@@ -360,8 +383,7 @@ export function ImportReviewPanel() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [captureTarget, setCaptureTarget] = useState<CaptureTarget | null>(null);
-  const [captureCandidate, setCaptureCandidate] =
-    useState<ExtractionCandidate | null>(null);
+  const [captureCandidate, setCaptureCandidate] = useState<ExtractionCandidate | null>(null);
   const [captureMethodIndex, setCaptureMethodIndex] = useState(0);
   const [captureDraft, setCaptureDraft] = useState("");
   const [captureNotice, setCaptureNotice] = useState("");
@@ -374,6 +396,10 @@ export function ImportReviewPanel() {
   const captureTargetRef = useRef<CaptureTarget | null>(null);
   captureTargetRef.current = captureTarget;
   const view = useMemo(() => importReviewView(session), [session]);
+
+  const selected = view.objects.find((object) => object.id === view.selectedObjectId);
+  const objectFields =
+    session && selected ? completeObjectFields(session, selected.id, view.fields) : view.fields;
 
   function closePickerConnection(): void {
     pickerGenerationRef.current++;
@@ -399,13 +425,11 @@ export function ImportReviewPanel() {
       return;
     }
     let index = 0;
-    const wantsUrl =
-      /(^|_|\b)url($|_|\b)/i.test(target.field) || /url/i.test(target.label);
+    const wantsUrl = /(^|_|\b)url($|_|\b)/i.test(target.field) || /url/i.test(target.label);
     if (wantsUrl) {
       const href = candidate.options.findIndex(
         (option) =>
-          option.extraction.type === "attribute" &&
-          option.extraction.attribute === "href",
+          option.extraction.type === "attribute" && option.extraction.attribute === "href",
       );
       if (href >= 0) index = href;
     }
@@ -420,11 +444,9 @@ export function ImportReviewPanel() {
     if (!tab?.id || !tab.url || !/^https?:/.test(tab.url)) {
       throw new Error("Otwórz stronę HTTP(S), z której chcesz wydzielić wartość.");
     }
-
     if (pickerClientRef.current && pickerTabIdRef.current === tab.id) {
       return pickerClientRef.current;
     }
-
     closePickerConnection();
     setPickerConnecting(true);
     const token = ++pickerGenerationRef.current;
@@ -436,10 +458,6 @@ export function ImportReviewPanel() {
       if (token !== pickerGenerationRef.current) {
         throw new Error("Połączenie ze stroną zmieniło się.");
       }
-
-      // picker.ts already accepts this lightweight port name. Review uses an
-      // explicit SELECTION RPC, so it does not compete with Workspace's
-      // automatic selected-text sender.
       const port = browser.tabs.connect(tab.id, {
         name: "burbot-file-picker",
         frameId: 0,
@@ -455,7 +473,6 @@ export function ImportReviewPanel() {
           setError(message.error);
         }
       });
-
       pickerClientRef.current = client;
       pickerPortRef.current = port;
       pickerTabIdRef.current = tab.id;
@@ -506,7 +523,6 @@ export function ImportReviewPanel() {
   useEffect(() => {
     const reviewing = Boolean(session && mode === "review");
     document.documentElement.classList.toggle("import-review-mode", reviewing);
-
     if (!reviewing) {
       closePickerConnection();
       setCaptureTarget(null);
@@ -516,14 +532,10 @@ export function ImportReviewPanel() {
       });
       return () => document.documentElement.classList.remove("import-review-mode");
     }
-
     void sendReviewHighlights(view);
     const sync = () => void sendReviewHighlights(view);
     const invalidatePicker = () => closePickerConnection();
-    const updated = (
-      tabId: number,
-      change: { url?: string; status?: string },
-    ) => {
+    const updated = (tabId: number, change: { url?: string; status?: string }) => {
       if (change.url || change.status === "complete") sync();
       if (
         pickerTabIdRef.current === tabId &&
@@ -535,7 +547,6 @@ export function ImportReviewPanel() {
     browser.tabs.onActivated.addListener(sync);
     browser.tabs.onActivated.addListener(invalidatePicker);
     browser.tabs.onUpdated.addListener(updated);
-
     return () => {
       browser.tabs.onActivated.removeListener(sync);
       browser.tabs.onActivated.removeListener(invalidatePicker);
@@ -554,10 +565,7 @@ export function ImportReviewPanel() {
       const now = new Date().toISOString();
       mutate(session, now);
       await writeImportReview(session);
-      setSession({
-        ...session,
-        previewState: { ...session.previewState },
-      });
+      setSession({ ...session, previewState: { ...session.previewState } });
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
       throw cause;
@@ -632,16 +640,13 @@ export function ImportReviewPanel() {
 
   function nextCaptureTarget(current: CaptureTarget): CaptureTarget | null {
     if (current.kind === "object") {
-      const index = view.fields.findIndex((field) => field.field === current.field);
-      const next = view.fields.slice(index + 1).find((field) => !field.editorValue);
+      const index = objectFields.findIndex((field) => field.field === current.field);
+      const next = objectFields.slice(index + 1).find((field) => !field.editorValue);
       return next && view.selectedObjectId
         ? targetFromObjectField(view.selectedObjectId, next)
         : null;
     }
-
-    const variant = view.financing.find(
-      (entry) => entry.id === current.financingId,
-    );
+    const variant = view.financing.find((entry) => entry.id === current.financingId);
     if (!variant) return null;
     const index = variant.fields.findIndex((field) => field.field === current.field);
     const next = variant.fields.slice(index + 1).find((field) => !field.editorValue);
@@ -669,8 +674,7 @@ export function ImportReviewPanel() {
         if (!option) throw new Error("Wybierz sposób odczytu wartości.");
         const client = await ensurePicker();
         if (
-          comparableUrl(await client.request("URL")) !==
-          comparableUrl(captureCandidate.pageUrl)
+          comparableUrl(await client.request("URL")) !== comparableUrl(captureCandidate.pageUrl)
         ) {
           throw new Error("Strona zmieniła się. Wydziel wartość ponownie.");
         }
@@ -712,7 +716,6 @@ export function ImportReviewPanel() {
           now,
         );
       }
-
       await writeImportReview(session);
       setSession({ ...session, previewState: { ...session.previewState } });
       setCaptureCandidate(null);
@@ -720,7 +723,6 @@ export function ImportReviewPanel() {
       setCaptureNotice(
         captureResult?.evidenceMessage ?? "Wartość zapisana ręcznie w Import Review.",
       );
-
       const next = nextCaptureTarget(currentTarget);
       if (next) {
         setCaptureTarget(next);
@@ -743,7 +745,6 @@ export function ImportReviewPanel() {
       if (!draft) {
         throw new Error("Najpierw rozpocznij New commit w zakładce Workspace.");
       }
-
       const previewId = session.selectedObjectId;
       const plan = buildImportApprovalPlan(session, previewId);
       const now = new Date().toISOString();
@@ -753,23 +754,15 @@ export function ImportReviewPanel() {
         () => crypto.randomUUID(),
         now,
       );
-
       draft.workingState = staged.state;
       draft.updatedAt = now;
       await writeActiveDraft(draft);
       await publishUiState(draft.workingState);
-
-      markImportObjectApproved(
-        session,
-        previewId,
-        staged.stagedObjectId,
-        now,
-      );
+      markImportObjectApproved(session, previewId, staged.stagedObjectId, now);
       await writeImportReview(session);
       setSession({ ...session, previewState: { ...session.previewState } });
       setCaptureTarget(null);
       setCaptureCandidate(null);
-
       window.dispatchEvent(new Event("burbot:commit-changed"));
       window.dispatchEvent(new CustomEvent("burbot:import-review-changed"));
     } catch (cause) {
@@ -783,9 +776,7 @@ export function ImportReviewPanel() {
     if (!session) return;
     if (
       (view.pendingCount ?? 0) > 0 &&
-      !confirm(
-        "Zamknąć import review? Niezatwierdzone obiekty zostaną odrzucone.",
-      )
+      !confirm("Zamknąć import review? Niezatwierdzone obiekty zostaną odrzucone.")
     ) {
       return;
     }
@@ -806,21 +797,19 @@ export function ImportReviewPanel() {
     label: groupLabel(type),
     objects: view.objects.filter(
       (object) =>
-        object.type === type ||
-        (type === "recruitment" && object.type === "nabor"),
+        object.type === type || (type === "recruitment" && object.type === "nabor"),
     ),
   }));
-  const selected = view.objects.find(
-    (object) => object.id === view.selectedObjectId,
-  );
   const readOnly = selected?.status === "APPROVED";
   const sourceUrls = [
-    ...new Set([
-      ...view.evidence.flatMap((entry) =>
-        entry.sourceUrl ? [entry.sourceUrl] : [],
-      ),
-      ...view.files.flatMap((file) => [file.sourcePageUrl, file.url]),
-    ].filter(Boolean)),
+    ...new Set(
+      [
+        ...view.evidence.flatMap((entry) =>
+          entry.sourceUrl ? [entry.sourceUrl] : [],
+        ),
+        ...view.files.flatMap((file) => [file.sourcePageUrl, file.url]),
+      ].filter(Boolean),
+    ),
   ];
   const selectedCaptureKey = captureKey(captureTarget);
   const selectedOption = captureCandidate?.options[captureMethodIndex];
@@ -850,15 +839,9 @@ export function ImportReviewPanel() {
             <div>
               <span className="eyebrow">IMPORT REVIEW</span>
               <strong>{view.fileName}</strong>
-              <small>
-                {view.approvedCount}/{view.objects.length} zatwierdzono
-              </small>
+              <small>{view.approvedCount}/{view.objects.length} zatwierdzono</small>
             </div>
-            <button
-              type="button"
-              className="text-button"
-              onClick={() => void closeReview()}
-            >
+            <button type="button" className="text-button" onClick={() => void closeReview()}>
               Zamknij
             </button>
           </header>
@@ -880,10 +863,7 @@ export function ImportReviewPanel() {
                 (group) =>
                   group.objects.length > 0 && (
                     <details key={group.type} open>
-                      <summary>
-                        {group.label}
-                        <span>{group.objects.length}</span>
-                      </summary>
+                      <summary>{group.label}<span>{group.objects.length}</span></summary>
                       {group.objects.map((object) => (
                         <button
                           key={object.id}
@@ -898,16 +878,10 @@ export function ImportReviewPanel() {
                             {object.status === "APPROVED"
                               ? "✓"
                               : [
-                                  object.evidenceCount
-                                    ? `${object.evidenceCount} ev`
-                                    : "",
+                                  object.evidenceCount ? `${object.evidenceCount} ev` : "",
                                   object.fileCount ? `${object.fileCount} plik` : "",
-                                  object.financingCount
-                                    ? `${object.financingCount} fin.`
-                                    : "",
-                                ]
-                                  .filter(Boolean)
-                                  .join(" · ") || "do sprawdzenia"}
+                                  object.financingCount ? `${object.financingCount} fin.` : "",
+                                ].filter(Boolean).join(" · ") || "do sprawdzenia"}
                           </small>
                         </button>
                       ))}
@@ -924,9 +898,7 @@ export function ImportReviewPanel() {
                       <span className="eyebrow">{selected.type.toUpperCase()}</span>
                       <h2>{selected.label}</h2>
                     </div>
-                    {!readOnly && (
-                      <span className="import-review-edit-badge">Workspace mode</span>
-                    )}
+                    {!readOnly && <span className="import-review-edit-badge">Workspace mode</span>}
                   </div>
 
                   {sourceUrls.length > 0 && (
@@ -948,15 +920,13 @@ export function ImportReviewPanel() {
                     <div className="import-review-section-heading">
                       <div>
                         <span className="eyebrow">DANE OBIEKTU</span>
-                        <strong>{view.fields.length} pól</strong>
+                        <strong>{objectFields.length} pól</strong>
                       </div>
                       <small>Kliknij pole i pracuj dokładnie jak w Workspace.</small>
                     </div>
                     <div className="import-review-fields">
-                      {view.fields.map((field) => {
-                        const evidence = view.evidence.filter(
-                          (entry) => entry.field === field.field,
-                        );
+                      {objectFields.map((field) => {
+                        const evidence = view.evidence.filter((entry) => entry.field === field.field);
                         const hasSource = evidence.some((entry) => entry.sourceUrl);
                         const color = field.evidenceCount
                           ? selectorColor(evidenceColorKey(view, field.field))
@@ -983,31 +953,21 @@ export function ImportReviewPanel() {
                               className="import-review-field-select"
                               disabled={readOnly || busy}
                               onClick={() =>
-                                selectCaptureTarget(
-                                  targetFromObjectField(selected.id, field),
-                                )
+                                selectCaptureTarget(targetFromObjectField(selected.id, field))
                               }
                             >
                               <span className="field-copy">
                                 <span className="field-label">{field.label}</span>
-                                <span
-                                  className={`field-value${
-                                    field.editorValue ? "" : " empty"
-                                  }`}
-                                >
+                                <span className={`field-value${field.editorValue ? "" : " empty"}`}>
                                   {field.value}
                                 </span>
                               </span>
-                              <span className="field-mark">
-                                {field.editorValue ? "✓" : "Brak"}
-                              </span>
+                              <span className="field-mark">{field.editorValue ? "✓" : "Brak"}</span>
                             </button>
                             {(field.evidenceCount > 0 || hasSource) && (
                               <div className="import-review-field-meta">
                                 <span style={{ color: color?.border }}>
-                                  {field.evidenceCount
-                                    ? `${field.evidenceCount} evidence`
-                                    : ""}
+                                  {field.evidenceCount ? `${field.evidenceCount} evidence` : ""}
                                 </span>
                                 {hasSource && (
                                   <button
@@ -1046,19 +1006,11 @@ export function ImportReviewPanel() {
                               ariaLabel="Nazwa pliku"
                               onSave={(value) =>
                                 persistReviewMutation((current, now) =>
-                                  renameImportReviewFile(
-                                    current,
-                                    selected.id,
-                                    file.id,
-                                    value,
-                                    now,
-                                  ),
+                                  renameImportReviewFile(current, selected.id, file.id, value, now),
                                 )
                               }
                             />
-                            <a href={file.url} target="_blank" rel="noreferrer">
-                              {file.url}
-                            </a>
+                            <a href={file.url} target="_blank" rel="noreferrer">{file.url}</a>
                             <div className="import-review-card-actions">
                               <button
                                 type="button"
@@ -1073,12 +1025,7 @@ export function ImportReviewPanel() {
                                 disabled={readOnly || busy}
                                 onClick={() =>
                                   void persistReviewMutation((current, now) =>
-                                    removeImportReviewFile(
-                                      current,
-                                      selected.id,
-                                      file.id,
-                                      now,
-                                    ),
+                                    removeImportReviewFile(current, selected.id, file.id, now),
                                   )
                                 }
                               >
@@ -1098,21 +1045,13 @@ export function ImportReviewPanel() {
                           <span className="eyebrow">FINANSOWANIE</span>
                           <strong>{view.financing.length} wariantów</strong>
                         </div>
-                        <small>
-                          Kliknij pole finansowania, aby wydzielić je z tej samej strony.
-                        </small>
+                        <small>Kliknij pole finansowania, aby wydzielić je z tej samej strony.</small>
                       </div>
                       <div className="import-review-financing">
                         {view.financing.map((variant) => (
-                          <details
-                            key={variant.id}
-                            open
-                            className="import-review-finance-card"
-                          >
+                          <details key={variant.id} open className="import-review-finance-card">
                             <summary>
-                              <span>
-                                {variant.companySizeLabel} · wariant {variant.variantNo}
-                              </span>
+                              <span>{variant.companySizeLabel} · wariant {variant.variantNo}</span>
                               <small>{variant.key}</small>
                             </summary>
                             <div className="import-review-finance-fields">
@@ -1123,9 +1062,7 @@ export function ImportReviewPanel() {
                                     key={field.field}
                                     type="button"
                                     className={`import-review-finance-field${
-                                      key === selectedCaptureKey
-                                        ? " capture-selected"
-                                        : ""
+                                      key === selectedCaptureKey ? " capture-selected" : ""
                                     }`}
                                     disabled={readOnly || busy}
                                     onClick={() =>
@@ -1152,12 +1089,7 @@ export function ImportReviewPanel() {
                               disabled={readOnly || busy}
                               onClick={() =>
                                 void persistReviewMutation((current, now) =>
-                                  removeImportReviewFinancing(
-                                    current,
-                                    selected.id,
-                                    variant.id,
-                                    now,
-                                  ),
+                                  removeImportReviewFinancing(current, selected.id, variant.id, now),
                                 )
                               }
                             >
@@ -1203,11 +1135,7 @@ export function ImportReviewPanel() {
                           disabled={busy || pickerConnecting}
                           onClick={() => void togglePick()}
                         >
-                          {pickerConnecting
-                            ? "Łączenie…"
-                            : picking
-                              ? "Anuluj picker"
-                              : "Wybierz element"}
+                          {pickerConnecting ? "Łączenie…" : picking ? "Anuluj picker" : "Wybierz element"}
                         </button>
                         <button
                           type="button"
@@ -1227,9 +1155,7 @@ export function ImportReviewPanel() {
 
                       {captureCandidate && (
                         <div className="import-review-capture-source">
-                          <label htmlFor="import-review-capture-method">
-                            Odczytaj ze strony
-                          </label>
+                          <label htmlFor="import-review-capture-method">Odczytaj ze strony</label>
                           <select
                             id="import-review-capture-method"
                             value={String(captureMethodIndex)}
@@ -1251,9 +1177,7 @@ export function ImportReviewPanel() {
                               </option>
                             ))}
                           </select>
-                          <div className="source-sample">
-                            {selectedOption?.raw ?? ""}
-                          </div>
+                          <div className="source-sample">{selectedOption?.raw ?? ""}</div>
                         </div>
                       )}
 
@@ -1298,9 +1222,9 @@ export function ImportReviewPanel() {
                   )}
 
                   <p className="import-review-hint">
-                    Import Review używa teraz tego samego flow co Workspace: wybierz pole,
-                    wydziel element lub zaznaczenie albo wpisz wartość ręcznie, a dopiero
-                    potem zatwierdź obiekt.
+                    Import Review używa tego samego flow co Workspace: wybierz również brakujące pole,
+                    wydziel element lub zaznaczenie albo wpisz wartość ręcznie, a dopiero potem
+                    zatwierdź obiekt.
                   </p>
                   <button
                     type="button"
