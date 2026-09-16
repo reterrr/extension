@@ -5,6 +5,7 @@ import {
   type PickerOperation,
   type PickerRequest,
   type PickerRpcValue,
+  type SelectorHighlight,
 } from "../shared/messaging/picker";
 import type {
   ExecutableExtractionRule,
@@ -18,6 +19,10 @@ interface PendingRequest {
   reject(error: Error): void;
 }
 
+type PickerPayload =
+  | { rules: ExecutableExtractionRule[] }
+  | { highlights: SelectorHighlight[] };
+
 export interface PickerClient {
   request(op: "PICK"): Promise<boolean>;
   request(op: "PICK_FILE"): Promise<boolean>;
@@ -28,6 +33,10 @@ export interface PickerClient {
     op: "RUN",
     payload: { rules: ExecutableExtractionRule[] },
   ): Promise<ExtractionRuleRunResult[]>;
+  request(
+    op: "SHOW_SELECTORS",
+    payload: { highlights: SelectorHighlight[] },
+  ): Promise<boolean>;
   dispose(error?: Error): void;
 }
 
@@ -38,7 +47,7 @@ function toError(error: unknown): Error {
 function createRequest(
   id: string,
   op: PickerOperation,
-  payload?: { rules: ExecutableExtractionRule[] },
+  payload?: PickerPayload,
 ): PickerRequest {
   switch (op) {
     case "PICK":
@@ -52,8 +61,15 @@ function createRequest(
     case "SELECTION":
       return { id, op: "SELECTION" };
     case "RUN":
-      if (!payload) throw new Error("RUN requires extraction rules.");
+      if (!payload || !("rules" in payload)) {
+        throw new Error("RUN requires extraction rules.");
+      }
       return { id, op: "RUN", rules: payload.rules };
+    case "SHOW_SELECTORS":
+      if (!payload || !("highlights" in payload)) {
+        throw new Error("SHOW_SELECTORS requires selector highlights.");
+      }
+      return { id, op: "SHOW_SELECTORS", highlights: payload.highlights };
   }
 }
 
@@ -79,8 +95,12 @@ class BrowserPickerClient implements PickerClient {
     payload: { rules: ExecutableExtractionRule[] },
   ): Promise<ExtractionRuleRunResult[]>;
   request(
+    op: "SHOW_SELECTORS",
+    payload: { highlights: SelectorHighlight[] },
+  ): Promise<boolean>;
+  request(
     op: PickerOperation,
-    payload?: { rules: ExecutableExtractionRule[] },
+    payload?: PickerPayload,
   ): Promise<PickerRpcValue> {
     if (this.disposed) {
       return Promise.reject(new Error("Page connection is closed."));
