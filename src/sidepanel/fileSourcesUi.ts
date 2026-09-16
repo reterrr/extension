@@ -101,6 +101,30 @@ function host(url: string): string {
   }
 }
 
+function originPermission(url: string): string {
+  const parsed = new URL(url);
+  return `${parsed.origin}/*`;
+}
+
+async function ensurePdfPermission(url: string): Promise<void> {
+  const origins = [originPermission(url)];
+  if (await browser.permissions.contains({ origins })) return;
+  if (!(await browser.permissions.request({ origins }))) {
+    throw new Error("Burbot needs access to this PDF host to read its text.");
+  }
+}
+
+async function openPdfReader(
+  object: LegacyStoredObject,
+  source: LegacyStoredFileSource,
+): Promise<void> {
+  await ensurePdfPermission(source.url);
+  const url = new URL(browser.runtime.getURL("pdf-reader.html"));
+  url.searchParams.set("objectId", object.id);
+  url.searchParams.set("sourceId", source.id);
+  await browser.tabs.create({ url: url.href });
+}
+
 function disconnectPicker(): void {
   pickerClient?.dispose();
   pickerClient = null;
@@ -229,6 +253,21 @@ function renderSource(source: LegacyStoredFileSource): HTMLElement {
   const actions = document.createElement("div");
   actions.className = "file-source-actions";
 
+  const read = document.createElement("button");
+  read.type = "button";
+  read.className = "text-button";
+  read.textContent = "Wydziel wartości";
+  read.onclick = () => {
+    const object = chosenObject();
+    if (!object || object.id !== source.objectId) {
+      notice("Choose the object that owns this PDF first.", true);
+      return;
+    }
+    void openPdfReader(object, source).catch((error: unknown) =>
+      notice(error instanceof Error ? error.message : String(error), true),
+    );
+  };
+
   const open = document.createElement("a");
   open.href = source.url;
   open.target = "_blank";
@@ -256,7 +295,7 @@ function renderSource(source: LegacyStoredFileSource): HTMLElement {
       );
   };
 
-  actions.append(open, remove);
+  actions.append(read, open, remove);
   row.append(title, meta, url, actions);
   return row;
 }
