@@ -16,7 +16,10 @@ import {
 } from "../shared/import/reviewStore";
 import { stageImportReviewObject } from "../shared/import/stageReview";
 import { selectorColor } from "../shared/selectorPalette";
-import type { ImportReviewSession, ImportReviewView } from "../shared/types/importReview";
+import type {
+  ImportReviewSession,
+  ImportReviewView,
+} from "../shared/types/importReview";
 
 async function activeTab(): Promise<browser.tabs.Tab | undefined> {
   const window = await browser.windows.getCurrent();
@@ -39,13 +42,18 @@ function evidenceColorKey(view: ImportReviewView, field: string): string {
   return `${view.selectedObjectId}:${field}`;
 }
 
-async function sendReviewHighlights(view: ImportReviewView): Promise<void> {
+async function sendReviewHighlights(
+  view: ImportReviewView,
+  focusId?: string,
+): Promise<void> {
   const tab = await activeTab();
   if (!tab?.id || !tab.url || !/^https?:/.test(tab.url)) return;
 
   const activeUrl = comparableUrl(tab.url);
   const highlights = view.evidence
-    .filter((entry) => entry.sourceUrl && comparableUrl(entry.sourceUrl) === activeUrl)
+    .filter(
+      (entry) => entry.sourceUrl && comparableUrl(entry.sourceUrl) === activeUrl,
+    )
     .map((entry) => ({
       id: entry.id,
       exact: entry.exact,
@@ -62,6 +70,7 @@ async function sendReviewHighlights(view: ImportReviewView): Promise<void> {
     await browser.tabs.sendMessage(tab.id, {
       type: "BURBOT_SHOW_IMPORT_REVIEW_HIGHLIGHTS",
       highlights,
+      ...(focusId ? { focusId } : {}),
     });
   } catch {
     // Evidence remains visible in the sidepanel if the page blocks injection.
@@ -85,9 +94,76 @@ async function clearPageReviewHighlights(): Promise<void> {
   }
 }
 
+async function waitForTabReady(
+  tabId: number,
+  expectedUrl: string,
+  timeoutMs = 10000,
+): Promise<void> {
+  const current = await browser.tabs.get(tabId).catch(() => undefined);
+  if (
+    current?.status === "complete" &&
+    comparableUrl(current.url ?? "") === comparableUrl(expectedUrl)
+  ) {
+    return;
+  }
+
+  await new Promise<void>((resolve) => {
+    let done = false;
+    let timer: number | undefined;
+
+    const finish = () => {
+      if (done) return;
+      done = true;
+      if (timer !== undefined) window.clearTimeout(timer);
+      browser.tabs.onUpdated.removeListener(listener);
+      resolve();
+    };
+
+    const listener = (
+      changedTabId: number,
+      change: { status?: string; url?: string },
+      tab: browser.tabs.Tab,
+    ) => {
+      if (changedTabId !== tabId) return;
+      const url = change.url ?? tab.url ?? "";
+      if (
+        change.status === "complete" &&
+        comparableUrl(url) === comparableUrl(expectedUrl)
+      ) {
+        finish();
+      }
+    };
+
+    browser.tabs.onUpdated.addListener(listener);
+    timer = window.setTimeout(finish, timeoutMs);
+  });
+}
+
 async function openSource(url: string): Promise<void> {
   const tab = await activeTab();
   if (tab?.id !== undefined) await browser.tabs.update(tab.id, { url });
+}
+
+async function focusFieldSource(
+  view: ImportReviewView,
+  field: string,
+): Promise<void> {
+  const evidence = view.evidence.find(
+    (entry) => entry.field === field && Boolean(entry.sourceUrl),
+  );
+  if (!evidence?.sourceUrl) {
+    throw new Error("To pole nie ma źródła, do którego można przejść.");
+  }
+
+  const tab = await activeTab();
+  if (!tab?.id) throw new Error("Nie udało się odnaleźć aktywnej karty.");
+
+  if (comparableUrl(tab.url ?? "") !== comparableUrl(evidence.sourceUrl)) {
+    await browser.tabs.update(tab.id, { url: evidence.sourceUrl });
+    await waitForTabReady(tab.id, evidence.sourceUrl);
+  }
+
+  await sendReviewHighlights(view, evidence.id);
 }
 
 function groupLabel(type: string): string {
@@ -157,6 +233,15 @@ export function ImportReviewPanel() {
     setError("");
   }
 
+  async function showFieldSource(field: string) {
+    setError("");
+    try {
+      await focusFieldSource(view, field);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    }
+  }
+
   async function approve() {
     if (!session?.selectedObjectId) return;
     setBusy(true);
@@ -204,7 +289,9 @@ export function ImportReviewPanel() {
     if (!session) return;
     if (
       (view.pendingCount ?? 0) > 0 &&
-      !confirm("Zamknąć import review? Niezatwierdzone obiekty zostaną odrzucone.")
+      !confirm(
+        "Zamknąć import review? Niezatwierdzone obiekty zostaną odrzucone.",
+      )
     ) {
       return;
     }
@@ -231,7 +318,9 @@ export function ImportReviewPanel() {
   );
   const sourceUrls = [
     ...new Set(
-      view.evidence.flatMap((entry) => (entry.sourceUrl ? [entry.sourceUrl] : [])),
+      view.evidence.flatMap((entry) =>
+        entry.sourceUrl ? [entry.sourceUrl] : [],
+      ),
     ),
   ];
 
@@ -291,7 +380,8 @@ export function ImportReviewPanel() {
                   group.objects.length > 0 && (
                     <details key={group.type} open>
                       <summary>
-                        {group.label}<span>{group.objects.length}</span>
+                        {group.label}
+                        <span>{group.objects.length}</span>
                       </summary>
                       {group.objects.map((object) => (
                         <button
@@ -337,6 +427,10 @@ export function ImportReviewPanel() {
                   )}
                   <div className="import-review-fields">
                     {view.fields.map((field) => {
+                      const evidence = view.evidence.filter(
+                        (entry) => entry.field === field.field,
+                      );
+                      const hasSource = evidence.some((entry) => entry.sourceUrl);
                       const color = field.evidenceCount
                         ? selectorColor(evidenceColorKey(view, field.field))
                         : null;
@@ -357,16 +451,28 @@ export function ImportReviewPanel() {
                           <small>{field.label}</small>
                           <strong>{field.value}</strong>
                           {field.evidenceCount > 0 && (
-                            <span style={{ color: color?.border }}>
-                              {field.evidenceCount} evidence
-                            </span>
+                            <div className="import-review-field-meta">
+                              <span style={{ color: color?.border }}>
+                                {field.evidenceCount} evidence
+                              </span>
+                              {hasSource && (
+                                <button
+                                  type="button"
+                                  className="import-review-source-button"
+                                  style={{ color: color?.border }}
+                                  onClick={() => void showFieldSource(field.field)}
+                                >
+                                  Pokaż w źródle ↗
+                                </button>
+                              )}
+                            </div>
                           )}
                         </div>
                       );
                     })}
                   </div>
                   <p className="import-review-hint">
-                    Kolor pola odpowiada kolorowi jego evidence na stronie. Pokazywane są wyłącznie evidence aktualnie wybranego obiektu.
+                    Każde evidence jest dopasowywane do jednego najlepszego miejsca na stronie. „Pokaż w źródle” przewija bezpośrednio do evidence danego pola.
                   </p>
                   <button
                     type="button"
