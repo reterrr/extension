@@ -1,6 +1,7 @@
 import type {
   ElementExtractionSpec,
   PageUrlExtraction,
+  PdfTextExtraction,
 } from "./extraction";
 
 export interface ElementExtractionCandidateOption {
@@ -15,9 +16,16 @@ export interface PageUrlExtractionCandidateOption {
   extraction: PageUrlExtraction;
 }
 
+export interface PdfTextExtractionCandidateOption {
+  label: string;
+  raw: string;
+  extraction: PdfTextExtraction;
+}
+
 export type ExtractionCandidateOption =
   | ElementExtractionCandidateOption
-  | PageUrlExtractionCandidateOption;
+  | PageUrlExtractionCandidateOption
+  | PdfTextExtractionCandidateOption;
 
 export interface ElementExtractionCandidate {
   pageUrl: string;
@@ -31,7 +39,14 @@ export interface PageUrlExtractionCandidate {
   options: [PageUrlExtractionCandidateOption];
 }
 
+export interface PdfTextExtractionCandidate {
+  pageUrl: string;
+  selector: null;
+  options: [PdfTextExtractionCandidateOption];
+}
+
 /** UI/picker state before the user chooses one extraction option. */
 export type ExtractionCandidate =
   | ElementExtractionCandidate
-  | PageUrlExtractionCandidate;
+  | PageUrlExtractionCandidate
+  | PdfTextExtractionCandidate;
