@@ -1,4 +1,5 @@
 import { clearActiveDraft } from "../commits/draftStore";
+import { normalizeFundingRanges } from "../domain/normalizeFundingRanges";
 import { LEGACY_STORAGE_KEY } from "../storage/constants";
 import type { LegacyStorageState } from "../types/legacy-storage";
 
@@ -94,11 +95,12 @@ async function loadRemoteState(): Promise<LegacyStorageState | null> {
 
   const value: unknown = await response.json();
   assertLegacyState(value);
-  return value;
+  return normalizeFundingRanges(value);
 }
 
 async function saveRemoteState(state: LegacyStorageState): Promise<void> {
   assertLegacyState(state);
+  normalizeFundingRanges(state);
   const response = await request("/state", {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
@@ -126,6 +128,7 @@ export async function loadState(): Promise<LegacyStorageState> {
 
   if (legacy) {
     assertLegacyState(legacy);
+    normalizeFundingRanges(legacy);
     await saveRemoteState(legacy);
     await publishUiState(legacy);
     return legacy;
@@ -142,6 +145,7 @@ export async function loadState(): Promise<LegacyStorageState> {
  * Interactive workspace edits should go through a draft commit instead.
  */
 export async function saveState(state: LegacyStorageState): Promise<void> {
+  normalizeFundingRanges(state);
   await saveRemoteState(state);
   await publishUiState(state);
 }
@@ -156,6 +160,7 @@ export async function commitState(
   workingState: LegacyStorageState,
 ): Promise<LegacyStorageState> {
   assertLegacyState(workingState);
+  normalizeFundingRanges(workingState);
   const current = await loadRemoteState();
   const currentRevision = current?.revision ?? 0;
   if (currentRevision !== baseRevision) {
