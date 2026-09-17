@@ -233,20 +233,29 @@
     },
   });
 
+  const fundingFields = {
+    refund_percent_min: percentage("Minimum refund"),
+    refund_percent_max: percentage("Maximum refund"),
+    max_amount_pln: { label: "Maximum amount", type: "money" },
+    max_per_person_pln: { label: "Maximum per person", type: "money" },
+    own_contribution_form: choice("Own contribution", {
+      UNSPECIFIED: "Not distinguished in source",
+      CASH: "Cash",
+      WAGES: "Wages",
+    }),
+    notes: text("Notes", "Funding", { multiline: true }),
+  };
+  // Portable imports and already-stored rules may still use the old exact
+  // `refund_percent` key. Keep it addressable for coercion/migration, but hide
+  // it from Object.entries() so the UI renders only the min/max range fields.
+  Object.defineProperty(fundingFields, "refund_percent", {
+    value: percentage("Refund"),
+    enumerable: false,
+  });
+
   globalThis.BurbotFunding = Object.freeze({
     sizes: { MICRO: "Micro", SMALL: "Small", MEDIUM: "Medium", LARGE: "Large" },
-    fields: {
-      refund_percent_min: percentage("Minimum refund"),
-      refund_percent_max: percentage("Maximum refund"),
-      max_amount_pln: { label: "Maximum amount", type: "money" },
-      max_per_person_pln: { label: "Maximum per person", type: "money" },
-      own_contribution_form: choice("Own contribution", {
-        UNSPECIFIED: "Not distinguished in source",
-        CASH: "Cash",
-        WAGES: "Wages",
-      }),
-      notes: text("Notes", "Funding", { multiline: true }),
-    },
+    fields: Object.freeze(fundingFields),
   });
 
   globalThis.BurbotDocuments = Object.freeze({
