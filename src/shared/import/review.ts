@@ -125,20 +125,56 @@ function editorValue(value: unknown): string {
   return String(value);
 }
 
+function visibleFieldEntries(
+  session: ImportReviewSession,
+  object: LegacyStoredObject,
+): Array<[string, Record<string, unknown> | undefined]> {
+  const fields = BurbotSchema[object.type]?.fields ?? {};
+  const entries: Array<[string, Record<string, unknown> | undefined]> = [];
+  const known = new Set<string>();
+
+  for (const [field, rawDefinition] of Object.entries(fields)) {
+    const definition = rawDefinition as Record<string, unknown>;
+    const shouldShow =
+      definition.legacy !== true ||
+      BurbotCore.hasValue(object.values[field]) ||
+      session.previewState.rules.some((rule) =>
+        BurbotCore.matches(rule, object.id, field),
+      );
+    if (!shouldShow) continue;
+    entries.push([field, definition]);
+    known.add(field);
+  }
+
+  // Do not hide imported compatibility data even if a future schema no longer
+  // knows the field. Normal schema fields still come first and stay complete.
+  for (const field of Object.keys(object.values)) {
+    if (!known.has(field) && !Object.prototype.hasOwnProperty.call(fields, field)) {
+      entries.push([field, undefined]);
+    }
+  }
+
+  return entries;
+}
+
 function fieldViews(
   session: ImportReviewSession,
   object: LegacyStoredObject | undefined,
 ): ImportReviewFieldView[] {
   if (!object) return [];
-  const fields = BurbotSchema[object.type]?.fields ?? {};
-  return Object.entries(object.values).map(([field, value]) => {
-    const definition = fields[field] as Record<string, unknown> | undefined;
+  return visibleFieldEntries(session, object).map(([field, definition]) => {
+    const value = object.values[field];
+    const isSet = BurbotCore.hasValue(value);
     return {
       field,
       label: String(definition?.label ?? field),
+      group: String(definition?.group ?? "Pozostałe"),
       value: definition
         ? BurbotCore.formatValue(value, definition, session.previewState)
-        : String(value ?? ""),
+        : isSet
+          ? String(value)
+          : "Nie ustawiono",
+      isSet,
       editorType: editorType(definition),
       editorValue: editorValue(value),
       ...(editorOptions(session, definition)
@@ -257,23 +293,29 @@ export function importReviewView(
   const objects = session.objectOrder
     .map((id) => session.previewState.objects.find((entry) => entry.id === id))
     .filter((entry): entry is LegacyStoredObject => Boolean(entry))
-    .map((entry) => ({
-      id: entry.id,
-      type: entry.type,
-      label: BurbotCore.displayName(entry),
-      status: session.statusByObjectId[entry.id] ?? "PENDING",
-      fieldCount: Object.keys(entry.values ?? {}).length,
-      evidenceCount: Object.values(entry.evidence ?? {}).reduce(
-        (sum, entries) => sum + entries.length,
-        0,
-      ),
-      fileCount: (session.previewState.fileSources ?? []).filter(
-        (source) => source.objectId === entry.id,
-      ).length,
-      financingCount: (session.previewState.financingRules ?? []).filter(
-        (row) => row.objectId === entry.id,
-      ).length,
-    }));
+    .map((entry) => {
+      const fields = visibleFieldEntries(session, entry);
+      return {
+        id: entry.id,
+        type: entry.type,
+        label: BurbotCore.displayName(entry),
+        status: session.statusByObjectId[entry.id] ?? "PENDING",
+        fieldCount: fields.length,
+        completedFieldCount: fields.filter(([field]) =>
+          BurbotCore.hasValue(entry.values[field]),
+        ).length,
+        evidenceCount: Object.values(entry.evidence ?? {}).reduce(
+          (sum, entries) => sum + entries.length,
+          0,
+        ),
+        fileCount: (session.previewState.fileSources ?? []).filter(
+          (source) => source.objectId === entry.id,
+        ).length,
+        financingCount: (session.previewState.financingRules ?? []).filter(
+          (row) => row.objectId === entry.id,
+        ).length,
+      };
+    });
 
   const approvedCount = objects.filter((entry) => entry.status === "APPROVED").length;
   return {
