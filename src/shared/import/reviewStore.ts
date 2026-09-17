@@ -1,3 +1,4 @@
+import { normalizeFundingRanges } from "../domain/normalizeFundingRanges";
 import type { ImportReviewSession } from "../types/importReview";
 
 const DB_NAME = "burbot-import-review";
@@ -29,6 +30,11 @@ async function openDatabase(): Promise<IDBDatabase> {
   return requestResult(request);
 }
 
+function normalizeSession(session: ImportReviewSession): ImportReviewSession {
+  normalizeFundingRanges(session.previewState);
+  return session;
+}
+
 export async function readImportReview(): Promise<ImportReviewSession | null> {
   const database = await openDatabase();
   try {
@@ -36,13 +42,16 @@ export async function readImportReview(): Promise<ImportReviewSession | null> {
     const done = transactionDone(transaction);
     const value = await requestResult(transaction.objectStore(STORE).get(ACTIVE_KEY));
     await done;
-    return (value as ImportReviewSession | undefined) ?? null;
+    return value
+      ? normalizeSession(value as ImportReviewSession)
+      : null;
   } finally {
     database.close();
   }
 }
 
 export async function writeImportReview(session: ImportReviewSession): Promise<void> {
+  normalizeSession(session);
   const database = await openDatabase();
   try {
     const transaction = database.transaction(STORE, "readwrite");
