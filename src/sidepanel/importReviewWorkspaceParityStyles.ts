@@ -88,6 +88,10 @@ style.textContent = `
     border-top: 1px solid var(--line);
   }
 
+  .import-review-section:has(> .import-review-fields) > .import-review-section-heading {
+    display: none;
+  }
+
   .import-review-section-heading {
     margin-bottom: 5px;
   }
@@ -115,6 +119,7 @@ style.textContent = `
   }
 
   .import-review-fields > div.import-review-workspace-field {
+    position: relative;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -128,6 +133,28 @@ style.textContent = `
     background: transparent !important;
     box-shadow: none !important;
     text-align: left;
+  }
+
+  .import-review-fields > div.import-review-workspace-field[data-review-group-start="true"] {
+    margin-top: 35px;
+  }
+
+  .import-review-fields > div.import-review-workspace-field[data-review-group-start="true"]::before {
+    content: attr(data-review-group);
+    position: absolute;
+    left: 0;
+    top: -25px;
+    right: 0;
+    padding-top: 12px;
+    border-top: 1px solid var(--line);
+    color: #5d7564;
+    font-size: 12px;
+    font-weight: 650;
+    pointer-events: none;
+  }
+
+  .import-review-fields > div.import-review-workspace-field[data-review-group-start="true"]:first-child {
+    margin-top: 28px;
   }
 
   .import-review-fields > div.import-review-workspace-field:hover {
@@ -171,8 +198,7 @@ style.textContent = `
     overflow-wrap: anywhere;
   }
 
-  .import-review-workspace-value:empty,
-  .import-review-workspace-value:is(:not(:empty))[data-empty="true"] {
+  .import-review-workspace-value[data-empty="true"] {
     color: #9aa49a;
     font-size: 12px;
   }
