@@ -39,7 +39,6 @@ CREATE TABLE IF NOT EXISTS geography_groups (
 CREATE TABLE IF NOT EXISTS projects (
   id INTEGER PRIMARY KEY,
   object_id TEXT NOT NULL UNIQUE,
-  operator_id INTEGER,
   type TEXT,
   name TEXT NOT NULL,
   number TEXT,
@@ -52,7 +51,6 @@ CREATE TABLE IF NOT EXISTS projects (
   geography_group_id INTEGER,
   FOREIGN KEY (id) REFERENCES workspace_objects(db_id) ON DELETE CASCADE,
   FOREIGN KEY (object_id) REFERENCES workspace_objects(object_id) ON DELETE CASCADE,
-  FOREIGN KEY (operator_id) REFERENCES operators(id) ON DELETE SET NULL,
   FOREIGN KEY (geography_group_id) REFERENCES geography_groups(id) ON DELETE SET NULL
 );
 
