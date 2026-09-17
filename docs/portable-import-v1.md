@@ -40,9 +40,7 @@ The v1 format is backward compatible. Objects can additionally declare remote PD
       "data": {
         "name": "Example project",
         "operator_id": { "$ref": "operator-1" },
-        "status": "AKTYWNY",
-        "refund_percent_min": 50,
-        "refund_percent_max": 80
+        "status": "AKTYWNY"
       },
       "evidence": {
         "name": [
@@ -66,7 +64,8 @@ The v1 format is backward compatible. Objects can additionally declare remote PD
           "key": "micro-standard",
           "company_size": "MICRO",
           "data": {
-            "refund_percent": 80,
+            "refund_percent_min": 60,
+            "refund_percent_max": 80,
             "max_amount_pln": 100000,
             "max_per_person_pln": 5000,
             "own_contribution_form": "CASH",
@@ -80,10 +79,18 @@ The v1 format is backward compatible. Objects can additionally declare remote PD
       "type": "recruitment",
       "data": {
         "external_number": "1/2026",
-        "project_id": { "$ref": "project-1" },
-        "refund_percent_min": 60,
-        "refund_percent_max": 80
-      }
+        "project_id": { "$ref": "project-1" }
+      },
+      "financing": [
+        {
+          "key": "small-standard",
+          "company_size": "SMALL",
+          "data": {
+            "refund_percent_min": 70,
+            "refund_percent_max": 80
+          }
+        }
+      ]
     }
   ]
 }
@@ -93,13 +100,9 @@ The v1 format is backward compatible. Objects can additionally declare remote PD
 
 AI should output only values that are actually known from the sources. It does **not** need to invent empty keys. Import Review is schema-driven and shows the same normal fields as Workspace even when they are absent from `objects[].data`; omitted fields appear as `Nie ustawiono` and can be completed manually or by using the page picker.
 
-Additional current fields include:
+`project.operator_id` is a reference to an imported `operator` via `{ "$ref": "operator-key" }`.
 
-- `project.operator_id` — reference to an imported `operator` via `{ "$ref": "operator-key" }`;
-- `project.refund_percent_min` — minimum project refund percentage, `0..100`;
-- `project.refund_percent_max` — maximum project refund percentage, `0..100`;
-- `recruitment.refund_percent_min` — minimum recruitment refund percentage, `0..100`;
-- `recruitment.refund_percent_max` — maximum recruitment refund percentage, `0..100`.
+Refund percentages are **not object-level Project/Recruitment fields**. They belong to a concrete financing variant in `objects[].financing[]`. This avoids a second, conflicting "Dofinansowanie" section next to the normal financing variants.
 
 ## `objects[].files[]`
 
@@ -113,16 +116,28 @@ This creates an object-level Burbot file source that remains available after app
 
 ## `objects[].financing[]`
 
-Each financing entry becomes one Burbot financing variant.
+Each financing entry becomes one Burbot financing variant. Project and Recruitment use the same financing structure.
 
 - `key` — required stable key unique within the object's financing list.
 - `company_size` — one of `MICRO`, `SMALL`, `MEDIUM`, `LARGE`.
 - `data` — any supported financing fields:
-  - `refund_percent`
-  - `max_amount_pln`
-  - `max_per_person_pln`
-  - `own_contribution_form`: `UNSPECIFIED`, `CASH`, or `WAGES`
-  - `notes`
+  - `refund_percent_min` — minimum refund percentage, `0..100`;
+  - `refund_percent_max` — maximum refund percentage, `0..100`;
+  - `max_amount_pln`;
+  - `max_per_person_pln`;
+  - `own_contribution_form`: `UNSPECIFIED`, `CASH`, or `WAGES`;
+  - `notes`.
+
+A fixed refund such as 60% should be represented as:
+
+```json
+{
+  "refund_percent_min": 60,
+  "refund_percent_max": 60
+}
+```
+
+Legacy imports using a single `refund_percent` remain accepted. Burbot migrates that value to both `refund_percent_min` and `refund_percent_max`.
 
 Variant numbers are assigned in input order separately for each company size.
 
@@ -130,10 +145,11 @@ Variant numbers are assigned in input order separately for each company size.
 
 The import first enters **Import Review**. Import Review uses the same field-oriented interaction model as Workspace. Before approval the reviewer can:
 
-- see all normal schema fields, including fields omitted by AI;
+- see all normal object schema fields, including fields omitted by AI;
 - select a field and use `Pick element`, selected text, page URL, or a manual value;
 - edit imported object fields;
-- change financing values or remove a financing variant;
+- edit financing variant fields, including minimum and maximum refund percentages;
+- remove a financing variant;
 - rename or remove an attached PDF;
 - inspect evidence and jump to the matching source location.
 
