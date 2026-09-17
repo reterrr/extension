@@ -10,8 +10,7 @@ function annotateImportReviewGroups(): void {
   let previousGroup = "";
   for (const row of rows) {
     const field = row.dataset.reviewField;
-    const objectId = row.dataset.reviewObjectId;
-    if (!field || !objectId) continue;
+    if (!field) continue;
 
     // The bridge already resolves the selected preview object and field. Schema
     // metadata is the canonical source for the same grouping used by Workspace.
@@ -19,7 +18,7 @@ function annotateImportReviewGroups(): void {
       .querySelector<HTMLElement>(".import-review-object-title .eyebrow")
       ?.textContent?.trim()
       .toLowerCase();
-    const normalizedType = type === "nabór" ? "recruitment" : type;
+    const normalizedType = type === "nabor" || type === "nabór" ? "recruitment" : type;
     const definition = normalizedType
       ? BurbotSchema[normalizedType]?.fields?.[field]
       : undefined;
