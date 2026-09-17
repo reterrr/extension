@@ -161,6 +161,40 @@ test("import review exposes selected object evidence, file attachments and finan
   );
 });
 
+test("import review exposes all normal workspace fields even when AI omitted them", () => {
+  const uuid = ids();
+  const session = reviewModule.createImportReviewSession(
+    documentFixture(),
+    "generator.burbot-import.json",
+    uuid,
+    "2026-09-16T18:00:00.000Z",
+  );
+
+  const projectView = reviewModule.importReviewView(session);
+  const projectFields = new Map(
+    projectView.fields.map((field) => [field.field, field]),
+  );
+  assert.equal(projectFields.get("operator_id")?.value, "Nie ustawiono");
+  assert.equal(projectFields.get("refund_percent_min")?.value, "Nie ustawiono");
+  assert.equal(projectFields.get("refund_percent_max")?.value, "Nie ustawiono");
+  assert.ok(projectFields.has("announcements_site_url"));
+  assert.equal(projectFields.has("amount"), false);
+
+  const recruitment = session.previewState.objects.find(
+    (object) => object.importKey === "recruitment-1",
+  );
+  assert.ok(recruitment);
+  session.selectedObjectId = recruitment.id;
+  const recruitmentView = reviewModule.importReviewView(session);
+  const recruitmentFields = new Map(
+    recruitmentView.fields.map((field) => [field.field, field]),
+  );
+  assert.equal(recruitmentFields.get("refund_percent_min")?.value, "Nie ustawiono");
+  assert.equal(recruitmentFields.get("refund_percent_max")?.value, "Nie ustawiono");
+  assert.ok(recruitmentFields.has("dataRozpoczeciaOd"));
+  assert.equal(recruitmentFields.has("start_date"), false);
+});
+
 test("review edits change staged data and invalidate stale object evidence", () => {
   const uuid = ids();
   const now = "2026-09-16T18:00:00.000Z";
