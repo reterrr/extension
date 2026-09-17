@@ -5,6 +5,8 @@ import "./importReviewWorkspaceBridge";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
+import "./importReviewWorkspaceGrouping";
+import "./importReviewWorkspaceParityStyles";
 
 const root = document.getElementById("root");
 if (!root) throw new Error("Missing sidepanel root element.");

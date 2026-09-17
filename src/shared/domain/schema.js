@@ -14,6 +14,13 @@
     group,
     ...extra,
   });
+  const percentage = (label, group = "Dofinansowanie") => ({
+    label,
+    type: "percentage",
+    group,
+    min: 0,
+    max: 100,
+  });
   const choice = (label, options, extra = {}) => ({
     label,
     type: "enum",
@@ -44,6 +51,12 @@
       geography: true,
       fields: {
         name: text("Nazwa"),
+        operator_id: {
+          label: "Operator",
+          type: "reference",
+          references: "operator",
+          group: "Podstawowe",
+        },
         type: choice("Typ projektu", { B2B: "B2B", B2C: "B2C" }),
         status: choice(
           "Status projektu",
@@ -68,6 +81,8 @@
           },
         ),
         number: text("Numer projektu"),
+        refund_percent_min: percentage("Minimalna refundacja"),
+        refund_percent_max: percentage("Maksymalna refundacja"),
         start_date: date("Data rozpoczęcia projektu"),
         end_date: date("Data zakończenia projektu"),
         announcements_site_url: url("Strona naborów"),
@@ -120,6 +135,8 @@
             },
           },
         ),
+        refund_percent_min: percentage("Minimalna refundacja"),
+        refund_percent_max: percentage("Maksymalna refundacja"),
 
         dataRozpoczeciaOd: date("Data rozpoczęcia — od", "Termin rzeczywisty"),
         dataRozpoczeciaDo: date("Data rozpoczęcia — do", "Termin rzeczywisty"),
@@ -269,7 +286,7 @@
       ["service_completion_certificate", "Zaświadczenie o zakończeniu udziału w usłudze rozwojowej"],
       ["no_eu_funding_declaration", "Oświadczenie o braku aplikowania o środki UE"],
       ["psf_service_settlement_application", "Wniosek o rozliczenie usługi rozwojowej (PSF)"],
-      ["pur_part_2", "PUR cz. II"],
+      ["pur_part_2", "PUR cz. II — Plan Usług Rozwojowych"],
       ["fgsa_green_10_17_application", "Formularz zgłoszeniowy 10.17 Zielony (FGSA)"],
       ["arr_czestochowa_6_6_application", "Formularz zgłoszeniowy 6.6 osoby dorosłe"],
       ["lok_postgraduate_agreement", "Umowa uczestnika — studia podyplomowe (LOK)"],

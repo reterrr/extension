@@ -131,22 +131,32 @@ function fieldViews(
 ): ImportReviewFieldView[] {
   if (!object) return [];
   const fields = BurbotSchema[object.type]?.fields ?? {};
-  return Object.entries(object.values).map(([field, value]) => {
-    const definition = fields[field] as Record<string, unknown> | undefined;
-    return {
-      field,
-      label: String(definition?.label ?? field),
-      value: definition
-        ? BurbotCore.formatValue(value, definition, session.previewState)
-        : String(value ?? ""),
-      editorType: editorType(definition),
-      editorValue: editorValue(value),
-      ...(editorOptions(session, definition)
-        ? { options: editorOptions(session, definition) }
-        : {}),
-      evidenceCount: object.evidence?.[field]?.length ?? 0,
-    };
-  });
+  return Object.entries(fields)
+    .filter(
+      ([field, definition]) =>
+        !definition.legacy ||
+        BurbotCore.hasValue(object.values[field]) ||
+        session.previewState.rules.some((rule) =>
+          BurbotCore.matches(rule, object.id, field),
+        ),
+    )
+    .map(([field, rawDefinition]) => {
+      const definition = rawDefinition as Record<string, unknown>;
+      const value = object.values[field];
+      const hasValue = BurbotCore.hasValue(value);
+      const options = editorOptions(session, definition);
+      return {
+        field,
+        label: String(definition.label ?? field),
+        value: hasValue
+          ? BurbotCore.formatValue(value, definition, session.previewState)
+          : "Nie ustawiono",
+        editorType: editorType(definition),
+        editorValue: editorValue(value),
+        ...(options ? { options } : {}),
+        evidenceCount: object.evidence?.[field]?.length ?? 0,
+      };
+    });
 }
 
 function evidenceViews(
@@ -262,7 +272,7 @@ export function importReviewView(
       type: entry.type,
       label: BurbotCore.displayName(entry),
       status: session.statusByObjectId[entry.id] ?? "PENDING",
-      fieldCount: Object.keys(entry.values ?? {}).length,
+      fieldCount: fieldViews(session, entry).length,
       evidenceCount: Object.values(entry.evidence ?? {}).reduce(
         (sum, entries) => sum + entries.length,
         0,

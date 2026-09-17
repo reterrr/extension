@@ -43,6 +43,8 @@ CREATE TABLE IF NOT EXISTS projects (
   name TEXT NOT NULL,
   number TEXT,
   status TEXT NOT NULL,
+  refund_percent_min REAL,
+  refund_percent_max REAL,
   start_date TEXT,
   end_date TEXT,
   announcements_site_url TEXT,
@@ -69,6 +71,8 @@ CREATE TABLE IF NOT EXISTS recruitments (
   sequence_number INTEGER,
   year INTEGER,
   status TEXT NOT NULL,
+  refund_percent_min REAL,
+  refund_percent_max REAL,
   start_low_date TEXT,
   start_ceil_date TEXT,
   end_low_date TEXT,
@@ -202,4 +206,4 @@ CREATE TABLE IF NOT EXISTS document_requirements (
   FOREIGN KEY (object_id) REFERENCES workspace_objects(object_id) ON DELETE CASCADE
 );
 
-PRAGMA user_version = 1;
+PRAGMA user_version = 2;

@@ -33,8 +33,28 @@ db.pragma("journal_mode = WAL");
 db.pragma("synchronous = NORMAL");
 db.exec(readFileSync(SCHEMA_PATH, "utf8"));
 
+function ensureColumn(table, column, definition) {
+  const columns = new Set(
+    db
+      .prepare(`PRAGMA table_info(${table})`)
+      .all()
+      .map((row) => String(row.name)),
+  );
+  if (!columns.has(column)) {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+  }
+}
+
+// CREATE TABLE IF NOT EXISTS does not evolve an existing local database. Keep
+// the typed materialization compatible with databases created by schema v1.
+ensureColumn("projects", "refund_percent_min", "REAL");
+ensureColumn("projects", "refund_percent_max", "REAL");
+ensureColumn("recruitments", "refund_percent_min", "REAL");
+ensureColumn("recruitments", "refund_percent_max", "REAL");
+db.pragma("user_version = 2");
+
 db.prepare(
-  `INSERT INTO app_meta(key, value) VALUES ('schema_version', '1')
+  `INSERT INTO app_meta(key, value) VALUES ('schema_version', '2')
    ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
 ).run();
 
@@ -60,6 +80,12 @@ function nullableInt(value) {
   if (value === undefined || value === null || value === "") return null;
   const number = Number(value);
   return Number.isSafeInteger(number) ? number : null;
+}
+
+function nullableNumber(value) {
+  if (value === undefined || value === null || value === "") return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
 }
 
 function json(value) {
@@ -206,25 +232,46 @@ function syncGeographies(state) {
 
 function syncBusinessTables(state, groupByObject) {
   const projectIdByObject = new Map();
+  const operatorIdByObject = new Map();
+
   const insertProject = db.prepare(`
     INSERT INTO projects(
       id, object_id, type, name, number, status,
+      refund_percent_min, refund_percent_max,
       start_date, end_date, announcements_site_url, geography_group_id
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   const insertOperator = db.prepare(`
     INSERT INTO operators(id, object_id, name, nip)
     VALUES (?, ?, ?, ?)
   `);
+  const insertProjectOperator = db.prepare(`
+    INSERT INTO projects_operators(project_id, operator_id, operator_type)
+    VALUES (?, ?, ?)
+  `);
   const insertRecruitment = db.prepare(`
     INSERT INTO recruitments(
       id, object_id, project_id, external_number, sequence_number, year, status,
+      refund_percent_min, refund_percent_max,
       start_low_date, start_ceil_date, end_low_date, end_ceil_date,
       planned_start_year, planned_start_month, planned_start_quarter,
       planned_end_year, planned_end_month, planned_end_quarter,
       closed_status, status_reason, announcement_url, geography_group_id
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
+
+  // Operators are materialized first because project.operator_id points to one.
+  for (const object of state.objects.filter((entry) => entry.type === "operator")) {
+    const id = objectDbId(object.id);
+    const values = object.values ?? {};
+    operatorIdByObject.set(String(object.id), id);
+    insertOperator.run(
+      id,
+      String(object.id),
+      nullableText(values.name) ?? object.label ?? "",
+      nullableText(values.nip),
+    );
+  }
 
   for (const object of state.objects.filter((entry) => entry.type === "project")) {
     const id = objectDbId(object.id);
@@ -237,21 +284,16 @@ function syncBusinessTables(state, groupByObject) {
       nullableText(values.name) ?? object.label ?? "",
       nullableText(values.number),
       nullableText(values.status) ?? "PLANOWANY",
+      nullableNumber(values.refund_percent_min),
+      nullableNumber(values.refund_percent_max),
       nullableText(values.start_date),
       nullableText(values.end_date),
       nullableText(values.announcements_site_url),
       groupByObject.get(String(object.id)) ?? null,
     );
-  }
 
-  for (const object of state.objects.filter((entry) => entry.type === "operator")) {
-    const values = object.values ?? {};
-    insertOperator.run(
-      objectDbId(object.id),
-      String(object.id),
-      nullableText(values.name) ?? object.label ?? "",
-      nullableText(values.nip),
-    );
+    const operatorId = operatorIdByObject.get(String(values.operator_id ?? ""));
+    if (operatorId) insertProjectOperator.run(id, operatorId, "GLOWNY");
   }
 
   for (const object of state.objects.filter((entry) => entry.type === "recruitment")) {
@@ -264,6 +306,8 @@ function syncBusinessTables(state, groupByObject) {
       nullableInt(values.sequence_number),
       nullableInt(values.year),
       nullableText(values.status) ?? "OGLOSZONY",
+      nullableNumber(values.refund_percent_min),
+      nullableNumber(values.refund_percent_max),
       nullableText(values.dataRozpoczeciaOd),
       nullableText(values.dataRozpoczeciaDo),
       nullableText(values.dataZakonczeniaOd),
