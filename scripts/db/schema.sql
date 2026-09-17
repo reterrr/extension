@@ -39,16 +39,20 @@ CREATE TABLE IF NOT EXISTS geography_groups (
 CREATE TABLE IF NOT EXISTS projects (
   id INTEGER PRIMARY KEY,
   object_id TEXT NOT NULL UNIQUE,
+  operator_id INTEGER,
   type TEXT,
   name TEXT NOT NULL,
   number TEXT,
   status TEXT NOT NULL,
+  refund_percent_min REAL,
+  refund_percent_max REAL,
   start_date TEXT,
   end_date TEXT,
   announcements_site_url TEXT,
   geography_group_id INTEGER,
   FOREIGN KEY (id) REFERENCES workspace_objects(db_id) ON DELETE CASCADE,
   FOREIGN KEY (object_id) REFERENCES workspace_objects(object_id) ON DELETE CASCADE,
+  FOREIGN KEY (operator_id) REFERENCES operators(id) ON DELETE SET NULL,
   FOREIGN KEY (geography_group_id) REFERENCES geography_groups(id) ON DELETE SET NULL
 );
 
@@ -69,6 +73,8 @@ CREATE TABLE IF NOT EXISTS recruitments (
   sequence_number INTEGER,
   year INTEGER,
   status TEXT NOT NULL,
+  refund_percent_min REAL,
+  refund_percent_max REAL,
   start_low_date TEXT,
   start_ceil_date TEXT,
   end_low_date TEXT,
@@ -202,4 +208,4 @@ CREATE TABLE IF NOT EXISTS document_requirements (
   FOREIGN KEY (object_id) REFERENCES workspace_objects(object_id) ON DELETE CASCADE
 );
 
-PRAGMA user_version = 1;
+PRAGMA user_version = 2;
