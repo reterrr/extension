@@ -1,8 +1,8 @@
 const style = document.createElement("style");
 style.dataset.burbotImportWorkspaceParity = "true";
 style.textContent = `
-  /* Import Review is a staging workspace, so keep its visual hierarchy aligned
-     with the normal Workspace instead of presenting imported data as a table. */
+  /* Import Review is a staging workspace. Keep the same visual rhythm as the
+     normal Workspace and override the old review-table layout deterministically. */
   .import-review-panel {
     margin: 0;
     border: 0;
@@ -12,79 +12,119 @@ style.textContent = `
   }
 
   .import-review-header {
-    padding: 14px 16px 12px;
+    padding: 12px 16px 10px;
     border-bottom: 1px solid var(--line);
   }
 
+  .import-review-header strong {
+    max-width: min(430px, 72vw);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
   .import-review-layout {
-    display: block;
+    display: block !important;
     min-height: 0;
     border-top: 0;
   }
 
+  /* Object switcher: one compact horizontal rail instead of a tall sidebar. */
   .import-review-list {
-    display: flex;
-    gap: 6px;
+    display: flex !important;
+    align-items: flex-start;
+    gap: 14px;
+    max-height: 82px;
     overflow-x: auto;
-    padding: 8px 16px;
-    border-right: 0;
+    overflow-y: hidden;
+    padding: 8px 16px 9px;
+    border-right: 0 !important;
     border-bottom: 1px solid var(--line);
     background: #fff;
+    scrollbar-width: thin;
   }
 
   .import-review-list details {
     flex: none;
+    display: block;
     margin: 0 !important;
+    white-space: nowrap;
   }
 
   .import-review-list summary {
-    padding: 5px 7px;
-    border-radius: 5px;
-    color: #65776a;
-    font-size: 10px;
+    display: block;
+    width: fit-content;
+    margin: 0 0 4px;
+    padding: 0;
+    color: #718074;
+    background: transparent !important;
+    font-size: 9px;
+    font-weight: 700;
     letter-spacing: .8px;
+    text-transform: uppercase;
   }
 
-  .import-review-list details[open] summary {
-    background: #f5f8f4;
+  .import-review-list summary span {
+    margin-left: 4px;
+    color: #9aa49a;
   }
 
   .import-review-list button {
-    width: auto;
-    min-width: 150px;
-    max-width: 230px;
-    margin-top: 4px;
-    padding: 7px 9px;
+    display: inline-flex !important;
+    width: auto !important;
+    min-width: 128px;
+    max-width: 195px;
+    min-height: 36px;
+    margin: 0 4px 0 0 !important;
+    padding: 6px 8px !important;
     border-radius: 6px;
+    vertical-align: top;
+  }
+
+  .import-review-list button > span {
+    max-width: 132px;
   }
 
   .import-review-list button.selected {
-    background: #eaf2e7;
-    border-color: transparent;
+    background: #eaf2e7 !important;
+    border-color: transparent !important;
     box-shadow: inset 3px 0 var(--green);
   }
 
   .import-review-detail {
-    padding: 0 16px 18px;
+    min-width: 0;
+    padding: 0 16px 20px !important;
   }
 
   .import-review-object-title {
-    padding: 14px 0 16px;
-    margin: 0;
+    margin: 0 !important;
+    padding: 14px 0 12px;
   }
 
   .import-review-object-title h2 {
-    margin: 5px 0 0;
-    font-size: 22px;
+    margin: 4px 0 0;
+    font-size: 21px;
+    line-height: 1.2;
+  }
+
+  .import-review-edit-badge {
+    margin-top: 1px;
   }
 
   .import-review-sources {
-    margin: -8px 0 10px;
+    gap: 6px;
+    margin: -4px 0 9px;
+  }
+
+  .import-review-sources .text-button {
+    padding: 3px 0;
+    font-size: 10px;
   }
 
   .import-review-section {
-    padding: 13px 0;
-    margin: 0;
+    display: block !important;
+    margin: 0 !important;
+    padding: 12px 0;
     border-top: 1px solid var(--line);
   }
 
@@ -93,7 +133,7 @@ style.textContent = `
   }
 
   .import-review-section-heading {
-    margin-bottom: 5px;
+    margin-bottom: 7px;
   }
 
   .import-review-section-heading > div {
@@ -105,8 +145,8 @@ style.textContent = `
   }
 
   .import-review-section-heading > div > strong {
-    font-size: 10px;
     color: var(--muted);
+    font-size: 10px;
     font-weight: 500;
   }
 
@@ -115,19 +155,27 @@ style.textContent = `
   }
 
   .import-review-fields {
-    display: block;
+    display: block !important;
   }
 
+  /* Exact Workspace-like field anatomy: label/value on the left, one action on
+     the right. The previous flex rule split label, value and evidence into three
+     columns, which is what made the review look broken in narrow sidebars. */
   .import-review-fields > div.import-review-workspace-field {
     position: relative;
-    display: flex;
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "head meta"
+      "value meta";
+    column-gap: 10px;
+    row-gap: 1px;
     align-items: center;
-    justify-content: space-between;
-    gap: 8px;
     width: 100%;
-    min-height: 53px;
+    min-height: 50px;
     margin: 1px 0;
-    padding: 9px 10px;
+    padding: 8px 10px;
+    box-sizing: border-box;
     border: 0 !important;
     border-radius: 6px;
     background: transparent !important;
@@ -136,16 +184,16 @@ style.textContent = `
   }
 
   .import-review-fields > div.import-review-workspace-field[data-review-group-start="true"] {
-    margin-top: 35px;
+    margin-top: 34px;
   }
 
   .import-review-fields > div.import-review-workspace-field[data-review-group-start="true"]::before {
     content: attr(data-review-group);
     position: absolute;
-    left: 0;
     top: -25px;
     right: 0;
-    padding-top: 12px;
+    left: 0;
+    padding-top: 10px;
     border-top: 1px solid var(--line);
     color: #5d7564;
     font-size: 12px;
@@ -158,7 +206,7 @@ style.textContent = `
   }
 
   .import-review-fields > div.import-review-workspace-field:hover {
-    background: #f7faf6 !important;
+    background: var(--surface-soft, #f7faf6) !important;
   }
 
   .import-review-fields > div.import-review-workspace-field.selected {
@@ -168,44 +216,47 @@ style.textContent = `
   }
 
   .import-review-field-head {
+    grid-area: head;
     min-width: 0;
-    flex: 1;
-    display: block;
+    display: block !important;
   }
 
   .import-review-field-head small:first-child {
     display: block;
-    font-size: 11px;
     color: #718074;
+    font-size: 11px;
+  }
+
+  .import-review-field-head > span {
+    display: none;
   }
 
   .import-review-workspace-field.selected .import-review-field-head small:first-child {
     color: var(--green);
   }
 
-  .import-review-field-head > span {
-    float: right;
-    margin-left: 8px;
-    font-size: 9px;
-  }
-
   .import-review-workspace-value {
+    grid-area: value;
     min-width: 0;
-    flex: 1;
-    margin: 0;
+    margin: 0 !important;
+    color: #26342d;
     font-size: 13px;
-    font-weight: 400;
+    font-weight: 500;
+    line-height: 1.25;
     overflow-wrap: anywhere;
   }
 
   .import-review-workspace-value[data-empty="true"] {
     color: #9aa49a;
     font-size: 12px;
+    font-weight: 400;
   }
 
   .import-review-field-meta {
-    flex: none;
-    margin: 0;
+    grid-area: meta;
+    align-self: center;
+    display: block !important;
+    margin: 0 !important;
   }
 
   .import-review-field-meta > span {
@@ -213,33 +264,78 @@ style.textContent = `
   }
 
   .import-review-source-button {
-    font-size: 10px;
+    padding: 3px 0;
+    font-size: 9px;
+    white-space: nowrap;
   }
 
   .import-review-files,
   .import-review-financing {
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    gap: 7px;
     margin-top: 6px;
   }
 
   .import-review-file-card,
   .import-review-finance-card {
-    border-color: var(--line);
-    border-radius: 7px;
-    background: #fafcfa;
+    min-width: 0;
+    border: 1px solid var(--line) !important;
+    border-radius: 7px !important;
+    background: #fafcfa !important;
+  }
+
+  .import-review-file-card {
+    padding: 9px 10px;
+  }
+
+  .import-review-file-card .import-review-editor {
+    font-size: 12px;
+  }
+
+  .import-review-file-card a {
+    display: block;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+  }
+
+  .import-review-finance-card > summary {
+    padding: 9px 10px;
+  }
+
+  /* Financing uses the same vertical field rhythm as Workspace variants. */
+  .import-review-finance-fields {
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    gap: 1px !important;
+    padding: 0 9px 8px !important;
   }
 
   .import-review-finance-fields > label.import-review-workspace-field {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    min-height: 46px;
-    padding: 8px 10px 8px 12px;
+    display: grid !important;
+    grid-template-columns: 1fr;
+    gap: 2px;
+    align-items: start;
+    min-width: 0;
+    min-height: 45px;
+    padding: 7px 9px;
     border-radius: 6px;
     cursor: pointer;
   }
 
+  .import-review-finance-fields > label.import-review-workspace-field > small {
+    color: #718074;
+    font-size: 10px;
+  }
+
+  .import-review-finance-fields > label.import-review-workspace-field > .import-review-workspace-value {
+    grid-area: auto !important;
+    width: 100%;
+    font-size: 12px;
+  }
+
   .import-review-finance-fields > label.import-review-workspace-field:hover {
-    background: #f3f7f2;
+    background: var(--surface-soft, #f3f7f2);
   }
 
   .import-review-finance-fields > label.import-review-workspace-field.selected {
@@ -248,29 +344,54 @@ style.textContent = `
     outline: 0;
   }
 
+  .import-review-remove-finance {
+    margin: 1px 10px 9px;
+  }
+
   .import-review-capture-area {
     position: sticky;
     z-index: 25;
     bottom: 8px;
-    margin: 14px -4px 0;
+    margin: 12px -2px 0;
     border: 1px solid #cfdbcf;
-    border-radius: 10px;
-    box-shadow: 0 10px 30px #1d39211c;
+    border-radius: 9px;
+    background: #fff;
+    box-shadow: 0 10px 26px #1d39211c;
+  }
+
+  .import-review-capture-area .capture-tools {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+  }
+
+  .import-review-capture-area .capture-tools button {
+    flex: 1 1 auto;
+    min-width: 0;
   }
 
   .import-review-hint {
-    margin: 12px 0;
+    margin: 10px 0;
+    line-height: 1.4;
   }
 
   .import-review-approve {
-    min-height: 42px;
+    min-height: 40px;
   }
 
   @media (max-width: 520px) {
-    .import-review-layout { display: block; }
     .import-review-list {
-      border-right: 0;
-      border-bottom: 1px solid var(--line);
+      max-height: 78px;
+      padding-inline: 12px;
+    }
+
+    .import-review-detail {
+      padding-inline: 12px !important;
+    }
+
+    .import-review-list button {
+      min-width: 118px;
+      max-width: 170px;
     }
   }
 `;
