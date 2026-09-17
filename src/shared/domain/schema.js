@@ -14,6 +14,13 @@
     group,
     ...extra,
   });
+  const percentage = (label, group = "Dofinansowanie") => ({
+    label,
+    type: "percentage",
+    group,
+    min: 0,
+    max: 100,
+  });
   const choice = (label, options, extra = {}) => ({
     label,
     type: "enum",
@@ -67,9 +74,17 @@
             },
           },
         ),
+        operator_id: {
+          label: "Operator",
+          type: "reference",
+          references: "operator",
+          group: "Powiązania",
+        },
         number: text("Numer projektu"),
         start_date: date("Data rozpoczęcia projektu"),
         end_date: date("Data zakończenia projektu"),
+        min_refund_percent: percentage("Minimalna refundacja"),
+        max_refund_percent: percentage("Maksymalna refundacja"),
         announcements_site_url: url("Strona naborów"),
         amount: {
           label: "Previously captured amount",
@@ -120,6 +135,8 @@
             },
           },
         ),
+        min_refund_percent: percentage("Minimalna refundacja"),
+        max_refund_percent: percentage("Maksymalna refundacja"),
 
         dataRozpoczeciaOd: date("Data rozpoczęcia — od", "Termin rzeczywisty"),
         dataRozpoczeciaDo: date("Data rozpoczęcia — do", "Termin rzeczywisty"),
