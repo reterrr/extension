@@ -329,6 +329,7 @@ style.textContent = `
   }
 
   .import-review-finance-fields > label.import-review-workspace-field > .import-review-workspace-value {
+    grid-area: auto !important;
     width: 100%;
     font-size: 12px;
   }
