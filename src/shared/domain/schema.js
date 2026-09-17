@@ -28,6 +28,14 @@
     group: "Podstawowe",
     ...extra,
   });
+  const defineHidden = (target, key, value) => {
+    Object.defineProperty(target, key, {
+      value,
+      enumerable: false,
+      configurable: false,
+      writable: false,
+    });
+  };
   const months = {
     1: "Styczeń",
     2: "Luty",
@@ -43,56 +51,189 @@
     12: "Grudzień",
   };
 
+  const projectFields = {
+    name: text("Nazwa"),
+    operator_id: {
+      label: "Operator",
+      type: "reference",
+      references: "operator",
+      group: "Podstawowe",
+    },
+    type: choice("Typ projektu", { B2B: "B2B", B2C: "B2C" }),
+    status: choice(
+      "Status projektu",
+      {
+        PLANOWANY: "Planowany",
+        AKTYWNY: "Aktywny",
+        ZAWIESZONY: "Zawieszony",
+        ZAKONCZONY: "Zakończony",
+      },
+      {
+        default: "PLANOWANY",
+        aliases: {
+          PLANNED: "PLANOWANY",
+          ACTIVE: "AKTYWNY",
+          SUSPENDED: "ZAWIESZONY",
+          CLOSED: "ZAKONCZONY",
+          Planned: "PLANOWANY",
+          Active: "AKTYWNY",
+          Suspended: "ZAWIESZONY",
+          Closed: "ZAKONCZONY",
+        },
+      },
+    ),
+    number: text("Numer projektu"),
+    start_date: date("Data rozpoczęcia projektu"),
+    end_date: date("Data zakończenia projektu"),
+    announcements_site_url: url("Strona naborów"),
+    amount: {
+      label: "Previously captured amount",
+      type: "number",
+      group: "Earlier captures",
+      legacy: true,
+    },
+  };
+
+  // Compatibility only. Refund percentages belong to financing variants now.
+  // Keep direct lookup working for already stored/imported object values without
+  // rendering a separate object-level "Dofinansowanie" section.
+  defineHidden(projectFields, "refund_percent_min", {
+    ...percentage("Minimalna refundacja"),
+    legacy: true,
+    hidden: true,
+  });
+  defineHidden(projectFields, "refund_percent_max", {
+    ...percentage("Maksymalna refundacja"),
+    legacy: true,
+    hidden: true,
+  });
+
+  const recruitmentFields = {
+    external_number: text("Numer / nazwa naboru"),
+    project_id: {
+      label: "Projekt",
+      type: "reference",
+      references: "project",
+      group: "Podstawowe",
+    },
+    sequence_number: integer("Numer kolejny", "Podstawowe", { min: 1 }),
+    year: integer("Rok", "Podstawowe", { min: 1000, max: 9999 }),
+    status: choice(
+      "Status naboru",
+      {
+        PLANOWANY: "Planowany",
+        OGLOSZONY: "Ogłoszony",
+        AKTYWNY: "Aktywny",
+        ZAWIESZONY: "Zawieszony",
+        ZAKONCZONY: "Zakończony",
+      },
+      {
+        default: "OGLOSZONY",
+        aliases: {
+          PLANNED: "PLANOWANY",
+          ANNOUNCED: "OGLOSZONY",
+          ACTIVE: "AKTYWNY",
+          SUSPENDED: "ZAWIESZONY",
+          CLOSED: "ZAKONCZONY",
+          Planned: "PLANOWANY",
+          Announced: "OGLOSZONY",
+          Active: "AKTYWNY",
+          Suspended: "ZAWIESZONY",
+          Closed: "ZAKONCZONY",
+        },
+      },
+    ),
+
+    dataRozpoczeciaOd: date("Data rozpoczęcia — od", "Termin rzeczywisty"),
+    dataRozpoczeciaDo: date("Data rozpoczęcia — do", "Termin rzeczywisty"),
+    dataZakonczeniaOd: date("Data zakończenia — od", "Termin rzeczywisty"),
+    dataZakonczeniaDo: date("Data zakończenia — do", "Termin rzeczywisty"),
+
+    planowanyStartRok: integer("Planowany start — rok", "Termin planowany", {
+      min: 1000,
+      max: 9999,
+    }),
+    planowanyStartMiesiac: choice(
+      "Planowany start — miesiąc",
+      months,
+      { numeric: true, group: "Termin planowany" },
+    ),
+    planowanyStartKwartal: choice(
+      "Planowany start — kwartał",
+      { 1: "Q1", 2: "Q2", 3: "Q3", 4: "Q4" },
+      { numeric: true, group: "Termin planowany" },
+    ),
+
+    planowanyKoniecRok: integer("Planowany koniec — rok", "Termin planowany", {
+      min: 1000,
+      max: 9999,
+    }),
+    planowanyKoniecMiesiac: choice(
+      "Planowany koniec — miesiąc",
+      months,
+      { numeric: true, group: "Termin planowany" },
+    ),
+    planowanyKoniecKwartal: choice(
+      "Planowany koniec — kwartał",
+      { 1: "Q1", 2: "Q2", 3: "Q3", 4: "Q4" },
+      { numeric: true, group: "Termin planowany" },
+    ),
+
+    statusZakonczenia: text("Status zakończenia", "Zakończenie"),
+    powodStatusu: text("Powód statusu", "Zakończenie", { multiline: true }),
+    urlOgloszenia: url("URL ogłoszenia"),
+
+    // Pre-typed-domain compatibility. Existing objects/rules keep working,
+    // but these rows stay hidden unless they already contain data.
+    start_date: { ...date("Stara data rozpoczęcia", "Earlier captures"), legacy: true },
+    end_date: { ...date("Stara data zakończenia", "Earlier captures"), legacy: true },
+    announced_year: {
+      ...integer("Stary rok ogłoszenia", "Earlier captures", {
+        min: 1000,
+        max: 9999,
+      }),
+      legacy: true,
+    },
+    announced_quarter: {
+      ...choice(
+        "Stary kwartał ogłoszenia",
+        { 1: "Q1", 2: "Q2", 3: "Q3", 4: "Q4" },
+        { numeric: true, group: "Earlier captures" },
+      ),
+      legacy: true,
+    },
+    closed_status: {
+      ...text("Stary status zakończenia", "Earlier captures"),
+      legacy: true,
+    },
+    status_reason: {
+      ...text("Stary powód statusu", "Earlier captures", { multiline: true }),
+      legacy: true,
+    },
+    announcement_url: {
+      ...url("Stary URL ogłoszenia", "Earlier captures"),
+      legacy: true,
+    },
+  };
+
+  defineHidden(recruitmentFields, "refund_percent_min", {
+    ...percentage("Minimalna refundacja"),
+    legacy: true,
+    hidden: true,
+  });
+  defineHidden(recruitmentFields, "refund_percent_max", {
+    ...percentage("Maksymalna refundacja"),
+    legacy: true,
+    hidden: true,
+  });
+
   globalThis.BurbotSchema = Object.freeze({
     project: {
       label: "Projekt",
       primary: "name",
       configuration: true,
       geography: true,
-      fields: {
-        name: text("Nazwa"),
-        operator_id: {
-          label: "Operator",
-          type: "reference",
-          references: "operator",
-          group: "Podstawowe",
-        },
-        type: choice("Typ projektu", { B2B: "B2B", B2C: "B2C" }),
-        status: choice(
-          "Status projektu",
-          {
-            PLANOWANY: "Planowany",
-            AKTYWNY: "Aktywny",
-            ZAWIESZONY: "Zawieszony",
-            ZAKONCZONY: "Zakończony",
-          },
-          {
-            default: "PLANOWANY",
-            aliases: {
-              PLANNED: "PLANOWANY",
-              ACTIVE: "AKTYWNY",
-              SUSPENDED: "ZAWIESZONY",
-              CLOSED: "ZAKONCZONY",
-              Planned: "PLANOWANY",
-              Active: "AKTYWNY",
-              Suspended: "ZAWIESZONY",
-              Closed: "ZAKONCZONY",
-            },
-          },
-        ),
-        number: text("Numer projektu"),
-        refund_percent_min: percentage("Minimalna refundacja"),
-        refund_percent_max: percentage("Maksymalna refundacja"),
-        start_date: date("Data rozpoczęcia projektu"),
-        end_date: date("Data zakończenia projektu"),
-        announcements_site_url: url("Strona naborów"),
-        amount: {
-          label: "Previously captured amount",
-          type: "number",
-          group: "Earlier captures",
-          legacy: true,
-        },
-      },
+      fields: projectFields,
     },
 
     recruitment: {
@@ -100,115 +241,7 @@
       primary: "external_number",
       configuration: true,
       geography: true,
-      fields: {
-        external_number: text("Numer / nazwa naboru"),
-        project_id: {
-          label: "Projekt",
-          type: "reference",
-          references: "project",
-          group: "Podstawowe",
-        },
-        sequence_number: integer("Numer kolejny", "Podstawowe", { min: 1 }),
-        year: integer("Rok", "Podstawowe", { min: 1000, max: 9999 }),
-        status: choice(
-          "Status naboru",
-          {
-            PLANOWANY: "Planowany",
-            OGLOSZONY: "Ogłoszony",
-            AKTYWNY: "Aktywny",
-            ZAWIESZONY: "Zawieszony",
-            ZAKONCZONY: "Zakończony",
-          },
-          {
-            default: "OGLOSZONY",
-            aliases: {
-              PLANNED: "PLANOWANY",
-              ANNOUNCED: "OGLOSZONY",
-              ACTIVE: "AKTYWNY",
-              SUSPENDED: "ZAWIESZONY",
-              CLOSED: "ZAKONCZONY",
-              Planned: "PLANOWANY",
-              Announced: "OGLOSZONY",
-              Active: "AKTYWNY",
-              Suspended: "ZAWIESZONY",
-              Closed: "ZAKONCZONY",
-            },
-          },
-        ),
-        refund_percent_min: percentage("Minimalna refundacja"),
-        refund_percent_max: percentage("Maksymalna refundacja"),
-
-        dataRozpoczeciaOd: date("Data rozpoczęcia — od", "Termin rzeczywisty"),
-        dataRozpoczeciaDo: date("Data rozpoczęcia — do", "Termin rzeczywisty"),
-        dataZakonczeniaOd: date("Data zakończenia — od", "Termin rzeczywisty"),
-        dataZakonczeniaDo: date("Data zakończenia — do", "Termin rzeczywisty"),
-
-        planowanyStartRok: integer("Planowany start — rok", "Termin planowany", {
-          min: 1000,
-          max: 9999,
-        }),
-        planowanyStartMiesiac: choice(
-          "Planowany start — miesiąc",
-          months,
-          { numeric: true, group: "Termin planowany" },
-        ),
-        planowanyStartKwartal: choice(
-          "Planowany start — kwartał",
-          { 1: "Q1", 2: "Q2", 3: "Q3", 4: "Q4" },
-          { numeric: true, group: "Termin planowany" },
-        ),
-
-        planowanyKoniecRok: integer("Planowany koniec — rok", "Termin planowany", {
-          min: 1000,
-          max: 9999,
-        }),
-        planowanyKoniecMiesiac: choice(
-          "Planowany koniec — miesiąc",
-          months,
-          { numeric: true, group: "Termin planowany" },
-        ),
-        planowanyKoniecKwartal: choice(
-          "Planowany koniec — kwartał",
-          { 1: "Q1", 2: "Q2", 3: "Q3", 4: "Q4" },
-          { numeric: true, group: "Termin planowany" },
-        ),
-
-        statusZakonczenia: text("Status zakończenia", "Zakończenie"),
-        powodStatusu: text("Powód statusu", "Zakończenie", { multiline: true }),
-        urlOgloszenia: url("URL ogłoszenia"),
-
-        // Pre-typed-domain compatibility. Existing objects/rules keep working,
-        // but these rows stay hidden unless they already contain data.
-        start_date: { ...date("Stara data rozpoczęcia", "Earlier captures"), legacy: true },
-        end_date: { ...date("Stara data zakończenia", "Earlier captures"), legacy: true },
-        announced_year: {
-          ...integer("Stary rok ogłoszenia", "Earlier captures", {
-            min: 1000,
-            max: 9999,
-          }),
-          legacy: true,
-        },
-        announced_quarter: {
-          ...choice(
-            "Stary kwartał ogłoszenia",
-            { 1: "Q1", 2: "Q2", 3: "Q3", 4: "Q4" },
-            { numeric: true, group: "Earlier captures" },
-          ),
-          legacy: true,
-        },
-        closed_status: {
-          ...text("Stary status zakończenia", "Earlier captures"),
-          legacy: true,
-        },
-        status_reason: {
-          ...text("Stary powód statusu", "Earlier captures", { multiline: true }),
-          legacy: true,
-        },
-        announcement_url: {
-          ...url("Stary URL ogłoszenia", "Earlier captures"),
-          legacy: true,
-        },
-      },
+      fields: recruitmentFields,
     },
 
     operator: {
@@ -237,19 +270,43 @@
     },
   });
 
+  const fundingFields = {
+    refund_percent_min: {
+      label: "Minimalna refundacja",
+      type: "percentage",
+      min: 0,
+      max: 100,
+    },
+    refund_percent_max: {
+      label: "Maksymalna refundacja",
+      type: "percentage",
+      min: 0,
+      max: 100,
+    },
+    max_amount_pln: { label: "Maximum amount", type: "money" },
+    max_per_person_pln: { label: "Maximum per person", type: "money" },
+    own_contribution_form: choice("Own contribution", {
+      UNSPECIFIED: "Not distinguished in source",
+      CASH: "Cash",
+      WAGES: "Wages",
+    }),
+    notes: text("Notes", "Funding", { multiline: true }),
+  };
+
+  // Old imports and extraction rules used one `refund_percent`. Keep it
+  // addressable but non-enumerable so it never appears as an extra UI row.
+  defineHidden(fundingFields, "refund_percent", {
+    label: "Refund (legacy)",
+    type: "percentage",
+    min: 0,
+    max: 100,
+    legacy: true,
+    hidden: true,
+  });
+
   globalThis.BurbotFunding = Object.freeze({
     sizes: { MICRO: "Micro", SMALL: "Small", MEDIUM: "Medium", LARGE: "Large" },
-    fields: {
-      refund_percent: { label: "Refund", type: "percentage" },
-      max_amount_pln: { label: "Maximum amount", type: "money" },
-      max_per_person_pln: { label: "Maximum per person", type: "money" },
-      own_contribution_form: choice("Own contribution", {
-        UNSPECIFIED: "Not distinguished in source",
-        CASH: "Cash",
-        WAGES: "Wages",
-      }),
-      notes: text("Notes", "Funding", { multiline: true }),
-    },
+    fields: fundingFields,
   });
 
   globalThis.BurbotDocuments = Object.freeze({

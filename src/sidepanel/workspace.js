@@ -332,7 +332,33 @@ import { createPickerClient } from "./pickerRpc";
           "Variant " + variant.variant_no,
         );
         const parts = [];
-        if (C.hasValue(variant.refund_percent))
+        const hasMin = C.hasValue(variant.refund_percent_min),
+          hasMax = C.hasValue(variant.refund_percent_max);
+        if (hasMin || hasMax) {
+          const minText = hasMin
+              ? C.formatValue(
+                  variant.refund_percent_min,
+                  BurbotFunding.fields.refund_percent_min,
+                  db,
+                )
+              : "",
+            maxText = hasMax
+              ? C.formatValue(
+                  variant.refund_percent_max,
+                  BurbotFunding.fields.refund_percent_max,
+                  db,
+                )
+              : "";
+          if (hasMin && hasMax)
+            parts.push(
+              minText === maxText
+                ? minText
+                : minText.replace(/%$/, "") + "–" + maxText,
+            );
+          else if (hasMin) parts.push("od " + minText);
+          else parts.push("do " + maxText);
+        } else if (C.hasValue(variant.refund_percent)) {
+          // Compatibility before an old state/import has been normalized.
           parts.push(
             C.formatValue(
               variant.refund_percent,
@@ -340,6 +366,7 @@ import { createPickerClient } from "./pickerRpc";
               db,
             ),
           );
+        }
         if (C.hasValue(variant.max_amount_pln))
           parts.push(
             "max " +
@@ -399,7 +426,7 @@ import { createPickerClient } from "./pickerRpc";
           .at(-1);
         expanded.add("funding:" + variant.id);
         active = {
-          field: "refund_percent",
+          field: "refund_percent_min",
           target: { kind: "funding", id: variant.id },
           context: label + " · Variant " + variant.variant_no,
         };

@@ -1,4 +1,5 @@
 import { clearActiveDraft } from "../commits/draftStore";
+import { migrateFundingRefundRanges } from "../domain/stateMigrations";
 import { LEGACY_STORAGE_KEY } from "../storage/constants";
 import type { LegacyStorageState } from "../types/legacy-storage";
 
@@ -31,6 +32,7 @@ function assertLegacyState(value: unknown): asserts value is LegacyStorageState 
   ) {
     throw new Error("Unsupported stored data format.");
   }
+  migrateFundingRefundRanges(state);
 }
 
 function emptyState(): LegacyStorageState {

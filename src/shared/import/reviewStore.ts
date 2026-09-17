@@ -1,3 +1,4 @@
+import { migrateFundingRefundRanges } from "../domain/stateMigrations";
 import type { ImportReviewSession } from "../types/importReview";
 
 const DB_NAME = "burbot-import-review";
@@ -36,13 +37,16 @@ export async function readImportReview(): Promise<ImportReviewSession | null> {
     const done = transactionDone(transaction);
     const value = await requestResult(transaction.objectStore(STORE).get(ACTIVE_KEY));
     await done;
-    return (value as ImportReviewSession | undefined) ?? null;
+    const session = (value as ImportReviewSession | undefined) ?? null;
+    if (session) migrateFundingRefundRanges(session.previewState);
+    return session;
   } finally {
     database.close();
   }
 }
 
 export async function writeImportReview(session: ImportReviewSession): Promise<void> {
+  migrateFundingRefundRanges(session.previewState);
   const database = await openDatabase();
   try {
     const transaction = database.transaction(STORE, "readwrite");

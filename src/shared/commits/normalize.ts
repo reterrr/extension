@@ -1,3 +1,4 @@
+import { migrateFundingRefundRanges } from "../domain/stateMigrations";
 import type { DraftCommit } from "../types/commit";
 
 /**
@@ -6,6 +7,7 @@ import type { DraftCommit } from "../types/commit";
  * only Commit to SQLite advances that revision.
  */
 export function normalizeDraftWorkingRevision(draft: DraftCommit): DraftCommit {
+  migrateFundingRefundRanges(draft.workingState);
   draft.workingState.revision = draft.baseRevision;
   return draft;
 }
