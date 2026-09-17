@@ -93,9 +93,19 @@ export function stageImportReviewObject(
       throw new Error(`Unsupported reviewed extraction target: ${target.kind}.`);
     }
 
+    const referencePatch =
+      !target || target.kind === "object"
+        ? plan.referencePatches.find((patch) => patch.field === reviewedRule.field)
+        : undefined;
+    const transform =
+      reviewedRule.transform && referencePatch
+        ? { ...reviewedRule.transform, value: referencePatch.targetObjectId }
+        : reviewedRule.transform;
+
     const { targetImportKey: _targetImportKey, ...rule } = reviewedRule;
     copiedRules.push({
       ...rule,
+      ...(transform ? { transform } : { transform: undefined }),
       id: uuid(),
       objectId: selected.id,
       ...(target?.kind && target.kind !== "object" ? { target } : { target: undefined }),
