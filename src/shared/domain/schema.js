@@ -81,8 +81,6 @@
           },
         ),
         number: text("Numer projektu"),
-        refund_percent_min: percentage("Minimalna refundacja"),
-        refund_percent_max: percentage("Maksymalna refundacja"),
         start_date: date("Data rozpoczęcia projektu"),
         end_date: date("Data zakończenia projektu"),
         announcements_site_url: url("Strona naborów"),
@@ -135,8 +133,6 @@
             },
           },
         ),
-        refund_percent_min: percentage("Minimalna refundacja"),
-        refund_percent_max: percentage("Maksymalna refundacja"),
 
         dataRozpoczeciaOd: date("Data rozpoczęcia — od", "Termin rzeczywisty"),
         dataRozpoczeciaDo: date("Data rozpoczęcia — do", "Termin rzeczywisty"),
@@ -240,7 +236,8 @@
   globalThis.BurbotFunding = Object.freeze({
     sizes: { MICRO: "Micro", SMALL: "Small", MEDIUM: "Medium", LARGE: "Large" },
     fields: {
-      refund_percent: { label: "Refund", type: "percentage" },
+      refund_percent_min: percentage("Minimum refund"),
+      refund_percent_max: percentage("Maximum refund"),
       max_amount_pln: { label: "Maximum amount", type: "money" },
       max_per_person_pln: { label: "Maximum per person", type: "money" },
       own_contribution_form: choice("Own contribution", {
