@@ -6,8 +6,6 @@ import {
 } from "../shared/commits/draftStore";
 import {
   buildImportApprovalPlan,
-  editImportReviewFinancingField,
-  editImportReviewObjectField,
   importReviewView,
   markImportObjectApproved,
   removeImportReviewFile,
@@ -20,10 +18,10 @@ import {
   writeImportReview,
 } from "../shared/import/reviewStore";
 import { stageImportReviewObject } from "../shared/import/stageReview";
-import { selectorColor } from "../shared/selectorPalette";
 import type {
   ImportReviewEditorOption,
   ImportReviewEditorType,
+  ImportReviewFieldView,
   ImportReviewSession,
   ImportReviewView,
 } from "../shared/types/importReview";
@@ -179,6 +177,16 @@ function groupLabel(type: string): string {
   return "Nabory";
 }
 
+function groupedFields(fields: ImportReviewFieldView[]) {
+  const groups = new Map<string, ImportReviewFieldView[]>();
+  for (const field of fields) {
+    const rows = groups.get(field.group) ?? [];
+    rows.push(field);
+    groups.set(field.group, rows);
+  }
+  return [...groups.entries()].map(([name, rows]) => ({ name, rows }));
+}
+
 interface ReviewEditorProps {
   type: ImportReviewEditorType;
   value: string;
@@ -202,7 +210,11 @@ function ReviewEditor({
 
   async function commit(next = draft) {
     if (disabled || next === value) return;
-    await onSave(next);
+    try {
+      await onSave(next);
+    } catch {
+      setDraft(value);
+    }
   }
 
   if (type === "select") {
@@ -413,6 +425,7 @@ export function ImportReviewPanel() {
     (object) => object.id === view.selectedObjectId,
   );
   const readOnly = selected?.status === "APPROVED";
+  const fieldGroups = groupedFields(view.fields);
   const sourceUrls = [
     ...new Set([
       ...view.evidence.flatMap((entry) =>
@@ -421,6 +434,8 @@ export function ImportReviewPanel() {
       ...view.files.flatMap((file) => [file.sourcePageUrl, file.url]),
     ]),
   ];
+  const supportsConfiguration =
+    selected?.type === "project" || selected?.type === "recruitment";
 
   return (
     <section className="import-review-shell">
@@ -494,17 +509,7 @@ export function ImportReviewPanel() {
                           <small>
                             {object.status === "APPROVED"
                               ? "✓"
-                              : [
-                                  object.evidenceCount
-                                    ? `${object.evidenceCount} ev`
-                                    : "",
-                                  object.fileCount ? `${object.fileCount} plik` : "",
-                                  object.financingCount
-                                    ? `${object.financingCount} fin.`
-                                    : "",
-                                ]
-                                  .filter(Boolean)
-                                  .join(" · ") || "do sprawdzenia"}
+                              : `${object.completedFieldCount}/${object.fieldCount}`}
                           </small>
                         </button>
                       ))}
@@ -516,238 +521,336 @@ export function ImportReviewPanel() {
             <div className="import-review-detail">
               {selected ? (
                 <>
-                  <div className="import-review-object-title">
-                    <div>
-                      <span className="eyebrow">{selected.type.toUpperCase()}</span>
-                      <h2>{selected.label}</h2>
-                    </div>
-                    {!readOnly && <span className="import-review-edit-badge">Edytowalne</span>}
-                  </div>
-
-                  {sourceUrls.length > 0 && (
-                    <div className="import-review-sources">
-                      {sourceUrls.map((url) => (
-                        <button
-                          key={url}
-                          type="button"
-                          className="text-button"
-                          onClick={() => void openSource(url)}
-                        >
-                          Otwórz źródło ↗
-                        </button>
-                      ))}
-                    </div>
-                  )}
-
-                  <section className="import-review-section">
-                    <div className="import-review-section-heading">
+                  <section className="object-header import-review-object-header">
+                    <div className="import-review-object-title">
                       <div>
-                        <span className="eyebrow">DANE OBIEKTU</span>
-                        <strong>{view.fields.length} pól</strong>
+                        <span className="eyebrow">{selected.type.toUpperCase()}</span>
+                        <h1>{selected.label}</h1>
                       </div>
-                      <small>Zmiana wartości usuwa evidence tego pola.</small>
+                      {!readOnly && (
+                        <span className="import-review-edit-badge">Edytowalne</span>
+                      )}
                     </div>
-                    <div className="import-review-fields">
-                      {view.fields.map((field) => {
-                        const evidence = view.evidence.filter(
-                          (entry) => entry.field === field.field,
-                        );
-                        const hasSource = evidence.some((entry) => entry.sourceUrl);
-                        const color = field.evidenceCount
-                          ? selectorColor(evidenceColorKey(view, field.field))
-                          : null;
-                        return (
-                          <div
-                            key={field.field}
-                            className={field.evidenceCount ? "has-evidence" : ""}
-                            style={
-                              color
-                                ? {
-                                    borderLeftColor: color.border,
-                                    background: color.soft,
-                                    boxShadow: `inset 3px 0 0 ${color.border}`,
-                                  }
-                                : undefined
-                            }
+                    <div className="progress-label">
+                      <span>
+                        {selected.completedFieldCount} / {selected.fieldCount} pól uzupełniono
+                      </span>
+                    </div>
+                    <progress
+                      max={selected.fieldCount || 1}
+                      value={selected.completedFieldCount}
+                    />
+                    {sourceUrls.length > 0 && (
+                      <div className="import-review-sources">
+                        {sourceUrls.map((url) => (
+                          <button
+                            key={url}
+                            type="button"
+                            className="text-button"
+                            onClick={() => void openSource(url)}
                           >
-                            <div className="import-review-field-head">
-                              <small>{field.label}</small>
-                              {field.evidenceCount > 0 && (
-                                <span style={{ color: color?.border }}>
-                                  {field.evidenceCount} evidence
-                                </span>
-                              )}
-                            </div>
-                            <ReviewEditor
-                              type={field.editorType}
-                              value={field.editorValue}
-                              options={field.options}
-                              disabled={readOnly || busy}
-                              ariaLabel={field.label}
-                              onSave={(value) =>
-                                persistReviewMutation((current, now) =>
-                                  editImportReviewObjectField(
-                                    current,
-                                    selected.id,
-                                    field.field,
-                                    value,
-                                    now,
-                                  ),
-                                )
-                              }
-                            />
-                            {field.evidenceCount > 0 && hasSource && (
-                              <div className="import-review-field-meta">
-                                <span>{field.value}</span>
-                                <button
-                                  type="button"
-                                  className="import-review-source-button"
-                                  style={{ color: color?.border }}
-                                  onClick={() => void showFieldSource(field.field)}
-                                >
-                                  Pokaż w źródle ↗
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </section>
-
-                  {view.files.length > 0 && (
-                    <section className="import-review-section">
-                      <div className="import-review-section-heading">
-                        <div>
-                          <span className="eyebrow">PLIKI</span>
-                          <strong>{view.files.length} przypiętych</strong>
-                        </div>
-                        <small>AI wskazało te pliki jako źródła obiektu.</small>
-                      </div>
-                      <div className="import-review-files">
-                        {view.files.map((file) => (
-                          <div key={file.id} className="import-review-file-card">
-                            <ReviewEditor
-                              type="text"
-                              value={file.name}
-                              disabled={readOnly || busy}
-                              ariaLabel="Nazwa pliku"
-                              onSave={(value) =>
-                                persistReviewMutation((current, now) =>
-                                  renameImportReviewFile(
-                                    current,
-                                    selected.id,
-                                    file.id,
-                                    value,
-                                    now,
-                                  ),
-                                )
-                              }
-                            />
-                            <a href={file.url} target="_blank" rel="noreferrer">
-                              {file.url}
-                            </a>
-                            <div className="import-review-card-actions">
-                              <button
-                                type="button"
-                                className="text-button"
-                                onClick={() => void openSource(file.sourcePageUrl)}
-                              >
-                                Strona źródłowa ↗
-                              </button>
-                              <button
-                                type="button"
-                                className="text-button danger"
-                                disabled={readOnly || busy}
-                                onClick={() =>
-                                  void persistReviewMutation((current, now) =>
-                                    removeImportReviewFile(
-                                      current,
-                                      selected.id,
-                                      file.id,
-                                      now,
-                                    ),
-                                  )
-                                }
-                              >
-                                Usuń
-                              </button>
-                            </div>
-                          </div>
+                            Otwórz źródło ↗
+                          </button>
                         ))}
                       </div>
-                    </section>
-                  )}
+                    )}
+                  </section>
 
-                  {view.financing.length > 0 && (
-                    <section className="import-review-section">
-                      <div className="import-review-section-heading">
-                        <div>
-                          <span className="eyebrow">FINANSOWANIE</span>
-                          <strong>{view.financing.length} wariantów</strong>
-                        </div>
-                        <small>Wartości zostaną zapisane jako konfiguracja finansowania.</small>
-                      </div>
-                      <div className="import-review-financing">
-                        {view.financing.map((variant) => (
-                          <details key={variant.id} open className="import-review-finance-card">
-                            <summary>
-                              <span>
-                                {variant.companySizeLabel} · wariant {variant.variantNo}
-                              </span>
-                              <small>{variant.key}</small>
-                            </summary>
-                            <div className="import-review-finance-fields">
-                              {variant.fields.map((field) => (
-                                <label key={field.field}>
-                                  <small>{field.label}</small>
-                                  <ReviewEditor
-                                    type={field.editorType}
-                                    value={field.editorValue}
-                                    options={field.options}
+                  {fieldGroups.map((group) => {
+                    const completed = group.rows.filter((field) => field.isSet).length;
+                    return (
+                      <section
+                        key={group.name}
+                        className="business-section import-review-business-section"
+                      >
+                        <details className="workspace-section-card field-group-card" open>
+                          <summary className="workspace-section-summary">
+                            <span className="workspace-section-title">
+                              <strong>{group.name}</strong>
+                              <small>
+                                Kliknij pole, aby uzupełnić ręcznie albo wydzielić je ze strony
+                              </small>
+                            </span>
+                            <span
+                              className="workspace-section-status"
+                              data-state={
+                                completed === group.rows.length ? "complete" : "missing"
+                              }
+                            >
+                              {completed}/{group.rows.length}
+                            </span>
+                          </summary>
+                          <div className="workspace-section-body import-review-fields">
+                            {group.rows.map((field) => {
+                              const evidence = view.evidence.filter(
+                                (entry) => entry.field === field.field,
+                              );
+                              const hasSource = evidence.some((entry) => entry.sourceUrl);
+                              return (
+                                <div
+                                  key={field.field}
+                                  role="button"
+                                  tabIndex={readOnly ? -1 : 0}
+                                  aria-disabled={readOnly}
+                                  className={`field-row import-review-workspace-field${
+                                    field.isSet ? "" : " is-missing"
+                                  }`}
+                                  data-review-object-id={selected.id}
+                                  data-review-field={field.field}
+                                  data-review-label={field.label}
+                                  data-review-context={group.name}
+                                  data-review-target-kind="object"
+                                  onKeyDown={(event) => {
+                                    if (
+                                      !readOnly &&
+                                      (event.key === "Enter" || event.key === " ")
+                                    ) {
+                                      event.preventDefault();
+                                      event.currentTarget.click();
+                                    }
+                                  }}
+                                >
+                                  <span className="field-copy">
+                                    <span className="field-label">{field.label}</span>
+                                    <span
+                                      className={`field-value${
+                                        field.isSet ? "" : " empty"
+                                      }`}
+                                    >
+                                      {field.value}
+                                    </span>
+                                    {field.evidenceCount > 0 && hasSource && (
+                                      <button
+                                        type="button"
+                                        className="import-review-source-button"
+                                        onClick={() => void showFieldSource(field.field)}
+                                      >
+                                        Pokaż evidence ↗
+                                      </button>
+                                    )}
+                                  </span>
+                                  <span
+                                    className={`field-mark ${
+                                      field.isSet
+                                        ? "field-state-set"
+                                        : "field-state-missing"
+                                    }`}
+                                  >
+                                    {field.evidenceCount > 0
+                                      ? `${field.evidenceCount} AI`
+                                      : field.isSet
+                                        ? "✓"
+                                        : "Brak"}
+                                  </span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </details>
+                      </section>
+                    );
+                  })}
+
+                  <section className="business-section import-review-business-section">
+                    <details className="workspace-section-card" open={view.files.length > 0}>
+                      <summary className="workspace-section-summary">
+                        <span className="workspace-section-title">
+                          <strong>Pliki</strong>
+                          <small>Pliki wskazane przez AI dla tego obiektu</small>
+                        </span>
+                        <span
+                          className="workspace-section-status"
+                          data-state={view.files.length ? "complete" : "missing"}
+                        >
+                          {view.files.length ? `${view.files.length} plik` : "Brak"}
+                        </span>
+                      </summary>
+                      <div className="workspace-section-body">
+                        {view.files.length ? (
+                          <div className="import-review-files">
+                            {view.files.map((file) => (
+                              <div key={file.id} className="import-review-file-card">
+                                <ReviewEditor
+                                  type="text"
+                                  value={file.name}
+                                  disabled={readOnly || busy}
+                                  ariaLabel="Nazwa pliku"
+                                  onSave={(value) =>
+                                    persistReviewMutation((current, now) =>
+                                      renameImportReviewFile(
+                                        current,
+                                        selected.id,
+                                        file.id,
+                                        value,
+                                        now,
+                                      ),
+                                    )
+                                  }
+                                />
+                                <a href={file.url} target="_blank" rel="noreferrer">
+                                  {file.url}
+                                </a>
+                                <div className="import-review-card-actions">
+                                  <button
+                                    type="button"
+                                    className="text-button"
+                                    onClick={() => void openSource(file.sourcePageUrl)}
+                                  >
+                                    Strona źródłowa ↗
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="text-button danger"
                                     disabled={readOnly || busy}
-                                    ariaLabel={`${variant.companySizeLabel}: ${field.label}`}
-                                    onSave={(value) =>
-                                      persistReviewMutation((current, now) =>
-                                        editImportReviewFinancingField(
+                                    onClick={() =>
+                                      void persistReviewMutation((current, now) =>
+                                        removeImportReviewFile(
                                           current,
                                           selected.id,
-                                          variant.id,
-                                          field.field,
-                                          value,
+                                          file.id,
                                           now,
                                         ),
                                       )
                                     }
-                                  />
-                                </label>
+                                  >
+                                    Usuń
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="import-review-empty-state">
+                            AI nie wskazało plików dla tego obiektu.
+                          </p>
+                        )}
+                      </div>
+                    </details>
+                  </section>
+
+                  {supportsConfiguration && (
+                    <section className="business-section import-review-business-section">
+                      <details
+                        className="workspace-section-card"
+                        open={view.financing.length > 0}
+                      >
+                        <summary className="workspace-section-summary">
+                          <span className="workspace-section-title">
+                            <strong>Warianty dofinansowania</strong>
+                            <small>
+                              Te same pola finansowania, które są dostępne w Workspace
+                            </small>
+                          </span>
+                          <span
+                            className="workspace-section-status"
+                            data-state={view.financing.length ? "complete" : "missing"}
+                          >
+                            {view.financing.length
+                              ? `${view.financing.length} wariantów`
+                              : "Brak"}
+                          </span>
+                        </summary>
+                        <div className="workspace-section-body">
+                          {view.financing.length ? (
+                            <div className="import-review-financing">
+                              {view.financing.map((variant) => (
+                                <details
+                                  key={variant.id}
+                                  open
+                                  className="import-review-finance-card"
+                                >
+                                  <summary>
+                                    <span>
+                                      {variant.companySizeLabel} · wariant {variant.variantNo}
+                                    </span>
+                                    <small>{variant.key}</small>
+                                  </summary>
+                                  <div className="import-review-finance-fields">
+                                    {variant.fields.map((field) => {
+                                      const isSet = Boolean(field.editorValue);
+                                      return (
+                                        <div
+                                          key={field.field}
+                                          role="button"
+                                          tabIndex={readOnly ? -1 : 0}
+                                          aria-disabled={readOnly}
+                                          className={`field-row import-review-workspace-field${
+                                            isSet ? "" : " is-missing"
+                                          }`}
+                                          data-review-object-id={selected.id}
+                                          data-review-field={field.field}
+                                          data-review-label={field.label}
+                                          data-review-context={`${variant.companySizeLabel} · wariant ${variant.variantNo}`}
+                                          data-review-target-kind="funding"
+                                          data-review-target-id={variant.id}
+                                          onKeyDown={(event) => {
+                                            if (
+                                              !readOnly &&
+                                              (event.key === "Enter" || event.key === " ")
+                                            ) {
+                                              event.preventDefault();
+                                              event.currentTarget.click();
+                                            }
+                                          }}
+                                        >
+                                          <span className="field-copy">
+                                            <span className="field-label">{field.label}</span>
+                                            <span
+                                              className={`field-value${
+                                                isSet ? "" : " empty"
+                                              }`}
+                                            >
+                                              {field.value || "Nie ustawiono"}
+                                            </span>
+                                          </span>
+                                          <span
+                                            className={`field-mark ${
+                                              isSet
+                                                ? "field-state-set"
+                                                : "field-state-missing"
+                                            }`}
+                                          >
+                                            {isSet ? "✓" : "Brak"}
+                                          </span>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                  <button
+                                    type="button"
+                                    className="text-button danger import-review-remove-finance"
+                                    disabled={readOnly || busy}
+                                    onClick={() =>
+                                      void persistReviewMutation((current, now) =>
+                                        removeImportReviewFinancing(
+                                          current,
+                                          selected.id,
+                                          variant.id,
+                                          now,
+                                        ),
+                                      )
+                                    }
+                                  >
+                                    Usuń wariant
+                                  </button>
+                                </details>
                               ))}
                             </div>
-                            <button
-                              type="button"
-                              className="text-button danger import-review-remove-finance"
-                              disabled={readOnly || busy}
-                              onClick={() =>
-                                void persistReviewMutation((current, now) =>
-                                  removeImportReviewFinancing(
-                                    current,
-                                    selected.id,
-                                    variant.id,
-                                    now,
-                                  ),
-                                )
-                              }
-                            >
-                              Usuń wariant
-                            </button>
-                          </details>
-                        ))}
-                      </div>
+                          ) : (
+                            <p className="import-review-empty-state">
+                              AI nie wskazało wariantów finansowania. Zakres refundacji możesz
+                              uzupełnić bezpośrednio w polach obiektu powyżej.
+                            </p>
+                          )}
+                        </div>
+                      </details>
                     </section>
                   )}
 
                   <p className="import-review-hint">
-                    Przed zatwierdzeniem możesz poprawić dane, pliki i finansowanie. Evidence pozostaje tylko przy wartościach, których ręcznie nie zmieniono.
+                    Import Review korzysta z tego samego sposobu pracy co Workspace:
+                    wybierz pole, a następnie wpisz wartość ręcznie, użyj zaznaczonego
+                    tekstu, URL strony albo Pick element.
                   </p>
                   <button
                     type="button"
