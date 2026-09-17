@@ -28,11 +28,21 @@ The v1 format is backward compatible. Objects can additionally declare remote PD
   ],
   "objects": [
     {
+      "key": "operator-1",
+      "type": "operator",
+      "data": {
+        "name": "Example operator"
+      }
+    },
+    {
       "key": "project-1",
       "type": "project",
       "data": {
         "name": "Example project",
-        "status": "AKTYWNY"
+        "operator_id": { "$ref": "operator-1" },
+        "status": "AKTYWNY",
+        "refund_percent_min": 50,
+        "refund_percent_max": 80
       },
       "evidence": {
         "name": [
@@ -64,10 +74,32 @@ The v1 format is backward compatible. Objects can additionally declare remote PD
           }
         }
       ]
+    },
+    {
+      "key": "recruitment-1",
+      "type": "recruitment",
+      "data": {
+        "external_number": "1/2026",
+        "project_id": { "$ref": "project-1" },
+        "refund_percent_min": 60,
+        "refund_percent_max": 80
+      }
     }
   ]
 }
 ```
+
+## Object fields relevant to AI import
+
+AI should output only values that are actually known from the sources. It does **not** need to invent empty keys. Import Review is schema-driven and shows the same normal fields as Workspace even when they are absent from `objects[].data`; omitted fields appear as `Nie ustawiono` and can be completed manually or by using the page picker.
+
+Additional current fields include:
+
+- `project.operator_id` — reference to an imported `operator` via `{ "$ref": "operator-key" }`;
+- `project.refund_percent_min` — minimum project refund percentage, `0..100`;
+- `project.refund_percent_max` — maximum project refund percentage, `0..100`;
+- `recruitment.refund_percent_min` — minimum recruitment refund percentage, `0..100`;
+- `recruitment.refund_percent_max` — maximum recruitment refund percentage, `0..100`.
 
 ## `objects[].files[]`
 
@@ -96,8 +128,10 @@ Variant numbers are assigned in input order separately for each company size.
 
 ## Review semantics
 
-The import first enters **Import Review**. Before approval the reviewer can:
+The import first enters **Import Review**. Import Review uses the same field-oriented interaction model as Workspace. Before approval the reviewer can:
 
+- see all normal schema fields, including fields omitted by AI;
+- select a field and use `Pick element`, selected text, page URL, or a manual value;
 - edit imported object fields;
 - change financing values or remove a financing variant;
 - rename or remove an attached PDF;
