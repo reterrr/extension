@@ -23,7 +23,9 @@ export interface ImportReviewEditorOption {
 export interface ImportReviewFieldView {
   field: string;
   label: string;
+  group: string;
   value: string;
+  isSet: boolean;
   editorType: ImportReviewEditorType;
   editorValue: string;
   options?: ImportReviewEditorOption[];
@@ -73,6 +75,7 @@ export interface ImportReviewObjectView {
   label: string;
   status: ImportReviewObjectStatus;
   fieldCount: number;
+  completedFieldCount: number;
   evidenceCount: number;
   fileCount: number;
   financingCount: number;
