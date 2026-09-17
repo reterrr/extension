@@ -1,6 +1,18 @@
 import { importDocumentIntoState } from "./format";
 import type { ImportApprovalPlan } from "./review";
-import type { LegacyStorageState } from "../types/legacy-storage";
+import type {
+  LegacyStorageState,
+  LegacyStoredRule,
+} from "../types/legacy-storage";
+
+export interface ReviewedImportRule extends LegacyStoredRule {
+  /** Stable financing key used to remap preview row ids after staging. */
+  targetImportKey?: string;
+}
+
+export interface ImportApprovalPlanWithRules extends ImportApprovalPlan {
+  reviewRules?: ReviewedImportRule[];
+}
 
 export interface StagedImportReviewResult {
   state: LegacyStorageState;
@@ -9,7 +21,7 @@ export interface StagedImportReviewResult {
 
 export function stageImportReviewObject(
   original: LegacyStorageState,
-  plan: ImportApprovalPlan,
+  plan: ImportApprovalPlanWithRules,
   uuid: () => string,
   now: string,
 ): StagedImportReviewResult {
@@ -56,6 +68,44 @@ export function stageImportReviewObject(
       uuid,
       now,
     );
+  }
+
+  const copiedRules: LegacyStoredRule[] = [];
+  for (const reviewedRule of plan.reviewRules ?? []) {
+    let target = reviewedRule.target;
+
+    if (target?.kind === "funding") {
+      if (!reviewedRule.targetImportKey) {
+        throw new Error("Could not remap reviewed funding extraction rule.");
+      }
+      const funding = (state.financingRules ?? []).find(
+        (row) =>
+          row.objectId === selected.id &&
+          String(row.importKey ?? "") === reviewedRule.targetImportKey,
+      );
+      if (!funding?.id) {
+        throw new Error(
+          `Could not resolve reviewed financing variant ${reviewedRule.targetImportKey}.`,
+        );
+      }
+      target = { kind: "funding", id: String(funding.id) };
+    } else if (target?.kind && target.kind !== "object") {
+      throw new Error(`Unsupported reviewed extraction target: ${target.kind}.`);
+    }
+
+    const { targetImportKey: _targetImportKey, ...rule } = reviewedRule;
+    copiedRules.push({
+      ...rule,
+      id: uuid(),
+      objectId: selected.id,
+      ...(target?.kind && target.kind !== "object" ? { target } : { target: undefined }),
+      createdAt: now,
+    });
+  }
+
+  if (copiedRules.length) {
+    state.rules.push(...copiedRules);
+    state.revision++;
   }
 
   for (const importKey of plan.temporaryDependencyImportKeys) {
