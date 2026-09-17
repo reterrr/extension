@@ -102,7 +102,8 @@ function documentFixture() {
             key: "micro-default",
             company_size: "MICRO",
             data: {
-              refund_percent: 80,
+              refund_percent_min: 60,
+              refund_percent_max: 80,
               max_amount_pln: 100000,
               own_contribution_form: "CASH",
               notes: "Podstawowy wariant",
@@ -125,6 +126,16 @@ function documentFixture() {
             },
           ],
         },
+        financing: [
+          {
+            key: "small-recruitment",
+            company_size: "SMALL",
+            data: {
+              refund_percent_min: 70,
+              refund_percent_max: 80,
+            },
+          },
+        ],
       },
     ],
   };
@@ -155,13 +166,27 @@ test("import review exposes selected object evidence, file attachments and finan
   assert.equal(view.financing.length, 1);
   assert.equal(view.financing[0].companySize, "MICRO");
   assert.equal(
+    view.financing[0].fields.find((field) => field.field === "refund_percent_min")
+      ?.editorValue,
+    "60",
+  );
+  assert.equal(
+    view.financing[0].fields.find((field) => field.field === "refund_percent_max")
+      ?.editorValue,
+    "80",
+  );
+  assert.equal(
+    view.financing[0].fields.some((field) => field.field === "refund_percent"),
+    false,
+  );
+  assert.equal(
     view.financing[0].fields.find((field) => field.field === "max_amount_pln")
       ?.editorValue,
     "100000",
   );
 });
 
-test("import review exposes all normal workspace fields even when AI omitted them", () => {
+test("refund range belongs to financing variants, not normal project/recruitment fields", () => {
   const uuid = ids();
   const session = reviewModule.createImportReviewSession(
     documentFixture(),
@@ -175,10 +200,20 @@ test("import review exposes all normal workspace fields even when AI omitted the
     projectView.fields.map((field) => [field.field, field]),
   );
   assert.equal(projectFields.get("operator_id")?.value, "Nie ustawiono");
-  assert.equal(projectFields.get("refund_percent_min")?.value, "Nie ustawiono");
-  assert.equal(projectFields.get("refund_percent_max")?.value, "Nie ustawiono");
+  assert.equal(projectFields.has("refund_percent_min"), false);
+  assert.equal(projectFields.has("refund_percent_max"), false);
   assert.ok(projectFields.has("announcements_site_url"));
   assert.equal(projectFields.has("amount"), false);
+  assert.equal(
+    projectView.financing[0].fields.find((field) => field.field === "refund_percent_min")
+      ?.editorValue,
+    "60",
+  );
+  assert.equal(
+    projectView.financing[0].fields.find((field) => field.field === "refund_percent_max")
+      ?.editorValue,
+    "80",
+  );
 
   const recruitment = session.previewState.objects.find(
     (object) => object.importKey === "recruitment-1",
@@ -189,10 +224,24 @@ test("import review exposes all normal workspace fields even when AI omitted the
   const recruitmentFields = new Map(
     recruitmentView.fields.map((field) => [field.field, field]),
   );
-  assert.equal(recruitmentFields.get("refund_percent_min")?.value, "Nie ustawiono");
-  assert.equal(recruitmentFields.get("refund_percent_max")?.value, "Nie ustawiono");
+  assert.equal(recruitmentFields.has("refund_percent_min"), false);
+  assert.equal(recruitmentFields.has("refund_percent_max"), false);
   assert.ok(recruitmentFields.has("dataRozpoczeciaOd"));
   assert.equal(recruitmentFields.has("start_date"), false);
+  assert.equal(recruitmentView.financing.length, 1);
+  assert.equal(recruitmentView.financing[0].companySize, "SMALL");
+  assert.equal(
+    recruitmentView.financing[0].fields.find(
+      (field) => field.field === "refund_percent_min",
+    )?.editorValue,
+    "70",
+  );
+  assert.equal(
+    recruitmentView.financing[0].fields.find(
+      (field) => field.field === "refund_percent_max",
+    )?.editorValue,
+    "80",
+  );
 });
 
 test("review edits change staged data and invalidate stale object evidence", () => {
@@ -266,6 +315,8 @@ test("review edits change staged data and invalidate stale object evidence", () 
   assert.equal(staged.state.fileSources.length, 1);
   assert.equal(staged.state.fileSources[0].name, "Regulamin po korekcie.pdf");
   assert.equal(staged.state.financingRules.length, 1);
+  assert.equal(staged.state.financingRules[0].refund_percent_min, 60);
+  assert.equal(staged.state.financingRules[0].refund_percent_max, 80);
   assert.equal(staged.state.financingRules[0].max_amount_pln, 120000);
 });
 
@@ -339,6 +390,7 @@ test("referenced objects must be approved first and each approval stages only on
   );
 
   assert.equal(stagedRecruitment.state.objects.length, 2);
+  assert.equal(stagedRecruitment.state.financingRules.length, 2);
   const finalRecruitment = stagedRecruitment.state.objects.find(
     (object) => object.id === stagedRecruitment.stagedObjectId,
   );
