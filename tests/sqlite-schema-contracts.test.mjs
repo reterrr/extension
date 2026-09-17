@@ -42,7 +42,20 @@ test("SQLite schema creates typed business and provenance tables", () => {
     assert.ok(tables.has(table), `missing table ${table}`);
   }
 
-  assert.equal(db.pragma("user_version", { simple: true }), 1);
+  const projectColumns = new Set(
+    db.prepare("PRAGMA table_info(projects)").all().map((row) => row.name),
+  );
+  assert.ok(projectColumns.has("refund_percent_min"));
+  assert.ok(projectColumns.has("refund_percent_max"));
+  assert.equal(projectColumns.has("operator_id"), false);
+
+  const recruitmentColumns = new Set(
+    db.prepare("PRAGMA table_info(recruitments)").all().map((row) => row.name),
+  );
+  assert.ok(recruitmentColumns.has("refund_percent_min"));
+  assert.ok(recruitmentColumns.has("refund_percent_max"));
+
+  assert.equal(db.pragma("user_version", { simple: true }), 2);
   db.close();
 });
 
@@ -57,14 +70,29 @@ test("typed project row can share stable numeric id with workspace object", () =
     .get("project-uuid");
 
   db.prepare(
-    "INSERT INTO projects(id, object_id, name, status) VALUES (?, ?, ?, ?)",
-  ).run(id, "project-uuid", "Generator Kompetencji 3.0", "AKTYWNY");
+    `INSERT INTO projects(
+       id, object_id, name, status, refund_percent_min, refund_percent_max
+     ) VALUES (?, ?, ?, ?, ?, ?)`,
+  ).run(
+    id,
+    "project-uuid",
+    "Generator Kompetencji 3.0",
+    "AKTYWNY",
+    50,
+    80,
+  );
 
-  const row = db.prepare("SELECT id, name, status FROM projects").get();
+  const row = db
+    .prepare(
+      "SELECT id, name, status, refund_percent_min, refund_percent_max FROM projects",
+    )
+    .get();
   assert.deepEqual(row, {
     id,
     name: "Generator Kompetencji 3.0",
     status: "AKTYWNY",
+    refund_percent_min: 50,
+    refund_percent_max: 80,
   });
   db.close();
 });
