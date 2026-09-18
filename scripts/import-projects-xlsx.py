@@ -242,6 +242,14 @@ def strip_city_prefix(value: str) -> str:
     return text
 
 
+def strip_locality_prefix(value: str) -> str:
+    text = value.strip()
+    for prefix in ("gmina ", "m.st. ", "m. ", "miasto "):
+        if text.casefold().startswith(prefix.casefold()):
+            return text[len(prefix):].strip()
+    return text
+
+
 def parse_enum(source: str, enum_name: str) -> dict[str, str]:
     match = re.search(
         rf"export\s+enum\s+{re.escape(enum_name)}\s*\{{(.*?)\n\}}",
@@ -285,7 +293,7 @@ class GeographyCatalog:
 
     def gmina_value(self, woj: str, powiat: str, name: str, label: str) -> str:
         city = name.casefold().startswith("m.")
-        locality = strip_city_prefix(name)
+        locality = strip_locality_prefix(name)
         powiat_name = strip_city_prefix(powiat)
         prefix = (
             f"{normalize_key(woj)}_{normalize_key(powiat_name)}_{normalize_key(locality)}_"
