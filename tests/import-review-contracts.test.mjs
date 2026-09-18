@@ -208,6 +208,7 @@ test("refund range belongs to financing variants, not normal project/recruitment
     projectView.fields.map((field) => [field.field, field]),
   );
   assert.equal(projectFields.get("operator_id")?.value, "Nie ustawiono");
+  assert.equal(projectFields.get("last_checked_at")?.value, "Nie ustawiono");
   assert.equal(projectFields.has("refund_percent_min"), false);
   assert.equal(projectFields.has("refund_percent_avg"), false);
   assert.equal(projectFields.has("refund_percent_max"), false);
@@ -430,5 +431,21 @@ test("referenced objects must be approved first and each approval stages only on
       (object) => object.importKey === "project-1",
     ).length,
     1,
+  );
+});
+
+test("portable import cannot set system-managed last_checked_at", () => {
+  const document = documentFixture();
+  document.objects[0].data.last_checked_at = "2026-09-18T10:00:00Z";
+
+  assert.throws(
+    () =>
+      reviewModule.createImportReviewSession(
+        document,
+        "invalid-system-field.burbot-import.json",
+        ids(),
+        "2026-09-18T10:00:00.000Z",
+      ),
+    /managed automatically/,
   );
 });
