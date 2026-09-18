@@ -14,12 +14,17 @@ import {
   readImportReview,
   writeImportReview,
 } from "../shared/import/reviewStore";
-import { stageImportReviewObject } from "../shared/import/stageReview";
+import {
+  stageImportReviewObject,
+  type ImportApprovalPlanWithRules,
+  type ReviewedImportRule,
+} from "../shared/import/stageReview";
 import { selectorColor } from "../shared/selectorPalette";
 import type {
   ImportReviewSession,
   ImportReviewView,
 } from "../shared/types/importReview";
+import type { LegacyStoredRule } from "../shared/types/legacy-storage";
 
 async function activeTab(): Promise<browser.tabs.Tab | undefined> {
   const window = await browser.windows.getCurrent();
@@ -172,6 +177,25 @@ function groupLabel(type: string): string {
   return "Nabory";
 }
 
+function reviewedRules(
+  current: ImportReviewSession,
+  objectId: string,
+): ReviewedImportRule[] {
+  return current.previewState.rules
+    .filter((rule) => rule.objectId === objectId)
+    .map((rule: LegacyStoredRule) => {
+      if (rule.target?.kind !== "funding") return { ...rule };
+      const row = (current.previewState.financingRules ?? []).find(
+        (entry) =>
+          entry.objectId === objectId && String(entry.id) === rule.target!.id,
+      );
+      if (!row?.importKey) {
+        throw new Error("Nie udało się zmapować reguły wariantu finansowania.");
+      }
+      return { ...rule, targetImportKey: String(row.importKey) };
+    });
+}
+
 export function ImportReviewPanel() {
   const [session, setSession] = useState<ImportReviewSession | null>(null);
   const [mode, setMode] = useState<"workspace" | "review">("workspace");
@@ -253,7 +277,10 @@ export function ImportReviewPanel() {
       }
 
       const previewId = session.selectedObjectId;
-      const plan = buildImportApprovalPlan(session, previewId);
+      const plan: ImportApprovalPlanWithRules = {
+        ...buildImportApprovalPlan(session, previewId),
+        reviewRules: reviewedRules(session, previewId),
+      };
       const now = new Date().toISOString();
       const staged = stageImportReviewObject(
         draft.workingState,
