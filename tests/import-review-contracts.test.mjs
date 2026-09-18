@@ -118,6 +118,7 @@ function documentFixture() {
         data: {
           external_number: "Nabór 3/2026",
           project_id: { $ref: "project-1" },
+          continuous: true,
         },
         evidence: {
           external_number: [
@@ -241,6 +242,8 @@ test("refund range belongs to financing variants, not normal project/recruitment
   assert.equal(recruitmentFields.has("refund_percent_avg"), false);
   assert.equal(recruitmentFields.has("refund_percent_max"), false);
   assert.ok(recruitmentFields.has("dataRozpoczeciaOd"));
+  assert.equal(recruitmentFields.get("continuous")?.value, "Tak");
+  assert.equal(recruitmentFields.get("last_checked_at")?.value, "Nie ustawiono");
   assert.equal(recruitmentFields.has("start_date"), false);
   assert.equal(recruitmentView.financing.length, 1);
   assert.equal(recruitmentView.financing[0].companySize, "SMALL");
@@ -421,6 +424,7 @@ test("referenced objects must be approved first and each approval stages only on
     finalRecruitment.values.project_id,
     stagedProject.stagedObjectId,
   );
+  assert.equal(finalRecruitment.values.continuous, true);
   assert.equal(
     stagedRecruitment.state.objects.filter(
       (object) => object.importKey === "project-1",
