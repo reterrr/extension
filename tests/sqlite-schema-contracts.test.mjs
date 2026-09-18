@@ -47,6 +47,7 @@ test("SQLite schema creates typed business and provenance tables", () => {
   );
   assert.ok(projectColumns.has("refund_percent_min"));
   assert.ok(projectColumns.has("refund_percent_max"));
+  assert.ok(projectColumns.has("last_checked_at"));
   assert.equal(projectColumns.has("operator_id"), false);
 
   const recruitmentColumns = new Set(
@@ -54,8 +55,20 @@ test("SQLite schema creates typed business and provenance tables", () => {
   );
   assert.ok(recruitmentColumns.has("refund_percent_min"));
   assert.ok(recruitmentColumns.has("refund_percent_max"));
+  assert.ok(recruitmentColumns.has("continuous"));
+  assert.ok(recruitmentColumns.has("last_checked_at"));
 
-  assert.equal(db.pragma("user_version", { simple: true }), 2);
+  const operatorColumns = new Set(
+    db.prepare("PRAGMA table_info(operators)").all().map((row) => row.name),
+  );
+  assert.ok(operatorColumns.has("last_checked_at"));
+
+  const workspaceColumns = new Set(
+    db.prepare("PRAGMA table_info(workspace_objects)").all().map((row) => row.name),
+  );
+  assert.ok(workspaceColumns.has("last_checked_at"));
+
+  assert.equal(db.pragma("user_version", { simple: true }), 3);
   db.close();
 });
 
