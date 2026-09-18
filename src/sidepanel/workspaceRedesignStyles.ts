@@ -10,6 +10,9 @@ if (!document.querySelector("style[data-burbot-workspace-redesign]")) {
   --text-soft: #69786f;
   --border: #dfe6df;
   --border-strong: #ced9d0;
+  --field-surface: #fbfcfb;
+  --field-border: #d5ded6;
+  --field-hover: #f0f4f1;
   --success: #2f7659;
   --success-soft: #eaf4ee;
   --warning: #a76100;
@@ -171,25 +174,31 @@ progress {
 
 .field-row {
   min-height: 48px;
-  margin: 2px 0;
+  margin: 4px 0;
   padding: 8px 9px;
-  border: 1px solid transparent;
+  border: 1px solid var(--field-border);
   border-radius: 8px;
+  background: var(--field-surface);
+  box-shadow: 0 1px 2px rgba(32, 53, 40, .035);
 }
 
 .field-row:hover {
-  background: var(--surface-soft);
-  border-color: #edf1ed;
+  background: var(--field-hover);
+  border-color: #bccbc0;
+  box-shadow: 0 1px 3px rgba(32, 53, 40, .07);
 }
 
 .field-row.selected {
   background: var(--success-soft);
-  border-color: #d6e7dc;
-  box-shadow: inset 3px 0 var(--success);
+  border-color: #a9c9b4;
+  box-shadow:
+    inset 4px 0 var(--success),
+    0 0 0 1px rgba(47, 118, 89, .08);
 }
 
 .field-row.is-missing:not(.selected) {
-  background: #fffdf8;
+  background: #fffaf1;
+  border-color: #ead8ba;
 }
 
 .field-label {
@@ -349,7 +358,9 @@ progress {
   border-bottom: 1px solid var(--border);
 }
 
-.variant .field-row {
+.variant .field-row,
+.document .field-row {
+  width: calc(100% - 8px);
   margin-left: 4px;
   margin-right: 4px;
 }
@@ -378,6 +389,16 @@ progress {
 
 .document summary {
   padding: 9px 7px;
+}
+
+.document[open] > summary {
+  margin-bottom: 4px;
+  border-bottom: 1px solid #dfe6df;
+  background: #f7f9f7;
+}
+
+.document[open] {
+  padding-bottom: 4px;
 }
 
 .review-section {
