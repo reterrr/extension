@@ -81,6 +81,12 @@
       return number;
     }
 
+    if (type === "datetime") {
+      const value = new Date(text);
+      if (Number.isNaN(value.getTime())) throw Error("Use a valid ISO date-time.");
+      return value.toISOString();
+    }
+
     if (type === "date") {
       const match =
         /^(\d{4})-(\d{2})-(\d{2})$/.exec(text) ||
@@ -286,6 +292,15 @@
     }
     if (definition.labels?.[value]) return definition.labels[value];
     if (definition.type === "boolean") return value ? "Tak" : "Nie";
+    if (definition.type === "datetime") {
+      const date = new Date(String(value));
+      if (!Number.isNaN(date.getTime())) {
+        return new Intl.DateTimeFormat("pl-PL", {
+          dateStyle: "medium",
+          timeStyle: "short",
+        }).format(date);
+      }
+    }
     if (definition.type === "date" && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
       return new Intl.DateTimeFormat("pl-PL", {
         day: "numeric",
@@ -417,6 +432,8 @@
       message.target,
       uuid,
     );
+    if (definition.readonly || definition.system)
+      throw Error("This field is managed automatically.");
     const input = message.value ?? candidate.raw;
     values[message.field] = coerceField(input, definition, state);
     state.rules = state.rules.filter(
@@ -521,6 +538,8 @@
           message.target,
           uuid,
         );
+        if (definition.readonly || definition.system)
+          throw Error("This field is managed automatically.");
         const value = coerceField(message.value, definition, state);
         values[message.field] = value;
         const rule = state.rules.find((r) =>

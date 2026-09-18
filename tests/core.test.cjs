@@ -166,6 +166,21 @@ test("formats business values, validates enums, dates, NIP, percentages and refe
     "0123456789",
   );
   assert.equal(s.C.coerceField("false", { type: "boolean" }, s.state), false);
+  const recruitment = s.context.BurbotSchema.recruitment.fields;
+  assert.equal(
+    s.C.coerceField("true", recruitment.continuous, s.state),
+    true,
+  );
+  assert.equal(recruitment.last_checked_at.system, true);
+  assert.equal(recruitment.last_checked_at.readonly, true);
+  assert.match(
+    s.C.formatValue(
+      "2026-09-18T08:30:00.000Z",
+      recruitment.last_checked_at,
+      s.state,
+    ),
+    /2026/,
+  );
   assert.equal(
     s.C.coerceField(
       project.values.name,

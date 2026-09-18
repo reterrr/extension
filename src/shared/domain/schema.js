@@ -7,6 +7,13 @@
     ...extra,
   });
   const date = (label, group = "Daty") => ({ label, type: "date", group });
+  const systemDateTime = (label = "Ostatnio sprawdzono") => ({
+    label,
+    type: "datetime",
+    group: "Systemowe",
+    system: true,
+    readonly: true,
+  });
   const url = (label, group = "Źródła") => ({ label, type: "url", group });
   const integer = (label, group = "Podstawowe", extra = {}) => ({
     label,
@@ -86,6 +93,7 @@
     start_date: date("Data rozpoczęcia projektu"),
     end_date: date("Data zakończenia projektu"),
     announcements_site_url: url("Strona naborów"),
+    last_checked_at: systemDateTime(),
     amount: {
       label: "Previously captured amount",
       type: "number",
@@ -118,6 +126,11 @@
     },
     sequence_number: integer("Numer kolejny", "Podstawowe", { min: 1 }),
     year: integer("Rok", "Podstawowe", { min: 1000, max: 9999 }),
+    continuous: {
+      label: "Nabór ciągły",
+      type: "boolean",
+      group: "Podstawowe",
+    },
     status: choice(
       "Status naboru",
       {
@@ -182,6 +195,7 @@
     statusZakonczenia: text("Status zakończenia", "Zakończenie"),
     powodStatusu: text("Powód statusu", "Zakończenie", { multiline: true }),
     urlOgloszenia: url("URL ogłoszenia"),
+    last_checked_at: systemDateTime(),
 
     // Pre-typed-domain compatibility. Existing objects/rules keep working,
     // but these rows stay hidden unless they already contain data.
@@ -250,6 +264,7 @@
       fields: {
         name: text("Nazwa"),
         nip: { label: "NIP", type: "nip", group: "Podstawowe" },
+        last_checked_at: systemDateTime(),
         website: { ...url("Website"), legacy: true },
         email: text("Email", "Earlier captures", { legacy: true }),
       },

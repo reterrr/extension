@@ -80,7 +80,8 @@ The v1 format is backward compatible. Objects can additionally declare remote PD
       "type": "recruitment",
       "data": {
         "external_number": "1/2026",
-        "project_id": { "$ref": "project-1" }
+        "project_id": { "$ref": "project-1" },
+        "continuous": true
       },
       "financing": [
         {
@@ -100,7 +101,11 @@ The v1 format is backward compatible. Objects can additionally declare remote PD
 
 ## Object fields relevant to AI import
 
-AI should output only values that are actually known from the sources. It does **not** need to invent empty keys. Import Review is schema-driven and shows the same normal fields as Workspace even when they are absent from `objects[].data`; omitted fields appear as `Nie ustawiono` and can be completed manually or by using the page picker.
+AI should output only values that are actually known from the sources. It does **not** need to invent empty keys. Import Review is schema-driven and shows the same normal fields as Workspace even when they are absent from `objects[].data`; omitted fields appear as `Nie ustawiono`.
+
+`recruitment.continuous` is a boolean field for a continuous/open-ended recruitment.
+
+`last_checked_at` is a system-managed date-time field on Project, Operator and Recruitment. It must **not** be supplied by AI imports. Burbot stamps it automatically when a changed/new object is committed to SQLite.
 
 `project.operator_id` is a reference to an imported `operator` via `{ "$ref": "operator-key" }`.
 
@@ -147,14 +152,6 @@ Variant numbers are assigned in input order separately for each company size.
 
 ## Review semantics
 
-The import first enters **Import Review**. Import Review uses the same field-oriented interaction model as Workspace. Before approval the reviewer can:
+The import first enters **Import Review**. Import Review is read-only: it is used to inspect imported values, attached files, financing variants and evidence/source locations. Corrections are made in Workspace after approval.
 
-- see all normal object schema fields, including fields omitted by AI;
-- select a field and use `Pick element`, selected text, page URL, or a manual value;
-- edit imported object fields;
-- edit financing variant fields, including minimum, average and maximum refund percentages;
-- remove a financing variant;
-- rename or remove an attached PDF;
-- inspect evidence and jump to the matching source location.
-
-When a reviewer manually changes an object field, Burbot removes imported evidence for that field. Evidence for the old value must not be presented as proof of the corrected value.
+Approval stages the selected object into the active commit. The final database commit assigns `last_checked_at` to new or changed objects.

@@ -201,6 +201,24 @@ progress {
   border-color: #ead8ba;
 }
 
+.field-row.system-field,
+.field-row.system-field:hover {
+  cursor: default;
+  background: #f3f6f4;
+  border-color: #dce4de;
+  box-shadow: none;
+}
+
+.field-row.system-field .field-label {
+  color: #7d8881;
+}
+
+.field-row.system-field .field-mark {
+  color: #87948b;
+  font-size: 8px;
+  letter-spacing: .5px;
+}
+
 .field-label {
   font-size: 10px;
   color: var(--text-soft);

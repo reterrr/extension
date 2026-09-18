@@ -285,18 +285,25 @@ import { createPickerClient } from "./pickerRpc";
     context = "",
   ) {
     const descriptor = { field, target, context };
-    descriptors.push(descriptor);
+    const readOnly = Boolean(definition.readonly || definition.system);
+    if (!readOnly) descriptors.push(descriptor);
     const button = node(
       "button",
-      "field-row" + (keyOf(active) === keyOf(descriptor) ? " selected" : ""),
+      "field-row" +
+        (keyOf(active) === keyOf(descriptor) ? " selected" : "") +
+        (readOnly ? " system-field" : ""),
     );
     button.type = "button";
     button.dataset.field = field;
     button.dataset.target = C.targetKey(target);
     button.setAttribute(
       "aria-pressed",
-      String(keyOf(active) === keyOf(descriptor)),
+      String(!readOnly && keyOf(active) === keyOf(descriptor)),
     );
+    if (readOnly) {
+      button.setAttribute("aria-readonly", "true");
+      button.tabIndex = -1;
+    }
     button.disabled = busy;
     const copy = node("span", "field-copy");
     copy.append(node("span", "field-label", definition.label));
@@ -308,8 +315,11 @@ import { createPickerClient } from "./pickerRpc";
         C.formatValue(values[field], definition, db),
       ),
     );
-    button.append(copy, node("span", "field-mark", set ? "✓" : ""));
-    button.onclick = () => selectField(descriptor);
+    button.append(
+      copy,
+      node("span", "field-mark", readOnly ? (set ? "AUTO" : "") : set ? "✓" : ""),
+    );
+    if (!readOnly) button.onclick = () => selectField(descriptor);
     container.append(button);
   }
   function trackExpansion(details, key) {
@@ -708,12 +718,13 @@ import { createPickerClient } from "./pickerRpc";
       $("object-title").textContent = C.displayName(object);
       renderSwitcher();
       const fields = normalFields(object),
-        count = fields.filter(([key]) => C.hasValue(object.values[key])).length;
+        businessFields = fields.filter(([, definition]) => !definition.system),
+        count = businessFields.filter(([key]) => C.hasValue(object.values[key])).length;
       $("progress").textContent =
-        count + " / " + fields.length + " fields completed";
+        count + " / " + businessFields.length + " fields completed";
       const rules = db.rules.filter((r) => r.objectId === objectId).length;
       $("rule-count").textContent = rules + (rules === 1 ? " rule" : " rules");
-      $("progress-bar").max = fields.length || 1;
+      $("progress-bar").max = businessFields.length || 1;
       $("progress-bar").value = count;
       $("fields").replaceChildren();
       const groups = new Map();

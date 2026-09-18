@@ -118,6 +118,7 @@ function documentFixture() {
         data: {
           external_number: "Nabór 3/2026",
           project_id: { $ref: "project-1" },
+          continuous: true,
         },
         evidence: {
           external_number: [
@@ -207,6 +208,7 @@ test("refund range belongs to financing variants, not normal project/recruitment
     projectView.fields.map((field) => [field.field, field]),
   );
   assert.equal(projectFields.get("operator_id")?.value, "Nie ustawiono");
+  assert.equal(projectFields.get("last_checked_at")?.value, "Nie ustawiono");
   assert.equal(projectFields.has("refund_percent_min"), false);
   assert.equal(projectFields.has("refund_percent_avg"), false);
   assert.equal(projectFields.has("refund_percent_max"), false);
@@ -241,6 +243,8 @@ test("refund range belongs to financing variants, not normal project/recruitment
   assert.equal(recruitmentFields.has("refund_percent_avg"), false);
   assert.equal(recruitmentFields.has("refund_percent_max"), false);
   assert.ok(recruitmentFields.has("dataRozpoczeciaOd"));
+  assert.equal(recruitmentFields.get("continuous")?.value, "Tak");
+  assert.equal(recruitmentFields.get("last_checked_at")?.value, "Nie ustawiono");
   assert.equal(recruitmentFields.has("start_date"), false);
   assert.equal(recruitmentView.financing.length, 1);
   assert.equal(recruitmentView.financing[0].companySize, "SMALL");
@@ -421,10 +425,27 @@ test("referenced objects must be approved first and each approval stages only on
     finalRecruitment.values.project_id,
     stagedProject.stagedObjectId,
   );
+  assert.equal(finalRecruitment.values.continuous, true);
   assert.equal(
     stagedRecruitment.state.objects.filter(
       (object) => object.importKey === "project-1",
     ).length,
     1,
+  );
+});
+
+test("portable import cannot set system-managed last_checked_at", () => {
+  const document = documentFixture();
+  document.objects[0].data.last_checked_at = "2026-09-18T10:00:00Z";
+
+  assert.throws(
+    () =>
+      reviewModule.createImportReviewSession(
+        document,
+        "invalid-system-field.burbot-import.json",
+        ids(),
+        "2026-09-18T10:00:00.000Z",
+      ),
+    /managed automatically/,
   );
 });

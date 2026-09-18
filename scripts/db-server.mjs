@@ -51,10 +51,15 @@ ensureColumn("projects", "refund_percent_min", "REAL");
 ensureColumn("projects", "refund_percent_max", "REAL");
 ensureColumn("recruitments", "refund_percent_min", "REAL");
 ensureColumn("recruitments", "refund_percent_max", "REAL");
-db.pragma("user_version = 2");
+ensureColumn("workspace_objects", "last_checked_at", "TEXT");
+ensureColumn("projects", "last_checked_at", "TEXT");
+ensureColumn("operators", "last_checked_at", "TEXT");
+ensureColumn("recruitments", "last_checked_at", "TEXT");
+ensureColumn("recruitments", "continuous", "INTEGER");
+db.pragma("user_version = 3");
 
 db.prepare(
-  `INSERT INTO app_meta(key, value) VALUES ('schema_version', '2')
+  `INSERT INTO app_meta(key, value) VALUES ('schema_version', '3')
    ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
 ).run();
 
@@ -86,6 +91,12 @@ function nullableNumber(value) {
   if (value === undefined || value === null || value === "") return null;
   const number = Number(value);
   return Number.isFinite(number) ? number : null;
+}
+
+function nullableBoolean(value) {
+  if (value === true) return 1;
+  if (value === false) return 0;
+  return null;
 }
 
 function json(value) {
@@ -130,8 +141,9 @@ function clearMaterializedTables() {
 const upsertWorkspaceObject = db.prepare(`
   INSERT INTO workspace_objects(
     object_id, object_type, label, source_url, creation_note,
-    created_at, updated_at, import_key, values_json, evidence_json, manual_fields_json
-  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    created_at, updated_at, last_checked_at, import_key,
+    values_json, evidence_json, manual_fields_json
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   ON CONFLICT(object_id) DO UPDATE SET
     object_type = excluded.object_type,
     label = excluded.label,
@@ -139,6 +151,7 @@ const upsertWorkspaceObject = db.prepare(`
     creation_note = excluded.creation_note,
     created_at = excluded.created_at,
     updated_at = excluded.updated_at,
+    last_checked_at = excluded.last_checked_at,
     import_key = excluded.import_key,
     values_json = excluded.values_json,
     evidence_json = excluded.evidence_json,
@@ -172,6 +185,7 @@ function syncWorkspaceObjects(state) {
       object.creationNote ?? null,
       object.createdAt ?? null,
       object.updatedAt ?? null,
+      object.values?.last_checked_at ?? null,
       object.importKey ?? null,
       json(object.values ?? {}),
       object.evidence ? json(object.evidence) : null,
@@ -238,12 +252,13 @@ function syncBusinessTables(state, groupByObject) {
     INSERT INTO projects(
       id, object_id, type, name, number, status,
       refund_percent_min, refund_percent_max,
-      start_date, end_date, announcements_site_url, geography_group_id
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      start_date, end_date, announcements_site_url, last_checked_at,
+      geography_group_id
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   const insertOperator = db.prepare(`
-    INSERT INTO operators(id, object_id, name, nip)
-    VALUES (?, ?, ?, ?)
+    INSERT INTO operators(id, object_id, name, nip, last_checked_at)
+    VALUES (?, ?, ?, ?, ?)
   `);
   const insertProjectOperator = db.prepare(`
     INSERT INTO projects_operators(project_id, operator_id, operator_type)
@@ -252,12 +267,13 @@ function syncBusinessTables(state, groupByObject) {
   const insertRecruitment = db.prepare(`
     INSERT INTO recruitments(
       id, object_id, project_id, external_number, sequence_number, year, status,
-      refund_percent_min, refund_percent_max,
+      continuous, refund_percent_min, refund_percent_max,
       start_low_date, start_ceil_date, end_low_date, end_ceil_date,
       planned_start_year, planned_start_month, planned_start_quarter,
       planned_end_year, planned_end_month, planned_end_quarter,
-      closed_status, status_reason, announcement_url, geography_group_id
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      closed_status, status_reason, announcement_url, last_checked_at,
+      geography_group_id
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   // Operators are materialized first because project.operator_id points to one.
@@ -270,6 +286,7 @@ function syncBusinessTables(state, groupByObject) {
       String(object.id),
       nullableText(values.name) ?? object.label ?? "",
       nullableText(values.nip),
+      nullableText(values.last_checked_at),
     );
   }
 
@@ -289,6 +306,7 @@ function syncBusinessTables(state, groupByObject) {
       nullableText(values.start_date),
       nullableText(values.end_date),
       nullableText(values.announcements_site_url),
+      nullableText(values.last_checked_at),
       groupByObject.get(String(object.id)) ?? null,
     );
 
@@ -306,6 +324,7 @@ function syncBusinessTables(state, groupByObject) {
       nullableInt(values.sequence_number),
       nullableInt(values.year),
       nullableText(values.status) ?? "OGLOSZONY",
+      nullableBoolean(values.continuous),
       nullableNumber(values.refund_percent_min),
       nullableNumber(values.refund_percent_max),
       nullableText(values.dataRozpoczeciaOd),
@@ -321,6 +340,7 @@ function syncBusinessTables(state, groupByObject) {
       nullableText(values.statusZakonczenia),
       nullableText(values.powodStatusu),
       nullableText(values.urlOgloszenia),
+      nullableText(values.last_checked_at),
       groupByObject.get(String(object.id)) ?? null,
     );
   }
