@@ -6,13 +6,8 @@ import {
 } from "../shared/commits/draftStore";
 import {
   buildImportApprovalPlan,
-  editImportReviewFinancingField,
-  editImportReviewObjectField,
   importReviewView,
   markImportObjectApproved,
-  removeImportReviewFile,
-  removeImportReviewFinancing,
-  renameImportReviewFile,
 } from "../shared/import/review";
 import {
   clearImportReview,
@@ -22,8 +17,6 @@ import {
 import { stageImportReviewObject } from "../shared/import/stageReview";
 import { selectorColor } from "../shared/selectorPalette";
 import type {
-  ImportReviewEditorOption,
-  ImportReviewEditorType,
   ImportReviewSession,
   ImportReviewView,
 } from "../shared/types/importReview";
@@ -179,76 +172,6 @@ function groupLabel(type: string): string {
   return "Nabory";
 }
 
-interface ReviewEditorProps {
-  type: ImportReviewEditorType;
-  value: string;
-  options?: ImportReviewEditorOption[];
-  disabled?: boolean;
-  ariaLabel: string;
-  onSave(value: string): Promise<void>;
-}
-
-function ReviewEditor({
-  type,
-  value,
-  options,
-  disabled = false,
-  ariaLabel,
-  onSave,
-}: ReviewEditorProps) {
-  const [draft, setDraft] = useState(value);
-
-  useEffect(() => setDraft(value), [value]);
-
-  async function commit(next = draft) {
-    if (disabled || next === value) return;
-    await onSave(next);
-  }
-
-  if (type === "select") {
-    return (
-      <select
-        className="import-review-editor"
-        aria-label={ariaLabel}
-        value={draft}
-        disabled={disabled}
-        onChange={(event) => {
-          const next = event.currentTarget.value;
-          setDraft(next);
-          void commit(next);
-        }}
-      >
-        <option value="">Wybierz…</option>
-        {(options ?? []).map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
-    );
-  }
-
-  return (
-    <input
-      className="import-review-editor"
-      aria-label={ariaLabel}
-      type={type}
-      step={type === "number" ? "any" : undefined}
-      value={draft}
-      disabled={disabled}
-      onChange={(event) => setDraft(event.currentTarget.value)}
-      onBlur={() => void commit()}
-      onKeyDown={(event) => {
-        if (event.key === "Enter") event.currentTarget.blur();
-        if (event.key === "Escape") {
-          setDraft(value);
-          event.currentTarget.blur();
-        }
-      }}
-    />
-  );
-}
-
 export function ImportReviewPanel() {
   const [session, setSession] = useState<ImportReviewSession | null>(null);
   const [mode, setMode] = useState<"workspace" | "review">("workspace");
@@ -300,25 +223,6 @@ export function ImportReviewPanel() {
       document.documentElement.classList.remove("import-review-mode");
     };
   }, [session, mode, view.selectedObjectId, view.evidence]);
-
-  async function persistReviewMutation(
-    mutate: (current: ImportReviewSession, now: string) => void,
-  ) {
-    if (!session) return;
-    setError("");
-    try {
-      const now = new Date().toISOString();
-      mutate(session, now);
-      await writeImportReview(session);
-      setSession({
-        ...session,
-        previewState: { ...session.previewState },
-      });
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
-      throw cause;
-    }
-  }
 
   async function select(objectId: string) {
     if (!session) return;
@@ -412,7 +316,6 @@ export function ImportReviewPanel() {
   const selected = view.objects.find(
     (object) => object.id === view.selectedObjectId,
   );
-  const readOnly = selected?.status === "APPROVED";
   const sourceUrls = [
     ...new Set([
       ...view.evidence.flatMap((entry) =>
@@ -521,7 +424,7 @@ export function ImportReviewPanel() {
                       <span className="eyebrow">{selected.type.toUpperCase()}</span>
                       <h2>{selected.label}</h2>
                     </div>
-                    {!readOnly && <span className="import-review-edit-badge">Edytowalne</span>}
+                    <span className="import-review-edit-badge">Tylko podgląd</span>
                   </div>
 
                   {sourceUrls.length > 0 && (
@@ -545,7 +448,7 @@ export function ImportReviewPanel() {
                         <span className="eyebrow">DANE OBIEKTU</span>
                         <strong>{view.fields.length} pól</strong>
                       </div>
-                      <small>Zmiana wartości usuwa evidence tego pola.</small>
+                      <small>Dane z importu są tylko do odczytu.</small>
                     </div>
                     <div className="import-review-fields">
                       {view.fields.map((field) => {
@@ -559,7 +462,9 @@ export function ImportReviewPanel() {
                         return (
                           <div
                             key={field.field}
-                            className={field.evidenceCount ? "has-evidence" : ""}
+                            className={`import-review-workspace-field ${field.evidenceCount ? "has-evidence" : ""}`}
+                            data-review-field={field.field}
+                            data-review-target-kind="object"
                             style={
                               color
                                 ? {
@@ -578,24 +483,9 @@ export function ImportReviewPanel() {
                                 </span>
                               )}
                             </div>
-                            <ReviewEditor
-                              type={field.editorType}
-                              value={field.editorValue}
-                              options={field.options}
-                              disabled={readOnly || busy}
-                              ariaLabel={field.label}
-                              onSave={(value) =>
-                                persistReviewMutation((current, now) =>
-                                  editImportReviewObjectField(
-                                    current,
-                                    selected.id,
-                                    field.field,
-                                    value,
-                                    now,
-                                  ),
-                                )
-                              }
-                            />
+                            <strong className="import-review-workspace-value">
+                              {field.value || "Nie ustawiono"}
+                            </strong>
                             {field.evidenceCount > 0 && hasSource && (
                               <div className="import-review-field-meta">
                                 <span>{field.value}</span>
@@ -627,23 +517,7 @@ export function ImportReviewPanel() {
                       <div className="import-review-files">
                         {view.files.map((file) => (
                           <div key={file.id} className="import-review-file-card">
-                            <ReviewEditor
-                              type="text"
-                              value={file.name}
-                              disabled={readOnly || busy}
-                              ariaLabel="Nazwa pliku"
-                              onSave={(value) =>
-                                persistReviewMutation((current, now) =>
-                                  renameImportReviewFile(
-                                    current,
-                                    selected.id,
-                                    file.id,
-                                    value,
-                                    now,
-                                  ),
-                                )
-                              }
-                            />
+                            <strong>{file.name}</strong>
                             <a href={file.url} target="_blank" rel="noreferrer">
                               {file.url}
                             </a>
@@ -654,23 +528,6 @@ export function ImportReviewPanel() {
                                 onClick={() => void openSource(file.sourcePageUrl)}
                               >
                                 Strona źródłowa ↗
-                              </button>
-                              <button
-                                type="button"
-                                className="text-button danger"
-                                disabled={readOnly || busy}
-                                onClick={() =>
-                                  void persistReviewMutation((current, now) =>
-                                    removeImportReviewFile(
-                                      current,
-                                      selected.id,
-                                      file.id,
-                                      now,
-                                    ),
-                                  )
-                                }
-                              >
-                                Usuń
                               </button>
                             </div>
                           </div>
@@ -699,47 +556,17 @@ export function ImportReviewPanel() {
                             </summary>
                             <div className="import-review-finance-fields">
                               {variant.fields.map((field) => (
-                                <label key={field.field}>
+                                <label
+                                  key={field.field}
+                                  className="import-review-workspace-field"
+                                >
                                   <small>{field.label}</small>
-                                  <ReviewEditor
-                                    type={field.editorType}
-                                    value={field.editorValue}
-                                    options={field.options}
-                                    disabled={readOnly || busy}
-                                    ariaLabel={`${variant.companySizeLabel}: ${field.label}`}
-                                    onSave={(value) =>
-                                      persistReviewMutation((current, now) =>
-                                        editImportReviewFinancingField(
-                                          current,
-                                          selected.id,
-                                          variant.id,
-                                          field.field,
-                                          value,
-                                          now,
-                                        ),
-                                      )
-                                    }
-                                  />
+                                  <strong className="import-review-workspace-value">
+                                    {field.value || "Nie ustawiono"}
+                                  </strong>
                                 </label>
                               ))}
                             </div>
-                            <button
-                              type="button"
-                              className="text-button danger import-review-remove-finance"
-                              disabled={readOnly || busy}
-                              onClick={() =>
-                                void persistReviewMutation((current, now) =>
-                                  removeImportReviewFinancing(
-                                    current,
-                                    selected.id,
-                                    variant.id,
-                                    now,
-                                  ),
-                                )
-                              }
-                            >
-                              Usuń wariant
-                            </button>
                           </details>
                         ))}
                       </div>
@@ -747,7 +574,7 @@ export function ImportReviewPanel() {
                   )}
 
                   <p className="import-review-hint">
-                    Przed zatwierdzeniem możesz poprawić dane, pliki i finansowanie. Evidence pozostaje tylko przy wartościach, których ręcznie nie zmieniono.
+                    Import Review służy wyłącznie do sprawdzenia danych i źródeł. Zmiany wykonuj po zatwierdzeniu w Workspace.
                   </p>
                   <button
                     type="button"
