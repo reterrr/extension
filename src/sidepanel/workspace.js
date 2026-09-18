@@ -40,6 +40,44 @@ import { createPickerClient } from "./pickerRpc";
           C.matches(r, objectId, active.field, active.target),
         )
       : null;
+  function publishSelectorPreview() {
+    let detail = null;
+    if (
+      active &&
+      candidate &&
+      typeof candidate.selector === "string" &&
+      candidate.selector.length > 0
+    ) {
+      const option = candidate.options[methodIndex];
+      const quote =
+        option?.extraction?.type === "selection"
+          ? option.extraction.quote
+          : undefined;
+      detail = {
+        objectId,
+        field: active.field,
+        targetKey: C.targetKey(active.target),
+        pageUrl: candidate.pageUrl,
+        highlight: {
+          id:
+            "preview:" +
+            objectId +
+            ":" +
+            C.targetKey(active.target) +
+            ":" +
+            active.field,
+          selector: candidate.selector,
+          ...(candidate.selectorFallbacks?.length
+            ? { selectorFallbacks: candidate.selectorFallbacks }
+            : {}),
+          ...(quote ? { quote } : {}),
+        },
+      };
+    }
+    window.dispatchEvent(
+      new CustomEvent("burbot:selector-capture-preview", { detail }),
+    );
+  }
   const node = (tag, className, text) => {
     const element = document.createElement(tag);
     if (className) element.className = className;
@@ -65,6 +103,13 @@ import { createPickerClient } from "./pickerRpc";
     });
     if (!result?.ok) throw Error(result?.error || "Storage is unavailable.");
     adopt(result.value);
+    if (result.value?.objects && Array.isArray(result.value.rules)) {
+      window.dispatchEvent(
+        new CustomEvent("burbot:workspace-state-changed", {
+          detail: { state: result.value },
+        }),
+      );
+    }
     return result.value;
   }
   function rpc(op, extra = {}) {
@@ -76,6 +121,7 @@ import { createPickerClient } from "./pickerRpc";
   function resetCapture() {
     candidate = null;
     methodIndex = 0;
+    publishSelectorPreview();
     try {
       draft = activeInfo()?.values[active.field] ?? "";
     } catch {
@@ -213,6 +259,7 @@ import { createPickerClient } from "./pickerRpc";
       if (href >= 0) methodIndex = href;
     }
     updateDraftFromCapture();
+    publishSelectorPreview();
     renderEditor();
     controls();
     notice("Review the value, then save its extraction rule.");
@@ -737,6 +784,7 @@ import { createPickerClient } from "./pickerRpc";
   $("method").onchange = () => {
     methodIndex = Number($("method").value);
     updateDraftFromCapture();
+    publishSelectorPreview();
     renderEditor();
     controls();
   };
