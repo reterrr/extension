@@ -12,6 +12,16 @@ let state = BurbotCore.empty() as LegacyStorageState;
 let activePageUrl = "";
 let syncQueued = false;
 
+type PendingSelectorPreview = {
+  objectId: string;
+  field: string;
+  targetKey: string;
+  pageUrl: string;
+  highlight: SelectorHighlight;
+};
+
+let pendingPreview: PendingSelectorPreview | null = null;
+
 async function data(): Promise<LegacyStorageState> {
   const response = (await browser.runtime.sendMessage({
     type: "BURBOT_DATA",
@@ -105,16 +115,33 @@ function colorSidebar(): void {
     const field = row.dataset.field;
     const target = row.dataset.target ?? "";
     if (!field) continue;
+    const previewSelector =
+      pendingPreview &&
+      pendingPreview.objectId === object.id &&
+      pendingPreview.field === field &&
+      pendingPreview.targetKey === target
+        ? pendingPreview.highlight.selector
+        : null;
     const rule = matchingRule(object, field, target);
-    if (rule && typeof rule.selector === "string") setSelectorVariables(row, rule.selector);
+    if (previewSelector) setSelectorVariables(row, previewSelector);
+    else if (rule && typeof rule.selector === "string") setSelectorVariables(row, rule.selector);
   }
   const details = document.getElementById("rule-details");
   if (!(details instanceof HTMLElement)) return;
   clearSelectorVariables(details);
   const selected = document.querySelector<HTMLElement>(".field-row.selected");
   if (!selected || !object || !selected.dataset.field) return;
-  const rule = matchingRule(object, selected.dataset.field, selected.dataset.target ?? "");
-  if (rule && typeof rule.selector === "string") setSelectorVariables(details, rule.selector);
+  const selectedTarget = selected.dataset.target ?? "";
+  const previewSelector =
+    pendingPreview &&
+    pendingPreview.objectId === object.id &&
+    pendingPreview.field === selected.dataset.field &&
+    pendingPreview.targetKey === selectedTarget
+      ? pendingPreview.highlight.selector
+      : null;
+  const rule = matchingRule(object, selected.dataset.field, selectedTarget);
+  if (previewSelector) setSelectorVariables(details, previewSelector);
+  else if (rule && typeof rule.selector === "string") setSelectorVariables(details, rule.selector);
 }
 
 async function renderPageHighlights(tabId: number, highlights: SelectorHighlight[]): Promise<void> {
@@ -140,6 +167,15 @@ async function syncPage(): Promise<void> {
   const seen = new Set<string>();
   for (const rule of selectorRules(object)) {
     if (typeof rule.selector !== "string") continue;
+    if (
+      pendingPreview &&
+      object &&
+      pendingPreview.objectId === object.id &&
+      pendingPreview.field === rule.field &&
+      pendingPreview.targetKey === ruleTargetKey(rule)
+    ) {
+      continue;
+    }
     const quote = rule.extraction.type === "selection" ? rule.extraction.quote : undefined;
     const key = [rule.selector, quote?.exact ?? "", quote?.prefix ?? "", quote?.suffix ?? ""].join("\u0000");
     if (seen.has(key)) continue;
@@ -147,6 +183,16 @@ async function syncPage(): Promise<void> {
     const fallbacks = ruleFallbacks(rule);
     highlights.push({ id: String(rule.id), selector: rule.selector, ...(fallbacks.length ? { selectorFallbacks: fallbacks } : {}), ...(quote ? { quote } : {}) });
   }
+
+  if (
+    pendingPreview &&
+    object &&
+    pendingPreview.objectId === object.id &&
+    samePage(pendingPreview.pageUrl, activePageUrl)
+  ) {
+    highlights.push(pendingPreview.highlight);
+  }
+
   try { await renderPageHighlights(tab.id, highlights); } catch {}
 }
 
@@ -172,6 +218,17 @@ export async function initSelectorHighlightsUi(): Promise<void> {
     if (target instanceof Element && target.closest(".field-row, #object-options button")) queueSync();
   }, true);
   window.addEventListener("burbot:selector-highlights-refresh", queueSync);
+  window.addEventListener("burbot:workspace-state-changed", (event) => {
+    const next = (event as CustomEvent<{ state?: LegacyStorageState }>).detail?.state;
+    if (!next || !Array.isArray(next.objects) || !Array.isArray(next.rules)) return;
+    state = next;
+    queueSync();
+  });
+  window.addEventListener("burbot:selector-capture-preview", (event) => {
+    pendingPreview =
+      (event as CustomEvent<PendingSelectorPreview | null>).detail ?? null;
+    queueSync();
+  });
   browser.storage.onChanged.addListener((changes, area) => {
     if (area !== "local") return;
     const next = changes[STORAGE_KEY]?.newValue as LegacyStorageState | undefined;
