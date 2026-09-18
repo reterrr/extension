@@ -21,6 +21,7 @@ CREATE TABLE IF NOT EXISTS workspace_objects (
   creation_note TEXT,
   created_at TEXT,
   updated_at TEXT,
+  last_checked_at TEXT,
   import_key TEXT,
   values_json TEXT NOT NULL DEFAULT '{}',
   evidence_json TEXT,
@@ -48,6 +49,7 @@ CREATE TABLE IF NOT EXISTS projects (
   start_date TEXT,
   end_date TEXT,
   announcements_site_url TEXT,
+  last_checked_at TEXT,
   geography_group_id INTEGER,
   FOREIGN KEY (id) REFERENCES workspace_objects(db_id) ON DELETE CASCADE,
   FOREIGN KEY (object_id) REFERENCES workspace_objects(object_id) ON DELETE CASCADE,
@@ -59,6 +61,7 @@ CREATE TABLE IF NOT EXISTS operators (
   object_id TEXT NOT NULL UNIQUE,
   name TEXT NOT NULL,
   nip TEXT,
+  last_checked_at TEXT,
   FOREIGN KEY (id) REFERENCES workspace_objects(db_id) ON DELETE CASCADE,
   FOREIGN KEY (object_id) REFERENCES workspace_objects(object_id) ON DELETE CASCADE
 );
@@ -71,6 +74,7 @@ CREATE TABLE IF NOT EXISTS recruitments (
   sequence_number INTEGER,
   year INTEGER,
   status TEXT NOT NULL,
+  continuous INTEGER CHECK (continuous IN (0, 1)),
   refund_percent_min REAL,
   refund_percent_max REAL,
   start_low_date TEXT,
@@ -86,6 +90,7 @@ CREATE TABLE IF NOT EXISTS recruitments (
   closed_status TEXT,
   status_reason TEXT,
   announcement_url TEXT,
+  last_checked_at TEXT,
   geography_group_id INTEGER,
   FOREIGN KEY (id) REFERENCES workspace_objects(db_id) ON DELETE CASCADE,
   FOREIGN KEY (object_id) REFERENCES workspace_objects(object_id) ON DELETE CASCADE,
@@ -206,4 +211,4 @@ CREATE TABLE IF NOT EXISTS document_requirements (
   FOREIGN KEY (object_id) REFERENCES workspace_objects(object_id) ON DELETE CASCADE
 );
 
-PRAGMA user_version = 2;
+PRAGMA user_version = 3;
