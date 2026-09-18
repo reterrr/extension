@@ -4,11 +4,13 @@ if (!document.querySelector("style[data-burbot-selector-colors]")) {
   style.textContent = `
 .field-row.has-selector-color {
   position: relative;
-  box-shadow: inset 3px 0 var(--selector-border);
-  background: linear-gradient(90deg, var(--selector-soft) 0, #fff 34%);
+  border-color: color-mix(in srgb, var(--selector-border) 45%, #d5ded6);
+  box-shadow: inset 4px 0 var(--selector-border);
+  background: linear-gradient(90deg, var(--selector-soft) 0, #fbfcfb 46%);
 }
 .field-row.has-selector-color:hover {
-  background: linear-gradient(90deg, var(--selector-soft) 0, #f9fbf8 45%);
+  border-color: color-mix(in srgb, var(--selector-border) 62%, #c7d2c9);
+  background: linear-gradient(90deg, var(--selector-soft) 0, #f4f8f5 58%);
 }
 .field-row.has-selector-color.selected {
   box-shadow:
