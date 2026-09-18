@@ -1,4 +1,5 @@
 import { clearActiveDraft } from "../commits/draftStore";
+import { stampLastCheckedAt } from "../commits/lastChecked";
 import { migrateFundingRefundRanges } from "../domain/stateMigrations";
 import { LEGACY_STORAGE_KEY } from "../storage/constants";
 import type { LegacyStorageState } from "../types/legacy-storage";
@@ -166,7 +167,12 @@ export async function commitState(
     );
   }
 
-  const committed = JSON.parse(JSON.stringify(workingState)) as LegacyStorageState;
+  const checkedAt = new Date().toISOString();
+  const committed = stampLastCheckedAt(
+    current ?? emptyState(),
+    workingState,
+    checkedAt,
+  );
   committed.revision = baseRevision + 1;
   await saveRemoteState(committed);
   await publishUiState(committed);
