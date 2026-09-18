@@ -49,7 +49,8 @@ function annotateFieldRows(root: ParentNode): void {
   for (const row of root.querySelectorAll<HTMLElement>(".field-row")) {
     const value = row.querySelector<HTMLElement>(".field-value");
     const mark = row.querySelector<HTMLElement>(".field-mark");
-    const missing = !!value?.classList.contains("empty");
+    const system = row.classList.contains("system-field");
+    const missing = !system && !!value?.classList.contains("empty");
     const neutral = !missing && !!value && isNeutralAnswer(value.textContent ?? "");
 
     row.classList.toggle("is-missing", missing);
@@ -58,8 +59,17 @@ function annotateFieldRows(root: ParentNode): void {
 
     if (mark) {
       mark.classList.toggle("field-state-missing", missing);
-      mark.classList.toggle("field-state-set", !missing);
-      setText(mark, missing ? "Brak" : "");
+      mark.classList.toggle("field-state-set", !missing && !system);
+      setText(
+        mark,
+        system
+          ? value?.classList.contains("empty")
+            ? ""
+            : "AUTO"
+          : missing
+            ? "Brak"
+            : "",
+      );
     }
   }
 }
@@ -87,8 +97,12 @@ function enhanceFieldGroups(): void {
     const heading = group.querySelector<HTMLElement>(":scope > h2");
     const title = heading?.textContent?.trim() || `Sekcja ${index + 1}`;
     const rows = Array.from(group.querySelectorAll<HTMLElement>(":scope > .field-row"));
-    const missing = rows.filter((row) => row.classList.contains("is-missing")).length;
-    const status = sectionStatus(rows.length, missing);
+    const businessRows = rows.filter((row) => !row.classList.contains("system-field"));
+    const missing = businessRows.filter((row) => row.classList.contains("is-missing")).length;
+    const systemOnly = rows.length > 0 && businessRows.length === 0;
+    const status = systemOnly
+      ? { text: "Automatyczne", state: "muted" }
+      : sectionStatus(businessRows.length, missing);
     const selected = rows.some((row) => row.classList.contains("selected"));
 
     const details = document.createElement("details");
@@ -108,7 +122,9 @@ function enhanceFieldGroups(): void {
     const titleNode = document.createElement("strong");
     titleNode.textContent = title;
     const helper = document.createElement("small");
-    helper.textContent = `${rows.length - missing}/${rows.length} pól uzupełnionych`;
+    helper.textContent = systemOnly
+      ? "Uzupełniane przy zapisie do bazy"
+      : `${businessRows.length - missing}/${businessRows.length} pól uzupełnionych`;
     titleWrap.append(titleNode, helper);
 
     const badge = document.createElement("span");
