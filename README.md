@@ -181,6 +181,47 @@ npm run import:operators -- /path/to/operatorzy.xlsx --dry-run
 
 The importer merges operators into the current workspace state instead of replacing it. `operator_id` is used as the stable import key (and as the object ID for new operators), existing matching operators keep their internal IDs, all URLs from `strona_www` are preserved in `values.website`, and the first URL is used as `sourceUrl`. The import updates `last_checked_at` and increments the workspace revision once.
 
+## Project + geography XLSX import
+
+The BUR workbook can seed/update projects together with their complete project geography.
+
+Prerequisite: import operators first so every `Projekty.operator_id` can be resolved:
+
+```bash
+npm run db
+npm run import:operators -- /path/to/operatorzy.xlsx
+```
+
+Validate the project workbook without modifying SQLite:
+
+```bash
+npm run import:projects -- /path/to/bur_.xlsx --dry-run
+```
+
+Then import:
+
+```bash
+npm run import:projects -- /path/to/bur_.xlsx
+```
+
+The importer reads `Projekty`, `Geografia_Slownik` and `Geografia_Projekty`. It is idempotent by `projekt_id`: existing project objects keep their internal IDs, known project fields are refreshed from XLSX, and geography for every imported project is replaced by the exact current XLSX assignment.
+
+Project mapping:
+
+```text
+projekt_id                  -> project importKey / object ID for new projects
+nazwa_projektu              -> project.name
+operator_id                 -> project.operator_id (resolved existing operator)
+typ_odbiorcy                -> project.type
+status_projektu             -> project.status
+data_start                  -> project.start_date
+data_koniec                 -> project.end_date
+Link do harmonogramu/naborów -> project.announcements_site_url
+import time                 -> project.last_checked_at
+```
+
+Geography is normalized against `src/shared/types/geography.ts` before any database write. Powiaty, cities with powiat rights and gminas therefore use the same canonical values as the Workspace geography picker. All imported geography rows use role `OBEJMUJE`.
+
 ## Development
 
 ```bash
