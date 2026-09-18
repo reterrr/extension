@@ -1,8 +1,8 @@
 const style = document.createElement("style");
 style.dataset.burbotImportWorkspaceParity = "true";
 style.textContent = `
-  /* Import Review is a staging workspace. Keep the same visual rhythm as the
-     normal Workspace and override the old review-table layout deterministically. */
+  /* Import Review is a read-only staging preview. Keep the same visual rhythm
+     as Workspace without suggesting that rows are editable. */
   .import-review-panel {
     margin: 0;
     border: 0;
@@ -320,7 +320,7 @@ style.textContent = `
     min-height: 45px;
     padding: 7px 9px;
     border-radius: 6px;
-    cursor: pointer;
+    cursor: default;
   }
 
   .import-review-finance-fields > label.import-review-workspace-field > small {
