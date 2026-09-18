@@ -153,6 +153,34 @@ Import is additive and atomic: the full document is validated before the new sta
 
 The existing **Export workspace state** action still exports the extension's internal local state, including extraction rules. It is intentionally different from Burbot Import v1.
 
+## Operator XLSX import
+
+A one-off/idempotent importer is available for the operator workbook with columns:
+
+```text
+operator_id | nazwa_operatora | NIP | strona_www
+```
+
+Start the local SQLite service first:
+
+```bash
+npm run db
+```
+
+Then import the workbook from another terminal:
+
+```bash
+npm run import:operators -- /path/to/operatorzy.xlsx
+```
+
+Validation without writing:
+
+```bash
+npm run import:operators -- /path/to/operatorzy.xlsx --dry-run
+```
+
+The importer merges operators into the current workspace state instead of replacing it. `operator_id` is used as the stable import key (and as the object ID for new operators), existing matching operators keep their internal IDs, all URLs from `strona_www` are preserved in `values.website`, and the first URL is used as `sourceUrl`. The import updates `last_checked_at` and increments the workspace revision once.
+
 ## Development
 
 ```bash
