@@ -28,7 +28,7 @@ function rowsForObject(
   collection: RelatedCollection,
   objectId: string,
 ): unknown[] {
-  const rows = state[collection] ?? [];
+  const rows = (state[collection] ?? []) as readonly unknown[];
   return rows.filter(
     (row) =>
       typeof row === "object" &&
