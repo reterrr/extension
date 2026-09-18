@@ -277,6 +277,12 @@
       min: 0,
       max: 100,
     },
+    refund_percent_avg: {
+      label: "Średnia refundacja",
+      type: "percentage",
+      min: 0,
+      max: 100,
+    },
     refund_percent_max: {
       label: "Maksymalna refundacja",
       type: "percentage",

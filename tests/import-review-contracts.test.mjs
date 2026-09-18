@@ -103,6 +103,7 @@ function documentFixture() {
             company_size: "MICRO",
             data: {
               refund_percent_min: 60,
+              refund_percent_avg: 70,
               refund_percent_max: 80,
               max_amount_pln: 100000,
               own_contribution_form: "CASH",
@@ -132,6 +133,7 @@ function documentFixture() {
             company_size: "SMALL",
             data: {
               refund_percent_min: 70,
+              refund_percent_avg: 75,
               refund_percent_max: 80,
             },
           },
@@ -171,6 +173,11 @@ test("import review exposes selected object evidence, file attachments and finan
     "60",
   );
   assert.equal(
+    view.financing[0].fields.find((field) => field.field === "refund_percent_avg")
+      ?.editorValue,
+    "70",
+  );
+  assert.equal(
     view.financing[0].fields.find((field) => field.field === "refund_percent_max")
       ?.editorValue,
     "80",
@@ -201,6 +208,7 @@ test("refund range belongs to financing variants, not normal project/recruitment
   );
   assert.equal(projectFields.get("operator_id")?.value, "Nie ustawiono");
   assert.equal(projectFields.has("refund_percent_min"), false);
+  assert.equal(projectFields.has("refund_percent_avg"), false);
   assert.equal(projectFields.has("refund_percent_max"), false);
   assert.ok(projectFields.has("announcements_site_url"));
   assert.equal(projectFields.has("amount"), false);
@@ -208,6 +216,11 @@ test("refund range belongs to financing variants, not normal project/recruitment
     projectView.financing[0].fields.find((field) => field.field === "refund_percent_min")
       ?.editorValue,
     "60",
+  );
+  assert.equal(
+    projectView.financing[0].fields.find((field) => field.field === "refund_percent_avg")
+      ?.editorValue,
+    "70",
   );
   assert.equal(
     projectView.financing[0].fields.find((field) => field.field === "refund_percent_max")
@@ -225,6 +238,7 @@ test("refund range belongs to financing variants, not normal project/recruitment
     recruitmentView.fields.map((field) => [field.field, field]),
   );
   assert.equal(recruitmentFields.has("refund_percent_min"), false);
+  assert.equal(recruitmentFields.has("refund_percent_avg"), false);
   assert.equal(recruitmentFields.has("refund_percent_max"), false);
   assert.ok(recruitmentFields.has("dataRozpoczeciaOd"));
   assert.equal(recruitmentFields.has("start_date"), false);
@@ -235,6 +249,12 @@ test("refund range belongs to financing variants, not normal project/recruitment
       (field) => field.field === "refund_percent_min",
     )?.editorValue,
     "70",
+  );
+  assert.equal(
+    recruitmentView.financing[0].fields.find(
+      (field) => field.field === "refund_percent_avg",
+    )?.editorValue,
+    "75",
   );
   assert.equal(
     recruitmentView.financing[0].fields.find(
@@ -316,6 +336,7 @@ test("review edits change staged data and invalidate stale object evidence", () 
   assert.equal(staged.state.fileSources[0].name, "Regulamin po korekcie.pdf");
   assert.equal(staged.state.financingRules.length, 1);
   assert.equal(staged.state.financingRules[0].refund_percent_min, 60);
+  assert.equal(staged.state.financingRules[0].refund_percent_avg, 70);
   assert.equal(staged.state.financingRules[0].refund_percent_max, 80);
   assert.equal(staged.state.financingRules[0].max_amount_pln, 120000);
 });

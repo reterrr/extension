@@ -65,6 +65,7 @@ The v1 format is backward compatible. Objects can additionally declare remote PD
           "company_size": "MICRO",
           "data": {
             "refund_percent_min": 60,
+            "refund_percent_avg": 70,
             "refund_percent_max": 80,
             "max_amount_pln": 100000,
             "max_per_person_pln": 5000,
@@ -87,6 +88,7 @@ The v1 format is backward compatible. Objects can additionally declare remote PD
           "company_size": "SMALL",
           "data": {
             "refund_percent_min": 70,
+            "refund_percent_avg": 75,
             "refund_percent_max": 80
           }
         }
@@ -122,6 +124,7 @@ Each financing entry becomes one Burbot financing variant. Project and Recruitme
 - `company_size` — one of `MICRO`, `SMALL`, `MEDIUM`, `LARGE`.
 - `data` — any supported financing fields:
   - `refund_percent_min` — minimum refund percentage, `0..100`;
+  - `refund_percent_avg` — average refund percentage, `0..100`;
   - `refund_percent_max` — maximum refund percentage, `0..100`;
   - `max_amount_pln`;
   - `max_per_person_pln`;
@@ -133,11 +136,12 @@ A fixed refund such as 60% should be represented as:
 ```json
 {
   "refund_percent_min": 60,
+  "refund_percent_avg": 60,
   "refund_percent_max": 60
 }
 ```
 
-Legacy imports using a single `refund_percent` remain accepted. Burbot migrates that value to both `refund_percent_min` and `refund_percent_max`.
+Legacy imports using a single `refund_percent` remain accepted. Burbot migrates that value to `refund_percent_min`, `refund_percent_avg` and `refund_percent_max`.
 
 Variant numbers are assigned in input order separately for each company size.
 
@@ -148,7 +152,7 @@ The import first enters **Import Review**. Import Review uses the same field-ori
 - see all normal object schema fields, including fields omitted by AI;
 - select a field and use `Pick element`, selected text, page URL, or a manual value;
 - edit imported object fields;
-- edit financing variant fields, including minimum and maximum refund percentages;
+- edit financing variant fields, including minimum, average and maximum refund percentages;
 - remove a financing variant;
 - rename or remove an attached PDF;
 - inspect evidence and jump to the matching source location.

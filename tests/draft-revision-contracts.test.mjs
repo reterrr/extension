@@ -54,7 +54,7 @@ test("staged writes keep working state on the commit base revision", () => {
   assert.equal(result, draft);
 });
 
-test("legacy single refund percent becomes a min/max funding range", () => {
+test("legacy single refund percent becomes a min/avg/max funding range", () => {
   const workingState = {
     ...state(11),
     financingRules: [
@@ -91,12 +91,13 @@ test("legacy single refund percent becomes a min/max funding range", () => {
 
   const funding = draft.workingState.financingRules[0];
   assert.equal(funding.refund_percent_min, 60);
+  assert.equal(funding.refund_percent_avg, 60);
   assert.equal(funding.refund_percent_max, 60);
   assert.equal("refund_percent" in funding, false);
   assert.deepEqual(
     draft.workingState.rules.map((rule) => rule.field).sort(),
-    ["refund_percent_max", "refund_percent_min"],
+    ["refund_percent_avg", "refund_percent_max", "refund_percent_min"],
   );
-  assert.equal(new Set(draft.workingState.rules.map((rule) => rule.id)).size, 2);
+  assert.equal(new Set(draft.workingState.rules.map((rule) => rule.id)).size, 3);
   assert.equal(draft.workingState.revision, 4);
 });

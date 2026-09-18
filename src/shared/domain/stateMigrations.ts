@@ -19,9 +19,9 @@ function uniqueRuleId(base: string, used: Set<string>): string {
 /**
  * Migrates the old single funding refund percentage into an explicit range.
  *
- * Old `refund_percent = 60` becomes min=60 and max=60. Extraction rules are
- * duplicated so a previously learned fixed percentage keeps both ends of the
- * range synchronized until the reviewer teaches separate min/max rules.
+ * Old `refund_percent = 60` becomes min=60, avg=60 and max=60. Extraction
+ * rules are duplicated so a previously learned fixed percentage keeps all three
+ * refund fields synchronized until the reviewer teaches separate rules.
  *
  * The function mutates `state` in place and returns whether anything changed.
  */
@@ -32,6 +32,7 @@ export function migrateFundingRefundRanges(state: LegacyStorageState): boolean {
     if (!own(row, "refund_percent")) continue;
     const value = row.refund_percent;
     if (!own(row, "refund_percent_min")) row.refund_percent_min = value;
+    if (!own(row, "refund_percent_avg")) row.refund_percent_avg = value;
     if (!own(row, "refund_percent_max")) row.refund_percent_max = value;
     delete row.refund_percent;
     changed = true;
@@ -48,19 +49,35 @@ export function migrateFundingRefundRanges(state: LegacyStorageState): boolean {
     const original = cloneRule(rule);
     rule.field = "refund_percent_min";
 
-    const alreadyHasMax = state.rules.some(
-      (candidate) =>
-        candidate !== rule &&
-        candidate.objectId === rule.objectId &&
-        candidate.target?.kind === "funding" &&
-        candidate.target.id === rule.target?.id &&
-        candidate.field === "refund_percent_max",
-    );
+    const hasRule = (field: string) =>
+      state.rules.some(
+        (candidate) =>
+          candidate !== rule &&
+          candidate.objectId === rule.objectId &&
+          candidate.target?.kind === "funding" &&
+          candidate.target.id === rule.target?.id &&
+          candidate.field === field,
+      ) ||
+      addedRules.some(
+        (candidate) =>
+          candidate.objectId === rule.objectId &&
+          candidate.target?.kind === "funding" &&
+          candidate.target.id === rule.target?.id &&
+          candidate.field === field,
+      );
 
-    if (!alreadyHasMax) {
-      original.id = uniqueRuleId(rule.id, usedRuleIds);
-      original.field = "refund_percent_max";
-      addedRules.push(original);
+    if (!hasRule("refund_percent_avg")) {
+      const avgRule = cloneRule(original);
+      avgRule.id = uniqueRuleId(`${rule.id}:avg`, usedRuleIds);
+      avgRule.field = "refund_percent_avg";
+      addedRules.push(avgRule);
+    }
+
+    if (!hasRule("refund_percent_max")) {
+      const maxRule = cloneRule(original);
+      maxRule.id = uniqueRuleId(rule.id, usedRuleIds);
+      maxRule.field = "refund_percent_max";
+      addedRules.push(maxRule);
     }
     changed = true;
   }
