@@ -334,6 +334,11 @@ export function importDocumentIntoState(
       if (!Object.prototype.hasOwnProperty.call(schema.fields, field)) {
         throw new Error(`Unknown field ${item.type}.${field}.`);
       }
+      if (schema.fields[field]?.system) {
+        throw new Error(
+          `${item.type}.${field} is managed automatically and must not be imported.`,
+        );
+      }
     }
 
     const id = uuid();
