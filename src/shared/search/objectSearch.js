@@ -173,7 +173,7 @@ function rawRegex(value) {
 
   const pattern = value.slice(1, slash);
   const suppliedFlags = value.slice(slash + 1);
-  if (!/^[dimsuv]*$/.test(suppliedFlags)) {
+  if (!/^[dgimsuvy]*$/.test(suppliedFlags)) {
     throw new Error(`Nieobsługiwane flagi regex: ${suppliedFlags || "(brak)"}.`);
   }
   const flags = [...new Set(suppliedFlags)].join("");
