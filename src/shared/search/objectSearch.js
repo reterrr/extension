@@ -22,6 +22,16 @@ const FIELD_ALIASES = new Map([
   ["numer", "number"],
   ["status", "status"],
   ["id", "id"],
+  ["geo", "geo"],
+  ["geografia", "geo"],
+  ["woj", "wojewodztwo"],
+  ["wojewodztwo", "wojewodztwo"],
+  ["województwo", "wojewodztwo"],
+  ["podregion", "podregion"],
+  ["powiat", "powiat"],
+  ["gmina", "gmina"],
+  ["miasto", "miasto"],
+  ["city", "miasto"],
 ]);
 
 export function normalizeObjectSearch(value) {
@@ -36,7 +46,12 @@ function canonicalType(value) {
   return TYPE_ALIASES.get(normalizeObjectSearch(value)) ?? null;
 }
 
-export function createObjectSearchDocument(object, displayName, typeLabel) {
+export function createObjectSearchDocument(
+  object,
+  displayName,
+  typeLabel,
+  geography = {},
+) {
   const objectType = object.type === "nabor" ? "recruitment" : object.type;
   const values = object.values ?? {};
   const number = values.number ?? values.external_number ?? "";
@@ -60,6 +75,12 @@ export function createObjectSearchDocument(object, displayName, typeLabel) {
     number,
     status: values.status ?? "",
     id: [object.id, object.importKey].filter(Boolean).join(" "),
+    geo: geography.geo ?? "",
+    wojewodztwo: geography.wojewodztwo ?? "",
+    podregion: geography.podregion ?? "",
+    powiat: geography.powiat ?? "",
+    gmina: geography.gmina ?? "",
+    miasto: geography.miasto ?? "",
   };
 
   const all = [
