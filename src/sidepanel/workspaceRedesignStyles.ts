@@ -65,6 +65,104 @@ main {
   position: relative;
 }
 
+
+.active-object-view {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  margin-top: 8px;
+  padding: 6px 7px;
+  border: 1px solid #b9d0c0;
+  border-radius: 8px;
+  background: #eef6f1;
+}
+
+.active-object-view[hidden] {
+  display: none;
+}
+
+.active-object-view-badge {
+  flex: none;
+  padding: 2px 5px;
+  border-radius: 5px;
+  background: #dceee3;
+  color: var(--success);
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: .7px;
+}
+
+.active-object-view-count {
+  flex: none;
+  color: #315945;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.active-object-view-query {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  color: #6f7d74;
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.active-object-view > button {
+  flex: none;
+  min-height: 24px;
+  padding: 3px 6px;
+  font-size: 9px;
+}
+
+.object-picker-view-actions {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid #e3e9e4;
+}
+
+.object-picker-view-info {
+  min-width: 0;
+  flex: 1;
+  color: #76827a;
+  font-size: 9px;
+}
+
+.object-picker-set-view,
+.object-picker-clear-view {
+  flex: none;
+  min-height: 29px;
+  padding: 5px 8px;
+  border: 1px solid #bfd1c4;
+  border-radius: 7px;
+  background: #edf5f0;
+  color: #315e47;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.object-picker-set-view:hover,
+.object-picker-clear-view:hover {
+  background: #e4f0e8;
+}
+
+.object-picker-set-view:disabled {
+  border-color: #e0e5e1;
+  background: #f5f6f5;
+  color: #9aa39d;
+}
+
+.object-picker-clear-view {
+  border-color: #d8ded9;
+  background: #fff;
+  color: #6d7971;
+}
+
 #switcher > summary {
   display: inline-flex;
   align-items: center;
