@@ -41,6 +41,12 @@ GEO_DICT_HEADERS = [
 ]
 GEO_PROJECT_HEADERS = ["geo_projekt_id", "projekt_id", "geo_id"]
 
+# Historical/legacy administrative names that appear in source workbooks but
+# have a newer canonical name in Burbot's geography catalog.
+POWIAT_NAME_ALIASES = {
+    ("dolnośląskie", "jeleniogórski"): "karkonoski",
+}
+
 STATUS_MAP = {
     "aktywny": "AKTYWNY",
     "active": "AKTYWNY",
@@ -250,6 +256,12 @@ def strip_locality_prefix(value: str) -> str:
     return text
 
 
+def canonical_powiat_name(wojewodztwo: str, powiat: str) -> str:
+    woj = wojewodztwo.strip().casefold()
+    name = strip_city_prefix(powiat).strip().casefold()
+    return POWIAT_NAME_ALIASES.get((woj, name), name)
+
+
 def parse_enum(source: str, enum_name: str) -> dict[str, str]:
     match = re.search(
         rf"export\s+enum\s+{re.escape(enum_name)}\s*\{{(.*?)\n\}}",
@@ -296,7 +308,7 @@ class GeographyCatalog:
     def gmina_value(self, woj: str, powiat: str, name: str, label: str) -> str:
         city = name.casefold().startswith("m.")
         locality = strip_locality_prefix(name)
-        powiat_name = strip_city_prefix(powiat)
+        powiat_name = canonical_powiat_name(woj, powiat)
         prefix = (
             f"{normalize_key(woj)}_{normalize_key(powiat_name)}_{normalize_key(locality)}_"
         )
@@ -365,7 +377,8 @@ def canonical_geography(
             city = strip_city_prefix(name)
             value = f"{woj_name}|miasto|{city}"
             return catalog.validate("MIASTO_NA_PRAWACH_POWIATU", value, geo["geo_id"])
-        value = f"{woj_name}|powiat|{name.casefold()}"
+        powiat_name = canonical_powiat_name(woj["nazwa"], name)
+        value = f"{woj_name}|powiat|{powiat_name}"
         return catalog.validate("POWIAT", value, geo["geo_id"])
 
     if type_name == "miasto":
