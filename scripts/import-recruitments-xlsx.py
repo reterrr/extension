@@ -231,6 +231,74 @@ def inferred_year(start_date: str | None, name: str) -> int | None:
     return None
 
 
+MONTH_BY_NAME = {
+    "STYCZEN": 1,
+    "LUTY": 2,
+    "MARZEC": 3,
+    "KWIECIEN": 4,
+    "MAJ": 5,
+    "CZERWIEC": 6,
+    "LIPIEC": 7,
+    "SIERPIEN": 8,
+    "WRZESIEN": 9,
+    "PAZDZIERNIK": 10,
+    "LISTOPAD": 11,
+    "GRUDZIEN": 12,
+}
+ROMAN_QUARTER = {"I": 1, "II": 2, "III": 3, "IV": 4}
+
+
+def planned_components(
+    start_date: str | None,
+    end_date: str | None,
+    name: str,
+) -> dict[str, int | None]:
+    result: dict[str, int | None] = {
+        "planowanyStartRok": None,
+        "planowanyStartMiesiac": None,
+        "planowanyStartKwartal": None,
+        "planowanyKoniecRok": None,
+        "planowanyKoniecMiesiac": None,
+        "planowanyKoniecKwartal": None,
+    }
+
+    if start_date:
+        year, month, _day = (int(part) for part in start_date.split("-"))
+        result["planowanyStartRok"] = year
+        result["planowanyStartMiesiac"] = month
+        result["planowanyStartKwartal"] = (month - 1) // 3 + 1
+    else:
+        normalized = common.normalize_key(name)
+        years = sorted(set(re.findall(r"\b20\d{2}\b", name)))
+        if len(years) == 1:
+            result["planowanyStartRok"] = int(years[0])
+        months = [
+            number
+            for month_name, number in MONTH_BY_NAME.items()
+            if month_name in normalized
+        ]
+        if len(set(months)) == 1:
+            month = months[0]
+            result["planowanyStartMiesiac"] = month
+            result["planowanyStartKwartal"] = (month - 1) // 3 + 1
+        quarter_match = re.search(
+            r"\b(I|II|III|IV)[ _-]*KWARTAL\b",
+            normalized,
+        )
+        if quarter_match:
+            result["planowanyStartKwartal"] = ROMAN_QUARTER[
+                quarter_match.group(1)
+            ]
+
+    if end_date:
+        year, month, _day = (int(part) for part in end_date.split("-"))
+        result["planowanyKoniecRok"] = year
+        result["planowanyKoniecMiesiac"] = month
+        result["planowanyKoniecKwartal"] = (month - 1) // 3 + 1
+
+    return result
+
+
 def set_or_remove(values: dict[str, Any], key: str, value: Any) -> None:
     if value is None or value == "":
         values.pop(key, None)
@@ -574,6 +642,14 @@ def merge_recruitments(
             inferred_year(start_date, row["nabor_nazwa"]),
         )
 
+        planned_fields = (
+            "planowanyStartRok",
+            "planowanyStartMiesiac",
+            "planowanyStartKwartal",
+            "planowanyKoniecRok",
+            "planowanyKoniecMiesiac",
+            "planowanyKoniecKwartal",
+        )
         if status == "PLANOWANY":
             for field in (
                 "dataRozpoczeciaOd",
@@ -584,9 +660,18 @@ def merge_recruitments(
                 values.pop(field, None)
             set_or_remove(values, "planned_start_date", start_date)
             set_or_remove(values, "planned_end_date", end_date)
+            components = planned_components(
+                start_date,
+                end_date,
+                row["nabor_nazwa"],
+            )
+            for field in planned_fields:
+                set_or_remove(values, field, components[field])
         else:
             values.pop("planned_start_date", None)
             values.pop("planned_end_date", None)
+            for field in planned_fields:
+                values.pop(field, None)
             for field in ("dataRozpoczeciaOd", "dataRozpoczeciaDo"):
                 set_or_remove(values, field, start_date)
             for field in ("dataZakonczeniaOd", "dataZakonczeniaDo"):
