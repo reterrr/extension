@@ -15,6 +15,7 @@ import type {
   ImportedSource,
   LegacyStoredFileSource,
   LegacyStoredObject,
+  LegacyStorageState,
 } from "../types/legacy-storage";
 
 export interface ImportApprovalReferencePatch {
@@ -22,10 +23,16 @@ export interface ImportApprovalReferencePatch {
   targetObjectId: string;
 }
 
+export interface ImportApprovalExistingReferenceLink {
+  importKey: string;
+  targetObjectId: string;
+}
+
 export interface ImportApprovalPlan {
   document: unknown;
   selectedImportKey: string;
   referencePatches: ImportApprovalReferencePatch[];
+  existingReferenceLinks: ImportApprovalExistingReferenceLink[];
   temporaryDependencyImportKeys: string[];
 }
 
@@ -516,9 +523,69 @@ function importedSourceForFile(
   return source;
 }
 
+function normalizedIdentity(value: unknown): string {
+  return String(value ?? "")
+    .normalize("NFKC")
+    .trim()
+    .toLocaleLowerCase("pl-PL");
+}
+
+function uniqueExistingMatch(
+  objects: LegacyStoredObject[],
+  predicate: (object: LegacyStoredObject) => boolean,
+): LegacyStoredObject | undefined {
+  const matches = objects.filter(predicate);
+  return matches.length === 1 ? matches[0] : undefined;
+}
+
+export function findExistingImportObjectMatch(
+  imported: LegacyStoredObject,
+  state: LegacyStorageState | undefined,
+): LegacyStoredObject | undefined {
+  if (!state) return undefined;
+  const candidates = state.objects.filter((object) => object.type === imported.type);
+  if (!candidates.length) return undefined;
+
+  if (imported.importKey) {
+    const byStableKey = uniqueExistingMatch(
+      candidates,
+      (object) =>
+        object.importKey === imported.importKey ||
+        String(object.id) === imported.importKey,
+    );
+    if (byStableKey) return byStableKey;
+  }
+
+  if (imported.type === "project") {
+    const number = normalizedIdentity(imported.values.number);
+    if (number) {
+      const byNumber = uniqueExistingMatch(
+        candidates,
+        (object) => normalizedIdentity(object.values.number) === number,
+      );
+      if (byNumber) return byNumber;
+    }
+  }
+
+  if (imported.type === "operator") {
+    const nip = String(imported.values.nip ?? "").replace(/\D/g, "");
+    if (nip) {
+      const byNip = uniqueExistingMatch(
+        candidates,
+        (object) =>
+          String(object.values.nip ?? "").replace(/\D/g, "") === nip,
+      );
+      if (byNip) return byNip;
+    }
+  }
+
+  return undefined;
+}
+
 export function buildImportApprovalPlan(
   session: ImportReviewSession,
   objectId: string,
+  existingState?: LegacyStorageState,
 ): ImportApprovalPlan {
   const object = session.previewState.objects.find((entry) => entry.id === objectId);
   if (!object?.importKey) throw new Error("Imported object not found.");
@@ -528,11 +595,26 @@ export function buildImportApprovalPlan(
 
   const references = referencedObjects(session, object);
   const referencePatches: ImportApprovalReferencePatch[] = [];
+  const existingReferenceLinks: ImportApprovalExistingReferenceLink[] = [];
   for (const { field, target } of references) {
     if (!target.importKey) throw new Error(`Could not resolve imported reference ${field}.`);
-    const targetObjectId = session.approvedObjectIdByImportKey[target.importKey];
+
+    let targetObjectId = session.approvedObjectIdByImportKey[target.importKey];
     if (!targetObjectId) {
-      throw new Error(`Approve referenced object “${BurbotCore.displayName(target)}” first.`);
+      const existing = findExistingImportObjectMatch(target, existingState);
+      if (existing) {
+        targetObjectId = existing.id;
+        existingReferenceLinks.push({
+          importKey: target.importKey,
+          targetObjectId: existing.id,
+        });
+      }
+    }
+
+    if (!targetObjectId) {
+      throw new Error(
+        `Approve referenced object “${BurbotCore.displayName(target)}” first, or make sure the existing object has the same import key / project number / NIP.`,
+      );
     }
     referencePatches.push({ field, targetObjectId });
   }
@@ -602,6 +684,7 @@ export function buildImportApprovalPlan(
   return {
     selectedImportKey: object.importKey,
     referencePatches,
+    existingReferenceLinks,
     temporaryDependencyImportKeys: [...dependencyMap.keys()],
     document: {
       version: 1,
@@ -624,6 +707,21 @@ export function buildImportApprovalPlan(
       ],
     },
   };
+}
+
+export function markImportObjectLinked(
+  session: ImportReviewSession,
+  importKey: string,
+  targetObjectId: string,
+  now: string,
+): void {
+  const object = session.previewState.objects.find(
+    (entry) => entry.importKey === importKey,
+  );
+  if (!object) return;
+  session.statusByObjectId[object.id] = "APPROVED";
+  session.approvedObjectIdByImportKey[importKey] = targetObjectId;
+  session.updatedAt = now;
 }
 
 export function markImportObjectApproved(

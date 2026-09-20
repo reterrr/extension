@@ -8,6 +8,7 @@ import {
   buildImportApprovalPlan,
   importReviewView,
   markImportObjectApproved,
+  markImportObjectLinked,
 } from "../shared/import/review";
 import {
   clearImportReview,
@@ -278,7 +279,7 @@ export function ImportReviewPanel() {
 
       const previewId = session.selectedObjectId;
       const plan: ImportApprovalPlanWithRules = {
-        ...buildImportApprovalPlan(session, previewId),
+        ...buildImportApprovalPlan(session, previewId, draft.workingState),
         reviewRules: reviewedRules(session, previewId),
       };
       const now = new Date().toISOString();
@@ -293,6 +294,15 @@ export function ImportReviewPanel() {
       draft.updatedAt = now;
       await writeActiveDraft(draft);
       await publishUiState(draft.workingState);
+
+      for (const link of plan.existingReferenceLinks) {
+        markImportObjectLinked(
+          session,
+          link.importKey,
+          link.targetObjectId,
+          now,
+        );
+      }
 
       markImportObjectApproved(
         session,
