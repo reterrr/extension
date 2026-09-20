@@ -151,6 +151,22 @@ def optional_url(value: str, field: str, recruitment_id: str) -> str | None:
     return common.valid_url(value, f"{recruitment_id}.{field}")
 
 
+def url_list(value: str, field: str, recruitment_id: str) -> list[str]:
+    value = value.strip()
+    if not value:
+        return []
+    parts = [part.strip() for part in value.split(";") if part.strip()]
+    return [
+        common.valid_url(part, f"{recruitment_id}.{field}") or ""
+        for part in parts
+    ]
+
+
+def normalized_url_list(value: str, field: str, recruitment_id: str) -> str | None:
+    urls = [url for url in url_list(value, field, recruitment_id) if url]
+    return " ; ".join(urls) if urls else None
+
+
 def optional_number(value: str, field: str, recruitment_id: str) -> int | float | None:
     value = value.strip()
     if not value:
@@ -222,11 +238,22 @@ def set_or_remove(values: dict[str, Any], key: str, value: Any) -> None:
 
 
 def recruitment_source_url(row: dict[str, str]) -> str | None:
-    for field in ("link_nabor", "zrodlo_danych", "link_dokumenty"):
-        value = row.get(field, "").strip()
-        if value:
-            return optional_url(value, field, row["nabor_id"])
-    return None
+    recruitment_id = row["nabor_id"]
+    direct = optional_url(row.get("link_nabor", ""), "link_nabor", recruitment_id)
+    if direct:
+        return direct
+    data_urls = url_list(
+        row.get("zrodlo_danych", ""),
+        "zrodlo_danych",
+        recruitment_id,
+    )
+    if data_urls:
+        return data_urls[0]
+    return optional_url(
+        row.get("link_dokumenty", ""),
+        "link_dokumenty",
+        recruitment_id,
+    )
 
 
 def build_b2b_financing(
@@ -393,13 +420,10 @@ def validate_input(
             "data_weryfikacji_finansow",
             rid,
         )
-        for field in (
-            "link_nabor",
-            "link_dokumenty",
-            "zrodlo_danych",
-            "zrodlo_weryfikacji_finansow",
-        ):
+        for field in ("link_nabor", "link_dokumenty"):
             optional_url(row[field], field, rid)
+        for field in ("zrodlo_danych", "zrodlo_weryfikacji_finansow"):
+            url_list(row[field], field, rid)
         boolean_pl(
             row["link_prowadzi_do_konkretnego_naboru"],
             "link_prowadzi_do_konkretnego_naboru",
@@ -549,10 +573,23 @@ def merge_recruitments(
             inferred_year(start_date, row["nabor_nazwa"]),
         )
 
-        for field in ("dataRozpoczeciaOd", "dataRozpoczeciaDo"):
-            set_or_remove(values, field, start_date)
-        for field in ("dataZakonczeniaOd", "dataZakonczeniaDo"):
-            set_or_remove(values, field, end_date)
+        if status == "PLANOWANY":
+            for field in (
+                "dataRozpoczeciaOd",
+                "dataRozpoczeciaDo",
+                "dataZakonczeniaOd",
+                "dataZakonczeniaDo",
+            ):
+                values.pop(field, None)
+            set_or_remove(values, "planned_start_date", start_date)
+            set_or_remove(values, "planned_end_date", end_date)
+        else:
+            values.pop("planned_start_date", None)
+            values.pop("planned_end_date", None)
+            for field in ("dataRozpoczeciaOd", "dataRozpoczeciaDo"):
+                set_or_remove(values, field, start_date)
+            for field in ("dataZakonczeniaOd", "dataZakonczeniaDo"):
+                set_or_remove(values, field, end_date)
 
         set_or_remove(
             values,
@@ -569,7 +606,9 @@ def merge_recruitments(
         set_or_remove(
             values,
             "data_source_url",
-            optional_url(row["zrodlo_danych"], "zrodlo_danych", recruitment_key),
+            normalized_url_list(
+                row["zrodlo_danych"], "zrodlo_danych", recruitment_key
+            ),
         )
         set_or_remove(values, "action_code", row["kod_dzialania"].strip() or None)
         set_or_remove(values, "notes", row["uwaga"].strip() or None)
@@ -583,7 +622,7 @@ def merge_recruitments(
         set_or_remove(
             values,
             "funding_verification_url",
-            optional_url(
+            normalized_url_list(
                 row["zrodlo_weryfikacji_finansow"],
                 "zrodlo_weryfikacji_finansow",
                 recruitment_key,
