@@ -252,14 +252,14 @@ def strip_locality_prefix(value: str) -> str:
 
 def parse_enum(source: str, enum_name: str) -> dict[str, str]:
     match = re.search(
-        rf"export\\s+enum\\s+{re.escape(enum_name)}\\s*\\{{(.*?)\\n\\}}",
+        rf"export\s+enum\s+{re.escape(enum_name)}\s*\{{(.*?)\n\}}",
         source,
         flags=re.S,
     )
     if not match:
         raise ValueError(f"Could not parse enum {enum_name} from geography.ts.")
     entries: dict[str, str] = {}
-    entry_pattern = re.compile(r'\\s*([A-Z0-9_]+)\\s*=\\s*"([^"]+)"\\s*,?\\s*')
+    entry_pattern = re.compile(r'\s*([A-Z0-9_]+)\s*=\s*"([^"]+)"\s*,?\s*')
     for line in match.group(1).splitlines():
         entry = entry_pattern.fullmatch(line)
         if entry:
