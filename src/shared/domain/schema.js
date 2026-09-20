@@ -211,6 +211,9 @@
       group: "Źródła",
     },
     notes: text("Uwagi", "Źródła", { multiline: true }),
+    funding_rules: text("Zasady dofinansowania", "Dofinansowanie", {
+      multiline: true,
+    }),
     funding_verified_at: date("Data weryfikacji finansowania", "Dofinansowanie"),
     funding_verification_url: url("Źródło weryfikacji finansowania", "Dofinansowanie"),
     last_checked_at: systemDateTime(),
