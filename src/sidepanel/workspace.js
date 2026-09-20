@@ -774,6 +774,23 @@ import { createPickerClient } from "./pickerRpc";
             );
           else if (hasMin) parts.push("od " + minText);
           else parts.push("do " + maxText);
+        } else if (C.hasValue(variant.refund_percent_standard)) {
+          parts.push(
+            C.formatValue(
+              variant.refund_percent_standard,
+              BurbotFunding.fields.refund_percent_standard,
+              db,
+            ),
+          );
+        } else if (C.hasValue(variant.refund_percent_base)) {
+          parts.push(
+            "baza " +
+              C.formatValue(
+                variant.refund_percent_base,
+                BurbotFunding.fields.refund_percent_base,
+                db,
+              ),
+          );
         } else if (C.hasValue(variant.refund_percent)) {
           // Compatibility before an old state/import has been normalized.
           parts.push(
