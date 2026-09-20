@@ -63,6 +63,7 @@ ensureColumn("recruitments", "documents_url", "TEXT");
 ensureColumn("recruitments", "data_source_url", "TEXT");
 ensureColumn("recruitments", "direct_recruitment_link", "INTEGER");
 ensureColumn("recruitments", "notes", "TEXT");
+ensureColumn("recruitments", "funding_rules", "TEXT");
 ensureColumn("recruitments", "funding_verified_at", "TEXT");
 ensureColumn("recruitments", "funding_verification_url", "TEXT");
 db.pragma("user_version = 4");
@@ -283,14 +284,14 @@ function syncBusinessTables(state, groupByObject) {
       planned_end_year, planned_end_month, planned_end_quarter,
       closed_status, status_reason, action_code,
       announcement_url, documents_url, data_source_url,
-      direct_recruitment_link, notes,
+      direct_recruitment_link, notes, funding_rules,
       funding_verified_at, funding_verification_url,
       last_checked_at, geography_group_id
     ) VALUES (
       ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
       ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
       ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-      ?, ?, ?, ?
+      ?, ?, ?, ?, ?
     )
   `);
 
@@ -365,6 +366,7 @@ function syncBusinessTables(state, groupByObject) {
       nullableText(values.data_source_url),
       nullableBoolean(values.direct_recruitment_link),
       nullableText(values.notes),
+      nullableText(values.funding_rules),
       nullableText(values.funding_verified_at),
       nullableText(values.funding_verification_url),
       nullableText(values.last_checked_at),
