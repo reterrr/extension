@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
+import os
 import re
 import sys
 import zipfile
@@ -706,7 +707,7 @@ def main() -> int:
     parser.add_argument("xlsx", type=Path, help="Path to bur_.xlsx")
     parser.add_argument(
         "--db-url",
-        default="http://127.0.0.1:8765",
+        default=os.environ.get("BURBOT_DB_URL", "http://127.0.0.1:8765"),
         help="Burbot DB service URL.",
     )
     parser.add_argument(
