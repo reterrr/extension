@@ -97,6 +97,7 @@ CREATE TABLE IF NOT EXISTS recruitments (
   data_source_url TEXT,
   direct_recruitment_link INTEGER CHECK (direct_recruitment_link IN (0, 1)),
   notes TEXT,
+  funding_rules TEXT,
   funding_verified_at TEXT,
   funding_verification_url TEXT,
   last_checked_at TEXT,
