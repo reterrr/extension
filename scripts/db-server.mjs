@@ -58,6 +58,8 @@ ensureColumn("recruitments", "last_checked_at", "TEXT");
 ensureColumn("recruitments", "continuous", "INTEGER");
 ensureColumn("recruitments", "operator_id", "INTEGER");
 ensureColumn("recruitments", "source_number", "TEXT");
+ensureColumn("recruitments", "planned_start_date", "TEXT");
+ensureColumn("recruitments", "planned_end_date", "TEXT");
 ensureColumn("recruitments", "action_code", "TEXT");
 ensureColumn("recruitments", "documents_url", "TEXT");
 ensureColumn("recruitments", "data_source_url", "TEXT");
@@ -280,6 +282,7 @@ function syncBusinessTables(state, groupByObject) {
       external_number, source_number, sequence_number, year, status,
       continuous, refund_percent_min, refund_percent_max,
       start_low_date, start_ceil_date, end_low_date, end_ceil_date,
+      planned_start_date, planned_end_date,
       planned_start_year, planned_start_month, planned_start_quarter,
       planned_end_year, planned_end_month, planned_end_quarter,
       closed_status, status_reason, action_code,
@@ -291,7 +294,7 @@ function syncBusinessTables(state, groupByObject) {
       ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
       ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
       ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-      ?, ?, ?, ?, ?
+      ?, ?, ?, ?, ?, ?, ?
     )
   `);
 
@@ -352,6 +355,8 @@ function syncBusinessTables(state, groupByObject) {
       nullableText(values.dataRozpoczeciaDo),
       nullableText(values.dataZakonczeniaOd),
       nullableText(values.dataZakonczeniaDo),
+      nullableText(values.planned_start_date),
+      nullableText(values.planned_end_date),
       nullableInt(values.planowanyStartRok),
       nullableInt(values.planowanyStartMiesiac),
       nullableInt(values.planowanyStartKwartal),
