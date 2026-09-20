@@ -25,7 +25,9 @@ import { createPickerClient } from "./pickerRpc";
     picking = false,
     focusStamp = "",
     descriptors = [],
-    ready = false;
+    ready = false,
+    switcherQuery = "",
+    switcherType = "all";
   const expanded = new Set();
   const chosen = () => db.objects.find((o) => o.id === objectId);
   const keyOf = (descriptor) =>
@@ -331,30 +333,216 @@ import { createPickerClient } from "./pickerRpc";
   }
   function renderSwitcher() {
     const root = $("object-options");
+    const switcher = $("switcher");
+    root.dataset.activeObjectId = objectId;
     root.replaceChildren();
+
+    const normalize = (value) =>
+      String(value ?? "")
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toLocaleLowerCase("pl-PL")
+        .trim();
+
     const local = (object) =>
       pageUrl &&
       (object.sourceUrl === pageUrl ||
         db.rules.some(
           (r) => r.objectId === object.id && r.pageUrl === pageUrl,
         ));
-    for (const [title, objects] of [
-      ["On this page", db.objects.filter(local)],
-      ["Saved objects", db.objects.filter((o) => !local(o))],
-    ]) {
-      if (!objects.length) continue;
-      root.append(node("div", "switch-group", title));
-      for (const object of [...objects].reverse()) {
-        const button = node("button", "", C.displayName(object));
-        button.append(
-          node("small", "", BurbotSchema[object.type]?.label || object.type),
+
+    const objectKind = (object) =>
+      object.type === "nabor" ? "recruitment" : object.type;
+
+    const searchable = (object) =>
+      normalize(
+        [
+          C.displayName(object),
+          BurbotSchema[object.type]?.label || object.type,
+          object.values?.number,
+          object.values?.external_number,
+          object.values?.nip,
+          object.values?.status,
+        ]
+          .filter(Boolean)
+          .join(" "),
+      );
+
+    const picker = node("div", "object-picker");
+    const toolbar = node("div", "object-picker-toolbar");
+    const search = document.createElement("input");
+    search.type = "search";
+    search.className = "object-picker-search";
+    search.placeholder = "Szukaj projektu, operatora lub naboru…";
+    search.autocomplete = "off";
+    search.setAttribute("aria-label", "Szukaj obiektu");
+    search.value = switcherQuery;
+
+    const filters = node("div", "object-picker-filters");
+    const filterOptions = [
+      ["all", "Wszystkie"],
+      ["project", "Projekty"],
+      ["operator", "Operatorzy"],
+      ["recruitment", "Nabory"],
+    ];
+    for (const [value, label] of filterOptions) {
+      const button = node("button", "object-picker-filter", label);
+      button.type = "button";
+      button.dataset.type = value;
+      button.setAttribute("aria-pressed", String(switcherType === value));
+      button.onclick = () => {
+        switcherType = value;
+        renderResults();
+        search.focus();
+      };
+      filters.append(button);
+    }
+
+    toolbar.append(search, filters);
+    const results = node("div", "object-picker-results");
+    picker.append(toolbar, results);
+    root.append(picker);
+
+    const visibleButtons = () =>
+      Array.from(results.querySelectorAll("button.object-option"));
+
+    const focusRelative = (button, direction) => {
+      const buttons = visibleButtons();
+      if (!buttons.length) return;
+      const current = Math.max(0, buttons.indexOf(button));
+      const next = (current + direction + buttons.length) % buttons.length;
+      buttons[next].focus();
+    };
+
+    const chooseFromKeyboard = (button, event) => {
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        focusRelative(button, 1);
+      } else if (event.key === "ArrowUp") {
+        event.preventDefault();
+        focusRelative(button, -1);
+      } else if (event.key === "Escape") {
+        event.preventDefault();
+        switcher.open = false;
+        switcher.querySelector("summary")?.focus();
+      }
+    };
+
+    function objectButton(object) {
+      const button = node("button", "object-option");
+      button.type = "button";
+      button.dataset.objectId = object.id;
+      button.setAttribute("aria-current", String(object.id === objectId));
+      button.disabled = busy;
+
+      const copy = node("span", "object-option-copy");
+      copy.append(node("strong", "object-option-name", C.displayName(object)));
+
+      const typeLabel = BurbotSchema[object.type]?.label || object.type;
+      const meta = [];
+      meta.push(typeLabel);
+      if (object.values?.number) meta.push(String(object.values.number));
+      else if (object.values?.external_number)
+        meta.push(String(object.values.external_number));
+      else if (object.values?.nip) meta.push("NIP " + object.values.nip);
+      copy.append(node("small", "object-option-meta", meta.join(" · ")));
+
+      button.append(copy);
+      if (object.id === objectId)
+        button.append(node("span", "object-option-current", "✓"));
+
+      button.onclick = () => chooseObject(object.id);
+      button.onkeydown = (event) => chooseFromKeyboard(button, event);
+      return button;
+    }
+
+    function appendGroup(title, objects) {
+      if (!objects.length) return;
+      const group = node("section", "object-picker-group");
+      const heading = node("div", "switch-group");
+      heading.append(
+        node("span", "", title),
+        node("small", "object-picker-count", String(objects.length)),
+      );
+      group.append(heading);
+      for (const object of objects) group.append(objectButton(object));
+      results.append(group);
+    }
+
+    function renderResults() {
+      results.replaceChildren();
+      for (const button of filters.querySelectorAll(".object-picker-filter")) {
+        button.setAttribute(
+          "aria-pressed",
+          String(button.dataset.type === switcherType),
         );
-        button.setAttribute("aria-current", String(object.id === objectId));
-        button.disabled = busy;
-        button.onclick = () => chooseObject(object.id);
-        root.append(button);
+      }
+
+      const needle = normalize(switcherQuery);
+      const matches = (object) =>
+        (switcherType === "all" || objectKind(object) === switcherType) &&
+        (!needle || searchable(object).includes(needle));
+
+      const localObjects = [...db.objects.filter((o) => local(o) && matches(o))]
+        .reverse();
+      const saved = db.objects.filter((o) => !local(o) && matches(o));
+
+      appendGroup("Na tej stronie", localObjects);
+      appendGroup(
+        "Projekty",
+        [...saved.filter((o) => objectKind(o) === "project")].reverse(),
+      );
+      appendGroup(
+        "Operatorzy",
+        [...saved.filter((o) => objectKind(o) === "operator")].reverse(),
+      );
+      appendGroup(
+        "Nabory",
+        [...saved.filter((o) => objectKind(o) === "recruitment")].reverse(),
+      );
+
+      if (!results.childElementCount) {
+        const empty = node("div", "object-picker-empty");
+        empty.append(
+          node("strong", "", "Brak pasujących obiektów"),
+          node("small", "", "Zmień wyszukiwanie albo filtr typu."),
+        );
+        results.append(empty);
       }
     }
+
+    search.oninput = () => {
+      switcherQuery = search.value;
+      renderResults();
+    };
+    search.onkeydown = (event) => {
+      const buttons = visibleButtons();
+      if (event.key === "ArrowDown" && buttons.length) {
+        event.preventDefault();
+        buttons[0].focus();
+      } else if (event.key === "ArrowUp" && buttons.length) {
+        event.preventDefault();
+        buttons.at(-1).focus();
+      } else if (event.key === "Enter" && buttons.length) {
+        event.preventDefault();
+        buttons[0].click();
+      } else if (event.key === "Escape") {
+        event.preventDefault();
+        switcher.open = false;
+        switcher.querySelector("summary")?.focus();
+      }
+    };
+
+    switcher.ontoggle = () => {
+      if (!switcher.open) return;
+      switcherQuery = "";
+      switcherType = "all";
+      search.value = "";
+      renderResults();
+      requestAnimationFrame(() => search.focus());
+    };
+
+    renderResults();
   }
   function renderFunding(object) {
     const root = $("funding");
