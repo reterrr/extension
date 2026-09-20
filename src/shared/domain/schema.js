@@ -169,6 +169,9 @@
     dataZakonczeniaOd: date("Data zakończenia — od", "Termin rzeczywisty"),
     dataZakonczeniaDo: date("Data zakończenia — do", "Termin rzeczywisty"),
 
+    planned_start_date: date("Planowana data rozpoczęcia", "Termin planowany"),
+    planned_end_date: date("Planowana data zakończenia", "Termin planowany"),
+
     planowanyStartRok: integer("Planowany start — rok", "Termin planowany", {
       min: 1000,
       max: 9999,
