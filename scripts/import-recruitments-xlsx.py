@@ -282,7 +282,7 @@ def planned_components(
             result["planowanyStartMiesiac"] = month
             result["planowanyStartKwartal"] = (month - 1) // 3 + 1
         quarter_match = re.search(
-            r"\b(I|II|III|IV)[ _-]*KWARTAL\b",
+            r"(?:^|_)(I|II|III|IV)_KWARTAL(?:_|$)",
             normalized,
         )
         if quarter_match:
