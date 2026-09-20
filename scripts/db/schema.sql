@@ -83,6 +83,8 @@ CREATE TABLE IF NOT EXISTS recruitments (
   start_ceil_date TEXT,
   end_low_date TEXT,
   end_ceil_date TEXT,
+  planned_start_date TEXT,
+  planned_end_date TEXT,
   planned_start_year INTEGER,
   planned_start_month INTEGER,
   planned_start_quarter INTEGER,
