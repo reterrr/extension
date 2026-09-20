@@ -259,7 +259,8 @@ def parse_enum(source: str, enum_name: str) -> dict[str, str]:
     if not match:
         raise ValueError(f"Could not parse enum {enum_name} from geography.ts.")
     entries: dict[str, str] = {}
-    for key, value in re.findall(r'^\s*([A-Z0-9_]+)\s*=\s*"([^"]+)"\s*,?\s*, match.group(1), flags=re.M):
+    for key, value in re.findall(
+        r'^\s*([A-Z0-9_]+)\s*=\s*"([^"]+)"\s*,?\s*
         entries[key] = value
     if not entries:
         raise ValueError(f"Enum {enum_name} is empty.")
@@ -696,7 +697,10 @@ if __name__ == "__main__":
     except (ValueError, RuntimeError, zipfile.BadZipFile) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         raise SystemExit(1)
-, match.group(1), flags=re.M):
+,
+        match.group(1),
+        flags=re.M,
+    ):
         entries[key] = value
     if not entries:
         raise ValueError(f"Enum {enum_name} is empty.")
@@ -730,7 +734,7 @@ class GeographyCatalog:
 
     def gmina_value(self, woj: str, powiat: str, name: str, label: str) -> str:
         city = name.casefold().startswith("m.")
-        locality = strip_city_prefix(name)
+        locality = strip_locality_prefix(name)
         powiat_name = strip_city_prefix(powiat)
         prefix = (
             f"{normalize_key(woj)}_{normalize_key(powiat_name)}_{normalize_key(locality)}_"
