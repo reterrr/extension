@@ -74,24 +74,20 @@ function exportFiles(state, objectId) {
   return (state.fileSources ?? [])
     .filter((source) => String(source.objectId) === String(objectId))
     .map((source) =>
-      compactRecord(
-        {
-          name: source.name,
-          file_type: source.fileType,
-          url: source.url,
-          source_page_url: source.sourcePageUrl,
-          added_at: source.addedAt,
-        },
-      ),
+      compactRecord({
+        name: source.name,
+        file_type: source.fileType,
+        url: source.url,
+        source_page_url: source.sourcePageUrl,
+        added_at: source.addedAt,
+      }),
     );
 }
 
 function exportFunding(state, objectId) {
   return (state.financingRules ?? [])
     .filter((row) => String(row.objectId) === String(objectId))
-    .map((row) =>
-      compactRecord(row, ["id", "objectId"]),
-    );
+    .map((row) => compactRecord(row, ["id", "objectId"]));
 }
 
 function exportDocuments(state, objectId, documentCatalog) {
@@ -110,6 +106,50 @@ function exportDocuments(state, objectId, documentCatalog) {
         ...compactRecord(row, ["id", "objectId", "document_type_key"]),
       });
     });
+}
+
+function urlsFromValue(value) {
+  if (typeof value !== "string") return [];
+  return value
+    .split(/[;\n\r\t ]+/u)
+    .map((part) => part.trim())
+    .filter((part) => /^https?:\/\/\S+$/iu.test(part));
+}
+
+function exportLinks(object, files, schema) {
+  const byUrl = new Map();
+
+  const add = (url, from) => {
+    if (typeof url !== "string" || !/^https?:\/\//iu.test(url.trim())) return;
+    const normalized = url.trim();
+    const existing = byUrl.get(normalized) ?? {
+      url: normalized,
+      from: [],
+    };
+    if (from && !existing.from.includes(from)) existing.from.push(from);
+    byUrl.set(normalized, existing);
+  };
+
+  add(object.sourceUrl, "source_url");
+
+  for (const [key, value] of Object.entries(object.values ?? {})) {
+    const definition = schema?.[object.type]?.fields?.[key];
+    const likelyUrlField =
+      definition?.type === "url" ||
+      /(url|website|link|site)/iu.test(String(key));
+    if (!likelyUrlField) continue;
+    for (const url of urlsFromValue(value)) add(url, "values." + key);
+  }
+
+  for (const file of files) {
+    add(file.url, file.name ? "file:" + file.name : "file");
+    add(
+      file.source_page_url,
+      file.name ? "file_source:" + file.name : "file_source",
+    );
+  }
+
+  return [...byUrl.values()];
 }
 
 function exportObject(
@@ -131,6 +171,7 @@ function exportObject(
     .filter((entry) => String(entry.objectId) === String(object.id))
     .map((entry) => geographyPresentation(entry, catalogByKey));
 
+  const files = exportFiles(state, object.id);
   const result = {
     id: String(object.id),
     type: object.type,
@@ -151,10 +192,40 @@ function exportObject(
   );
   if (documents.length) result.documents = documents;
 
-  const files = exportFiles(state, object.id);
   if (files.length) result.files = files;
 
+  const links = exportLinks(object, files, schema);
+  if (links.length) result.links = links;
+
   return result;
+}
+
+function relatedRecruitments(state, projectId) {
+  return (state.objects ?? []).filter(
+    (object) =>
+      (object.type === "recruitment" || object.type === "nabor") &&
+      String(object.values?.project_id ?? "") === String(projectId),
+  );
+}
+
+function exportProjectRecruitments(
+  state,
+  project,
+  objectsById,
+  schema,
+  geographyCatalog,
+  documentCatalog,
+) {
+  return relatedRecruitments(state, project.id).map((recruitment) =>
+    exportObject(
+      state,
+      recruitment,
+      objectsById,
+      schema,
+      geographyCatalog,
+      documentCatalog,
+    ),
+  );
 }
 
 /**
@@ -163,6 +234,10 @@ function exportObject(
  * Deliberately excludes extraction rules, evidence, import snapshots and
  * commit/session internals. It keeps all stored business values and resolves
  * reference fields to {id, name, type} using the whole workspace.
+ *
+ * Projects additionally include every related recruitment with its complete
+ * business payload (values, geography, financing, documents, files and links),
+ * even when those recruitment objects are not direct members of the View.
  */
 export function createAiViewExport({
   state,
@@ -179,19 +254,38 @@ export function createAiViewExport({
   const objectsById = new Map(
     (state.objects ?? []).map((object) => [String(object.id), object]),
   );
+
+  let relatedRecruitmentCount = 0;
   const objects = view.objectIds
     .map((id) => objectsById.get(String(id)))
     .filter(Boolean)
-    .map((object) =>
-      exportObject(
+    .map((object) => {
+      const exported = exportObject(
         state,
         object,
         objectsById,
         schema,
         geographyCatalog,
         documentCatalog,
-      ),
-    );
+      );
+
+      if (object.type === "project") {
+        const recruitments = exportProjectRecruitments(
+          state,
+          object,
+          objectsById,
+          schema,
+          geographyCatalog,
+          documentCatalog,
+        );
+        if (recruitments.length) {
+          exported.recruitments = recruitments;
+          relatedRecruitmentCount += recruitments.length;
+        }
+      }
+
+      return exported;
+    });
 
   if (!objects.length) {
     throw new Error("View nie zawiera już żadnych istniejących obiektów.");
@@ -205,6 +299,8 @@ export function createAiViewExport({
       query: view.query || undefined,
       type: view.type !== "all" ? view.type : undefined,
       object_count: objects.length,
+      related_recruitment_count:
+        relatedRecruitmentCount || undefined,
     }),
     objects,
   };
