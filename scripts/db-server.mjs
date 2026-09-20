@@ -56,10 +56,19 @@ ensureColumn("projects", "last_checked_at", "TEXT");
 ensureColumn("operators", "last_checked_at", "TEXT");
 ensureColumn("recruitments", "last_checked_at", "TEXT");
 ensureColumn("recruitments", "continuous", "INTEGER");
-db.pragma("user_version = 3");
+ensureColumn("recruitments", "operator_id", "INTEGER");
+ensureColumn("recruitments", "source_number", "TEXT");
+ensureColumn("recruitments", "action_code", "TEXT");
+ensureColumn("recruitments", "documents_url", "TEXT");
+ensureColumn("recruitments", "data_source_url", "TEXT");
+ensureColumn("recruitments", "direct_recruitment_link", "INTEGER");
+ensureColumn("recruitments", "notes", "TEXT");
+ensureColumn("recruitments", "funding_verified_at", "TEXT");
+ensureColumn("recruitments", "funding_verification_url", "TEXT");
+db.pragma("user_version = 4");
 
 db.prepare(
-  `INSERT INTO app_meta(key, value) VALUES ('schema_version', '3')
+  `INSERT INTO app_meta(key, value) VALUES ('schema_version', '4')
    ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
 ).run();
 
@@ -266,14 +275,23 @@ function syncBusinessTables(state, groupByObject) {
   `);
   const insertRecruitment = db.prepare(`
     INSERT INTO recruitments(
-      id, object_id, project_id, external_number, sequence_number, year, status,
+      id, object_id, project_id, operator_id,
+      external_number, source_number, sequence_number, year, status,
       continuous, refund_percent_min, refund_percent_max,
       start_low_date, start_ceil_date, end_low_date, end_ceil_date,
       planned_start_year, planned_start_month, planned_start_quarter,
       planned_end_year, planned_end_month, planned_end_quarter,
-      closed_status, status_reason, announcement_url, last_checked_at,
-      geography_group_id
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      closed_status, status_reason, action_code,
+      announcement_url, documents_url, data_source_url,
+      direct_recruitment_link, notes,
+      funding_verified_at, funding_verification_url,
+      last_checked_at, geography_group_id
+    ) VALUES (
+      ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+      ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+      ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+      ?, ?, ?, ?
+    )
   `);
 
   // Operators are materialized first because project.operator_id points to one.
@@ -320,7 +338,9 @@ function syncBusinessTables(state, groupByObject) {
       objectDbId(object.id),
       String(object.id),
       projectIdByObject.get(String(values.project_id ?? "")) ?? null,
+      operatorIdByObject.get(String(values.operator_id ?? "")) ?? null,
       nullableText(values.external_number),
+      nullableText(values.source_number),
       nullableInt(values.sequence_number),
       nullableInt(values.year),
       nullableText(values.status) ?? "OGLOSZONY",
@@ -339,7 +359,14 @@ function syncBusinessTables(state, groupByObject) {
       nullableInt(values.planowanyKoniecKwartal),
       nullableText(values.statusZakonczenia),
       nullableText(values.powodStatusu),
+      nullableText(values.action_code),
       nullableText(values.urlOgloszenia),
+      nullableText(values.documents_url),
+      nullableText(values.data_source_url),
+      nullableBoolean(values.direct_recruitment_link),
+      nullableText(values.notes),
+      nullableText(values.funding_verified_at),
+      nullableText(values.funding_verification_url),
       nullableText(values.last_checked_at),
       groupByObject.get(String(object.id)) ?? null,
     );
