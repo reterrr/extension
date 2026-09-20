@@ -8,6 +8,10 @@ import {
   createObjectSearchDocument,
 } from "../shared/search/objectSearch.js";
 import {
+  aiViewExportFilename,
+  createAiViewExport,
+} from "../shared/export/aiViewExport.js";
+import {
   OBJECT_VIEW_STORAGE_KEY,
   createObjectView,
   normalizeObjectView,
@@ -166,6 +170,37 @@ import { createPickerClient } from "./pickerRpc";
     render();
     notice("Widok wyczyszczony. Pokazuję wszystkie obiekty.");
   }
+  function downloadJsonFile(filename, value) {
+    const url = URL.createObjectURL(
+      new Blob([JSON.stringify(value, null, 2)], {
+        type: "application/json",
+      }),
+    );
+    const link = node("a");
+    link.href = url;
+    link.download = filename;
+    document.body.append(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  function exportObjectViewForAi() {
+    const view = normalizedObjectView();
+    if (!view) throw new Error("Najpierw ustaw View z wyników wyszukiwania.");
+    const exportedAt = new Date().toISOString();
+    const payload = createAiViewExport({
+      state: db,
+      view,
+      schema: BurbotSchema,
+      geographyCatalog: BurbotGeography?.catalog || [],
+      documentCatalog: BurbotDocuments?.catalog || [],
+      exportedAt,
+    });
+    downloadJsonFile(aiViewExportFilename(exportedAt), payload);
+    notice("Wyeksportowano View dla AI: " + payload.objects.length + " obiektów.");
+  }
+
   function adopt(next) {
     if (next?.objects && next.revision >= db.revision) {
       if (next.revision > db.revision) preview = null;
@@ -1111,6 +1146,13 @@ import { createPickerClient } from "./pickerRpc";
   $("connect").onclick = () => {
     void connect();
   };
+  $("export-object-view").onclick = () => {
+    try {
+      exportObjectViewForAi();
+    } catch (error) {
+      notice(error.message, true);
+    }
+  };
   $("clear-object-view").onclick = () => {
     void clearObjectView().catch((error) => notice(error.message, true));
   };
@@ -1235,16 +1277,10 @@ import { createPickerClient } from "./pickerRpc";
   });
   $("export").onclick = action(async () => {
     const saved = await data("GET");
-    const url = URL.createObjectURL(
-      new Blob([JSON.stringify(saved, null, 2)], { type: "application/json" }),
+    downloadJsonFile(
+      "burbot-" + new Date().toISOString().slice(0, 10) + ".json",
+      saved,
     );
-    const link = node("a");
-    link.href = url;
-    link.download = "burbot-" + new Date().toISOString().slice(0, 10) + ".json";
-    document.body.append(link);
-    link.click();
-    link.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
     $("more").open = false;
   });
   browser.runtime.onMessage.addListener((message) => {
