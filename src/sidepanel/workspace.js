@@ -948,6 +948,201 @@ import { createPickerClient } from "./pickerRpc";
       root.append(group);
     }
   }
+  function renderReferenceObjectPicker(root, definition) {
+    const referencedType = definition.references;
+    const candidates = db.objects.filter((object) => object.type === referencedType);
+    const geographyByObject = buildGeographySearchIndex(
+      db.geographies || [],
+      BurbotGeography?.catalog || [],
+    );
+
+    const picker = node("div", "reference-object-picker");
+    const selected = node("div", "reference-object-picker-selected");
+    const search = document.createElement("input");
+    search.type = "search";
+    search.className = "object-picker-search reference-object-picker-search";
+    search.autocomplete = "off";
+    search.spellcheck = false;
+    const typeLabel =
+      BurbotSchema[referencedType]?.label ||
+      (referencedType === "project" ? "Projekt" : referencedType);
+    search.placeholder = "Szukaj: " + typeLabel.toLocaleLowerCase("pl-PL") + "…";
+    search.setAttribute("aria-label", "Szukaj obiektu referencyjnego");
+
+    const feedback = node("div", "object-picker-search-feedback");
+    const results = node("div", "reference-object-picker-results");
+    const footer = node("div", "reference-object-picker-footer");
+    picker.append(selected, search, feedback, results, footer);
+    root.append(picker);
+
+    let query = "";
+
+    const candidateMeta = (object) => {
+      const meta = [];
+      if (object.values?.number) meta.push("Numer " + object.values.number);
+      if (object.values?.external_number)
+        meta.push(String(object.values.external_number));
+      if (object.values?.nip) meta.push("NIP " + object.values.nip);
+      if (object.importKey) meta.push(String(object.importKey));
+      return meta.join(" · ");
+    };
+
+    const searchDocument = (object) =>
+      createObjectSearchDocument(
+        object,
+        C.displayName(object),
+        BurbotSchema[object.type]?.label || object.type,
+        geographyByObject.get(object.id) || {},
+      );
+
+    const selectObject = (object) => {
+      draft = object.id;
+      renderResults();
+      controls();
+    };
+
+    const visibleButtons = () =>
+      Array.from(results.querySelectorAll("button.reference-object-option"));
+
+    const moveFocus = (button, direction) => {
+      const buttons = visibleButtons();
+      if (!buttons.length) return;
+      const current = Math.max(0, buttons.indexOf(button));
+      buttons[(current + direction + buttons.length) % buttons.length].focus();
+    };
+
+    const optionButton = (object) => {
+      const button = node("button", "object-option reference-object-option");
+      button.type = "button";
+      button.dataset.objectId = object.id;
+      const isSelected = String(object.id) === String(draft);
+      button.setAttribute("aria-selected", String(isSelected));
+      button.disabled = busy;
+
+      const copy = node("span", "object-option-copy");
+      copy.append(node("strong", "object-option-name", C.displayName(object)));
+      const meta = candidateMeta(object);
+      if (meta) copy.append(node("small", "object-option-meta", meta));
+      button.append(copy);
+      if (isSelected)
+        button.append(node("span", "object-option-current", "✓"));
+
+      button.onclick = () => selectObject(object);
+      button.onkeydown = (event) => {
+        if (event.key === "ArrowDown") {
+          event.preventDefault();
+          moveFocus(button, 1);
+        } else if (event.key === "ArrowUp") {
+          event.preventDefault();
+          moveFocus(button, -1);
+        } else if (event.key === "Escape") {
+          event.preventDefault();
+          search.focus();
+        }
+      };
+      return button;
+    };
+
+    function renderSelected() {
+      selected.replaceChildren();
+      const current = candidates.find(
+        (object) => String(object.id) === String(draft),
+      );
+      if (!current) {
+        selected.hidden = true;
+        return;
+      }
+      selected.hidden = false;
+      const copy = node("span", "reference-object-picker-selected-copy");
+      copy.append(
+        node("small", "reference-object-picker-selected-label", "Wybrano"),
+        node("strong", "", C.displayName(current)),
+      );
+      const meta = candidateMeta(current);
+      if (meta) copy.append(node("small", "object-option-meta", meta));
+      const clear = node("button", "text-button reference-object-picker-clear", "Wyczyść");
+      clear.type = "button";
+      clear.disabled = busy;
+      clear.onclick = () => {
+        draft = "";
+        renderResults();
+        controls();
+        search.focus();
+      };
+      selected.append(copy, clear);
+    }
+
+    function renderResults() {
+      renderSelected();
+      results.replaceChildren();
+      feedback.replaceChildren();
+
+      const compiled = compileObjectSearch(query);
+      search.classList.toggle("is-invalid", Boolean(compiled.error));
+      search.setAttribute("aria-invalid", String(Boolean(compiled.error)));
+
+      if (compiled.error) {
+        feedback.append(
+          node("small", "object-picker-search-error", compiled.error),
+        );
+        footer.textContent = "Niepoprawne wyszukiwanie";
+        return;
+      }
+
+      feedback.append(
+        node(
+          "small",
+          "object-picker-search-hint",
+          "Tekst · * wildcard · /regex/i · name: · number: · nip: · id: · geo:",
+        ),
+      );
+
+      const matches = candidates.filter((object) =>
+        compiled.matches(searchDocument(object)),
+      );
+      footer.textContent =
+        matches.length +
+        (matches.length === 1 ? " wynik" : " wyników") +
+        " · " +
+        typeLabel;
+
+      if (!matches.length) {
+        results.append(
+          node(
+            "div",
+            "reference-object-picker-empty",
+            query
+              ? "Brak pasujących obiektów."
+              : "Brak obiektów tego typu w workspace.",
+          ),
+        );
+        return;
+      }
+
+      for (const object of matches) results.append(optionButton(object));
+    }
+
+    search.oninput = () => {
+      query = search.value;
+      renderResults();
+    };
+    search.onkeydown = (event) => {
+      const buttons = visibleButtons();
+      if (event.key === "ArrowDown" && buttons.length) {
+        event.preventDefault();
+        buttons[0].focus();
+      } else if (event.key === "ArrowUp" && buttons.length) {
+        event.preventDefault();
+        buttons.at(-1).focus();
+      } else if (event.key === "Enter" && buttons.length) {
+        event.preventDefault();
+        buttons[0].click();
+      }
+    };
+
+    renderResults();
+  }
+
   function renderEditor() {
     const info = activeInfo();
     $("capture-area").hidden = !info;
@@ -966,16 +1161,13 @@ import { createPickerClient } from "./pickerRpc";
     }
     const root = $("value-control");
     root.replaceChildren();
-    let input;
-    if (["enum", "reference"].includes(definition.type)) {
+    let input = null;
+    if (definition.type === "reference") {
+      renderReferenceObjectPicker(root, definition);
+    } else if (definition.type === "enum") {
       input = node("select");
       input.append(new Option("Choose…", ""));
-      const options =
-        definition.type === "enum"
-          ? Object.entries(definition.options)
-          : db.objects
-              .filter((o) => o.type === definition.references)
-              .map((o) => [o.id, C.displayName(o)]);
+      const options = Object.entries(definition.options);
       for (const [value, label] of options)
         input.append(new Option(label, value));
       if (
@@ -1012,14 +1204,16 @@ import { createPickerClient } from "./pickerRpc";
       }
       input.value = String(draft);
     }
-    input.id = "edit-value";
-    input.disabled = busy;
-    input.oninput = () => {
-      draft = definition.type === "boolean" ? input.checked : input.value;
-      input.indeterminate = false;
-      controls();
-    };
-    if (definition.type !== "boolean") root.append(input);
+    if (input) {
+      input.id = "edit-value";
+      input.disabled = busy;
+      input.oninput = () => {
+        draft = definition.type === "boolean" ? input.checked : input.value;
+        input.indeterminate = false;
+        controls();
+      };
+      if (definition.type !== "boolean") root.append(input);
+    }
     if (definition.type === "url" && C.hasValue(values[active.field])) {
       try {
         const href = C.coerce(values[active.field], "url"),

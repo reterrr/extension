@@ -375,6 +375,118 @@ main {
   font-weight: 800;
 }
 
+
+.reference-object-picker {
+  overflow: hidden;
+  border: 1px solid #cbd7cd;
+  border-radius: 9px;
+  background: #fff;
+}
+
+.reference-object-picker-selected {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 9px;
+  border-bottom: 1px solid #dfe8e1;
+  background: #edf6f0;
+  box-shadow: inset 3px 0 var(--success);
+}
+
+.reference-object-picker-selected[hidden] {
+  display: none;
+}
+
+.reference-object-picker-selected-copy {
+  min-width: 0;
+  display: grid;
+  gap: 1px;
+}
+
+.reference-object-picker-selected-copy > strong {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reference-object-picker-selected-label {
+  color: var(--success);
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: .7px;
+  text-transform: uppercase;
+}
+
+.reference-object-picker-clear {
+  flex: none;
+  min-height: 26px;
+  padding: 4px 7px;
+  font-size: 9px;
+}
+
+.reference-object-picker-search {
+  width: calc(100% - 16px);
+  margin: 8px 8px 0;
+}
+
+.reference-object-picker .object-picker-search-feedback {
+  margin: 4px 8px 0;
+}
+
+.reference-object-picker-results {
+  max-height: min(38vh, 320px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 4px 6px 6px;
+  border-top: 1px solid #eef2ef;
+}
+
+.reference-object-picker .object-option {
+  width: 100%;
+  min-height: 46px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 2px 0;
+  padding: 7px 8px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: #fff;
+  text-align: left;
+}
+
+.reference-object-picker .object-option:hover,
+.reference-object-picker .object-option:focus-visible {
+  background: #f3f7f4;
+  border-color: #d5dfd7;
+}
+
+.reference-object-picker .object-option[aria-selected="true"] {
+  background: #eaf4ee;
+  border-color: #b6cfbf;
+  box-shadow: inset 3px 0 var(--success);
+}
+
+.reference-object-picker-empty {
+  padding: 14px 10px;
+  color: #859087;
+  font-size: 10px;
+  text-align: center;
+}
+
+.reference-object-picker-footer {
+  padding: 6px 9px;
+  border-top: 1px solid #e9eeea;
+  background: #f8faf8;
+  color: #7b877f;
+  font-size: 9px;
+}
+
 .object-picker-empty {
   display: grid;
   gap: 3px;
