@@ -204,7 +204,9 @@
     action_code: text("Kod działania", "Źródła"),
     urlOgloszenia: url("URL ogłoszenia"),
     documents_url: url("URL dokumentów"),
-    data_source_url: url("Źródło danych"),
+    data_source_url: text("Źródło danych / URL-e", "Źródła", {
+      multiline: true,
+    }),
     direct_recruitment_link: {
       label: "Link prowadzi do konkretnego naboru",
       type: "boolean",
@@ -215,7 +217,11 @@
       multiline: true,
     }),
     funding_verified_at: date("Data weryfikacji finansowania", "Dofinansowanie"),
-    funding_verification_url: url("Źródło weryfikacji finansowania", "Dofinansowanie"),
+    funding_verification_url: text(
+      "Źródło weryfikacji finansowania / URL-e",
+      "Dofinansowanie",
+      { multiline: true },
+    ),
     last_checked_at: systemDateTime(),
 
     // Pre-typed-domain compatibility. Existing objects/rules keep working,
