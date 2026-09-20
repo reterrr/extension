@@ -118,6 +118,31 @@ main {
   color: #8b968f;
 }
 
+
+.object-picker-search.is-invalid {
+  border-color: #d8a1a1;
+  background: #fff8f8;
+}
+
+.object-picker-search-feedback {
+  min-height: 18px;
+  margin-top: 5px;
+  padding: 0 2px;
+}
+
+.object-picker-search-hint {
+  color: #87928b;
+  font-size: 8px;
+  line-height: 1.35;
+}
+
+.object-picker-search-error {
+  color: var(--danger);
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
 .object-picker-filters {
   display: flex;
   gap: 4px;

@@ -2,6 +2,10 @@ import {
   createCapturedExtractionInput,
   createPageUrlCandidate,
 } from "../shared/extraction/rules";
+import {
+  compileObjectSearch,
+  createObjectSearchDocument,
+} from "../shared/search/objectSearch.js";
 import { createPickerClient } from "./pickerRpc";
 
 (() => {
@@ -337,13 +341,6 @@ import { createPickerClient } from "./pickerRpc";
     root.dataset.activeObjectId = objectId;
     root.replaceChildren();
 
-    const normalize = (value) =>
-      String(value ?? "")
-        .normalize("NFD")
-        .replace(/[\u0300-\u036f]/g, "")
-        .toLocaleLowerCase("pl-PL")
-        .trim();
-
     const local = (object) =>
       pageUrl &&
       (object.sourceUrl === pageUrl ||
@@ -353,20 +350,6 @@ import { createPickerClient } from "./pickerRpc";
 
     const objectKind = (object) =>
       object.type === "nabor" ? "recruitment" : object.type;
-
-    const searchable = (object) =>
-      normalize(
-        [
-          C.displayName(object),
-          BurbotSchema[object.type]?.label || object.type,
-          object.values?.number,
-          object.values?.external_number,
-          object.values?.nip,
-          object.values?.status,
-        ]
-          .filter(Boolean)
-          .join(" "),
-      );
 
     const picker = node("div", "object-picker");
     const toolbar = node("div", "object-picker-toolbar");
@@ -398,7 +381,14 @@ import { createPickerClient } from "./pickerRpc";
       filters.append(button);
     }
 
-    toolbar.append(search, filters);
+    const searchFeedback = node("div", "object-picker-search-feedback");
+    const syntaxHint = node(
+      "small",
+      "object-picker-search-hint",
+      'Obsługuje: * wildcard · /regex/i · type:projekty · nip:526* · -status:zakończony',
+    );
+    searchFeedback.append(syntaxHint);
+    toolbar.append(search, filters, searchFeedback);
     const results = node("div", "object-picker-results");
     picker.append(toolbar, results);
     root.append(picker);
@@ -478,10 +468,26 @@ import { createPickerClient } from "./pickerRpc";
         );
       }
 
-      const needle = normalize(switcherQuery);
-      const matches = (object) =>
-        (switcherType === "all" || objectKind(object) === switcherType) &&
-        (!needle || searchable(object).includes(needle));
+      const compiled = compileObjectSearch(switcherQuery);
+      search.classList.toggle("is-invalid", Boolean(compiled.error));
+      search.setAttribute("aria-invalid", String(Boolean(compiled.error)));
+      searchFeedback.replaceChildren();
+      if (compiled.error) {
+        searchFeedback.append(
+          node("small", "object-picker-search-error", compiled.error),
+        );
+      } else {
+        searchFeedback.append(syntaxHint);
+      }
+
+      const matches = (object) => {
+        if (switcherType !== "all" && objectKind(object) !== switcherType)
+          return false;
+        const typeLabel = BurbotSchema[object.type]?.label || object.type;
+        return compiled.matches(
+          createObjectSearchDocument(object, C.displayName(object), typeLabel),
+        );
+      };
 
       const localObjects = [...db.objects.filter((o) => local(o) && matches(o))]
         .reverse();
