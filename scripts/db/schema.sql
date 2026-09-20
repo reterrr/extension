@@ -70,7 +70,9 @@ CREATE TABLE IF NOT EXISTS recruitments (
   id INTEGER PRIMARY KEY,
   object_id TEXT NOT NULL UNIQUE,
   project_id INTEGER,
+  operator_id INTEGER,
   external_number TEXT,
+  source_number TEXT,
   sequence_number INTEGER,
   year INTEGER,
   status TEXT NOT NULL,
@@ -89,12 +91,20 @@ CREATE TABLE IF NOT EXISTS recruitments (
   planned_end_quarter INTEGER,
   closed_status TEXT,
   status_reason TEXT,
+  action_code TEXT,
   announcement_url TEXT,
+  documents_url TEXT,
+  data_source_url TEXT,
+  direct_recruitment_link INTEGER CHECK (direct_recruitment_link IN (0, 1)),
+  notes TEXT,
+  funding_verified_at TEXT,
+  funding_verification_url TEXT,
   last_checked_at TEXT,
   geography_group_id INTEGER,
   FOREIGN KEY (id) REFERENCES workspace_objects(db_id) ON DELETE CASCADE,
   FOREIGN KEY (object_id) REFERENCES workspace_objects(object_id) ON DELETE CASCADE,
   FOREIGN KEY (project_id) REFERENCES projects(id),
+  FOREIGN KEY (operator_id) REFERENCES operators(id),
   FOREIGN KEY (geography_group_id) REFERENCES geography_groups(id) ON DELETE SET NULL
 );
 
@@ -211,4 +221,4 @@ CREATE TABLE IF NOT EXISTS document_requirements (
   FOREIGN KEY (object_id) REFERENCES workspace_objects(object_id) ON DELETE CASCADE
 );
 
-PRAGMA user_version = 3;
+PRAGMA user_version = 4;
