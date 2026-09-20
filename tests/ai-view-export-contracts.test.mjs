@@ -15,6 +15,16 @@ const schema = {
       last_checked_at: { type: "datetime" },
     },
   },
+  recruitment: {
+    fields: {
+      external_number: { type: "string" },
+      project_id: { type: "reference", references: "project" },
+      status: { type: "enum" },
+      continuous: { type: "boolean" },
+      urlOgloszenia: { type: "url" },
+      last_checked_at: { type: "datetime" },
+    },
+  },
   operator: {
     fields: {
       name: { type: "string" },
@@ -62,11 +72,35 @@ function state() {
           name: "Pełny rozwój",
           operator_id: "operator-1",
           status: "AKTYWNY",
+          announcements_site_url: "https://example.test/project/recruitments",
           last_checked_at: "2026-09-20T10:00:00.000Z",
           custom_imported_value: "wartość dodatkowa",
         },
         evidence: {
           name: [{ sourceId: "source-1", charStart: 0, charEnd: 12 }],
+        },
+      },
+      {
+        id: "recruitment-1",
+        type: "recruitment",
+        sourceUrl: "https://example.test/recruitment/1",
+        values: {
+          external_number: "1/2026",
+          project_id: "project-1",
+          status: "AKTYWNY",
+          continuous: false,
+          urlOgloszenia: "https://example.test/recruitment/1/announcement",
+          last_checked_at: "2026-09-20T11:00:00.000Z",
+          custom_recruitment_value: "pełna wartość naboru",
+        },
+      },
+      {
+        id: "recruitment-other",
+        type: "recruitment",
+        values: {
+          external_number: "2/2026",
+          project_id: "other-project",
+          status: "PLANOWANY",
         },
       },
     ],
@@ -88,6 +122,13 @@ function state() {
         role: "OBEJMUJE",
         value: "śląskie|miasto|Katowice",
       },
+      {
+        id: "geo-recruitment-1",
+        objectId: "recruitment-1",
+        type: "MIASTO_NA_PRAWACH_POWIATU",
+        role: "OBEJMUJE",
+        value: "śląskie|miasto|Katowice",
+      },
     ],
     financingRules: [
       {
@@ -99,6 +140,16 @@ function state() {
         refund_percent_avg: 75,
         refund_percent_max: 80,
       },
+      {
+        id: "funding-recruitment-1",
+        objectId: "recruitment-1",
+        company_size: "MICRO",
+        variant_no: 1,
+        refund_percent_min: 80,
+        refund_percent_avg: 85,
+        refund_percent_max: 90,
+        max_amount_pln: 12000,
+      },
     ],
     documentRequirements: [
       {
@@ -107,6 +158,14 @@ function state() {
         document_type_key: "msp_application_form",
         requirement: "REQUIRED",
         auto_fill: true,
+      },
+      {
+        id: "document-recruitment-1",
+        objectId: "recruitment-1",
+        document_type_key: "msp_application_form",
+        requirement: "OPTIONAL",
+        auto_fill: false,
+        notes: "Dokument dla naboru",
       },
     ],
     fileSources: [
@@ -118,6 +177,15 @@ function state() {
         url: "https://example.test/regulamin.pdf",
         sourcePageUrl: "https://example.test/project",
         addedAt: "2026-09-20T10:05:00.000Z",
+      },
+      {
+        id: "file-recruitment-1",
+        objectId: "recruitment-1",
+        fileType: "PDF",
+        name: "Dokumentacja naboru.pdf",
+        url: "https://example.test/recruitment/1/docs.pdf",
+        sourcePageUrl: "https://example.test/recruitment/1",
+        addedAt: "2026-09-20T11:05:00.000Z",
       },
     ],
     importSources: [
@@ -198,6 +266,93 @@ test("AI View export includes readable related business data", () => {
   assert.equal(project.documents[0].requirement, "REQUIRED");
   assert.equal(project.files[0].name, "Regulamin.pdf");
   assert.equal(project.files[0].url, "https://example.test/regulamin.pdf");
+});
+
+test("project export includes every related recruitment with full business data", () => {
+  const payload = createAiViewExport({
+    state: state(),
+    view: {
+      version: 1,
+      objectIds: ["project-1"],
+      query: "type:projekty",
+      type: "project",
+    },
+    schema,
+    geographyCatalog,
+    documentCatalog,
+    exportedAt: "2026-09-20T12:00:00.000Z",
+  });
+
+  const project = payload.objects[0];
+  assert.equal(payload.view.related_recruitment_count, 1);
+  assert.equal(project.recruitments.length, 1);
+
+  const recruitment = project.recruitments[0];
+  assert.equal(recruitment.id, "recruitment-1");
+  assert.equal(recruitment.name, "1/2026");
+  assert.equal(recruitment.values.status, "AKTYWNY");
+  assert.equal(recruitment.values.continuous, false);
+  assert.equal(
+    recruitment.values.custom_recruitment_value,
+    "pełna wartość naboru",
+  );
+  assert.deepEqual(recruitment.values.project_id, {
+    id: "project-1",
+    name: "Pełny rozwój",
+    type: "project",
+  });
+  assert.equal(recruitment.geography[0].label, "Katowice");
+  assert.equal(recruitment.financing[0].refund_percent_avg, 85);
+  assert.equal(recruitment.financing[0].max_amount_pln, 12000);
+  assert.equal(recruitment.documents[0].requirement, "OPTIONAL");
+  assert.equal(recruitment.documents[0].notes, "Dokument dla naboru");
+  assert.equal(recruitment.files[0].name, "Dokumentacja naboru.pdf");
+
+  assert.equal(
+    project.recruitments.some((row) => row.id === "recruitment-other"),
+    false,
+  );
+});
+
+test("AI View export provides a deduplicated link index for projects and recruitments", () => {
+  const payload = createAiViewExport({
+    state: state(),
+    view: {
+      version: 1,
+      objectIds: ["project-1"],
+      query: "",
+      type: "project",
+    },
+    schema,
+    geographyCatalog,
+    documentCatalog,
+  });
+
+  const project = payload.objects[0];
+  const projectUrls = new Set(project.links.map((entry) => entry.url));
+  assert.ok(projectUrls.has("https://example.test/project"));
+  assert.ok(projectUrls.has("https://example.test/project/recruitments"));
+  assert.ok(projectUrls.has("https://example.test/regulamin.pdf"));
+
+  const recruitment = project.recruitments[0];
+  const recruitmentUrls = new Set(recruitment.links.map((entry) => entry.url));
+  assert.ok(recruitmentUrls.has("https://example.test/recruitment/1"));
+  assert.ok(
+    recruitmentUrls.has(
+      "https://example.test/recruitment/1/announcement",
+    ),
+  );
+  assert.ok(
+    recruitmentUrls.has("https://example.test/recruitment/1/docs.pdf"),
+  );
+
+  const sourceLink = recruitment.links.find(
+    (entry) => entry.url === "https://example.test/recruitment/1",
+  );
+  assert.ok(sourceLink.from.includes("source_url"));
+  assert.ok(
+    sourceLink.from.includes("file_source:Dokumentacja naboru.pdf"),
+  );
 });
 
 test("AI View export excludes extraction and evidence internals", () => {
