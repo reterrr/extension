@@ -63,6 +63,7 @@ test("SQLite schema creates typed business and provenance tables", () => {
   assert.ok(recruitmentColumns.has("data_source_url"));
   assert.ok(recruitmentColumns.has("direct_recruitment_link"));
   assert.ok(recruitmentColumns.has("notes"));
+  assert.ok(recruitmentColumns.has("funding_rules"));
   assert.ok(recruitmentColumns.has("funding_verified_at"));
   assert.ok(recruitmentColumns.has("funding_verification_url"));
   assert.ok(recruitmentColumns.has("last_checked_at"));
