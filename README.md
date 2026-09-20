@@ -222,6 +222,51 @@ import time                 -> project.last_checked_at
 
 Geography is normalized against `src/shared/types/geography.ts` before any database write. Powiaty, cities with powiat rights and gminas therefore use the same canonical values as the Workspace geography picker. All imported geography rows use role `OBEJMUJE`.
 
+## Recruitment + geography + financing XLSX import
+
+After operators and projects are present in the local SQLite workspace, the same BUR workbook can import **all recruitments** together with their geography and financing data.
+
+Recommended order:
+
+```bash
+npm run db
+npm run import:operators -- /path/to/bur_.xlsx
+npm run import:projects -- /path/to/bur_.xlsx
+npm run import:recruitments -- /path/to/bur_.xlsx --dry-run
+npm run import:recruitments -- /path/to/bur_.xlsx
+```
+
+The recruitment importer reads `Nabory`, `Geografia_Nabory`, `Geografia_Slownik`, `Projekty` and `Operatorzy`.
+
+It is idempotent by `nabor_id`. For every imported recruitment it refreshes the source-owned fields and replaces only that recruitment's imported geography and financing variants. Existing extraction rules, file sources and document requirements are left intact.
+
+Core mapping:
+
+```text
+nabor_id                         -> recruitment importKey / object ID for new records
+nabor_nazwa                      -> external_number
+nabor_nr                         -> source_number (+ sequence_number when numeric)
+projekt_id                       -> project_id
+operator_id                      -> operator_id
+status                           -> AKTYWNY / PLANOWANY / ZAKONCZONY
+nabor_od / nabor_do              -> actual dates, or exact planned dates for PLANOWANY
+link_nabor                       -> urlOgloszenia
+link_dokumenty                   -> documents_url
+kod_dzialania                    -> action_code
+zrodlo_danych                    -> data_source_url (supports multiple URLs separated by ;)
+uwaga                            -> notes
+link_prowadzi_do_konkretnego...  -> direct_recruitment_link
+zasady_dofinansowania            -> funding_rules
+data_weryfikacji_finansow        -> funding_verified_at
+zrodlo_weryfikacji_finansow      -> funding_verification_url
+```
+
+`continuous` is set only when the source explicitly describes the recruitment as continuous (including `CIAGLY`/ `ciągły` in the source ID/name/notes/rules).
+
+B2B financing becomes MICRO / SMALL / MEDIUM variants with base/standard refund percentages and company/person limits. B2C financing becomes one `B2C` variant with base/max refund, own-contribution percentages and service/refund limits.
+
+Geography is normalized through the same canonical Burbot geography catalog as Projects. `include` becomes `OBEJMUJE`; `exclude` becomes `WYKLUCZA`.
+
 ## Development
 
 ```bash

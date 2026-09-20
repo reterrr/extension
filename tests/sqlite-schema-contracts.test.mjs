@@ -56,6 +56,18 @@ test("SQLite schema creates typed business and provenance tables", () => {
   assert.ok(recruitmentColumns.has("refund_percent_min"));
   assert.ok(recruitmentColumns.has("refund_percent_max"));
   assert.ok(recruitmentColumns.has("continuous"));
+  assert.ok(recruitmentColumns.has("operator_id"));
+  assert.ok(recruitmentColumns.has("source_number"));
+  assert.ok(recruitmentColumns.has("planned_start_date"));
+  assert.ok(recruitmentColumns.has("planned_end_date"));
+  assert.ok(recruitmentColumns.has("action_code"));
+  assert.ok(recruitmentColumns.has("documents_url"));
+  assert.ok(recruitmentColumns.has("data_source_url"));
+  assert.ok(recruitmentColumns.has("direct_recruitment_link"));
+  assert.ok(recruitmentColumns.has("notes"));
+  assert.ok(recruitmentColumns.has("funding_rules"));
+  assert.ok(recruitmentColumns.has("funding_verified_at"));
+  assert.ok(recruitmentColumns.has("funding_verification_url"));
   assert.ok(recruitmentColumns.has("last_checked_at"));
 
   const operatorColumns = new Set(
@@ -68,7 +80,7 @@ test("SQLite schema creates typed business and provenance tables", () => {
   );
   assert.ok(workspaceColumns.has("last_checked_at"));
 
-  assert.equal(db.pragma("user_version", { simple: true }), 3);
+  assert.equal(db.pragma("user_version", { simple: true }), 4);
   db.close();
 });
 

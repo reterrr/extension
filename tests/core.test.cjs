@@ -167,6 +167,10 @@ test("formats business values, validates enums, dates, NIP, percentages and refe
   );
   assert.equal(s.C.coerceField("false", { type: "boolean" }, s.state), false);
   const recruitment = s.context.BurbotSchema.recruitment.fields;
+  assert.equal(recruitment.operator_id.references, "operator");
+  assert.equal(recruitment.planned_start_date.type, "date");
+  assert.equal(recruitment.documents_url.type, "url");
+  assert.equal(recruitment.funding_rules.multiline, true);
   assert.equal(
     s.C.coerceField("true", recruitment.continuous, s.state),
     true,
@@ -180,6 +184,15 @@ test("formats business values, validates enums, dates, NIP, percentages and refe
       s.state,
     ),
     /2026/,
+  );
+  assert.equal(s.context.BurbotFunding.sizes.B2C, "B2C / osoba dorosła");
+  assert.equal(
+    s.C.coerceField("95%", F.refund_percent_base, s.state),
+    95,
+  );
+  assert.equal(
+    s.C.coerceField("5%", F.own_contribution_percent_standard, s.state),
+    5,
   );
   assert.equal(
     s.C.coerceField(
