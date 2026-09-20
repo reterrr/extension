@@ -13,6 +13,7 @@ function document({
   number = "",
   nip = "",
   status = "",
+  geography = {},
 }) {
   const object = {
     id,
@@ -30,7 +31,7 @@ function document({
     operator: "Operator",
     recruitment: "Nabór",
   };
-  return createObjectSearchDocument(object, name, labels[type]);
+  return createObjectSearchDocument(object, name, labels[type], geography);
 }
 
 const project = document({
@@ -54,6 +55,23 @@ const recruitment = document({
   name: "Nabór kompetencje cyfrowe 2026",
   number: "1/2026",
   status: "PLANOWANY",
+});
+
+const geographyProject = document({
+  id: "PRJ_GEO_ONLY",
+  type: "project",
+  name: "Akademia kompetencji przedsiębiorców",
+  number: "FEPK.07.09",
+  status: "AKTYWNY",
+  geography: {
+    geo:
+      "Podkarpackie Rzeszów rzeszowski podkarpackie|powiat|rzeszowski 1863011",
+    wojewodztwo: "Podkarpackie podkarpackie",
+    podregion: "Rzeszowski rzeszowski",
+    powiat: "Rzeszowski podkarpackie|powiat|rzeszowski",
+    gmina: "Trzebownisko rzeszowski podkarpackie 1816132",
+    miasto: "Rzeszów podkarpackie|miasto|Rzeszów",
+  },
 });
 
 function matches(query, candidate) {
@@ -98,6 +116,20 @@ test("negative terms exclude matching objects", () => {
   assert.equal(matches("slask -status:aktywny", project), false);
   assert.equal(matches("-type:operator", project), true);
   assert.equal(matches("-type:operator", operator), false);
+});
+
+test("geography participates in plain, field, wildcard and regex search", () => {
+  assert.equal(matches("podkarpackie", geographyProject), true);
+  assert.equal(matches("geo:rzeszow", geographyProject), true);
+  assert.equal(matches("woj:podkarpackie", geographyProject), true);
+  assert.equal(matches("powiat:rzesz*", geographyProject), true);
+  assert.equal(matches("gmina:trzebow?isko", geographyProject), true);
+  assert.equal(matches("miasto:/^rzesz[oó]w$/i", geographyProject), true);
+  assert.equal(
+    matches("type:projekty woj:podkarpackie -gmina:krakow", geographyProject),
+    true,
+  );
+  assert.equal(matches("woj:slaskie", geographyProject), false);
 });
 
 test("invalid regex is reported instead of throwing during rendering", () => {
