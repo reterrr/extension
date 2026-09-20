@@ -3,6 +3,7 @@ import {
   createPageUrlCandidate,
 } from "../shared/extraction/rules";
 import {
+  buildGeographySearchIndex,
   compileObjectSearch,
   createObjectSearchDocument,
 } from "../shared/search/objectSearch.js";
@@ -351,49 +352,13 @@ import { createPickerClient } from "./pickerRpc";
     const objectKind = (object) =>
       object.type === "nabor" ? "recruitment" : object.type;
 
-    const geographyCatalog = new Map(
-      (BurbotGeography?.catalog || []).map((entry) => [
-        entry.type + "\u0000" + entry.value,
-        entry,
-      ]),
+    const geographyByObject = buildGeographySearchIndex(
+      db.geographies || [],
+      BurbotGeography?.catalog || [],
     );
-    const geographyByObject = new Map();
-    for (const row of db.geographies || []) {
-      const entry = geographyCatalog.get(row.type + "\u0000" + row.value);
-      const text = [
-        entry?.label,
-        entry?.context,
-        entry?.value,
-        entry?.search,
-        row.value,
-      ]
-        .filter(Boolean)
-        .join(" ");
-      const current = geographyByObject.get(row.objectId) || {
-        geo: [],
-        wojewodztwo: [],
-        podregion: [],
-        powiat: [],
-        gmina: [],
-        miasto: [],
-      };
-      current.geo.push(text);
-      if (row.type === "WOJEWODZTWO") current.wojewodztwo.push(text);
-      else if (row.type === "PODREGION") current.podregion.push(text);
-      else if (row.type === "POWIAT") current.powiat.push(text);
-      else if (row.type === "GMINA") current.gmina.push(text);
-      else if (row.type === "MIASTO_NA_PRAWACH_POWIATU")
-        current.miasto.push(text);
-      geographyByObject.set(row.objectId, current);
-    }
 
-    const geographySearch = (object) => {
-      const values = geographyByObject.get(object.id);
-      if (!values) return {};
-      return Object.fromEntries(
-        Object.entries(values).map(([key, parts]) => [key, parts.join(" ")]),
-      );
-    };
+    const geographySearch = (object) =>
+      geographyByObject.get(object.id) || {};
 
     const picker = node("div", "object-picker");
     const toolbar = node("div", "object-picker-toolbar");

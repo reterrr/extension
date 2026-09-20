@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  buildGeographySearchIndex,
   compileObjectSearch,
   createObjectSearchDocument,
 } from "../src/shared/search/objectSearch.js";
@@ -116,6 +117,68 @@ test("negative terms exclude matching objects", () => {
   assert.equal(matches("slask -status:aktywny", project), false);
   assert.equal(matches("-type:operator", project), true);
   assert.equal(matches("-type:operator", operator), false);
+});
+
+test("woj filter is inferred from city and powiat geography rows", () => {
+  const catalog = [
+    {
+      type: "MIASTO_NA_PRAWACH_POWIATU",
+      value: "śląskie|miasto|Bytom",
+      label: "Bytom",
+      context: "śląskie",
+      search: "SLASKIE_BYTOM śląskie|miasto|Bytom Bytom śląskie",
+    },
+    {
+      type: "MIASTO_NA_PRAWACH_POWIATU",
+      value: "śląskie|miasto|Katowice",
+      label: "Katowice",
+      context: "śląskie",
+      search: "SLASKIE_KATOWICE śląskie|miasto|Katowice Katowice śląskie",
+    },
+    {
+      type: "POWIAT",
+      value: "śląskie|powiat|będziński",
+      label: "będziński",
+      context: "śląskie",
+      search: "SLASKIE_BEDZINSKI śląskie|powiat|będziński będziński śląskie",
+    },
+  ];
+  const rows = [
+    {
+      objectId: "PR_SLA_001",
+      type: "MIASTO_NA_PRAWACH_POWIATU",
+      value: "śląskie|miasto|Bytom",
+    },
+    {
+      objectId: "PR_SLA_001",
+      type: "MIASTO_NA_PRAWACH_POWIATU",
+      value: "śląskie|miasto|Katowice",
+    },
+    {
+      objectId: "PR_SLA_001",
+      type: "POWIAT",
+      value: "śląskie|powiat|będziński",
+    },
+  ];
+
+  const geography = buildGeographySearchIndex(rows, catalog).get("PR_SLA_001");
+  assert.ok(geography);
+  assert.match(geography.wojewodztwo, /śląskie/i);
+
+  const candidate = document({
+    id: "PR_SLA_001",
+    type: "project",
+    name: "Pełny rozwój",
+    status: "AKTYWNY",
+    geography,
+  });
+  assert.equal(
+    matches(
+      "type:projekty woj:śląskie geo:/Bytom|Chorzów|Dąbrowa Górnicza|Gliwice|Katowice/i",
+      candidate,
+    ),
+    true,
+  );
 });
 
 test("geography participates in plain, field, wildcard and regex search", () => {
