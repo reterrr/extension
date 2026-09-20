@@ -7,6 +7,13 @@ import {
   compileObjectSearch,
   createObjectSearchDocument,
 } from "../shared/search/objectSearch.js";
+import {
+  OBJECT_VIEW_STORAGE_KEY,
+  createObjectView,
+  normalizeObjectView,
+  objectInView,
+  objectsInView,
+} from "../shared/search/objectView.js";
 import { createPickerClient } from "./pickerRpc";
 
 (() => {
@@ -32,7 +39,8 @@ import { createPickerClient } from "./pickerRpc";
     descriptors = [],
     ready = false,
     switcherQuery = "",
-    switcherType = "all";
+    switcherType = "all",
+    objectView = null;
   const expanded = new Set();
   const chosen = () => db.objects.find((o) => o.id === objectId);
   const keyOf = (descriptor) =>
@@ -94,6 +102,69 @@ import { createPickerClient } from "./pickerRpc";
   function notice(text, error = false) {
     $("notice").textContent = text;
     $("notice").className = error ? "error" : "";
+  }
+
+  function normalizedObjectView() {
+    objectView = normalizeObjectView(objectView, db.objects);
+    return objectView;
+  }
+
+  function renderObjectViewIndicator() {
+    const root = $("active-object-view");
+    if (!root) return;
+    const view = normalizedObjectView();
+    root.hidden = !view;
+    if (!view) return;
+    const count = view.objectIds.length;
+    $("active-object-view-count").textContent =
+      count + (count === 1 ? " obiekt" : " obiektów");
+    const query = view.query || (view.type !== "all" ? "type:" + view.type : "");
+    $("active-object-view-query").textContent = query;
+    $("active-object-view-query").hidden = !query;
+    root.title = query
+      ? "Widok utworzony z: " + query
+      : "Tymczasowy widok roboczy";
+  }
+
+  async function persistObjectView(next) {
+    objectView = normalizeObjectView(next, db.objects);
+    if (objectView) {
+      await browser.storage.session.set({
+        [OBJECT_VIEW_STORAGE_KEY]: objectView,
+      });
+    } else {
+      await browser.storage.session.remove(OBJECT_VIEW_STORAGE_KEY);
+    }
+  }
+
+  async function setObjectView(objects, query, type) {
+    const next = createObjectView(
+      objects,
+      query,
+      type,
+      new Date().toISOString(),
+    );
+    await persistObjectView(next);
+    if (!objectInView(objectView, objectId)) {
+      objectId = objectView.objectIds[0] || "";
+      active = null;
+      preview = null;
+      resetCapture();
+    }
+    switcherQuery = "";
+    switcherType = "all";
+    $("switcher").open = false;
+    render();
+    notice("Widok roboczy ustawiony: " + objectView.objectIds.length + " obiektów.");
+  }
+
+  async function clearObjectView() {
+    objectView = null;
+    await browser.storage.session.remove(OBJECT_VIEW_STORAGE_KEY);
+    switcherQuery = "";
+    switcherType = "all";
+    render();
+    notice("Widok wyczyszczony. Pokazuję wszystkie obiekty.");
   }
   function adopt(next) {
     if (next?.objects && next.revision >= db.revision) {
@@ -911,8 +982,12 @@ import { createPickerClient } from "./pickerRpc";
       : "Save value & next";
   }
   function render() {
+    renderObjectViewIndicator();
     if (!chosen()) {
-      objectId = db.objects.at(-1)?.id || "";
+      objectId =
+        objectsInView(db.objects, normalizedObjectView()).at(0)?.id ||
+        db.objects.at(-1)?.id ||
+        "";
       active = null;
       resetCapture();
     }
@@ -989,6 +1064,9 @@ import { createPickerClient } from "./pickerRpc";
 
   $("connect").onclick = () => {
     void connect();
+  };
+  $("clear-object-view").onclick = () => {
+    void clearObjectView().catch((error) => notice(error.message, true));
   };
   $("pick").onclick = action(async () => {
     await rpc(picking ? "STOP" : "PICK");
@@ -1147,11 +1225,20 @@ import { createPickerClient } from "./pickerRpc";
       adopt(changes["burbot:v1"].newValue);
       render();
     }
+    if (area === "session" && changes[OBJECT_VIEW_STORAGE_KEY]) {
+      objectView = normalizeObjectView(
+        changes[OBJECT_VIEW_STORAGE_KEY].newValue,
+        db.objects,
+      );
+      render();
+    }
   });
   window.addEventListener("pagehide", disconnect);
   (async () => {
     windowId = (await browser.windows.getCurrent()).id;
     await data("GET");
+    const storedView = await browser.storage.session.get(OBJECT_VIEW_STORAGE_KEY);
+    objectView = normalizeObjectView(storedView[OBJECT_VIEW_STORAGE_KEY], db.objects);
     ready = true;
     await receiveFocus(await data("GET_FOCUS", { windowId }));
     render();
