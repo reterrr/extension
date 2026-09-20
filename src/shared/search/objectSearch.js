@@ -46,6 +46,99 @@ function canonicalType(value) {
   return TYPE_ALIASES.get(normalizeObjectSearch(value)) ?? null;
 }
 
+function appendUnique(values, value) {
+  const text = String(value ?? "").trim();
+  if (text && !values.includes(text)) values.push(text);
+}
+
+function geographyEntryText(row, entry) {
+  return [
+    entry?.label,
+    entry?.context,
+    entry?.value,
+    entry?.search,
+    row.value,
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
+function geographyParents(row, entry) {
+  const canonical = String(entry?.value ?? row.value ?? "");
+  const parts = canonical.split("|");
+  let wojewodztwo = "";
+  let powiat = "";
+
+  if (row.type === "WOJEWODZTWO") {
+    wojewodztwo = canonical;
+  } else if (
+    parts.length >= 3 &&
+    (parts[1] === "powiat" || parts[1] === "miasto")
+  ) {
+    wojewodztwo = parts[0];
+    if (parts[1] === "powiat") powiat = parts.at(-1) ?? "";
+  } else if (row.type === "GMINA" && entry?.context) {
+    const context = String(entry.context)
+      .split("·")
+      .map((part) => part.trim())
+      .filter(Boolean);
+    if (context.length >= 2) {
+      powiat = context[0];
+      wojewodztwo = context.at(-1) ?? "";
+    }
+  }
+
+  return { wojewodztwo, powiat };
+}
+
+export function buildGeographySearchIndex(geographies = [], catalog = []) {
+  const catalogByKey = new Map(
+    catalog.map((entry) => [entry.type + "\u0000" + entry.value, entry]),
+  );
+  const byObject = new Map();
+
+  for (const row of geographies) {
+    const entry = catalogByKey.get(row.type + "\u0000" + row.value);
+    const text = geographyEntryText(row, entry);
+    const current = byObject.get(row.objectId) ?? {
+      geo: [],
+      wojewodztwo: [],
+      podregion: [],
+      powiat: [],
+      gmina: [],
+      miasto: [],
+    };
+
+    appendUnique(current.geo, text);
+
+    if (row.type === "WOJEWODZTWO")
+      appendUnique(current.wojewodztwo, entry?.label ?? row.value);
+    else if (row.type === "PODREGION")
+      appendUnique(current.podregion, text);
+    else if (row.type === "POWIAT")
+      appendUnique(current.powiat, text);
+    else if (row.type === "GMINA")
+      appendUnique(current.gmina, text);
+    else if (row.type === "MIASTO_NA_PRAWACH_POWIATU")
+      appendUnique(current.miasto, text);
+
+    const parents = geographyParents(row, entry);
+    appendUnique(current.wojewodztwo, parents.wojewodztwo);
+    appendUnique(current.powiat, parents.powiat);
+
+    byObject.set(row.objectId, current);
+  }
+
+  return new Map(
+    [...byObject].map(([objectId, fields]) => [
+      objectId,
+      Object.fromEntries(
+        Object.entries(fields).map(([key, values]) => [key, values.join(" ")]),
+      ),
+    ]),
+  );
+}
+
 export function createObjectSearchDocument(
   object,
   displayName,
