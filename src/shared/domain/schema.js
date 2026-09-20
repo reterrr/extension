@@ -124,6 +124,13 @@
       references: "project",
       group: "Podstawowe",
     },
+    operator_id: {
+      label: "Operator naboru",
+      type: "reference",
+      references: "operator",
+      group: "Podstawowe",
+    },
+    source_number: text("Numer źródłowy naboru"),
     sequence_number: integer("Numer kolejny", "Podstawowe", { min: 1 }),
     year: integer("Rok", "Podstawowe", { min: 1000, max: 9999 }),
     continuous: {
@@ -194,7 +201,18 @@
 
     statusZakonczenia: text("Status zakończenia", "Zakończenie"),
     powodStatusu: text("Powód statusu", "Zakończenie", { multiline: true }),
+    action_code: text("Kod działania", "Źródła"),
     urlOgloszenia: url("URL ogłoszenia"),
+    documents_url: url("URL dokumentów"),
+    data_source_url: url("Źródło danych"),
+    direct_recruitment_link: {
+      label: "Link prowadzi do konkretnego naboru",
+      type: "boolean",
+      group: "Źródła",
+    },
+    notes: text("Uwagi", "Źródła", { multiline: true }),
+    funding_verified_at: date("Data weryfikacji finansowania", "Dofinansowanie"),
+    funding_verification_url: url("Źródło weryfikacji finansowania", "Dofinansowanie"),
     last_checked_at: systemDateTime(),
 
     // Pre-typed-domain compatibility. Existing objects/rules keep working,
@@ -286,6 +304,18 @@
   });
 
   const fundingFields = {
+    refund_percent_base: {
+      label: "Bazowa refundacja",
+      type: "percentage",
+      min: 0,
+      max: 100,
+    },
+    refund_percent_standard: {
+      label: "Standardowa refundacja",
+      type: "percentage",
+      min: 0,
+      max: 100,
+    },
     refund_percent_min: {
       label: "Minimalna refundacja",
       type: "percentage",
@@ -304,8 +334,32 @@
       min: 0,
       max: 100,
     },
-    max_amount_pln: { label: "Maximum amount", type: "money" },
-    max_per_person_pln: { label: "Maximum per person", type: "money" },
+    max_amount_pln: { label: "Maksymalnie na firmę", type: "money" },
+    max_per_person_pln: { label: "Maksymalnie na uczestnika", type: "money" },
+    own_contribution_percent_standard: {
+      label: "Standardowy wkład własny",
+      type: "percentage",
+      min: 0,
+      max: 100,
+    },
+    own_contribution_percent_min: {
+      label: "Minimalny wkład własny",
+      type: "percentage",
+      min: 0,
+      max: 100,
+    },
+    max_service_value_pln: {
+      label: "Maksymalna wartość usług",
+      type: "money",
+    },
+    max_refund_standard_pln: {
+      label: "Standardowa maks. refundacja",
+      type: "money",
+    },
+    max_refund_max_pln: {
+      label: "Maksymalna refundacja",
+      type: "money",
+    },
     own_contribution_form: choice("Own contribution", {
       UNSPECIFIED: "Not distinguished in source",
       CASH: "Cash",
@@ -326,7 +380,13 @@
   });
 
   globalThis.BurbotFunding = Object.freeze({
-    sizes: { MICRO: "Micro", SMALL: "Small", MEDIUM: "Medium", LARGE: "Large" },
+    sizes: {
+      MICRO: "Micro",
+      SMALL: "Small",
+      MEDIUM: "Medium",
+      LARGE: "Large",
+      B2C: "B2C / osoba dorosła",
+    },
     fields: fundingFields,
   });
 
