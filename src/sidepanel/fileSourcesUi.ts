@@ -84,18 +84,12 @@ function isLocal(object: LegacyStoredObject, pageUrl: string): boolean {
 
 /** Mirrors workspace.js switcher ordering to resolve its private objectId. */
 function chosenObject(): LegacyStoredObject | undefined {
-  const buttons = Array.from(
-    document.querySelectorAll<HTMLButtonElement>("#object-options button"),
+  const activeId =
+    document.getElementById("object-options")?.dataset.activeObjectId ?? "";
+  return (
+    state.objects.find((object) => object.id === activeId) ??
+    state.objects.at(-1)
   );
-  const activeIndex = buttons.findIndex(
-    (button) => button.getAttribute("aria-current") === "true",
-  );
-  if (activeIndex < 0) return state.objects.at(-1);
-
-  const pageUrl = workspacePageUrl();
-  const local = state.objects.filter((object) => isLocal(object, pageUrl));
-  const saved = state.objects.filter((object) => !isLocal(object, pageUrl));
-  return [...local].reverse().concat([...saved].reverse())[activeIndex];
 }
 
 function host(url: string): string {
