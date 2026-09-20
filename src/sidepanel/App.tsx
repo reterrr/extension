@@ -77,6 +77,9 @@ export function App() {
               <span className="active-object-view-badge">VIEW</span>
               <span id="active-object-view-count" className="active-object-view-count" />
               <span id="active-object-view-query" className="active-object-view-query" />
+              <button id="export-object-view" type="button" className="text-button">
+                Eksport AI
+              </button>
               <button id="clear-object-view" type="button" className="text-button">
                 Wyczyść
               </button>
