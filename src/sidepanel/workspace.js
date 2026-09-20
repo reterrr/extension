@@ -431,6 +431,8 @@ import { createPickerClient } from "./pickerRpc";
     const geographySearch = (object) =>
       geographyByObject.get(object.id) || {};
 
+    const scopedObjects = objectsInView(db.objects, normalizedObjectView());
+
     const picker = node("div", "object-picker");
     const toolbar = node("div", "object-picker-toolbar");
     const search = document.createElement("input");
@@ -468,10 +470,29 @@ import { createPickerClient } from "./pickerRpc";
       'Obsługuje: * wildcard · /regex/i · type:projekty · geo:śląskie · powiat:rzeszowski',
     );
     searchFeedback.append(syntaxHint);
-    toolbar.append(search, filters, searchFeedback);
+
+    const viewActions = node("div", "object-picker-view-actions");
+    const viewInfo = node("span", "object-picker-view-info");
+    const setViewButton = node("button", "object-picker-set-view");
+    setViewButton.type = "button";
+    const clearViewButton = node(
+      "button",
+      "object-picker-clear-view",
+      "Wyczyść widok",
+    );
+    clearViewButton.type = "button";
+    clearViewButton.hidden = !objectView;
+    clearViewButton.onclick = () => {
+      void clearObjectView().catch((error) => notice(error.message, true));
+    };
+    viewActions.append(viewInfo, setViewButton, clearViewButton);
+
+    toolbar.append(search, filters, searchFeedback, viewActions);
     const results = node("div", "object-picker-results");
     picker.append(toolbar, results);
     root.append(picker);
+
+    let currentMatches = [];
 
     const visibleButtons = () =>
       Array.from(results.querySelectorAll("button.object-option"));
@@ -574,9 +595,25 @@ import { createPickerClient } from "./pickerRpc";
         );
       };
 
-      const localObjects = [...db.objects.filter((o) => local(o) && matches(o))]
-        .reverse();
-      const saved = db.objects.filter((o) => !local(o) && matches(o));
+      currentMatches = scopedObjects.filter(matches);
+      const localObjects = [...currentMatches.filter((o) => local(o))].reverse();
+      const saved = currentMatches.filter((o) => !local(o));
+
+      const hasRestriction =
+        Boolean(switcherQuery.trim()) || switcherType !== "all";
+      viewInfo.textContent = objectView
+        ? "Aktywny widok: " + scopedObjects.length + " obiektów"
+        : "Wyniki: " + currentMatches.length;
+      setViewButton.textContent = objectView
+        ? hasRestriction
+          ? "Zawęź widok · " + currentMatches.length
+          : "Widok aktywny · " + scopedObjects.length
+        : hasRestriction
+          ? "Ustaw widok · " + currentMatches.length
+          : "Wyszukaj obiekty, aby ustawić widok";
+      setViewButton.disabled =
+        Boolean(compiled.error) || !currentMatches.length || !hasRestriction;
+      clearViewButton.hidden = !objectView;
 
       appendGroup("Na tej stronie", localObjects);
       appendGroup(
@@ -601,6 +638,15 @@ import { createPickerClient } from "./pickerRpc";
         results.append(empty);
       }
     }
+
+    setViewButton.onclick = () => {
+      if (setViewButton.disabled) return;
+      void setObjectView(
+        currentMatches,
+        switcherQuery,
+        switcherType,
+      ).catch((error) => notice(error.message, true));
+    };
 
     search.oninput = () => {
       switcherQuery = search.value;
