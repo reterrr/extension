@@ -434,6 +434,133 @@ test("referenced objects must be approved first and each approval stages only on
   );
 });
 
+test("recruitment reference reuses an existing workspace project instead of duplicating it", () => {
+  const uuid = ids();
+  const now = "2026-09-20T14:50:00.000Z";
+  const session = reviewModule.createImportReviewSession(
+    documentFixture(),
+    "existing-project-reference.burbot-import.json",
+    uuid,
+    now,
+  );
+  const project = session.previewState.objects.find(
+    (object) => object.importKey === "project-1",
+  );
+  const recruitment = session.previewState.objects.find(
+    (object) => object.importKey === "recruitment-1",
+  );
+  assert.ok(project);
+  assert.ok(recruitment);
+
+  const existingState = BurbotCore.empty();
+  existingState.objects.push({
+    id: "existing-project-id",
+    type: "project",
+    importKey: "project-1",
+    label: "Generator Kompetencji 3.0",
+    values: {
+      name: "Generator Kompetencji 3.0",
+      number: "FEPK.01.01-TEST",
+    },
+    createdAt: now,
+    updatedAt: now,
+  });
+
+  const plan = reviewModule.buildImportApprovalPlan(
+    session,
+    recruitment.id,
+    existingState,
+  );
+
+  assert.deepEqual(plan.referencePatches, [
+    {
+      field: "project_id",
+      targetObjectId: "existing-project-id",
+    },
+  ]);
+  assert.deepEqual(plan.existingReferenceLinks, [
+    {
+      importKey: "project-1",
+      targetObjectId: "existing-project-id",
+    },
+  ]);
+
+  const staged = stageModule.stageImportReviewObject(
+    existingState,
+    plan,
+    uuid,
+    now,
+  );
+
+  assert.equal(staged.state.objects.length, 2);
+  assert.equal(
+    staged.state.objects.filter((object) => object.type === "project").length,
+    1,
+  );
+  const stagedRecruitment = staged.state.objects.find(
+    (object) => object.id === staged.stagedObjectId,
+  );
+  assert.ok(stagedRecruitment);
+  assert.equal(
+    stagedRecruitment.values.project_id,
+    "existing-project-id",
+  );
+
+  reviewModule.markImportObjectLinked(
+    session,
+    "project-1",
+    "existing-project-id",
+    now,
+  );
+  assert.equal(session.statusByObjectId[project.id], "APPROVED");
+  assert.equal(
+    session.approvedObjectIdByImportKey["project-1"],
+    "existing-project-id",
+  );
+});
+
+test("existing project can be resolved by unique project number when import keys differ", () => {
+  const uuid = ids();
+  const now = "2026-09-20T14:50:00.000Z";
+  const document = documentFixture();
+  document.objects[0].data.number = "FEDS.09.01-IP.02-0007/23";
+
+  const session = reviewModule.createImportReviewSession(
+    document,
+    "project-number-reference.burbot-import.json",
+    uuid,
+    now,
+  );
+  const recruitment = session.previewState.objects.find(
+    (object) => object.importKey === "recruitment-1",
+  );
+  assert.ok(recruitment);
+
+  const existingState = BurbotCore.empty();
+  existingState.objects.push({
+    id: "database-project-id",
+    type: "project",
+    importKey: "legacy-project-key",
+    label: "Existing project",
+    values: {
+      name: "Existing project",
+      number: "FEDS.09.01-IP.02-0007/23",
+    },
+    createdAt: now,
+    updatedAt: now,
+  });
+
+  const plan = reviewModule.buildImportApprovalPlan(
+    session,
+    recruitment.id,
+    existingState,
+  );
+  assert.equal(
+    plan.referencePatches[0]?.targetObjectId,
+    "database-project-id",
+  );
+});
+
 test("portable import cannot set system-managed last_checked_at", () => {
   const document = documentFixture();
   document.objects[0].data.last_checked_at = "2026-09-18T10:00:00Z";
