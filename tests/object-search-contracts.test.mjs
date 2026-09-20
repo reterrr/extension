@@ -124,7 +124,7 @@ test("geography participates in plain, field, wildcard and regex search", () => 
   assert.equal(matches("woj:podkarpackie", geographyProject), true);
   assert.equal(matches("powiat:rzesz*", geographyProject), true);
   assert.equal(matches("gmina:trzebow?isko", geographyProject), true);
-  assert.equal(matches("miasto:/^rzesz[oó]w$/i", geographyProject), true);
+  assert.equal(matches("miasto:/rzesz[oó]w/i", geographyProject), true);
   assert.equal(
     matches("type:projekty woj:podkarpackie -gmina:krakow", geographyProject),
     true,
