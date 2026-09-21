@@ -18,7 +18,8 @@ from xml.etree import ElementTree as ET
 NS_MAIN = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
 NS_REL = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
 NS_PKG_REL = "http://schemas.openxmlformats.org/package/2006/relationships"
-REQUIRED_HEADERS = ["operator_id", "nazwa_operatora", "NIP", "strona_www"]
+REQUIRED_HEADERS = ["operator_id", "nazwa_operatora", "NIP"]
+OPTIONAL_HEADERS = ["rola", "adres", "email", "telefon", "strona_www", "uwagi"]
 
 
 def col_index(cell_ref: str) -> int:
@@ -98,28 +99,61 @@ def read_xlsx(path: Path) -> list[dict[str, str | None]]:
             f"; got: {headers}"
         )
     positions = {header: headers.index(header) for header in REQUIRED_HEADERS}
+    optional_positions = {
+        header: headers.index(header)
+        for header in OPTIONAL_HEADERS
+        if header in headers
+    }
 
-    records: list[dict[str, str | None]] = []
+    records: list[dict[str, Any]] = []
     for row_no, row in enumerate(rows[1:], start=2):
         row = row + [""] * (len(headers) - len(row))
         selected = [row[positions[header]].strip() for header in REQUIRED_HEADERS]
         if not any(selected):
             continue
-        operator_id, name, nip, website = selected
+        operator_id, name, nip = selected
         if not operator_id or not name or not nip:
             raise ValueError(f"Row {row_no}: operator_id, name and NIP are required.")
         if not re.fullmatch(r"\d{10}", nip):
             raise ValueError(f"Row {row_no}: NIP must contain exactly 10 digits: {nip!r}.")
+
+        def optional(header: str) -> str:
+            index = optional_positions.get(header)
+            return row[index].strip() if index is not None else ""
+
+        website = optional("strona_www")
         urls = [part.strip() for part in website.split(";") if part.strip()]
         for url in urls:
             parsed = urlparse(url)
             if parsed.scheme not in {"http", "https"} or not parsed.netloc:
                 raise ValueError(f"Row {row_no}: invalid HTTP(S) URL: {url!r}.")
+
+        role_raw = optional("rola").casefold()
+        role = None
+        if role_raw:
+            if role_raw not in {"operator", "partner"}:
+                raise ValueError(
+                    f"Row {row_no}: rola must be operator or partner, got {role_raw!r}."
+                )
+            role = "OPERATOR" if role_raw == "operator" else "PARTNER"
+
+        def contacts(header: str) -> list[str]:
+            return [
+                part.strip()
+                for part in re.split(r"[;\n\r]+", optional(header))
+                if part.strip()
+            ]
+
         records.append({
             "operator_id": operator_id,
             "name": name,
+            "role": role,
             "nip": nip,
+            "address": optional("adres") or None,
+            "emails": contacts("email"),
+            "phones": contacts("telefon"),
             "website": website or None,
+            "notes": optional("uwagi") or None,
             "source_url": urls[0] if urls else None,
         })
 
@@ -139,6 +173,7 @@ def empty_state() -> dict[str, Any]:
         "objects": [],
         "rules": [],
         "geographies": [],
+        "operatorContacts": [],
         "fileSources": [],
         "importSources": [],
         "financingRules": [],
@@ -184,7 +219,7 @@ def put_state(base_url: str, state: dict[str, Any]) -> None:
         raise RuntimeError(f"Cannot reach Burbot DB service at {base_url}.") from exc
 
 
-def find_existing(objects: list[dict[str, Any]], record: dict[str, str | None]) -> dict[str, Any] | None:
+def find_existing(objects: list[dict[str, Any]], record: dict[str, Any]) -> dict[str, Any] | None:
     operator_id = record["operator_id"]
     for obj in objects:
         if obj.get("type") == "operator" and obj.get("id") == operator_id:
@@ -201,7 +236,7 @@ def find_existing(objects: list[dict[str, Any]], record: dict[str, str | None]) 
     return exact[0] if len(exact) == 1 else None
 
 
-def merge_operators(state: dict[str, Any], records: list[dict[str, str | None]], source_name: str) -> dict[str, int]:
+def merge_operators(state: dict[str, Any], records: list[dict[str, Any]], source_name: str) -> dict[str, int]:
     objects = state.setdefault("objects", [])
     now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
     created = 0
@@ -229,11 +264,39 @@ def merge_operators(state: dict[str, Any], records: list[dict[str, str | None]],
         values = existing.setdefault("values", {})
         values["name"] = record["name"]
         values["nip"] = record["nip"]
-        if record["website"]:
-            values["website"] = record["website"]
+        if record["role"]:
+            values["role"] = record["role"]
         else:
-            values.pop("website", None)
+            values.pop("role", None)
+        for field, record_key in (
+            ("address", "address"),
+            ("website", "website"),
+            ("notes", "notes"),
+        ):
+            if record[record_key]:
+                values[field] = record[record_key]
+            else:
+                values.pop(field, None)
         values["last_checked_at"] = now
+
+        contacts = state.setdefault("operatorContacts", [])
+        contacts[:] = [
+            contact
+            for contact in contacts
+            if str(contact.get("objectId", "")) != str(existing["id"])
+        ]
+        for kind, items in (
+            ("EMAIL", record["emails"]),
+            ("PHONE", record["phones"]),
+        ):
+            for index, value in enumerate(items, start=1):
+                contacts.append({
+                    "id": f"xlsx:{record['operator_id']}:contact:{kind}:{index}",
+                    "objectId": str(existing["id"]),
+                    "kind": kind,
+                    "variant_no": index,
+                    "value": value,
+                })
 
         existing["type"] = "operator"
         existing["label"] = record["name"]
