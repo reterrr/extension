@@ -34,6 +34,7 @@ test("SQLite schema creates typed business and provenance tables", () => {
     "geography_groups",
     "geographies",
     "extraction_rules",
+    "field_evidence",
     "file_sources",
     "import_sources",
     "financing_rules",
@@ -80,7 +81,26 @@ test("SQLite schema creates typed business and provenance tables", () => {
   );
   assert.ok(workspaceColumns.has("last_checked_at"));
 
-  assert.equal(db.pragma("user_version", { simple: true }), 4);
+  const evidenceColumns = new Set(
+    db.prepare("PRAGMA table_info(field_evidence)").all().map((row) => row.name),
+  );
+  for (const column of [
+    "evidence_id",
+    "object_id",
+    "field",
+    "target_kind",
+    "target_id",
+    "page_url",
+    "selector_json",
+    "extraction_json",
+    "raw_value",
+    "value_at_capture_json",
+    "created_at",
+  ]) {
+    assert.ok(evidenceColumns.has(column), `missing field_evidence.${column}`);
+  }
+
+  assert.equal(db.pragma("user_version", { simple: true }), 5);
   db.close();
 });
 
