@@ -249,11 +249,13 @@ export function patchSidepanelUiState(
   patch: SidepanelUiPatch,
 ): Promise<void> {
   const storageKey = key(windowId);
-  writeQueue = writeQueue.then(async () => {
-    const current = await readSidepanelUiState(windowId);
-    const next = mergeState(current, patch);
-    await browser.storage.session.set({ [storageKey]: next });
-  });
+  writeQueue = writeQueue
+    .catch(() => undefined)
+    .then(async () => {
+      const current = await readSidepanelUiState(windowId);
+      const next = mergeState(current, patch);
+      await browser.storage.session.set({ [storageKey]: next });
+    });
   return writeQueue;
 }
 
