@@ -434,6 +434,179 @@ test("referenced objects must be approved first and each approval stages only on
   );
 });
 
+test("approving an existing imported object updates it in-place without duplicating or clearing omitted data", () => {
+  const uuid = ids();
+  const now = "2026-09-21T14:00:00.000Z";
+  const document = documentFixture();
+  document.objects[0].data.name = "Generator Kompetencji 3.0 — zweryfikowany";
+  document.objects[0].financing[0].data.refund_percent_max = 85;
+  delete document.objects[0].financing[0].data.max_amount_pln;
+
+  const session = reviewModule.createImportReviewSession(
+    document,
+    "project-update.burbot-import.json",
+    uuid,
+    now,
+  );
+  const importedProject = session.previewState.objects.find(
+    (object) => object.importKey === "project-1",
+  );
+  assert.ok(importedProject);
+
+  const existingState = BurbotCore.empty();
+  existingState.objects.push({
+    id: "existing-project-id",
+    type: "project",
+    importKey: "project-1",
+    label: "Generator Kompetencji 3.0",
+    values: {
+      name: "Generator Kompetencji 3.0",
+      number: "FEPK.01.01-TEST",
+      status: "AKTYWNY",
+      start_date: "2025-01-01",
+    },
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-09-01T00:00:00.000Z",
+  });
+  existingState.financingRules = [
+    {
+      id: "existing-funding-id",
+      objectId: "existing-project-id",
+      importKey: "micro-default",
+      company_size: "MICRO",
+      variant_no: 1,
+      refund_percent_min: 55,
+      refund_percent_max: 80,
+      max_amount_pln: 150000,
+      max_per_person_pln: 9000,
+      own_contribution_form: "CASH",
+    },
+  ];
+  existingState.fileSources = [
+    {
+      id: "existing-file-id",
+      objectId: "existing-project-id",
+      fileType: "PDF",
+      url: "https://example.test/files/regulamin.pdf",
+      name: "Stary regulamin.pdf",
+      sourcePageUrl: "https://example.test/project",
+      addedAt: "2026-09-01T00:00:00.000Z",
+    },
+  ];
+
+  const plan = reviewModule.buildImportApprovalPlan(
+    session,
+    importedProject.id,
+    existingState,
+  );
+  assert.equal(plan.existingTargetObjectId, "existing-project-id");
+  assert.deepEqual(plan.selectedDataFields, ["name"]);
+  assert.deepEqual(
+    plan.financingFieldsByImportKey["micro-default"].sort(),
+    [
+      "max_amount_pln",
+      "notes",
+      "own_contribution_form",
+      "refund_percent_avg",
+      "refund_percent_max",
+      "refund_percent_min",
+    ].sort(),
+  );
+
+  // max_amount_pln was intentionally removed from the raw input above, so it
+  // must not be in the explicit imported field set even though preview parsing
+  // may seed other defaults internally.
+  assert.equal(
+    plan.financingFieldsByImportKey["micro-default"].includes("max_amount_pln"),
+    false,
+  );
+
+  const staged = stageModule.stageImportReviewObject(
+    existingState,
+    plan,
+    uuid,
+    now,
+  );
+
+  assert.equal(staged.updatedExisting, true);
+  assert.equal(staged.stagedObjectId, "existing-project-id");
+  assert.equal(staged.state.objects.length, 1);
+
+  const updated = staged.state.objects[0];
+  assert.equal(
+    updated.values.name,
+    "Generator Kompetencji 3.0 — zweryfikowany",
+  );
+  assert.equal(updated.values.number, "FEPK.01.01-TEST");
+  assert.equal(updated.values.status, "AKTYWNY");
+  assert.equal(updated.values.start_date, "2025-01-01");
+
+  assert.equal(staged.state.financingRules.length, 1);
+  const funding = staged.state.financingRules[0];
+  assert.equal(funding.id, "existing-funding-id");
+  assert.equal(funding.refund_percent_min, 60);
+  assert.equal(funding.refund_percent_max, 85);
+  assert.equal(funding.max_amount_pln, 150000);
+  assert.equal(funding.max_per_person_pln, 9000);
+
+  assert.equal(staged.state.fileSources.length, 1);
+  assert.equal(staged.state.fileSources[0].id, "existing-file-id");
+  assert.equal(staged.state.fileSources[0].name, "Regulamin projektu.pdf");
+});
+
+test("existing-object update can match by project number without changing the internal object id", () => {
+  const uuid = ids();
+  const now = "2026-09-21T14:10:00.000Z";
+  const document = documentFixture();
+  document.objects[0].key = "ai-project-key";
+  document.objects[0].data.number = "FEDS.09.01-IP.02-0007/23";
+  document.objects[1].data.project_id = { $ref: "ai-project-key" };
+
+  const session = reviewModule.createImportReviewSession(
+    document,
+    "project-update-number.burbot-import.json",
+    uuid,
+    now,
+  );
+  const importedProject = session.previewState.objects.find(
+    (object) => object.importKey === "ai-project-key",
+  );
+  assert.ok(importedProject);
+
+  const existingState = BurbotCore.empty();
+  existingState.objects.push({
+    id: "stable-internal-id",
+    type: "project",
+    importKey: "old-import-key",
+    label: "Generator Kompetencji 3.0",
+    values: {
+      name: "Generator Kompetencji 3.0",
+      number: "FEDS.09.01-IP.02-0007/23",
+      status: "AKTYWNY",
+    },
+    createdAt: now,
+    updatedAt: now,
+  });
+
+  const plan = reviewModule.buildImportApprovalPlan(
+    session,
+    importedProject.id,
+    existingState,
+  );
+  assert.equal(plan.existingTargetObjectId, "stable-internal-id");
+
+  const staged = stageModule.stageImportReviewObject(
+    existingState,
+    plan,
+    uuid,
+    now,
+  );
+  assert.equal(staged.stagedObjectId, "stable-internal-id");
+  assert.equal(staged.state.objects.length, 1);
+  assert.equal(staged.state.objects[0].id, "stable-internal-id");
+  assert.equal(staged.state.objects[0].importKey, "old-import-key");
+});
+
 test("recruitment reference reuses an existing workspace project instead of duplicating it", () => {
   const uuid = ids();
   const now = "2026-09-20T14:50:00.000Z";
