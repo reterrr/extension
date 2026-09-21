@@ -288,6 +288,17 @@ export function ImportReviewPanel() {
     };
     window.addEventListener("burbot:import-review-changed", changed);
 
+    const workspaceReady = () => {
+      const windowId = windowIdRef.current;
+      if (windowId === null || modeRef.current !== "workspace") return;
+      void readSidepanelUiState(windowId).then((state) => {
+        if (modeRef.current === "workspace") {
+          restoreScroll(state.scroll.workspace);
+        }
+      });
+    };
+    window.addEventListener("burbot:workspace-ready", workspaceReady);
+
     const onScroll = () => {
       if (scrollTimerRef.current !== undefined) {
         window.clearTimeout(scrollTimerRef.current);
@@ -305,6 +316,7 @@ export function ImportReviewPanel() {
     return () => {
       disposed = true;
       window.removeEventListener("burbot:import-review-changed", changed);
+      window.removeEventListener("burbot:workspace-ready", workspaceReady);
       window.removeEventListener("scroll", onScroll);
       if (scrollTimerRef.current !== undefined) {
         window.clearTimeout(scrollTimerRef.current);
