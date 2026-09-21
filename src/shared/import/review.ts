@@ -764,7 +764,7 @@ export function buildImportApprovalPlan(
     const tracked =
       session.importedFinancingFieldsByObjectId?.[object.id]?.[key];
     const selectedFields =
-      tracked?.length
+      tracked !== undefined
         ? [...new Set(tracked)]
         : Object.keys(BurbotFunding.fields).filter((field) =>
             Object.prototype.hasOwnProperty.call(row, field),
