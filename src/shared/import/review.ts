@@ -31,9 +31,82 @@ export interface ImportApprovalExistingReferenceLink {
 export interface ImportApprovalPlan {
   document: unknown;
   selectedImportKey: string;
+  existingTargetObjectId?: string;
+  selectedDataFields: string[];
+  financingFieldsByImportKey: Record<string, string[]>;
   referencePatches: ImportApprovalReferencePatch[];
   existingReferenceLinks: ImportApprovalExistingReferenceLink[];
   temporaryDependencyImportKeys: string[];
+}
+
+function recordValue(value: unknown): Record<string, unknown> | undefined {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+function importedFieldSets(
+  input: unknown,
+  previewState: LegacyStorageState,
+): {
+  objectFields: Record<string, string[]>;
+  financingFields: Record<string, Record<string, string[]>>;
+} {
+  const root = recordValue(input);
+  const rawObjects = Array.isArray(root?.objects) ? root.objects : [];
+  const byImportKey = new Map(
+    previewState.objects
+      .filter((object) => object.importKey)
+      .map((object) => [String(object.importKey), object]),
+  );
+
+  const objectFields: Record<string, string[]> = {};
+  const financingFields: Record<string, Record<string, string[]>> = {};
+
+  for (const raw of rawObjects) {
+    const object = recordValue(raw);
+    if (!object || typeof object.key !== "string") continue;
+    const preview = byImportKey.get(object.key);
+    if (!preview) continue;
+
+    const data = recordValue(object.data);
+    objectFields[preview.id] = data ? Object.keys(data) : [];
+
+    const financing = Array.isArray(object.financing) ? object.financing : [];
+    const fieldsByKey: Record<string, string[]> = {};
+    for (const rawVariant of financing) {
+      const variant = recordValue(rawVariant);
+      if (!variant || typeof variant.key !== "string") continue;
+      const variantData = recordValue(variant.data);
+      fieldsByKey[variant.key] = variantData ? Object.keys(variantData) : [];
+    }
+    financingFields[preview.id] = fieldsByKey;
+  }
+
+  return { objectFields, financingFields };
+}
+
+function includeImportedObjectField(
+  session: ImportReviewSession,
+  objectId: string,
+  field: string,
+): void {
+  const fields = (session.importedFieldsByObjectId ||= {})[objectId] ?? [];
+  if (!fields.includes(field)) fields.push(field);
+  session.importedFieldsByObjectId[objectId] = fields;
+}
+
+function includeImportedFinancingField(
+  session: ImportReviewSession,
+  objectId: string,
+  financingImportKey: string,
+  field: string,
+): void {
+  const byObject = (session.importedFinancingFieldsByObjectId ||= {});
+  const byVariant = (byObject[objectId] ||= {});
+  const fields = byVariant[financingImportKey] ?? [];
+  if (!fields.includes(field)) fields.push(field);
+  byVariant[financingImportKey] = fields;
 }
 
 function quoteContext(text: string, evidence: ImportedEvidence) {
@@ -64,6 +137,7 @@ export function createImportReviewSession(
   );
   previewState.revision = 0;
 
+  const fieldSets = importedFieldSets(input, previewState);
   const objectOrder = previewState.objects.map((object) => object.id);
   return {
     id: uuid(),
@@ -76,6 +150,8 @@ export function createImportReviewSession(
       objectOrder.map((objectId) => [objectId, "PENDING"]),
     ),
     approvedObjectIdByImportKey: {},
+    importedFieldsByObjectId: fieldSets.objectFields,
+    importedFinancingFieldsByObjectId: fieldSets.financingFields,
     selectedObjectId: objectOrder[0] ?? null,
   };
 }
@@ -361,6 +437,7 @@ export function editImportReviewObjectField(
     if (!Object.keys(object.evidence).length) delete object.evidence;
   }
   (object.manualFields ||= {})[field] = true;
+  includeImportedObjectField(session, object.id, field);
   touch(session, object, now);
 }
 
@@ -380,6 +457,12 @@ export function editImportReviewFinancingField(
   const definition = BurbotFunding.fields[field];
   if (!definition) throw new Error(`Unknown financing field ${field}.`);
   row[field] = BurbotCore.coerceField(input, definition, session.previewState);
+  includeImportedFinancingField(
+    session,
+    object.id,
+    String(row.importKey ?? row.id),
+    field,
+  );
   touch(session, object, now);
 }
 
