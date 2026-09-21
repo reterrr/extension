@@ -313,6 +313,132 @@ test("document requirements and auto-fill belong to each object, not the catalog
   );
   assert.equal(s.context.BurbotDocuments.catalog[0].requirement, undefined);
 });
+test("recruitment notes is a normal optional business field", () => {
+  const s = setup();
+  assert.equal(s.context.BurbotSchema.recruitment.fields.notes.type, "string");
+  assert.equal(s.context.BurbotSchema.recruitment.fields.notes.multiline, true);
+  const recruitment = s.create("recruitment", "Nabór 1/2026");
+  s.mutate({
+    op: "EDIT",
+    objectId: recruitment.id,
+    field: "notes",
+    value: "Ważna uwaga do naboru",
+  });
+  assert.equal(
+    s.state.objects.find((object) => object.id === recruitment.id).values.notes,
+    "Ważna uwaga do naboru",
+  );
+});
+
+test("optional field evidence is stored without changing the field value or extraction rule", () => {
+  const s = setup();
+  const recruitment = s.create("recruitment", "Nabór 1/2026");
+  s.mutate({
+    op: "EDIT",
+    objectId: recruitment.id,
+    field: "notes",
+    value: "Wartość pozostaje ręczna",
+  });
+  const rulesBefore = s.state.rules.length;
+
+  s.mutate({
+    op: "ADD_FIELD_EVIDENCE",
+    objectId: recruitment.id,
+    field: "notes",
+    candidate: candidate(
+      "Fragment potwierdzający informację",
+      "https://example.org/recruitment",
+    ),
+  });
+
+  assert.equal(s.state.rules.length, rulesBefore);
+  assert.equal(
+    s.state.objects.find((object) => object.id === recruitment.id).values.notes,
+    "Wartość pozostaje ręczna",
+  );
+  assert.equal(s.state.fieldEvidence.length, 1);
+  assert.deepEqual(clone(s.state.fieldEvidence[0]), {
+    id: "3",
+    objectId: recruitment.id,
+    field: "notes",
+    pageUrl: "https://example.org/recruitment",
+    selector: "#name",
+    extraction: {
+      type: "selection",
+      quote: {
+        exact: "Fragment potwierdzający informację",
+        prefix: "",
+        suffix: "",
+      },
+    },
+    rawValue: "Fragment potwierdzający informację",
+    valueAtCapture: "Wartość pozostaje ręczna",
+    createdAt: "2026-09-15T12:00:00Z",
+  });
+});
+
+test("field evidence supports page URL and configuration targets and is removed with its target", () => {
+  const s = setup();
+  const project = s.create("project", "Projekt");
+  s.mutate({
+    op: "ADD_FIELD_EVIDENCE",
+    objectId: project.id,
+    field: "name",
+    candidate: {
+      pageUrl: "https://example.org/project",
+      selector: null,
+      raw: "https://example.org/project",
+      extraction: { type: "pageUrl" },
+    },
+  });
+  assert.equal(s.state.fieldEvidence[0].extraction.type, "pageUrl");
+
+  s.mutate({
+    op: "ADD_FUNDING",
+    objectId: project.id,
+    companySize: "MICRO",
+  });
+  const variant = s.state.financingRules[0];
+  s.mutate({
+    op: "EDIT",
+    objectId: project.id,
+    target: { kind: "funding", id: variant.id },
+    field: "refund_percent_max",
+    value: 80,
+  });
+  s.mutate({
+    op: "ADD_FIELD_EVIDENCE",
+    objectId: project.id,
+    target: { kind: "funding", id: variant.id },
+    field: "refund_percent_max",
+    candidate: candidate("do 80%"),
+  });
+  assert.equal(s.state.fieldEvidence.length, 2);
+  assert.deepEqual(clone(s.state.fieldEvidence[1].target), {
+    kind: "funding",
+    id: variant.id,
+  });
+  assert.equal(s.state.fieldEvidence[1].valueAtCapture, 80);
+
+  const evidenceId = s.state.fieldEvidence[0].id;
+  s.mutate({
+    op: "REMOVE_FIELD_EVIDENCE",
+    objectId: project.id,
+    evidenceId,
+  });
+  assert.equal(
+    s.state.fieldEvidence.some((entry) => entry.id === evidenceId),
+    false,
+  );
+
+  s.mutate({
+    op: "REMOVE_FUNDING",
+    objectId: project.id,
+    variantId: variant.id,
+  });
+  assert.equal(s.state.fieldEvidence.length, 0);
+});
+
 test("stale writes and failed re-extraction batches leave the original snapshot untouched", () => {
   const s = setup(),
     object = s.create(),

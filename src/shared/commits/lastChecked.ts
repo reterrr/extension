@@ -9,6 +9,7 @@ const RELATED_COLLECTIONS = [
   "fileSources",
   "financingRules",
   "documentRequirements",
+  "fieldEvidence",
 ] as const;
 
 type RelatedCollection = (typeof RELATED_COLLECTIONS)[number];

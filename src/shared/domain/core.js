@@ -11,6 +11,7 @@
     objects: [],
     rules: [],
     geographies: [],
+    fieldEvidence: [],
   });
 
   function coerce(raw, type) {
@@ -413,6 +414,47 @@
       throw Error("Invalid selection context.");
   }
 
+  function evidenceMatches(entry, objectId, field, target) {
+    return (
+      entry.objectId === objectId &&
+      entry.field === field &&
+      targetKey(entry.target) === targetKey(target)
+    );
+  }
+
+  function addFieldEvidence(state, object, message, uuid, now) {
+    validateCandidate(message.candidate);
+    const candidate = message.candidate;
+    const { values, definition } = fieldContext(
+      state,
+      object,
+      message.field,
+      message.target,
+    );
+    if (definition.readonly || definition.system)
+      throw Error("This field is managed automatically.");
+
+    const row = {
+      id: uuid(),
+      objectId: object.id,
+      field: message.field,
+      pageUrl: candidate.pageUrl,
+      selector: candidate.selector ?? null,
+      extraction: candidate.extraction,
+      rawValue: candidate.raw,
+      createdAt: now,
+    };
+    if (Array.isArray(candidate.selectorFallbacks) && candidate.selectorFallbacks.length)
+      row.selectorFallbacks = candidate.selectorFallbacks;
+    if (message.target?.kind && message.target.kind !== "object")
+      row.target = message.target;
+    if (hasValue(values[message.field]))
+      row.valueAtCapture = values[message.field];
+
+    (state.fieldEvidence ||= []).push(row);
+    object.updatedAt = now;
+  }
+
   function ruleValue(state, object, rule, raw) {
     const input = rule.transform?.sample === raw ? rule.transform.value : raw;
     return coerceField(
@@ -528,6 +570,10 @@
           state.geographies = state.geographies.filter(
             (row) => row.objectId !== object.id,
           );
+        if (state.fieldEvidence)
+          state.fieldEvidence = state.fieldEvidence.filter(
+            (row) => row.objectId !== object.id,
+          );
       } else if (message.op === "ASSIGN") {
         assign(state, object, message, uuid, now);
       } else if (message.op === "EDIT") {
@@ -557,6 +603,23 @@
           message.field === globalThis.BurbotSchema[object.type].primary
         )
           object.label = String(value);
+        object.updatedAt = now;
+      } else if (message.op === "ADD_FIELD_EVIDENCE") {
+        addFieldEvidence(state, object, message, uuid, now);
+      } else if (message.op === "REMOVE_FIELD_EVIDENCE") {
+        if (typeof message.evidenceId !== "string")
+          throw Error("Evidence id is required.");
+        const before = (state.fieldEvidence || []).length;
+        state.fieldEvidence = (state.fieldEvidence || []).filter(
+          (row) =>
+            !(
+              row.id === message.evidenceId &&
+              row.objectId === object.id &&
+              evidenceMatches(row, object.id, row.field, row.target)
+            ),
+        );
+        if (state.fieldEvidence.length === before)
+          throw Error("Evidence not found.");
         object.updatedAt = now;
       } else if (message.op === "APPLY") {
         if (!Array.isArray(message.results)) throw Error("Invalid preview.");
@@ -617,6 +680,14 @@
         state.geographies = (state.geographies || []).filter(
           (row) => !(row.id === message.geographyId && row.objectId === object.id),
         );
+        state.fieldEvidence = (state.fieldEvidence || []).filter(
+          (row) =>
+            !(
+              row.objectId === object.id &&
+              row.target?.kind === "geography" &&
+              row.target.id === message.geographyId
+            ),
+        );
         state.rules = state.rules.filter(
           (rule) =>
             !(
@@ -659,6 +730,14 @@
         });
         state.financingRules = state.financingRules.filter(
           (r) => !(r.id === message.variantId && r.objectId === object.id),
+        );
+        state.fieldEvidence = (state.fieldEvidence || []).filter(
+          (row) =>
+            !(
+              row.objectId === object.id &&
+              row.target?.kind === "funding" &&
+              row.target.id === message.variantId
+            ),
         );
         state.rules = state.rules.filter(
           (r) =>

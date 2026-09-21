@@ -187,6 +187,28 @@ CREATE TABLE IF NOT EXISTS extraction_rules (
 CREATE INDEX IF NOT EXISTS ix_extraction_rules_object ON extraction_rules(object_id);
 CREATE INDEX IF NOT EXISTS ix_extraction_rules_target ON extraction_rules(target_kind, target_id);
 
+CREATE TABLE IF NOT EXISTS field_evidence (
+  evidence_id TEXT PRIMARY KEY,
+  object_id TEXT NOT NULL,
+  field TEXT NOT NULL,
+  target_kind TEXT,
+  target_id TEXT,
+  page_url TEXT NOT NULL,
+  selector_json TEXT,
+  selector_fallbacks_json TEXT,
+  extraction_json TEXT NOT NULL,
+  raw_value TEXT NOT NULL,
+  value_at_capture_json TEXT,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY (object_id) REFERENCES workspace_objects(object_id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS ix_field_evidence_object_field
+ON field_evidence(object_id, field);
+
+CREATE INDEX IF NOT EXISTS ix_field_evidence_target
+ON field_evidence(target_kind, target_id);
+
 CREATE TABLE IF NOT EXISTS file_sources (
   source_id TEXT PRIMARY KEY,
   object_id TEXT NOT NULL,
@@ -224,4 +246,4 @@ CREATE TABLE IF NOT EXISTS document_requirements (
   FOREIGN KEY (object_id) REFERENCES workspace_objects(object_id) ON DELETE CASCADE
 );
 
-PRAGMA user_version = 4;
+PRAGMA user_version = 5;

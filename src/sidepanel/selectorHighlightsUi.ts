@@ -2,6 +2,7 @@ import { selectorColor } from "../shared/selectorPalette";
 import type { SelectorHighlight } from "../shared/messaging/picker";
 import type {
   LegacyStorageState,
+  LegacyStoredFieldEvidence,
   LegacyStoredObject,
   LegacyStoredRule,
 } from "../shared/types/legacy-storage";
@@ -61,7 +62,17 @@ function samePage(left: string, right: string): boolean {
 }
 
 function isLocal(object: LegacyStoredObject, pageUrl: string): boolean {
-  return !!pageUrl && (samePage(object.sourceUrl ?? "", pageUrl) || state.rules.some((rule) => rule.objectId === object.id && samePage(rule.pageUrl, pageUrl)));
+  return (
+    !!pageUrl &&
+    (samePage(object.sourceUrl ?? "", pageUrl) ||
+      state.rules.some(
+        (rule) => rule.objectId === object.id && samePage(rule.pageUrl, pageUrl),
+      ) ||
+      (state.fieldEvidence ?? []).some(
+        (entry) =>
+          entry.objectId === object.id && samePage(entry.pageUrl, pageUrl),
+      ))
+  );
 }
 
 function chosenObject(): LegacyStoredObject | undefined {
@@ -80,6 +91,38 @@ function selectorRules(object: LegacyStoredObject | undefined): LegacyStoredRule
 
 function ruleTargetKey(rule: LegacyStoredRule): string {
   return BurbotCore.targetKey(rule.target);
+}
+
+function evidenceTargetKey(entry: LegacyStoredFieldEvidence): string {
+  return BurbotCore.targetKey(entry.target);
+}
+
+function selectorEvidence(
+  object: LegacyStoredObject | undefined,
+): LegacyStoredFieldEvidence[] {
+  if (!object) return [];
+  return (state.fieldEvidence ?? []).filter(
+    (entry) =>
+      entry.objectId === object.id &&
+      samePage(entry.pageUrl, activePageUrl) &&
+      typeof entry.selector === "string" &&
+      entry.selector.length > 0,
+  );
+}
+
+function matchingEvidence(
+  object: LegacyStoredObject,
+  field: string,
+  targetKey: string,
+): LegacyStoredFieldEvidence | undefined {
+  return (state.fieldEvidence ?? []).find(
+    (entry) =>
+      entry.objectId === object.id &&
+      entry.field === field &&
+      evidenceTargetKey(entry) === targetKey &&
+      typeof entry.selector === "string" &&
+      entry.selector.length > 0,
+  );
 }
 
 function matchingRule(object: LegacyStoredObject, field: string, targetKey: string): LegacyStoredRule | undefined {
@@ -122,8 +165,12 @@ function colorSidebar(): void {
         ? pendingPreview.highlight.selector
         : null;
     const rule = matchingRule(object, field, target);
+    const evidence = matchingEvidence(object, field, target);
     if (previewSelector) setSelectorVariables(row, previewSelector);
-    else if (rule && typeof rule.selector === "string") setSelectorVariables(row, rule.selector);
+    else if (rule && typeof rule.selector === "string")
+      setSelectorVariables(row, rule.selector);
+    else if (evidence && typeof evidence.selector === "string")
+      setSelectorVariables(row, evidence.selector);
   }
   const details = document.getElementById("rule-details");
   if (!(details instanceof HTMLElement)) return;
@@ -139,8 +186,16 @@ function colorSidebar(): void {
       ? pendingPreview.highlight.selector
       : null;
   const rule = matchingRule(object, selected.dataset.field, selectedTarget);
+  const evidence = matchingEvidence(
+    object,
+    selected.dataset.field,
+    selectedTarget,
+  );
   if (previewSelector) setSelectorVariables(details, previewSelector);
-  else if (rule && typeof rule.selector === "string") setSelectorVariables(details, rule.selector);
+  else if (rule && typeof rule.selector === "string")
+    setSelectorVariables(details, rule.selector);
+  else if (evidence && typeof evidence.selector === "string")
+    setSelectorVariables(details, evidence.selector);
 }
 
 async function renderPageHighlights(tabId: number, highlights: SelectorHighlight[]): Promise<void> {
@@ -181,6 +236,30 @@ async function syncPage(): Promise<void> {
     seen.add(key);
     const fallbacks = ruleFallbacks(rule);
     highlights.push({ id: String(rule.id), selector: rule.selector, ...(fallbacks.length ? { selectorFallbacks: fallbacks } : {}), ...(quote ? { quote } : {}) });
+  }
+
+  for (const entry of selectorEvidence(object)) {
+    if (typeof entry.selector !== "string") continue;
+    const quote =
+      entry.extraction.type === "selection"
+        ? entry.extraction.quote
+        : undefined;
+    const key = [
+      entry.selector,
+      quote?.exact ?? "",
+      quote?.prefix ?? "",
+      quote?.suffix ?? "",
+    ].join("\u0000");
+    if (seen.has(key)) continue;
+    seen.add(key);
+    highlights.push({
+      id: "evidence:" + String(entry.id),
+      selector: entry.selector,
+      ...(entry.selectorFallbacks?.length
+        ? { selectorFallbacks: entry.selectorFallbacks }
+        : {}),
+      ...(quote ? { quote } : {}),
+    });
   }
 
   if (
