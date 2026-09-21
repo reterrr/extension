@@ -482,6 +482,7 @@ import { createPickerClient } from "./pickerRpc";
       ),
     );
     const evidenceCount = readOnly ? 0 : fieldEvidenceFor(descriptor).length;
+    button.dataset.evidenceCount = String(evidenceCount);
     const markText = readOnly
       ? set
         ? "AUTO"
