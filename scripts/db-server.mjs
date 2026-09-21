@@ -68,10 +68,10 @@ ensureColumn("recruitments", "notes", "TEXT");
 ensureColumn("recruitments", "funding_rules", "TEXT");
 ensureColumn("recruitments", "funding_verified_at", "TEXT");
 ensureColumn("recruitments", "funding_verification_url", "TEXT");
-db.pragma("user_version = 4");
+db.pragma("user_version = 5");
 
 db.prepare(
-  `INSERT INTO app_meta(key, value) VALUES ('schema_version', '4')
+  `INSERT INTO app_meta(key, value) VALUES ('schema_version', '5')
    ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
 ).run();
 
@@ -143,6 +143,7 @@ function clearMaterializedTables() {
     DELETE FROM geographies;
     DELETE FROM geography_groups;
     DELETE FROM extraction_rules;
+    DELETE FROM field_evidence;
     DELETE FROM file_sources;
     DELETE FROM import_sources;
     DELETE FROM financing_rules;
@@ -410,6 +411,37 @@ function syncExtractionRules(state) {
   }
 }
 
+function syncFieldEvidence(state) {
+  const insert = db.prepare(`
+    INSERT INTO field_evidence(
+      evidence_id, object_id, field, target_kind, target_id,
+      page_url, selector_json, selector_fallbacks_json, extraction_json,
+      raw_value, value_at_capture_json, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  for (const evidence of state.fieldEvidence ?? []) {
+    insert.run(
+      String(evidence.id),
+      String(evidence.objectId),
+      String(evidence.field),
+      evidence.target?.kind ?? null,
+      evidence.target?.id ?? null,
+      String(evidence.pageUrl),
+      evidence.selector === null || evidence.selector === undefined
+        ? null
+        : json(evidence.selector),
+      evidence.selectorFallbacks ? json(evidence.selectorFallbacks) : null,
+      json(evidence.extraction),
+      String(evidence.rawValue),
+      Object.prototype.hasOwnProperty.call(evidence, "valueAtCapture")
+        ? json(evidence.valueAtCapture)
+        : null,
+      String(evidence.createdAt),
+    );
+  }
+}
+
 function syncFileSources(state) {
   const insert = db.prepare(`
     INSERT INTO file_sources(
@@ -475,6 +507,7 @@ const persistStateTransaction = db.transaction((state) => {
   const groupByObject = syncGeographies(state);
   syncBusinessTables(state, groupByObject);
   syncExtractionRules(state);
+  syncFieldEvidence(state);
   syncFileSources(state);
   syncImportSources(state);
   syncPayloadRows("financing_rules", "funding", state.financingRules ?? []);
