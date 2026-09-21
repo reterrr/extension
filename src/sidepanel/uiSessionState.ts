@@ -16,6 +16,7 @@ export interface SidepanelUiState {
   };
   workspace: {
     objectId?: string;
+    focusStamp: string;
     active: SidepanelActiveField | null;
     expanded: string[];
     fieldSections: Record<string, boolean>;
@@ -51,6 +52,7 @@ function defaultState(): SidepanelUiState {
       review: 0,
     },
     workspace: {
+      focusStamp: "",
       active: null,
       expanded: [],
       fieldSections: {},
@@ -119,6 +121,8 @@ export function normalizeSidepanelUiState(value: unknown): SidepanelUiState {
       ...(typeof workspace.objectId === "string" && workspace.objectId
         ? { objectId: workspace.objectId }
         : {}),
+      focusStamp:
+        typeof workspace.focusStamp === "string" ? workspace.focusStamp : "",
       active,
       expanded: Array.isArray(workspace.expanded)
         ? [...new Set(workspace.expanded.filter((entry): entry is string => typeof entry === "string"))]
