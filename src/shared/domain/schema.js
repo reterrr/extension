@@ -73,8 +73,7 @@
         PLANOWANY: "Planowany",
         AKTYWNY: "Aktywny",
         ZAWIESZONY: "Zawieszony",
-        ZAMKNIETY: "Zamknięty",
-        ANULOWANY: "Anulowany",
+        ZAKONCZONY: "Zakończony",
       },
       {
         default: "PLANOWANY",
@@ -153,11 +152,12 @@
     status: choice(
       "Status naboru",
       {
-        PLANOWANY: "Planowany",
         OGLOSZONY: "Ogłoszony",
+        PLANOWANY: "Planowany",
         AKTYWNY: "Aktywny",
         ZAWIESZONY: "Zawieszony",
-        ZAKONCZONY: "Zakończony",
+        ZAMKNIETY: "Zamknięty",
+        ANULOWANY: "Anulowany",
       },
       {
         default: "OGLOSZONY",
