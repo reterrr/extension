@@ -166,6 +166,13 @@ test("formats business values, validates enums, dates, NIP, percentages and refe
     "0123456789",
   );
   assert.equal(s.C.coerceField("false", { type: "boolean" }, s.state), false);
+  const operator = s.context.BurbotSchema.operator.fields;
+  assert.equal(operator.address.group, "Kontakt");
+  assert.equal(operator.email.group, "Kontakt");
+  assert.equal(operator.phone.group, "Kontakt");
+  assert.equal(operator.website.type, "url");
+  assert.equal(operator.notes.multiline, true);
+
   const recruitment = s.context.BurbotSchema.recruitment.fields;
   assert.equal(recruitment.operator_id.references, "operator");
   assert.equal(recruitment.planned_start_date.type, "date");
