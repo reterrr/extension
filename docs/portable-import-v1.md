@@ -154,4 +154,16 @@ Variant numbers are assigned in input order separately for each company size.
 
 The import first enters **Import Review**. Import Review is read-only: it is used to inspect imported values, attached files, financing variants and evidence/source locations. Corrections are made in Workspace after approval.
 
-Approval stages the selected object into the active commit. The final database commit assigns `last_checked_at` to new or changed objects.
+Approval stages the selected object into the active commit. If the imported object matches an object already present in the active commit (stable import key / object ID, or the supported Project-number / Operator-NIP identity fallback), approval updates that existing object **in place** instead of creating a duplicate.
+
+For an in-place update:
+
+- only object fields explicitly supplied by the import (plus fields manually corrected during Import Review) are changed;
+- omitted object fields keep their existing values, so schema defaults from the preview cannot accidentally overwrite real data;
+- financing variants are upserted by their stable financing `key`; only fields supplied for that variant are changed;
+- existing financing fields omitted by AI are preserved;
+- files are upserted by URL rather than duplicated;
+- imported evidence/sources are attached to the updated values;
+- the existing object's internal ID remains unchanged.
+
+The final database commit assigns `last_checked_at` to new or changed objects.
