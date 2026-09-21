@@ -1900,6 +1900,7 @@ import {
       render();
     }
     scheduleWorkspaceUiPersist();
+    window.dispatchEvent(new Event("burbot:workspace-ready"));
     if (!port) await connect();
   })().catch((error) => notice(error.message, true));
 })();
