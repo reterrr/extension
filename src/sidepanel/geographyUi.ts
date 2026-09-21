@@ -130,6 +130,14 @@ function keepControlInPlace(
     window.requestAnimationFrame(() => {
       const delta = element.getBoundingClientRect().top - beforeTop;
       if (Math.abs(delta) > 0.5) window.scrollBy(0, delta);
+      const capture = document.getElementById("capture-area");
+      if (capture instanceof HTMLElement && !capture.hidden) {
+        const rect = element.getBoundingClientRect();
+        const dockTop = capture.getBoundingClientRect().top;
+        if (rect.bottom > dockTop - 10) {
+          window.scrollBy(0, rect.bottom - dockTop + 10);
+        }
+      }
       if (focus) {
         try {
           focus.focus({ preventScroll: true });
