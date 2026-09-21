@@ -697,6 +697,89 @@ test("approving an existing imported object updates it in place without duplicat
   );
 });
 
+test("existing object IDs and legacy financing rows are reused when stable import keys are absent", () => {
+  const uuid = ids();
+  const now = "2026-09-21T12:05:00.000Z";
+  const document = {
+    version: 1,
+    offset_unit: "unicode_codepoint",
+    sources: [],
+    objects: [
+      {
+        key: "existing-project-id",
+        type: "project",
+        data: {
+          name: "Updated project",
+        },
+        financing: [
+          {
+            key: "micro-1",
+            company_size: "MICRO",
+            data: {
+              refund_percent_max: 90,
+            },
+          },
+        ],
+      },
+    ],
+  };
+
+  const session = reviewModule.createImportReviewSession(
+    document,
+    "legacy-existing-update.burbot-import.json",
+    uuid,
+    now,
+  );
+  const existingState = BurbotCore.empty();
+  existingState.objects.push({
+    id: "existing-project-id",
+    type: "project",
+    label: "Old project",
+    values: {
+      name: "Old project",
+      number: "UNCHANGED",
+    },
+  });
+  existingState.financingRules = [
+    {
+      id: "legacy-finance-id",
+      objectId: "existing-project-id",
+      company_size: "MICRO",
+      variant_no: 1,
+      refund_percent_max: 75,
+      max_amount_pln: 200000,
+      own_contribution_form: "CASH",
+    },
+  ];
+
+  const plan = reviewModule.buildImportApprovalPlan(
+    session,
+    session.previewState.objects[0].id,
+    existingState,
+  );
+  assert.equal(plan.existingTargetObjectId, "existing-project-id");
+
+  const staged = stageModule.stageImportReviewObject(
+    existingState,
+    plan,
+    uuid,
+    now,
+  );
+
+  assert.equal(staged.state.objects.length, 1);
+  assert.equal(staged.state.objects[0].id, "existing-project-id");
+  assert.equal(staged.state.objects[0].importKey, "existing-project-id");
+  assert.equal(staged.state.objects[0].values.name, "Updated project");
+  assert.equal(staged.state.objects[0].values.number, "UNCHANGED");
+
+  assert.equal(staged.state.financingRules.length, 1);
+  assert.equal(staged.state.financingRules[0].id, "legacy-finance-id");
+  assert.equal(staged.state.financingRules[0].importKey, "micro-1");
+  assert.equal(staged.state.financingRules[0].refund_percent_max, 90);
+  assert.equal(staged.state.financingRules[0].max_amount_pln, 200000);
+  assert.equal(staged.state.financingRules[0].own_contribution_form, "CASH");
+});
+
 test("fields omitted by AI are not overwritten by schema defaults during an existing-object update", () => {
   const uuid = ids();
   const now = "2026-09-21T12:10:00.000Z";
