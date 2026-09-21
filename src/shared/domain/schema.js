@@ -73,7 +73,8 @@
         PLANOWANY: "Planowany",
         AKTYWNY: "Aktywny",
         ZAWIESZONY: "Zawieszony",
-        ZAKONCZONY: "Zakończony",
+        ZAMKNIETY: "Zamknięty",
+        ANULOWANY: "Anulowany",
       },
       {
         default: "PLANOWANY",
@@ -93,6 +94,17 @@
     start_date: date("Data rozpoczęcia projektu"),
     end_date: date("Data zakończenia projektu"),
     announcements_site_url: url("Strona naborów"),
+    documents_url: url("Strona dokumentów"),
+    documents_link_direct: {
+      label: "Link prowadzi bezpośrednio do dokumentów",
+      type: "boolean",
+      group: "Źródła",
+    },
+    notes: text("Uwagi", "Źródła", { multiline: true }),
+    schedule_note: text("Uwaga do harmonogramu / naborów", "Źródła", {
+      multiline: true,
+    }),
+    technical_notes: text("Uwagi techniczne", "Źródła", { multiline: true }),
     last_checked_at: systemDateTime(),
     amount: {
       label: "Previously captured amount",
@@ -154,12 +166,17 @@
           ANNOUNCED: "OGLOSZONY",
           ACTIVE: "AKTYWNY",
           SUSPENDED: "ZAWIESZONY",
-          CLOSED: "ZAKONCZONY",
+          CLOSED: "ZAMKNIETY",
+          CANCELLED: "ANULOWANY",
+          CANCELED: "ANULOWANY",
+          ZAKONCZONY: "ZAMKNIETY",
           Planned: "PLANOWANY",
           Announced: "OGLOSZONY",
           Active: "AKTYWNY",
           Suspended: "ZAWIESZONY",
-          Closed: "ZAKONCZONY",
+          Closed: "ZAMKNIETY",
+          Cancelled: "ANULOWANY",
+          Canceled: "ANULOWANY",
         },
       },
     ),
@@ -291,12 +308,35 @@
     operator: {
       label: "Operator",
       primary: "name",
+      contacts: true,
       fields: {
         name: text("Nazwa"),
+        role: choice(
+          "Rola",
+          {
+            OPERATOR: "Operator",
+            PARTNER: "Partner",
+          },
+          {
+            aliases: {
+              operator: "OPERATOR",
+              partner: "PARTNER",
+            },
+          },
+        ),
         nip: { label: "NIP", type: "nip", group: "Podstawowe" },
+        address: text("Adres", "Kontakt", { multiline: true }),
+        website: url("Strona WWW", "Kontakt"),
+        notes: text("Uwagi", "Kontakt", { multiline: true }),
         last_checked_at: systemDateTime(),
-        website: { ...url("Website"), legacy: true },
-        email: text("Email", "Earlier captures", { legacy: true }),
+        email: text("Email (legacy)", "Earlier captures", {
+          legacy: true,
+          hidden: true,
+        }),
+        phone: text("Telefon (legacy)", "Earlier captures", {
+          legacy: true,
+          hidden: true,
+        }),
       },
     },
 
@@ -313,6 +353,29 @@
         url: url("Announcement page"),
       },
     },
+  });
+
+  globalThis.BurbotOperatorContacts = Object.freeze({
+    kinds: Object.freeze({
+      EMAIL: "Email",
+      PHONE: "Telefon",
+    }),
+    fields: Object.freeze({
+      EMAIL: Object.freeze({
+        value: Object.freeze({
+          label: "Adres email",
+          type: "email",
+          group: "Kontakt",
+        }),
+      }),
+      PHONE: Object.freeze({
+        value: Object.freeze({
+          label: "Numer telefonu",
+          type: "phone",
+          group: "Kontakt",
+        }),
+      }),
+    }),
   });
 
   const fundingFields = {
