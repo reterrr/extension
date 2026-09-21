@@ -186,6 +186,18 @@ test("formats business values, validates enums, dates, NIP, percentages and refe
     /2026/,
   );
   assert.equal(s.context.BurbotFunding.sizes.B2C, "B2C / osoba dorosła");
+  assert.equal(F.refund_percent_base.label, "Bazowa refundacja (%)");
+  assert.equal(F.refund_percent_base.group, "Refundacja (%)");
+  assert.equal(F.refund_percent_max.group, "Refundacja (%)");
+  assert.equal(F.max_amount_pln.label, "Maksymalnie na firmę (PLN)");
+  assert.equal(F.max_amount_pln.group, "Limity kwotowe (PLN)");
+  assert.equal(
+    F.max_refund_max_pln.label,
+    "Maksymalna kwota refundacji (PLN)",
+  );
+  assert.equal(F.own_contribution_percent_min.group, "Wkład własny");
+  assert.equal(F.own_contribution_form.label, "Forma wkładu własnego");
+  assert.equal(F.notes.label, "Uwagi");
   assert.equal(
     s.C.coerceField("95%", F.refund_percent_base, s.state),
     95,

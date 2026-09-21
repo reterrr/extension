@@ -896,8 +896,8 @@ import {
           "",
           variants.length
             ? variants.length +
-                (variants.length === 1 ? " variant" : " variants")
-            : "Not configured",
+                (variants.length === 1 ? " wariant" : " wariantów")
+            : "Nie skonfigurowano",
         ),
       );
       group.append(heading);
@@ -907,7 +907,7 @@ import {
         const summary = node(
           "summary",
           "variant-summary",
-          "Variant " + variant.variant_no,
+          "Wariant " + variant.variant_no,
         );
         const parts = [];
         const hasMin = C.hasValue(variant.refund_percent_min),
@@ -972,7 +972,7 @@ import {
               ),
           );
         summary.append(
-          node("small", "", parts.join(" · ") || "Ready to capture"),
+          node("small", "", parts.join(" · ") || "Brak danych"),
         );
         summary.append(
           node(
@@ -986,19 +986,64 @@ import {
           ),
         );
         details.append(summary);
-        for (const [field, definition] of Object.entries(BurbotFunding.fields))
-          fieldRow(
-            details,
-            field,
-            definition,
-            variant,
-            { kind: "funding", id: variant.id },
-            label + " · Variant " + variant.variant_no,
+
+        const fundingFieldGroups = new Map();
+        for (const [field, definition] of Object.entries(BurbotFunding.fields)) {
+          const groupName = definition.group || "Inne";
+          if (!fundingFieldGroups.has(groupName))
+            fundingFieldGroups.set(groupName, []);
+          fundingFieldGroups.get(groupName).push([field, definition]);
+        }
+
+        for (const [groupName, fields] of fundingFieldGroups) {
+          const section = node("section", "funding-field-group");
+          section.dataset.group = groupName;
+
+          const groupHeading = node("div", "funding-field-group-heading");
+          const headingCopy = node("div", "funding-field-group-heading-copy");
+          headingCopy.append(node("strong", "", groupName));
+
+          const filled = fields.filter(([field]) =>
+            C.hasValue(variant[field]),
+          ).length;
+          headingCopy.append(
+            node(
+              "small",
+              "",
+              filled + "/" + fields.length + " pól",
+            ),
           );
-        const remove = node("button", "text-button danger", "Remove variant");
+
+          const unit = groupName.includes("(%)")
+            ? "%"
+            : groupName.includes("(PLN)")
+              ? "PLN"
+              : "";
+          groupHeading.append(headingCopy);
+          if (unit)
+            groupHeading.append(
+              node("span", "funding-field-group-unit", unit),
+            );
+
+          const grid = node("div", "funding-field-grid");
+          for (const [field, definition] of fields)
+            fieldRow(
+              grid,
+              field,
+              definition,
+              variant,
+              { kind: "funding", id: variant.id },
+              label + " · Wariant " + variant.variant_no,
+            );
+
+          section.append(groupHeading, grid);
+          details.append(section);
+        }
+
+        const remove = node("button", "text-button danger", "Usuń wariant");
         remove.disabled = busy;
         remove.onclick = action(async () => {
-          if (!confirm("Remove this funding variant and its extraction rules?"))
+          if (!confirm("Usunąć ten wariant finansowania i jego reguły ekstrakcji?"))
             return;
           rememberViewportAnchor(
             '[data-funding-add="' + size + '"]',
@@ -1012,7 +1057,7 @@ import {
         details.append(remove);
         group.append(details);
       }
-      const add = node("button", "text-button", "+ Add variant");
+      const add = node("button", "text-button", "+ Dodaj wariant");
       add.dataset.fundingAdd = size;
       add.disabled = busy;
       add.onclick = action(async () => {
@@ -1031,7 +1076,7 @@ import {
         active = {
           field: "refund_percent_min",
           target: { kind: "funding", id: variant.id },
-          context: label + " · Variant " + variant.variant_no,
+          context: label + " · Wariant " + variant.variant_no,
         };
         resetCapture();
         scheduleWorkspaceUiPersist();

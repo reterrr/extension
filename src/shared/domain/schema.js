@@ -317,67 +317,89 @@
 
   const fundingFields = {
     refund_percent_base: {
-      label: "Bazowa refundacja",
+      label: "Bazowa refundacja (%)",
       type: "percentage",
+      group: "Refundacja (%)",
       min: 0,
       max: 100,
     },
     refund_percent_standard: {
-      label: "Standardowa refundacja",
+      label: "Standardowa refundacja (%)",
       type: "percentage",
+      group: "Refundacja (%)",
       min: 0,
       max: 100,
     },
     refund_percent_min: {
-      label: "Minimalna refundacja",
+      label: "Minimalna refundacja (%)",
       type: "percentage",
+      group: "Refundacja (%)",
       min: 0,
       max: 100,
     },
     refund_percent_avg: {
-      label: "Średnia refundacja",
+      label: "Średnia refundacja (%)",
       type: "percentage",
+      group: "Refundacja (%)",
       min: 0,
       max: 100,
     },
     refund_percent_max: {
-      label: "Maksymalna refundacja",
+      label: "Maksymalna refundacja (%)",
       type: "percentage",
+      group: "Refundacja (%)",
       min: 0,
       max: 100,
     },
-    max_amount_pln: { label: "Maksymalnie na firmę", type: "money" },
-    max_per_person_pln: { label: "Maksymalnie na uczestnika", type: "money" },
+    max_amount_pln: {
+      label: "Maksymalnie na firmę (PLN)",
+      type: "money",
+      group: "Limity kwotowe (PLN)",
+    },
+    max_per_person_pln: {
+      label: "Maksymalnie na uczestnika (PLN)",
+      type: "money",
+      group: "Limity kwotowe (PLN)",
+    },
+    max_service_value_pln: {
+      label: "Maksymalna wartość usług (PLN)",
+      type: "money",
+      group: "Limity kwotowe (PLN)",
+    },
+    max_refund_standard_pln: {
+      label: "Standardowa maks. kwota refundacji (PLN)",
+      type: "money",
+      group: "Limity kwotowe (PLN)",
+    },
+    max_refund_max_pln: {
+      label: "Maksymalna kwota refundacji (PLN)",
+      type: "money",
+      group: "Limity kwotowe (PLN)",
+    },
     own_contribution_percent_standard: {
-      label: "Standardowy wkład własny",
+      label: "Standardowy wkład własny (%)",
       type: "percentage",
+      group: "Wkład własny",
       min: 0,
       max: 100,
     },
     own_contribution_percent_min: {
-      label: "Minimalny wkład własny",
+      label: "Minimalny wkład własny (%)",
       type: "percentage",
+      group: "Wkład własny",
       min: 0,
       max: 100,
     },
-    max_service_value_pln: {
-      label: "Maksymalna wartość usług",
-      type: "money",
-    },
-    max_refund_standard_pln: {
-      label: "Standardowa maks. refundacja",
-      type: "money",
-    },
-    max_refund_max_pln: {
-      label: "Maksymalna refundacja",
-      type: "money",
-    },
-    own_contribution_form: choice("Own contribution", {
-      UNSPECIFIED: "Not distinguished in source",
-      CASH: "Cash",
-      WAGES: "Wages",
-    }),
-    notes: text("Notes", "Funding", { multiline: true }),
+    own_contribution_form: choice(
+      "Forma wkładu własnego",
+      {
+        UNSPECIFIED: "Nie rozróżniono w źródle",
+        CASH: "Gotówkowy",
+        WAGES: "Wynagrodzenia",
+      },
+      { group: "Wkład własny" },
+    ),
+    notes: text("Uwagi", "Uwagi", { multiline: true }),
   };
 
   // Old imports and extraction rules used one `refund_percent`. Keep it
