@@ -240,6 +240,8 @@ function renderRows(object: LegacyStoredObject): void {
     remove.setAttribute("aria-label", "Usuń geografię");
     remove.textContent = "×";
     remove.onclick = () => {
+      const addPanel = $("geography-add");
+      const beforeTop = addPanel.getBoundingClientRect().top;
       void data("REMOVE_GEOGRAPHY", {
         objectId: object.id,
         geographyId: row.id,
@@ -247,6 +249,7 @@ function renderRows(object: LegacyStoredObject): void {
         .then(() => {
           notice("Usunięto warunek geograficzny.");
           render();
+          keepControlInPlace(addPanel, beforeTop);
         })
         .catch((error: unknown) =>
           notice(error instanceof Error ? error.message : String(error), true),
