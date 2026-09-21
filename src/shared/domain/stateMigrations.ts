@@ -99,8 +99,14 @@ function migratedContactId(
   objectId: string,
   kind: "EMAIL" | "PHONE",
   index: number,
+  usedIds: Set<string>,
 ): string {
-  return `migration:${objectId}:${kind.toLowerCase()}:${index + 1}`;
+  const base = `migration:${objectId}:${kind.toLowerCase()}:${index + 1}`;
+  let candidate = base;
+  let suffix = 1;
+  while (usedIds.has(candidate)) candidate = `${base}:${++suffix}`;
+  usedIds.add(candidate);
+  return candidate;
 }
 
 /**
@@ -129,6 +135,7 @@ export function migrateRecruitmentStatusesAndOperatorContacts(
         `${row.objectId}\u0000${row.kind}\u0000${String(row.value).trim().toLowerCase()}`,
     ),
   );
+  const usedIds = new Set(contacts.map((row) => row.id));
 
   for (const object of state.objects) {
     if (object.type !== "operator") continue;
@@ -153,7 +160,7 @@ export function migrateRecruitmentStatusesAndOperatorContacts(
           `${object.id}\u0000${kind}\u0000${value.toLowerCase()}`;
         if (signatures.has(signature)) return;
         contacts.push({
-          id: migratedContactId(object.id, kind, index),
+          id: migratedContactId(object.id, kind, index, usedIds),
           objectId: object.id,
           kind,
           variant_no: nextVariant++,
