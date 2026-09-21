@@ -67,6 +67,12 @@ test("UI state normalization is conservative and session-scoped", () => {
       fundingSize: "Mikro",
       captureCollapsed: true,
       panels: { "funding-panel": true, bad: "yes" },
+      geography: {
+        role: "WYKLUCZA",
+        type: "POWIAT",
+        query: "tarnogórski",
+        addOpen: true,
+      },
       switcher: {
         query: "status:AKTYWNY",
         type: "project",
@@ -83,6 +89,12 @@ test("UI state normalization is conservative and session-scoped", () => {
   assert.deepEqual(normalized.workspace.expanded, ["funding:1"]);
   assert.deepEqual(normalized.workspace.fieldSections, { Dane: true });
   assert.deepEqual(normalized.workspace.panels, { "funding-panel": true });
+  assert.deepEqual(normalized.workspace.geography, {
+    role: "WYKLUCZA",
+    type: "POWIAT",
+    query: "tarnogórski",
+    addOpen: true,
+  });
   assert.equal(normalized.workspace.captureCollapsed, true);
   assert.equal(normalized.workspace.switcher.query, "status:AKTYWNY");
   assert.equal(normalized.workspace.switcher.scrollTop, 85);
@@ -113,6 +125,12 @@ test("independent UI patches merge instead of clobbering remembered state", asyn
     workspace: {
       fieldSections: { Terminy: false },
       panels: { "geography-panel": true },
+      geography: {
+        role: "OBEJMUJE",
+        type: "MIASTO_NA_PRAWACH_POWIATU",
+        query: "Katowice",
+        addOpen: true,
+      },
       fundingSize: "Mikro",
       captureCollapsed: true,
     },
@@ -127,6 +145,12 @@ test("independent UI patches merge instead of clobbering remembered state", asyn
   assert.deepEqual(state.workspace.expanded, ["funding:abc"]);
   assert.equal(state.workspace.fieldSections.Terminy, false);
   assert.equal(state.workspace.panels["geography-panel"], true);
+  assert.deepEqual(state.workspace.geography, {
+    role: "OBEJMUJE",
+    type: "MIASTO_NA_PRAWACH_POWIATU",
+    query: "Katowice",
+    addOpen: true,
+  });
   assert.equal(state.workspace.fundingSize, "Mikro");
   assert.equal(state.workspace.captureCollapsed, true);
   assert.equal(state.workspace.switcher.query, "woj:/^śląskie$/i");
