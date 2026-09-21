@@ -998,6 +998,97 @@ progress {
   border-bottom: 1px solid var(--border);
 }
 
+.funding-field-group {
+  margin: 9px 7px 0;
+  overflow: hidden;
+  border: 1px solid #e2e8e3;
+  border-radius: 9px;
+  background: #fbfcfb;
+}
+
+.funding-field-group + .funding-field-group {
+  margin-top: 8px;
+}
+
+.funding-field-group-heading {
+  min-height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 9px;
+  border-bottom: 1px solid #e5ebe6;
+  background: #f5f8f6;
+}
+
+.funding-field-group-heading-copy {
+  min-width: 0;
+  display: grid;
+  gap: 1px;
+}
+
+.funding-field-group-heading strong {
+  color: #415148;
+  font-size: 10px;
+  font-weight: 760;
+  letter-spacing: .1px;
+}
+
+.funding-field-group-heading small {
+  color: #859087;
+  font-size: 8px;
+}
+
+.funding-field-group-unit {
+  flex: none;
+  min-width: 27px;
+  padding: 3px 6px;
+  border: 1px solid #d3dfd6;
+  border-radius: 999px;
+  background: #fff;
+  color: #52705d;
+  font-size: 8px;
+  font-weight: 800;
+  text-align: center;
+  letter-spacing: .2px;
+}
+
+.funding-field-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 4px;
+  padding: 5px;
+}
+
+.variant .funding-field-grid .field-row {
+  width: 100%;
+  margin: 0;
+}
+
+.variant .funding-field-grid .field-row.is-missing:not(.selected) {
+  background: #fffdf8;
+}
+
+.variant .funding-field-grid .field-label {
+  font-size: 9px;
+}
+
+.variant .funding-field-grid .field-value {
+  font-size: 12px;
+}
+
+@media (min-width: 720px) {
+  .funding-field-group[data-group="Refundacja (%)"] .funding-field-grid,
+  .funding-field-group[data-group="Limity kwotowe (PLN)"] .funding-field-grid,
+  .funding-field-group[data-group="Wkład własny"] .funding-field-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .funding-field-group[data-group="Uwagi"] .field-row {
+    grid-column: 1 / -1;
+  }
+}
+
 .variant .field-row,
 .document .field-row {
   width: calc(100% - 8px);
