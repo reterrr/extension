@@ -561,19 +561,77 @@ function portableEvidence(
   return evidence;
 }
 
+function explicitObjectFields(
+  session: ImportReviewSession,
+  object: LegacyStoredObject,
+): string[] {
+  const tracked = session.importedFieldsByObjectId?.[object.id];
+  const selected = new Set<string>();
+
+  if (tracked !== undefined) {
+    for (const field of tracked) selected.add(field);
+  } else {
+    // Compatibility with an Import Review session created before update
+    // metadata existed. Infer conservatively so schema defaults never
+    // overwrite a real value in an existing object.
+    const schema = BurbotSchema[object.type];
+    if (schema?.primary) selected.add(schema.primary);
+    for (const field of Object.keys(object.evidence ?? {})) selected.add(field);
+
+    for (const [field, value] of Object.entries(object.values)) {
+      const definition = schema?.fields?.[field];
+      if (!definition || !BurbotCore.hasValue(value)) continue;
+      if (definition.type === "reference") {
+        selected.add(field);
+        continue;
+      }
+      if (!Object.prototype.hasOwnProperty.call(definition, "default")) {
+        selected.add(field);
+        continue;
+      }
+      if (JSON.stringify(value) !== JSON.stringify(definition.default)) {
+        selected.add(field);
+      }
+    }
+  }
+
+  for (const field of Object.keys(object.manualFields ?? {})) {
+    selected.add(field);
+  }
+  return [...selected];
+}
+
+function explicitFinancingFields(
+  session: ImportReviewSession,
+  objectId: string,
+  row: Record<string, unknown>,
+  importKey: string,
+): string[] {
+  const tracked =
+    session.importedFinancingFieldsByObjectId?.[objectId]?.[importKey];
+  if (tracked !== undefined) return [...new Set(tracked)];
+
+  // Older review sessions did not remember the raw JSON field set. Funding
+  // fields have no schema defaults except own_contribution_form, which the
+  // importer seeds as UNSPECIFIED. Exclude that synthetic default.
+  return Object.keys(BurbotFunding.fields).filter((field) => {
+    if (!Object.prototype.hasOwnProperty.call(row, field)) return false;
+    if (
+      field === "own_contribution_form" &&
+      row[field] === "UNSPECIFIED"
+    ) {
+      return false;
+    }
+    return true;
+  });
+}
+
 function portableData(
   session: ImportReviewSession,
   object: LegacyStoredObject,
 ): Record<string, unknown> {
   const fields = BurbotSchema[object.type]?.fields ?? {};
-  const tracked = session.importedFieldsByObjectId?.[object.id];
-  const selectedFields =
-    tracked?.length
-      ? new Set(tracked)
-      : new Set(Object.keys(object.values));
-  for (const field of Object.keys(object.manualFields ?? {})) {
-    selectedFields.add(field);
-  }
+  const selectedFields = new Set(explicitObjectFields(session, object));
 
   const data: Record<string, unknown> = {};
   for (const [field, value] of Object.entries(object.values)) {
@@ -761,14 +819,12 @@ export function buildImportApprovalPlan(
   const financingFieldsByImportKey: Record<string, string[]> = {};
   const portableFinancing = selectedFinancing.map((row) => {
     const key = String(row.importKey ?? row.id);
-    const tracked =
-      session.importedFinancingFieldsByObjectId?.[object.id]?.[key];
-    const selectedFields =
-      tracked !== undefined
-        ? [...new Set(tracked)]
-        : Object.keys(BurbotFunding.fields).filter((field) =>
-            Object.prototype.hasOwnProperty.call(row, field),
-          );
+    const selectedFields = explicitFinancingFields(
+      session,
+      object.id,
+      row,
+      key,
+    );
     financingFieldsByImportKey[key] = selectedFields;
 
     const data: Record<string, unknown> = {};
@@ -790,13 +846,7 @@ export function buildImportApprovalPlan(
   return {
     selectedImportKey: object.importKey,
     ...(existingTarget ? { existingTargetObjectId: existingTarget.id } : {}),
-    selectedDataFields:
-      session.importedFieldsByObjectId?.[object.id]?.length
-        ? [...new Set([
-            ...session.importedFieldsByObjectId[object.id],
-            ...Object.keys(object.manualFields ?? {}),
-          ])]
-        : Object.keys(portableData(session, object)),
+    selectedDataFields: explicitObjectFields(session, object),
     financingFieldsByImportKey,
     referencePatches,
     existingReferenceLinks,
