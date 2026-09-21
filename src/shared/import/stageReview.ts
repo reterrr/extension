@@ -405,15 +405,20 @@ export function stageImportReviewObject(
   // Backward compatibility for older review sessions/plans: if the same
   // stable key is already present, treat it as an update instead of creating
   // a duplicate.
-  const existing = original.objects.find(
+  const sameKey = original.objects.filter(
     (object) => object.importKey === plan.selectedImportKey,
   );
-  if (existing) {
+  if (sameKey.length > 1) {
+    throw new Error(
+      `More than one object uses import key ${plan.selectedImportKey}; choose the target explicitly before importing.`,
+    );
+  }
+  if (sameKey.length === 1) {
     return stageExistingObjectUpdate(
       original,
       {
         ...plan,
-        existingTargetObjectId: existing.id,
+        existingTargetObjectId: sameKey[0].id,
       },
       uuid,
       now,
