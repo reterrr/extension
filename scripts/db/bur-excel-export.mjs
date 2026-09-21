@@ -40,10 +40,22 @@ function parseEnum(source, enumName) {
 
 function catalogFrom(source) {
   const powiat = parseEnum(source, "Powiat");
+  const cities = parseEnum(source, "MiastoNaPrawachPowiatu");
   const gmina = parseEnum(source, "Gmina");
+  const parentPrefixes = [
+    ...[...powiat].map(([key, value]) => ({
+      key,
+      value,
+      type: "POWIAT",
+    })),
+    ...[...cities].map(([key, value]) => ({
+      key: key.replace("_MIASTO_", "_"),
+      value,
+      type: "MIASTO_NA_PRAWACH_POWIATU",
+    })),
+  ].sort((a, b) => b.key.length - a.key.length);
   return {
-    powiat,
-    powiatPrefixes: [...powiat.keys()].sort((a, b) => b.length - a.length),
+    parentPrefixes,
     gminaByValue: new Map([...gmina].map(([key, value]) => [value, key])),
   };
 }
@@ -82,11 +94,16 @@ function gminaMeta(value, catalog) {
   const key = catalog.gminaByValue.get(String(value));
   if (!key) return null;
   const base = key.replace(/_MIEJSKO_WIEJSKA$/, "").replace(/_MIEJSKA$/, "").replace(/_WIEJSKA$/, "");
-  const powiatKey = catalog.powiatPrefixes.find((prefix) => base.startsWith(`${prefix}_`));
-  const powiatValue = powiatKey ? catalog.powiat.get(powiatKey) : null;
-  if (!powiatValue) return null;
-  const locality = base.slice(powiatKey.length + 1).replaceAll("_", " ");
-  return { powiatValue, name: `${key.endsWith("_MIEJSKA") ? "m. " : ""}${titleCase(locality)}` };
+  const parent = catalog.parentPrefixes.find(({ key: prefix }) =>
+    base.startsWith(`${prefix}_`),
+  );
+  if (!parent) return null;
+  const locality = base.slice(parent.key.length + 1).replaceAll("_", " ");
+  return {
+    parentType: parent.type,
+    parentValue: parent.value,
+    name: `${key.endsWith("_MIEJSKA") ? "m. " : ""}${titleCase(locality)}`,
+  };
 }
 
 function geoMeta(type, value, catalog) {
@@ -106,13 +123,20 @@ function geoMeta(type, value, catalog) {
   }
   if (type === "GMINA") {
     const gmina = gminaMeta(text, catalog);
-    const woj = gmina?.powiatValue?.split("|")[0] ?? null;
-    return { name: gmina?.name ?? text, level: 4, woj, powiat: gmina?.powiatValue?.split("|").at(-1) ?? null, parentType: gmina?.powiatValue ? "POWIAT" : null, parentValue: gmina?.powiatValue ?? null };
+    const woj = gmina?.parentValue?.split("|")[0] ?? null;
+    return {
+      name: gmina?.name ?? text,
+      level: 4,
+      woj,
+      powiat: gmina?.parentValue?.split("|").at(-1) ?? null,
+      parentType: gmina?.parentType ?? null,
+      parentValue: gmina?.parentValue ?? null,
+    };
   }
   return { name: text, level: 9 };
 }
 
-const geoType = (type) => ({ POLSKA: "polska", WOJEWODZTWO: "wojewodztwo", PODREGION: "podregion", POWIAT: "powiat", GMINA: "gmina", MIASTO_NA_PRAWACH_POWIATU: "miasto" }[type] ?? String(type).toLocaleLowerCase("pl-PL"));
+const geoType = (type) => ({ POLSKA: "polska", WOJEWODZTWO: "wojewodztwo", PODREGION: "podregion", POWIAT: "powiat", GMINA: "gmina", MIASTO_NA_PRAWACH_POWIATU: "powiat" }[type] ?? String(type).toLocaleLowerCase("pl-PL"));
 
 export function readBurSnapshot(db) {
   const stored = db.prepare("SELECT state_json FROM workspace_state WHERE id = 1").get();
