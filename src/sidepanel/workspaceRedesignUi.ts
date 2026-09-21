@@ -1,13 +1,49 @@
+import {
+  patchSidepanelUiState,
+  readSidepanelUiState,
+} from "./uiSessionState";
+
 let initialized = false;
 let enhanceQueued = false;
 let enhancing = false;
 let activeFundingSize = "";
 let lastCaptureLabel = "";
+let uiWindowId: number | null = null;
+let captureCollapsedPreference = false;
+let restoredPanels: Record<string, boolean> = {};
 let workspaceObserver: MutationObserver | null = null;
 let observedWorkspace: HTMLElement | null = null;
 let observedActiveLabel: HTMLElement | null = null;
 
 const fieldSectionOpen = new Map<string, boolean>();
+
+const BUSINESS_PANEL_IDS = [
+  "file-sources-panel",
+  "geography-panel",
+  "funding-panel",
+  "documents-panel",
+] as const;
+
+function persistWorkspaceChrome(
+  workspace: Parameters<typeof patchSidepanelUiState>[1]["workspace"],
+): void {
+  if (uiWindowId === null || !workspace) return;
+  void patchSidepanelUiState(uiWindowId, { workspace });
+}
+
+function restoreBusinessPanels(panels: Record<string, boolean>): void {
+  for (const id of BUSINESS_PANEL_IDS) {
+    const panel = $(id) as HTMLDetailsElement | null;
+    if (!panel) continue;
+    if (typeof panels[id] === "boolean") panel.open = panels[id];
+    if (panel.dataset.qolTracked === "true") continue;
+    panel.dataset.qolTracked = "true";
+    panel.addEventListener("toggle", () => {
+      if (!panel.isConnected) return;
+      persistWorkspaceChrome({ panels: { [id]: panel.open } });
+    });
+  }
+}
 
 function $<T extends HTMLElement = HTMLElement>(id: string): T | null {
   return document.getElementById(id) as T | null;
@@ -142,7 +178,11 @@ function enhanceFieldGroups(): void {
 
     details.append(summary, body);
     details.addEventListener("toggle", () => {
-      if (details.isConnected) fieldSectionOpen.set(title, details.open);
+      if (!details.isConnected) return;
+      fieldSectionOpen.set(title, details.open);
+      persistWorkspaceChrome({
+        fieldSections: { [title]: details.open },
+      });
     });
 
     group.replaceWith(details);
@@ -158,6 +198,7 @@ function fundingGroupLabel(group: HTMLElement, index: number): string {
 
 function selectFundingTab(root: HTMLElement, size: string): void {
   activeFundingSize = size;
+  persistWorkspaceChrome({ fundingSize: size });
   for (const button of root.querySelectorAll<HTMLButtonElement>(".funding-tab")) {
     const selected = button.dataset.size === size;
     if (button.getAttribute("aria-selected") !== String(selected)) {
@@ -347,9 +388,12 @@ function enhanceCaptureDock(): void {
 
   const currentLabel = label.textContent?.trim() || "";
   if (currentLabel && currentLabel !== lastCaptureLabel) {
-    area.classList.remove("is-collapsed");
-    collapse.setAttribute("aria-expanded", "true");
-    collapse.textContent = "⌄";
+    area.classList.toggle("is-collapsed", captureCollapsedPreference);
+    collapse.setAttribute(
+      "aria-expanded",
+      String(!captureCollapsedPreference),
+    );
+    collapse.textContent = captureCollapsedPreference ? "⌃" : "⌄";
     lastCaptureLabel = currentLabel;
   }
 }
@@ -389,6 +433,7 @@ function enhanceAll(): void {
     enhanceFunding();
     enhanceDocuments();
     enhanceStaticStatuses();
+    restoreBusinessPanels(restoredPanels);
     enhanceCaptureDock();
   } finally {
     enhancing = false;
@@ -405,21 +450,52 @@ function scheduleEnhance(): void {
   });
 }
 
-export function initWorkspaceRedesignUi(): void {
+export async function initWorkspaceRedesignUi(): Promise<void> {
   if (initialized) return;
   initialized = true;
 
   const workspace = $("workspace");
   if (!workspace) return;
 
+  const currentWindow = await browser.windows.getCurrent();
+  if (currentWindow.id !== undefined) {
+    uiWindowId = currentWindow.id;
+    const uiState = await readSidepanelUiState(currentWindow.id);
+    activeFundingSize = uiState.workspace.fundingSize;
+    captureCollapsedPreference = uiState.workspace.captureCollapsed;
+    restoredPanels = uiState.workspace.panels;
+    fieldSectionOpen.clear();
+    for (const [title, open] of Object.entries(
+      uiState.workspace.fieldSections,
+    )) {
+      fieldSectionOpen.set(title, open);
+    }
+  }
+
   const collapse = $("capture-collapse") as HTMLButtonElement | null;
   const capture = $("capture-area");
+  if (capture && collapse) {
+    capture.classList.toggle(
+      "is-collapsed",
+      captureCollapsedPreference,
+    );
+    collapse.setAttribute(
+      "aria-expanded",
+      String(!captureCollapsedPreference),
+    );
+    collapse.textContent = captureCollapsedPreference ? "⌃" : "⌄";
+  }
+
   collapse?.addEventListener("click", () => {
     if (!capture) return;
     const collapsed = capture.classList.toggle("is-collapsed");
+    captureCollapsedPreference = collapsed;
     collapse.setAttribute("aria-expanded", String(!collapsed));
     collapse.textContent = collapsed ? "⌃" : "⌄";
+    persistWorkspaceChrome({ captureCollapsed: collapsed });
   });
+
+  restoreBusinessPanels(restoredPanels);
 
   observedWorkspace = workspace;
   observedActiveLabel = $("active-label");
