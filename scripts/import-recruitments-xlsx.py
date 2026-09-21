@@ -73,11 +73,21 @@ GEO_DICT_HEADERS = [
 GEO_RECRUITMENT_HEADERS = ["id", "nabor_id", "miejscowosc_id", "typ"]
 
 STATUS_MAP = {
-    "zamknięty": "ZAKONCZONY",
-    "zamkniety": "ZAKONCZONY",
-    "otwarty": "AKTYWNY",
+    "ogłoszony": "OGLOSZONY",
+    "ogloszony": "OGLOSZONY",
+    "planowany": "PLANOWANY",
     "wkrótce": "PLANOWANY",
     "wkrotce": "PLANOWANY",
+    "aktywny": "AKTYWNY",
+    "otwarty": "AKTYWNY",
+    "zawieszony": "ZAWIESZONY",
+    "zamknięty": "ZAMKNIETY",
+    "zamkniety": "ZAMKNIETY",
+    "zakończony": "ZAMKNIETY",
+    "zakonczony": "ZAMKNIETY",
+    "anulowany": "ANULOWANY",
+    "cancelled": "ANULOWANY",
+    "canceled": "ANULOWANY",
 }
 
 ROLE_MAP = {

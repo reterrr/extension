@@ -64,6 +64,14 @@ export interface LegacyStoredObject {
   manualFields?: Record<string, boolean>;
 }
 
+export interface LegacyStoredOperatorContact {
+  id: string;
+  objectId: string;
+  kind: "EMAIL" | "PHONE";
+  variant_no: number;
+  value: string;
+}
+
 /** Compatibility shape for geography rows exposed to the current UI. */
 export interface LegacyStoredGeography {
   id: string;
@@ -110,6 +118,7 @@ export interface LegacyStorageState {
   objects: LegacyStoredObject[];
   rules: LegacyStoredRule[];
   geographies?: LegacyStoredGeography[];
+  operatorContacts?: LegacyStoredOperatorContact[];
   fileSources?: LegacyStoredFileSource[];
   importSources?: ImportedSource[];
   financingRules?: Array<Record<string, unknown>>;

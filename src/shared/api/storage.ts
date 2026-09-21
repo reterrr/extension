@@ -1,6 +1,9 @@
 import { clearActiveDraft } from "../commits/draftStore";
 import { stampLastCheckedAt } from "../commits/lastChecked";
-import { migrateFundingRefundRanges } from "../domain/stateMigrations";
+import {
+  migrateFundingRefundRanges,
+  migrateRecruitmentStatusesAndOperatorContacts,
+} from "../domain/stateMigrations";
 import { LEGACY_STORAGE_KEY } from "../storage/constants";
 import type { LegacyStorageState } from "../types/legacy-storage";
 
@@ -34,6 +37,7 @@ function assertLegacyState(value: unknown): asserts value is LegacyStorageState 
     throw new Error("Unsupported stored data format.");
   }
   migrateFundingRefundRanges(state);
+  migrateRecruitmentStatusesAndOperatorContacts(state);
 }
 
 function emptyState(): LegacyStorageState {
@@ -43,6 +47,7 @@ function emptyState(): LegacyStorageState {
     objects: [],
     rules: [],
     geographies: [],
+    operatorContacts: [],
     fileSources: [],
     importSources: [],
     financingRules: [],

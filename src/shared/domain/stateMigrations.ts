@@ -85,3 +85,92 @@ export function migrateFundingRefundRanges(state: LegacyStorageState): boolean {
   if (addedRules.length) state.rules.push(...addedRules);
   return changed;
 }
+
+
+function splitContactValues(value: unknown): string[] {
+  if (typeof value !== "string") return [];
+  return value
+    .split(/[;\n\r]+/u)
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
+function migratedContactId(
+  objectId: string,
+  kind: "EMAIL" | "PHONE",
+  index: number,
+  usedIds: Set<string>,
+): string {
+  const base = `migration:${objectId}:${kind.toLowerCase()}:${index + 1}`;
+  let candidate = base;
+  let suffix = 1;
+  while (usedIds.has(candidate)) candidate = `${base}:${++suffix}`;
+  usedIds.add(candidate);
+  return candidate;
+}
+
+/**
+ * Normalizes the recruitment status vocabulary and moves legacy single
+ * operator email/phone fields into first-class contact variants.
+ */
+export function migrateRecruitmentStatusesAndOperatorContacts(
+  state: LegacyStorageState,
+): boolean {
+  let changed = false;
+
+  for (const object of state.objects) {
+    if (
+      object.type === "recruitment" &&
+      object.values?.status === "ZAKONCZONY"
+    ) {
+      object.values.status = "ZAMKNIETY";
+      changed = true;
+    }
+  }
+
+  const contacts = (state.operatorContacts ||= []);
+  const signatures = new Set(
+    contacts.map(
+      (row) =>
+        `${row.objectId}\u0000${row.kind}\u0000${String(row.value).trim().toLowerCase()}`,
+    ),
+  );
+  const usedIds = new Set(contacts.map((row) => row.id));
+
+  for (const object of state.objects) {
+    if (object.type !== "operator") continue;
+
+    const legacy = [
+      ["EMAIL", object.values?.email],
+      ["PHONE", object.values?.phone ?? object.values?.telefon],
+    ] as const;
+
+    for (const [kind, raw] of legacy) {
+      const values = splitContactValues(raw);
+      let nextVariant =
+        Math.max(
+          0,
+          ...contacts
+            .filter((row) => row.objectId === object.id && row.kind === kind)
+            .map((row) => Number(row.variant_no) || 0),
+        ) + 1;
+
+      values.forEach((value, index) => {
+        const signature =
+          `${object.id}\u0000${kind}\u0000${value.toLowerCase()}`;
+        if (signatures.has(signature)) return;
+        contacts.push({
+          id: migratedContactId(object.id, kind, index, usedIds),
+          objectId: object.id,
+          kind,
+          variant_no: nextVariant++,
+          value,
+        });
+        signatures.add(signature);
+        changed = true;
+      });
+    }
+  }
+
+  return changed;
+}

@@ -84,6 +84,23 @@ function exportFiles(state, objectId) {
     );
 }
 
+function exportOperatorContacts(state, objectId) {
+  return (state.operatorContacts ?? [])
+    .filter((row) => String(row.objectId) === String(objectId))
+    .sort(
+      (a, b) =>
+        String(a.kind).localeCompare(String(b.kind)) ||
+        Number(a.variant_no ?? 0) - Number(b.variant_no ?? 0),
+    )
+    .map((row) =>
+      compactRecord({
+        kind: row.kind,
+        variant_no: row.variant_no,
+        value: row.value,
+      }),
+    );
+}
+
 function exportFunding(state, objectId) {
   return (state.financingRules ?? [])
     .filter((row) => String(row.objectId) === String(objectId))
@@ -181,6 +198,9 @@ function exportObject(
   };
 
   if (geographies.length) result.geography = geographies;
+
+  const contacts = exportOperatorContacts(state, object.id);
+  if (contacts.length) result.contacts = contacts;
 
   const financing = exportFunding(state, object.id);
   if (financing.length) result.financing = financing;

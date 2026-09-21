@@ -39,6 +39,7 @@ function snapshot() {
           updatedAt: "2026-09-20T10:15:00.000Z",
           values: {
             name: "RARR",
+            role: "OPERATOR",
             nip: "1234567890",
             address: "ul. Testowa 1, Rzeszów",
             email: "kontakt@rarr.example",
@@ -82,7 +83,7 @@ function snapshot() {
             continuous: false,
             project_id: "PR_1",
             operator_id: "OP_1",
-            status: "AKTYWNY",
+            status: "OGLOSZONY",
             dataRozpoczeciaOd: "2026-09-01",
             dataRozpoczeciaDo: "2026-09-01",
             dataZakonczeniaOd: "2026-09-30",
@@ -128,6 +129,36 @@ function snapshot() {
           type: "GMINA",
           role: "WYKLUCZA",
           value: "0264011",
+        },
+      ],
+      operatorContacts: [
+        {
+          id: "C1",
+          objectId: "OP_1",
+          kind: "EMAIL",
+          variant_no: 1,
+          value: "pierwszy@rarr.example",
+        },
+        {
+          id: "C2",
+          objectId: "OP_1",
+          kind: "EMAIL",
+          variant_no: 2,
+          value: "drugi@rarr.example",
+        },
+        {
+          id: "C3",
+          objectId: "OP_1",
+          kind: "PHONE",
+          variant_no: 1,
+          value: "+48 17 123 45 67",
+        },
+        {
+          id: "C4",
+          objectId: "OP_1",
+          kind: "PHONE",
+          variant_no: 2,
+          value: "+48 600 700 800",
         },
       ],
       financingRules: [

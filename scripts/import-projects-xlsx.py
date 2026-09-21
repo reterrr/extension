@@ -403,6 +403,7 @@ def empty_state() -> dict[str, Any]:
         "objects": [],
         "rules": [],
         "geographies": [],
+        "operatorContacts": [],
         "fileSources": [],
         "importSources": [],
         "financingRules": [],
@@ -588,6 +589,36 @@ def merge_projects(
             values["announcements_site_url"] = schedule_url
         else:
             values.pop("announcements_site_url", None)
+
+        documents_url = valid_url(
+            row.get("link_do_dokumentow", ""),
+            f"{project_key}.link_do_dokumentow",
+        ) if row.get("link_do_dokumentow", "").strip() else None
+        if documents_url:
+            values["documents_url"] = documents_url
+        else:
+            values.pop("documents_url", None)
+
+        direct_documents = row.get("link_prowadzi_do_dokumentow", "").strip().casefold()
+        if direct_documents:
+            if direct_documents not in {"tak", "nie", "true", "false", "1", "0"}:
+                raise ValueError(
+                    f"{project_key}.link_prowadzi_do_dokumentow: expected tak/nie."
+                )
+            values["documents_link_direct"] = direct_documents in {"tak", "true", "1"}
+        else:
+            values.pop("documents_link_direct", None)
+
+        for field, column in (
+            ("notes", "uwagi"),
+            ("schedule_note", "Uwaga"),
+            ("technical_notes", "uwagi_techniczne"),
+        ):
+            value = row.get(column, "").strip()
+            if value:
+                values[field] = value
+            else:
+                values.pop(field, None)
 
         values["last_checked_at"] = now
 

@@ -62,6 +62,7 @@ CREATE TABLE IF NOT EXISTS operators (
   id INTEGER PRIMARY KEY,
   object_id TEXT NOT NULL UNIQUE,
   name TEXT NOT NULL,
+  role TEXT,
   nip TEXT,
   address TEXT,
   email TEXT,
@@ -121,6 +122,19 @@ CREATE TABLE IF NOT EXISTS recruitments (
   FOREIGN KEY (operator_id) REFERENCES operators(id),
   FOREIGN KEY (geography_group_id) REFERENCES geography_groups(id) ON DELETE SET NULL
 );
+
+CREATE TABLE IF NOT EXISTS operator_contacts (
+  contact_id TEXT PRIMARY KEY,
+  object_id TEXT NOT NULL,
+  kind TEXT NOT NULL CHECK (kind IN ('EMAIL', 'PHONE')),
+  variant_no INTEGER NOT NULL CHECK (variant_no >= 1),
+  value TEXT NOT NULL,
+  UNIQUE(object_id, kind, variant_no),
+  FOREIGN KEY (object_id) REFERENCES workspace_objects(object_id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS ix_operator_contacts_object_kind
+ON operator_contacts(object_id, kind);
 
 CREATE TABLE IF NOT EXISTS projects_operators (
   id INTEGER PRIMARY KEY AUTOINCREMENT,

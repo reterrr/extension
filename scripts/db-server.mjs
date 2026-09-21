@@ -148,6 +148,7 @@ function geographyTable(type) {
 function clearMaterializedTables() {
   db.exec(`
     DELETE FROM projects_operators;
+    DELETE FROM operator_contacts;
     DELETE FROM recruitments;
     DELETE FROM projects;
     DELETE FROM operators;
@@ -323,6 +324,7 @@ function syncBusinessTables(state, groupByObject) {
       id,
       String(object.id),
       nullableText(values.name) ?? object.label ?? "",
+      nullableText(values.role),
       nullableText(values.nip),
       nullableText(values.address ?? values.adres),
       nullableText(values.email),
@@ -403,6 +405,29 @@ function syncBusinessTables(state, groupByObject) {
       nullableText(object.updatedAt),
       nullableText(values.last_checked_at),
       groupByObject.get(String(object.id)) ?? null,
+    );
+  }
+}
+
+function syncOperatorContacts(state) {
+  const insert = db.prepare(`
+    INSERT INTO operator_contacts(
+      contact_id, object_id, kind, variant_no, value
+    ) VALUES (?, ?, ?, ?, ?)
+  `);
+
+  for (const contact of state.operatorContacts ?? []) {
+    if (!["EMAIL", "PHONE"].includes(String(contact.kind))) {
+      throw new Error(`Unsupported operator contact kind: ${String(contact.kind)}.`);
+    }
+    const value = String(contact.value ?? "").trim();
+    if (!value) continue;
+    insert.run(
+      String(contact.id),
+      String(contact.objectId),
+      String(contact.kind),
+      Number(contact.variant_no),
+      value,
     );
   }
 }
@@ -532,6 +557,7 @@ const persistStateTransaction = db.transaction((state) => {
   syncWorkspaceObjects(state);
   const groupByObject = syncGeographies(state);
   syncBusinessTables(state, groupByObject);
+  syncOperatorContacts(state);
   syncExtractionRules(state);
   syncFieldEvidence(state);
   syncFileSources(state);
