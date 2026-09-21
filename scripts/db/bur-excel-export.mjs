@@ -12,7 +12,15 @@ export const SHEET_HEADERS = Object.freeze({
 });
 
 const PROJECT_STATUS = { PLANOWANY: "planowany", AKTYWNY: "aktywny", ZAWIESZONY: "zawieszony", ZAKONCZONY: "zakończony" };
-const RECRUITMENT_STATUS = { PLANOWANY: "wkrótce", OGLOSZONY: "otwarty", AKTYWNY: "otwarty", ZAWIESZONY: "zamknięty", ZAKONCZONY: "zamknięty" };
+const RECRUITMENT_STATUS = {
+  OGLOSZONY: "ogłoszony",
+  PLANOWANY: "planowany",
+  AKTYWNY: "aktywny",
+  ZAWIESZONY: "zawieszony",
+  ZAMKNIETY: "zamknięty",
+  ZAKONCZONY: "zamknięty",
+  ANULOWANY: "anulowany",
+};
 const PODREGION_WOJ = new Map([
   ...["jeleniogórski", "legnicko-głogowski", "wałbrzyski", "wrocławski", "miasto Wrocław"].map((x) => [x, "dolnośląskie"]),
   ...["bydgosko-toruński", "grudziądzki", "inowrocławski", "świecki", "włocławski"].map((x) => [x, "kujawsko-pomorskie"]),
@@ -181,20 +189,52 @@ export function buildBurSheets(snapshot, geographySource) {
     relationTypesByOperator.get(operatorId).add(String(relation.operator_type));
   }
 
+  const contactsByObject = new Map();
+  for (const contact of state.operatorContacts ?? []) {
+    const objectId = String(contact.objectId);
+    if (!contactsByObject.has(objectId)) contactsByObject.set(objectId, []);
+    contactsByObject.get(objectId).push(contact);
+  }
+
   const operatorRows = operators.map((object) => {
     const values = object.values ?? {};
     const types = relationTypesByOperator.get(String(object.id)) ?? new Set();
+    const contacts = contactsByObject.get(String(object.id)) ?? [];
+    const emails = contacts
+      .filter((contact) => contact.kind === "EMAIL" && contact.value)
+      .sort((a, b) => Number(a.variant_no) - Number(b.variant_no))
+      .map((contact) => String(contact.value));
+    const phones = contacts
+      .filter((contact) => contact.kind === "PHONE" && contact.value)
+      .sort((a, b) => Number(a.variant_no) - Number(b.variant_no))
+      .map((contact) => String(contact.value));
+    const role =
+      values.role === "PARTNER"
+        ? "partner"
+        : values.role === "OPERATOR"
+          ? "operator"
+          : types.has("GLOWNY") || !types.size
+            ? "operator"
+            : "partner";
     return row(SHEET_HEADERS.Operatorzy, {
       operator_id: keyOf(object),
       nazwa_operatora: values.name ?? object.label,
-      rola: types.has("GLOWNY") || !types.size ? "operator" : "partner",
+      rola: role,
       NIP: values.nip,
       adres: values.address ?? values.adres,
-      email: values.email,
-      telefon: values.phone ?? values.telefon,
+      email: emails.length ? emails.join("; ") : values.email,
+      telefon: phones.length
+        ? phones.join("; ")
+        : values.phone ?? values.telefon,
       strona_www: values.website ?? object.sourceUrl,
       uwagi: values.notes ?? object.creationNote,
-      operatorzy_glowni_dodatkowi: types.has("DODATKOWY") ? "dodatkowy" : types.has("GLOWNY") ? "główny" : null,
+      operatorzy_glowni_dodatkowi: types.has("DODATKOWY")
+        ? types.has("GLOWNY")
+          ? "główny; dodatkowy"
+          : "dodatkowy"
+        : types.has("GLOWNY")
+          ? "główny"
+          : null,
     });
   });
 
@@ -215,9 +255,12 @@ export function buildBurSheets(snapshot, geographySource) {
       link_do_dokumentow: documents ?? object.sourceUrl,
       operator_id: main ? keyOf(byId.get(String(main.operator_object_id))) : keyOf(byId.get(String(values.operator_id ?? ""))),
       uwagi: values.notes ?? object.creationNote,
-      link_prowadzi_do_dokumentow: documents || object.sourceUrl ? "tak" : null,
+      link_prowadzi_do_dokumentow: yesNo(values.documents_link_direct) ??
+        (documents || object.sourceUrl ? "tak" : null),
       "Link do harmonogramu / naborów": values.announcements_site_url,
+      Uwaga: values.schedule_note,
       operatorzy_dodatkowi: additional.length ? additional.join("; ") : null,
+      uwagi_techniczne: values.technical_notes,
     });
   });
 
