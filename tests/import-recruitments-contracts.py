@@ -23,7 +23,13 @@ def base_row() -> dict[str, str]:
 
 class RecruitmentImporterContracts(unittest.TestCase):
     def test_status_mapping_and_explicit_continuous_detection(self) -> None:
-        self.assertEqual(importer.STATUS_MAP["zamknięty"], "ZAKONCZONY")
+        self.assertEqual(importer.STATUS_MAP["ogłoszony"], "OGLOSZONY")
+        self.assertEqual(importer.STATUS_MAP["planowany"], "PLANOWANY")
+        self.assertEqual(importer.STATUS_MAP["aktywny"], "AKTYWNY")
+        self.assertEqual(importer.STATUS_MAP["zawieszony"], "ZAWIESZONY")
+        self.assertEqual(importer.STATUS_MAP["zamknięty"], "ZAMKNIETY")
+        self.assertEqual(importer.STATUS_MAP["anulowany"], "ANULOWANY")
+        # Backwards-compatible spreadsheet labels remain accepted.
         self.assertEqual(importer.STATUS_MAP["otwarty"], "AKTYWNY")
         self.assertEqual(importer.STATUS_MAP["wkrótce"], "PLANOWANY")
 
