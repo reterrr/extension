@@ -58,18 +58,18 @@ function annotateFieldRows(root: ParentNode): void {
     value?.classList.toggle("neutral-answer", neutral);
 
     if (mark) {
+      const evidenceCount = Number(row.dataset.evidenceCount ?? "0") || 0;
       mark.classList.toggle("field-state-missing", missing);
       mark.classList.toggle("field-state-set", !missing && !system);
-      setText(
-        mark,
-        system
-          ? value?.classList.contains("empty")
-            ? ""
-            : "AUTO"
-          : missing
-            ? "Brak"
-            : "",
-      );
+      const stateLabel = system
+        ? value?.classList.contains("empty")
+          ? ""
+          : "AUTO"
+        : missing
+          ? "Brak"
+          : "✓";
+      const evidenceLabel = !system && evidenceCount ? `EV ${evidenceCount}` : "";
+      setText(mark, [stateLabel, evidenceLabel].filter(Boolean).join(" · "));
     }
   }
 }
