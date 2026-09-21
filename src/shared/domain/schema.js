@@ -294,9 +294,12 @@
       fields: {
         name: text("Nazwa"),
         nip: { label: "NIP", type: "nip", group: "Podstawowe" },
+        address: text("Adres", "Kontakt"),
+        email: text("Email", "Kontakt"),
+        phone: text("Telefon", "Kontakt"),
+        website: url("Strona WWW", "Kontakt"),
+        notes: text("Uwagi", "Kontakt", { multiline: true }),
         last_checked_at: systemDateTime(),
-        website: { ...url("Website"), legacy: true },
-        email: text("Email", "Earlier captures", { legacy: true }),
       },
     },
 

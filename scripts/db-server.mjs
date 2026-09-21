@@ -52,8 +52,19 @@ ensureColumn("projects", "refund_percent_max", "REAL");
 ensureColumn("recruitments", "refund_percent_min", "REAL");
 ensureColumn("recruitments", "refund_percent_max", "REAL");
 ensureColumn("workspace_objects", "last_checked_at", "TEXT");
+ensureColumn("projects", "created_at", "TEXT");
+ensureColumn("projects", "updated_at", "TEXT");
 ensureColumn("projects", "last_checked_at", "TEXT");
+ensureColumn("operators", "address", "TEXT");
+ensureColumn("operators", "email", "TEXT");
+ensureColumn("operators", "phone", "TEXT");
+ensureColumn("operators", "website", "TEXT");
+ensureColumn("operators", "notes", "TEXT");
+ensureColumn("operators", "created_at", "TEXT");
+ensureColumn("operators", "updated_at", "TEXT");
 ensureColumn("operators", "last_checked_at", "TEXT");
+ensureColumn("recruitments", "created_at", "TEXT");
+ensureColumn("recruitments", "updated_at", "TEXT");
 ensureColumn("recruitments", "last_checked_at", "TEXT");
 ensureColumn("recruitments", "continuous", "INTEGER");
 ensureColumn("recruitments", "operator_id", "INTEGER");
@@ -68,10 +79,10 @@ ensureColumn("recruitments", "notes", "TEXT");
 ensureColumn("recruitments", "funding_rules", "TEXT");
 ensureColumn("recruitments", "funding_verified_at", "TEXT");
 ensureColumn("recruitments", "funding_verification_url", "TEXT");
-db.pragma("user_version = 5");
+db.pragma("user_version = 6");
 
 db.prepare(
-  `INSERT INTO app_meta(key, value) VALUES ('schema_version', '5')
+  `INSERT INTO app_meta(key, value) VALUES ('schema_version', '6')
    ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
 ).run();
 
@@ -265,13 +276,17 @@ function syncBusinessTables(state, groupByObject) {
     INSERT INTO projects(
       id, object_id, type, name, number, status,
       refund_percent_min, refund_percent_max,
-      start_date, end_date, announcements_site_url, last_checked_at,
+      start_date, end_date, announcements_site_url,
+      created_at, updated_at, last_checked_at,
       geography_group_id
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   const insertOperator = db.prepare(`
-    INSERT INTO operators(id, object_id, name, nip, last_checked_at)
-    VALUES (?, ?, ?, ?, ?)
+    INSERT INTO operators(
+      id, object_id, name, nip, address, email, phone, website, notes,
+      created_at, updated_at, last_checked_at
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   const insertProjectOperator = db.prepare(`
     INSERT INTO projects_operators(project_id, operator_id, operator_type)
@@ -290,12 +305,12 @@ function syncBusinessTables(state, groupByObject) {
       announcement_url, documents_url, data_source_url,
       direct_recruitment_link, notes, funding_rules,
       funding_verified_at, funding_verification_url,
-      last_checked_at, geography_group_id
+      created_at, updated_at, last_checked_at, geography_group_id
     ) VALUES (
       ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
       ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
       ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-      ?, ?, ?, ?, ?, ?, ?
+      ?, ?, ?, ?, ?, ?, ?, ?, ?
     )
   `);
 
@@ -309,6 +324,13 @@ function syncBusinessTables(state, groupByObject) {
       String(object.id),
       nullableText(values.name) ?? object.label ?? "",
       nullableText(values.nip),
+      nullableText(values.address ?? values.adres),
+      nullableText(values.email),
+      nullableText(values.phone ?? values.telefon),
+      nullableText(values.website),
+      nullableText(values.notes),
+      nullableText(object.createdAt),
+      nullableText(object.updatedAt),
       nullableText(values.last_checked_at),
     );
   }
@@ -329,6 +351,8 @@ function syncBusinessTables(state, groupByObject) {
       nullableText(values.start_date),
       nullableText(values.end_date),
       nullableText(values.announcements_site_url),
+      nullableText(object.createdAt),
+      nullableText(object.updatedAt),
       nullableText(values.last_checked_at),
       groupByObject.get(String(object.id)) ?? null,
     );
@@ -375,6 +399,8 @@ function syncBusinessTables(state, groupByObject) {
       nullableText(values.funding_rules),
       nullableText(values.funding_verified_at),
       nullableText(values.funding_verification_url),
+      nullableText(object.createdAt),
+      nullableText(object.updatedAt),
       nullableText(values.last_checked_at),
       groupByObject.get(String(object.id)) ?? null,
     );
