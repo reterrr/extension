@@ -94,6 +94,21 @@ export function App() {
 
           <div id="fields" />
 
+          <section id="operator-contacts-section" className="business-section" hidden>
+            <details id="operator-contacts-panel" className="workspace-section-card">
+              <summary className="workspace-section-summary">
+                <span className="workspace-section-title">
+                  <strong>Kontakty operatora</strong>
+                  <small>Wiele adresów email i numerów telefonu</small>
+                </span>
+                <span id="operator-contact-count" className="workspace-section-status">Brak kontaktów</span>
+              </summary>
+              <div className="workspace-section-body">
+                <div id="operator-contacts" />
+              </div>
+            </details>
+          </section>
+
           <section id="file-sources-section" className="business-section" hidden>
             <details id="file-sources-panel" className="workspace-section-card">
               <summary className="workspace-section-summary">
