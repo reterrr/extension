@@ -19,6 +19,10 @@ import {
   objectsInView,
 } from "../shared/search/objectView.js";
 import { createPickerClient } from "./pickerRpc";
+import {
+  patchSidepanelUiState,
+  readSidepanelUiState,
+} from "./uiSessionState";
 
 (() => {
   const $ = (id) => document.getElementById(id),
@@ -47,6 +51,9 @@ import { createPickerClient } from "./pickerRpc";
     ready = false,
     switcherQuery = "",
     switcherType = "all",
+    switcherScrollTop = 0,
+    uiPersistTimer = null,
+    pendingViewportAnchor = null,
     objectView = null;
   const expanded = new Set();
   const chosen = () => db.objects.find((o) => o.id === objectId);
@@ -71,6 +78,84 @@ import { createPickerClient } from "./pickerRpc";
     if (type === "text") return "Element";
     return "Evidence";
   };
+
+  function activeUiState() {
+    if (!active || !objectId) return null;
+    return {
+      objectId,
+      field: active.field,
+      ...(active.target ? { target: active.target } : {}),
+      ...(active.context ? { context: active.context } : {}),
+    };
+  }
+
+  function persistWorkspaceUi(extra = {}) {
+    if (!Number.isInteger(windowId)) return Promise.resolve();
+    return patchSidepanelUiState(windowId, {
+      workspace: {
+        objectId,
+        focusStamp,
+        active: activeUiState(),
+        expanded: [...expanded],
+        switcher: {
+          query: switcherQuery,
+          type: switcherType,
+          scrollTop: switcherScrollTop,
+        },
+        ...extra,
+      },
+    });
+  }
+
+  function scheduleWorkspaceUiPersist(extra = {}) {
+    if (uiPersistTimer !== null) clearTimeout(uiPersistTimer);
+    uiPersistTimer = setTimeout(() => {
+      uiPersistTimer = null;
+      void persistWorkspaceUi(extra);
+    }, 100);
+  }
+
+  function rememberViewportAnchor(selector, focus = false) {
+    const element = document.querySelector(selector);
+    if (!(element instanceof HTMLElement)) return;
+    pendingViewportAnchor = {
+      selector,
+      top: element.getBoundingClientRect().top,
+      focus,
+    };
+  }
+
+  function restoreViewportAnchor() {
+    if (busy) return;
+    const anchor = pendingViewportAnchor;
+    pendingViewportAnchor = null;
+    if (!anchor) return;
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const element = document.querySelector(anchor.selector);
+        if (!(element instanceof HTMLElement)) return;
+        const delta = element.getBoundingClientRect().top - anchor.top;
+        if (Math.abs(delta) > 0.5) window.scrollBy(0, delta);
+
+        const dock = $("capture-area");
+        if (dock && !dock.hidden) {
+          const rect = element.getBoundingClientRect();
+          const dockTop = dock.getBoundingClientRect().top;
+          if (rect.bottom > dockTop - 10) {
+            window.scrollBy(0, rect.bottom - dockTop + 10);
+          }
+        }
+
+        if (anchor.focus) {
+          try {
+            element.focus({ preventScroll: true });
+          } catch {
+            element.focus();
+          }
+        }
+      });
+    });
+  }
 
   const activeInfo = () =>
     active && chosen()
@@ -178,9 +263,8 @@ import { createPickerClient } from "./pickerRpc";
       preview = null;
       resetCapture();
     }
-    switcherQuery = "";
-    switcherType = "all";
     $("switcher").open = false;
+    scheduleWorkspaceUiPersist();
     render();
     notice("Widok roboczy ustawiony: " + objectView.objectIds.length + " obiektów.");
   }
@@ -188,8 +272,7 @@ import { createPickerClient } from "./pickerRpc";
   async function clearObjectView() {
     objectView = null;
     await browser.storage.session.remove(OBJECT_VIEW_STORAGE_KEY);
-    switcherQuery = "";
-    switcherType = "all";
+    scheduleWorkspaceUiPersist();
     render();
     notice("Widok wyczyszczony. Pokazuję wszystkie obiekty.");
   }
@@ -348,6 +431,7 @@ import { createPickerClient } from "./pickerRpc";
     viewEpoch++;
     resetCapture();
     $("switcher").open = false;
+    scheduleWorkspaceUiPersist();
     render();
     if (next) {
       const object = chosen();
@@ -368,6 +452,7 @@ import { createPickerClient } from "./pickerRpc";
     if (focusStamp !== message.stamp) return;
     if (db.objects.some((o) => o.id === message.objectId)) {
       chooseObject(message.objectId, true);
+      scheduleWorkspaceUiPersist();
       notice(message.note || "Choose a field to capture.");
       if (!port || tabId !== message.tabId) await connect();
     }
@@ -378,6 +463,7 @@ import { createPickerClient } from "./pickerRpc";
     active = descriptor;
     viewEpoch++;
     resetCapture();
+    scheduleWorkspaceUiPersist();
     if (descriptor.target?.kind === "funding")
       expanded.add("funding:" + descriptor.target.id);
     if (descriptor.target?.kind === "document") {
@@ -497,8 +583,9 @@ import { createPickerClient } from "./pickerRpc";
   function trackExpansion(details, key) {
     details.open = expanded.has(key);
     details.addEventListener("toggle", () => {
-      if (details.isConnected)
-        details.open ? expanded.add(key) : expanded.delete(key);
+      if (!details.isConnected) return;
+      details.open ? expanded.add(key) : expanded.delete(key);
+      scheduleWorkspaceUiPersist();
     });
   }
   function renderSwitcher() {
@@ -551,6 +638,7 @@ import { createPickerClient } from "./pickerRpc";
       button.setAttribute("aria-pressed", String(switcherType === value));
       button.onclick = () => {
         switcherType = value;
+        scheduleWorkspaceUiPersist();
         renderResults();
         search.focus();
       };
@@ -744,6 +832,7 @@ import { createPickerClient } from "./pickerRpc";
 
     search.oninput = () => {
       switcherQuery = search.value;
+      scheduleWorkspaceUiPersist();
       renderResults();
     };
     search.onkeydown = (event) => {
@@ -764,16 +853,29 @@ import { createPickerClient } from "./pickerRpc";
       }
     };
 
+    results.onscroll = () => {
+      switcherScrollTop = results.scrollTop;
+      scheduleWorkspaceUiPersist();
+    };
+
     switcher.ontoggle = () => {
-      if (!switcher.open) return;
-      switcherQuery = "";
-      switcherType = "all";
-      search.value = "";
+      if (!switcher.open) {
+        switcherScrollTop = results.scrollTop;
+        scheduleWorkspaceUiPersist();
+        return;
+      }
+      search.value = switcherQuery;
       renderResults();
-      requestAnimationFrame(() => search.focus());
+      requestAnimationFrame(() => {
+        results.scrollTop = switcherScrollTop;
+        search.focus();
+      });
     };
 
     renderResults();
+    requestAnimationFrame(() => {
+      results.scrollTop = switcherScrollTop;
+    });
   }
   function renderFunding(object) {
     const root = $("funding");
@@ -898,6 +1000,9 @@ import { createPickerClient } from "./pickerRpc";
         remove.onclick = action(async () => {
           if (!confirm("Remove this funding variant and its extraction rules?"))
             return;
+          rememberViewportAnchor(
+            '[data-funding-add="' + size + '"]',
+          );
           await data("REMOVE_FUNDING", { objectId, variantId: variant.id });
           if (active?.target?.id === variant.id) {
             active = null;
@@ -908,8 +1013,13 @@ import { createPickerClient } from "./pickerRpc";
         group.append(details);
       }
       const add = node("button", "text-button", "+ Add variant");
+      add.dataset.fundingAdd = size;
       add.disabled = busy;
       add.onclick = action(async () => {
+        rememberViewportAnchor(
+          '[data-funding-add="' + size + '"]',
+          true,
+        );
         const id = objectId,
           epoch = viewEpoch;
         await data("ADD_FUNDING", { objectId: id, companySize: size });
@@ -924,6 +1034,7 @@ import { createPickerClient } from "./pickerRpc";
           context: label + " · Variant " + variant.variant_no,
         };
         resetCapture();
+        scheduleWorkspaceUiPersist();
       });
       group.append(add);
       root.append(group);
@@ -1554,6 +1665,7 @@ import { createPickerClient } from "./pickerRpc";
     $("results").hidden = !preview;
     renderEditor();
     controls();
+    restoreViewportAnchor();
   }
   function action(handler) {
     return async (event) => {
@@ -1611,6 +1723,7 @@ import { createPickerClient } from "./pickerRpc";
     if (port && picking) void rpc("STOP").catch(() => {});
     active = null;
     resetCapture();
+    scheduleWorkspaceUiPersist();
     render();
   };
   $("save").onclick = action(async () => {
@@ -1650,6 +1763,7 @@ import { createPickerClient } from "./pickerRpc";
     if (next?.target) expanded.add(next.target.kind + ":" + next.target.id);
     if (next?.target?.kind === "document") $("documents-panel").open = true;
     resetCapture();
+    scheduleWorkspaceUiPersist();
     notice(capture ? "Extraction rule saved." : "Value saved.");
   });
   $("preview").onclick = action(async () => {
@@ -1707,6 +1821,7 @@ import { createPickerClient } from "./pickerRpc";
     objectId = "";
     active = null;
     resetCapture();
+    scheduleWorkspaceUiPersist();
     $("more").open = false;
   });
   $("export").onclick = action(async () => {
@@ -1749,15 +1864,54 @@ import { createPickerClient } from "./pickerRpc";
       render();
     }
   });
-  window.addEventListener("pagehide", disconnect);
+  window.addEventListener("pagehide", () => {
+    void persistWorkspaceUi();
+    disconnect();
+  });
   (async () => {
     windowId = (await browser.windows.getCurrent()).id;
     await data("GET");
-    const storedView = await browser.storage.session.get(OBJECT_VIEW_STORAGE_KEY);
-    objectView = normalizeObjectView(storedView[OBJECT_VIEW_STORAGE_KEY], db.objects);
+    const [storedView, uiState] = await Promise.all([
+      browser.storage.session.get(OBJECT_VIEW_STORAGE_KEY),
+      readSidepanelUiState(windowId),
+    ]);
+    objectView = normalizeObjectView(
+      storedView[OBJECT_VIEW_STORAGE_KEY],
+      db.objects,
+    );
+
+    switcherQuery = uiState.workspace.switcher.query;
+    switcherType = uiState.workspace.switcher.type;
+    switcherScrollTop = uiState.workspace.switcher.scrollTop;
+    focusStamp = uiState.workspace.focusStamp;
+    expanded.clear();
+    for (const key of uiState.workspace.expanded) expanded.add(key);
+
+    if (
+      uiState.workspace.objectId &&
+      db.objects.some((object) => object.id === uiState.workspace.objectId)
+    ) {
+      objectId = uiState.workspace.objectId;
+      const savedActive = uiState.workspace.active;
+      if (savedActive?.objectId === objectId) {
+        active = {
+          field: savedActive.field,
+          ...(savedActive.target ? { target: savedActive.target } : {}),
+          ...(savedActive.context ? { context: savedActive.context } : {}),
+        };
+        resetCapture();
+      }
+    }
+
     ready = true;
-    await receiveFocus(await data("GET_FOCUS", { windowId }));
-    render();
+    const pendingFocus = await data("GET_FOCUS", { windowId });
+    if (pendingFocus?.stamp && pendingFocus.stamp !== focusStamp) {
+      await receiveFocus(pendingFocus);
+    } else {
+      render();
+    }
+    scheduleWorkspaceUiPersist();
+    window.dispatchEvent(new Event("burbot:workspace-ready"));
     if (!port) await connect();
   })().catch((error) => notice(error.message, true));
 })();

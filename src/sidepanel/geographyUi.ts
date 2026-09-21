@@ -1,5 +1,9 @@
 import { createCapturedExtractionInput } from "../shared/extraction/rules";
 import { isPickerSelectionResponse } from "../shared/messaging/picker";
+import {
+  patchSidepanelUiState,
+  readSidepanelUiState,
+} from "./uiSessionState";
 import type {
   LegacyStorageState,
   LegacyStoredGeography,
@@ -11,6 +15,8 @@ let initialized = false;
 let state = BurbotCore.empty() as LegacyStorageState;
 let activePageUrl = "";
 let renderQueued = false;
+let uiWindowId: number | null = null;
+let uiPersistTimer: number | undefined;
 
 function $<T extends HTMLElement = HTMLElement>(id: string): T {
   const element = document.getElementById(id);
@@ -22,6 +28,32 @@ function notice(text: string, error = false): void {
   const element = $("notice");
   element.textContent = text;
   element.className = error ? "error" : "";
+}
+
+function persistGeographyUi(): void {
+  if (uiWindowId === null) return;
+  const role = $("geography-role") as HTMLSelectElement;
+  const type = $("geography-type") as HTMLSelectElement;
+  const search = $("geography-search") as HTMLInputElement;
+  const add = $("geography-add") as HTMLDetailsElement;
+  void patchSidepanelUiState(uiWindowId, {
+    workspace: {
+      geography: {
+        role: role.value,
+        type: type.value,
+        query: search.value,
+        addOpen: add.open,
+      },
+    },
+  });
+}
+
+function scheduleGeographyUiPersist(): void {
+  if (uiPersistTimer !== undefined) window.clearTimeout(uiPersistTimer);
+  uiPersistTimer = window.setTimeout(() => {
+    uiPersistTimer = undefined;
+    persistGeographyUi();
+  }, 100);
 }
 
 async function data(
@@ -87,6 +119,34 @@ function normalizeSearch(value: string): string {
     .replace(/[\u0300-\u036f]/g, "")
     .toLocaleLowerCase("pl-PL")
     .trim();
+}
+
+function keepControlInPlace(
+  element: HTMLElement,
+  beforeTop: number,
+  focus?: HTMLElement,
+): void {
+  window.requestAnimationFrame(() => {
+    window.requestAnimationFrame(() => {
+      const delta = element.getBoundingClientRect().top - beforeTop;
+      if (Math.abs(delta) > 0.5) window.scrollBy(0, delta);
+      const capture = document.getElementById("capture-area");
+      if (capture instanceof HTMLElement && !capture.hidden) {
+        const rect = element.getBoundingClientRect();
+        const dockTop = capture.getBoundingClientRect().top;
+        if (rect.bottom > dockTop - 10) {
+          window.scrollBy(0, rect.bottom - dockTop + 10);
+        }
+      }
+      if (focus) {
+        try {
+          focus.focus({ preventScroll: true });
+        } catch {
+          focus.focus();
+        }
+      }
+    });
+  });
 }
 
 function matchingCatalog(type: string, query: string) {
@@ -220,6 +280,8 @@ function renderRows(object: LegacyStoredObject): void {
     remove.setAttribute("aria-label", "Usuń geografię");
     remove.textContent = "×";
     remove.onclick = () => {
+      const addPanel = $("geography-add");
+      const beforeTop = addPanel.getBoundingClientRect().top;
       void data("REMOVE_GEOGRAPHY", {
         objectId: object.id,
         geographyId: row.id,
@@ -227,6 +289,7 @@ function renderRows(object: LegacyStoredObject): void {
         .then(() => {
           notice("Usunięto warunek geograficzny.");
           render();
+          keepControlInPlace(addPanel, beforeTop);
         })
         .catch((error: unknown) =>
           notice(error instanceof Error ? error.message : String(error), true),
@@ -269,6 +332,8 @@ function renderSearch(object: LegacyStoredObject): void {
     button.append(title, meta);
 
     button.onclick = () => {
+      const addPanel = $("geography-add");
+      const beforeTop = addPanel.getBoundingClientRect().top;
       void data("ADD_GEOGRAPHY", {
         objectId: object.id,
         geographyType: entry.type,
@@ -277,8 +342,10 @@ function renderSearch(object: LegacyStoredObject): void {
       })
         .then(() => {
           search.value = "";
+          scheduleGeographyUiPersist();
           notice(`Dodano: ${BurbotGeography.roles[role.value]} ${entry.label}.`);
           render();
+          keepControlInPlace(addPanel, beforeTop, search);
         })
         .catch((error: unknown) =>
           notice(error instanceof Error ? error.message : String(error), true),
@@ -324,9 +391,18 @@ function populateSelectors(): void {
 
   type.value = "WOJEWODZTWO";
   role.value = "OBEJMUJE";
-  type.onchange = queueRender;
-  role.onchange = queueRender;
-  ($("geography-search") as HTMLInputElement).oninput = queueRender;
+  type.onchange = () => {
+    scheduleGeographyUiPersist();
+    queueRender();
+  };
+  role.onchange = () => {
+    scheduleGeographyUiPersist();
+    queueRender();
+  };
+  ($("geography-search") as HTMLInputElement).oninput = () => {
+    scheduleGeographyUiPersist();
+    queueRender();
+  };
 }
 
 export async function initGeographyUi(): Promise<void> {
@@ -334,6 +410,28 @@ export async function initGeographyUi(): Promise<void> {
   initialized = true;
 
   populateSelectors();
+
+  const currentWindow = await browser.windows.getCurrent();
+  if (currentWindow.id !== undefined) {
+    uiWindowId = currentWindow.id;
+    const uiState = await readSidepanelUiState(currentWindow.id);
+    const role = $("geography-role") as HTMLSelectElement;
+    const type = $("geography-type") as HTMLSelectElement;
+    const search = $("geography-search") as HTMLInputElement;
+    const add = $("geography-add") as HTMLDetailsElement;
+    const saved = uiState.workspace.geography;
+
+    if (Array.from(role.options).some((option) => option.value === saved.role)) {
+      role.value = saved.role;
+    }
+    if (Array.from(type.options).some((option) => option.value === saved.type)) {
+      type.value = saved.type;
+    }
+    search.value = saved.query;
+    add.open = saved.addOpen;
+    add.addEventListener("toggle", scheduleGeographyUiPersist);
+  }
+
   state = await data("GET");
   await refreshActivePage();
 
@@ -370,5 +468,6 @@ export async function initGeographyUi(): Promise<void> {
       void refreshActivePage().then(queueRender).catch(() => undefined);
   });
 
+  window.addEventListener("pagehide", persistGeographyUi);
   render();
 }

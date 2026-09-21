@@ -33,6 +33,26 @@ function notice(text: string, error = false): void {
   element.className = error ? "error" : "";
 }
 
+function keepControlInPlace(
+  element: HTMLElement,
+  beforeTop: number,
+): void {
+  window.requestAnimationFrame(() => {
+    window.requestAnimationFrame(() => {
+      const delta = element.getBoundingClientRect().top - beforeTop;
+      if (Math.abs(delta) > 0.5) window.scrollBy(0, delta);
+      const capture = document.getElementById("capture-area");
+      if (capture instanceof HTMLElement && !capture.hidden) {
+        const rect = element.getBoundingClientRect();
+        const dockTop = capture.getBoundingClientRect().top;
+        if (rect.bottom > dockTop - 10) {
+          window.scrollBy(0, rect.bottom - dockTop + 10);
+        }
+      }
+    });
+  });
+}
+
 async function data(
   op: string,
   payload: Record<string, unknown> = {},
@@ -132,6 +152,8 @@ async function attachFile(
   object: LegacyStoredObject,
   file: RemoteFileSourceCandidate,
 ): Promise<void> {
+  const button = $("read-from-file");
+  const beforeTop = button.getBoundingClientRect().top;
   await data("ADD_FILE_SOURCE", {
     objectId: object.id,
     file,
@@ -139,6 +161,7 @@ async function attachFile(
   disconnectPicker();
   notice(`Dodano źródło PDF: ${file.name}`);
   render();
+  keepControlInPlace(button, beforeTop);
 }
 
 async function stopFileMode(): Promise<void> {
@@ -364,6 +387,8 @@ function renderSource(source: LegacyStoredFileSource): HTMLElement {
   remove.onclick = () => {
     const object = chosenObject();
     if (!object) return;
+    const button = $("read-from-file");
+    const beforeTop = button.getBoundingClientRect().top;
     void data("REMOVE_FILE_SOURCE", {
       objectId: object.id,
       sourceId: source.id,
@@ -371,6 +396,7 @@ function renderSource(source: LegacyStoredFileSource): HTMLElement {
       .then(() => {
         notice("Usunięto źródło plikowe.");
         render();
+        keepControlInPlace(button, beforeTop);
       })
       .catch((error: unknown) =>
         notice(error instanceof Error ? error.message : String(error), true),
