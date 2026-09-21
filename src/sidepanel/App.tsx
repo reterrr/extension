@@ -12,6 +12,7 @@ export function App() {
     void Promise.all([
       import("./workspace.js"),
       import("./importUi"),
+      import("./excelExportUi"),
       import("./geographyUi").then(({ initGeographyUi }) => initGeographyUi()),
       import("./fileSourcesUi").then(({ initFileSourcesUi }) => initFileSourcesUi()),
       import("./pdfCaptureUi").then(({ initPdfCaptureUi }) => initPdfCaptureUi()),
@@ -68,7 +69,8 @@ export function App() {
               <details id="more">
                 <summary aria-label="Akcje obiektu">•••</summary>
                 <div className="popover menu">
-                  <button id="export">Eksportuj workspace</button>
+                  <button id="export-excel">Eksportuj Excel</button>
+                  <button id="export">Eksportuj workspace JSON</button>
                   <button id="delete" className="danger">Usuń obiekt</button>
                 </div>
               </details>
