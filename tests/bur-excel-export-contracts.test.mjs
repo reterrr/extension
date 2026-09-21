@@ -37,8 +37,11 @@ function snapshot() {
           label: "RARR",
           values: {
             name: "RARR",
+            role: "OPERATOR",
             nip: "1234567890",
+            address: "ul. Testowa 1, Rzeszów",
             website: "https://rarr.example",
+            notes: "Operator testowy",
           },
         },
         {
@@ -50,10 +53,15 @@ function snapshot() {
             name: "Projekt",
             operator_id: "OP_1",
             type: "B2B",
-            status: "AKTYWNY",
+            status: "OGLOSZONY",
             start_date: "2026-01-01",
             end_date: "2026-12-31",
             announcements_site_url: "https://rarr.example/nabory",
+            documents_url: "https://rarr.example/dokumenty",
+            documents_link_direct: true,
+            notes: "Uwagi projektu",
+            schedule_note: "Uwaga do harmonogramu",
+            technical_notes: "Uwagi techniczne",
           },
         },
         {
@@ -101,6 +109,36 @@ function snapshot() {
           value: "0264011",
         },
       ],
+      operatorContacts: [
+        {
+          id: "C1",
+          objectId: "OP_1",
+          kind: "EMAIL",
+          variant_no: 1,
+          value: "pierwszy@rarr.example",
+        },
+        {
+          id: "C2",
+          objectId: "OP_1",
+          kind: "EMAIL",
+          variant_no: 2,
+          value: "drugi@rarr.example",
+        },
+        {
+          id: "C3",
+          objectId: "OP_1",
+          kind: "PHONE",
+          variant_no: 1,
+          value: "+48 17 123 45 67",
+        },
+        {
+          id: "C4",
+          objectId: "OP_1",
+          kind: "PHONE",
+          variant_no: 2,
+          value: "+48 600 700 800",
+        },
+      ],
       financingRules: [
         {
           id: "F1",
@@ -139,10 +177,26 @@ test("BUR Excel export keeps workbook sheet contract and relations", () => {
   );
   assert.deepEqual(sheets[0].headers, SHEET_HEADERS.Operatorzy);
   assert.equal(sheets[0].rows[0][0], "OP_1");
+  assert.equal(sheets[0].rows[0][2], "operator");
+  assert.equal(sheets[0].rows[0][4], "ul. Testowa 1, Rzeszów");
+  assert.equal(
+    sheets[0].rows[0][5],
+    "pierwszy@rarr.example; drugi@rarr.example",
+  );
+  assert.equal(
+    sheets[0].rows[0][6],
+    "+48 17 123 45 67; +48 600 700 800",
+  );
   assert.equal(sheets[1].rows[0][8], "OP_1");
+  assert.equal(sheets[1].rows[0][7], "https://rarr.example/dokumenty");
+  assert.equal(sheets[1].rows[0][9], "Uwagi projektu");
+  assert.equal(sheets[1].rows[0][10], "tak");
+  assert.equal(sheets[1].rows[0][12], "Uwaga do harmonogramu");
+  assert.equal(sheets[1].rows[0][14], "Uwagi techniczne");
   assert.equal(sheets[2].rows[0][0], "NAB_1");
   assert.equal(sheets[2].rows[0][2], "OP_1");
   assert.equal(sheets[2].rows[0][3], "PR_1");
+  assert.equal(sheets[2].rows[0][7], "ogłoszony");
   assert.equal(sheets[2].rows[0][10], 80);
   assert.equal(sheets[2].rows[0][23], 50);
   assert.equal(sheets[5].rows[0][1], "PR_1");
