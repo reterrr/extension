@@ -1328,10 +1328,14 @@ import { createPickerClient } from "./pickerRpc";
     for (const entry of fieldEvidenceFor()) {
       const row = node("div", "field-evidence-row");
       const copy = node("div", "field-evidence-copy");
+      const sourceLink = node("a", "field-evidence-source", entry.pageUrl);
+      sourceLink.href = entry.pageUrl;
+      sourceLink.target = "_blank";
+      sourceLink.rel = "noopener noreferrer";
       copy.append(
         node("strong", "", evidenceKindLabel(entry)),
         node("span", "field-evidence-raw", entry.rawValue),
-        node("small", "field-evidence-source", entry.pageUrl),
+        sourceLink,
       );
       const remove = node("button", "text-button danger", "Usuń");
       remove.type = "button";
