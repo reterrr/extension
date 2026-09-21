@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { publishUiState } from "../shared/api/storage";
 import {
   readActiveDraft,
@@ -26,6 +26,11 @@ import type {
   ImportReviewView,
 } from "../shared/types/importReview";
 import type { LegacyStoredRule } from "../shared/types/legacy-storage";
+import {
+  patchSidepanelUiState,
+  readSidepanelUiState,
+  type SidepanelMode,
+} from "./uiSessionState";
 
 async function activeTab(): Promise<browser.tabs.Tab | undefined> {
   const window = await browser.windows.getCurrent();
@@ -202,23 +207,114 @@ export function ImportReviewPanel() {
   const [mode, setMode] = useState<"workspace" | "review">("workspace");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const windowIdRef = useRef<number | null>(null);
+  const modeRef = useRef<SidepanelMode>("workspace");
+  const scrollTimerRef = useRef<number | undefined>(undefined);
   const view = useMemo(() => importReviewView(session), [session]);
+
+  function restoreScroll(top: number): void {
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        window.scrollTo({ top: Math.max(0, top), behavior: "auto" });
+      });
+    });
+  }
+
+  async function switchMode(nextMode: SidepanelMode): Promise<void> {
+    if (nextMode === modeRef.current) return;
+    const windowId = windowIdRef.current;
+    const previousMode = modeRef.current;
+    let targetScroll = 0;
+
+    if (windowId !== null) {
+      const saved = await readSidepanelUiState(windowId);
+      targetScroll = saved.scroll[nextMode];
+      await patchSidepanelUiState(windowId, {
+        mode: nextMode,
+        scroll: { [previousMode]: window.scrollY },
+      });
+    }
+
+    modeRef.current = nextMode;
+    setMode(nextMode);
+    restoreScroll(targetScroll);
+  }
 
   async function refresh(open = false) {
     const next = await readImportReview();
     setSession(next);
-    if (open && next) setMode("review");
+    if (open && next) {
+      const windowId = windowIdRef.current;
+      if (windowId !== null) {
+        await patchSidepanelUiState(windowId, {
+          mode: "review",
+          scroll: {
+            [modeRef.current]: window.scrollY,
+            review: 0,
+          },
+        });
+      }
+      modeRef.current = "review";
+      setMode("review");
+      restoreScroll(0);
+    }
   }
 
   useEffect(() => {
-    void refresh();
+    let disposed = false;
+
+    void (async () => {
+      const currentWindow = await browser.windows.getCurrent();
+      if (disposed || currentWindow.id === undefined) return;
+      windowIdRef.current = currentWindow.id;
+
+      const [uiState, nextSession] = await Promise.all([
+        readSidepanelUiState(currentWindow.id),
+        readImportReview(),
+      ]);
+      if (disposed) return;
+
+      const initialMode: SidepanelMode =
+        nextSession && uiState.mode === "review" ? "review" : "workspace";
+      modeRef.current = initialMode;
+      setMode(initialMode);
+      setSession(nextSession);
+      restoreScroll(uiState.scroll[initialMode]);
+    })();
+
     const changed = (event: Event) => {
       const detail = (event as CustomEvent<{ open?: boolean }>).detail;
       void refresh(detail?.open === true);
     };
     window.addEventListener("burbot:import-review-changed", changed);
-    return () => window.removeEventListener("burbot:import-review-changed", changed);
+
+    const onScroll = () => {
+      if (scrollTimerRef.current !== undefined) {
+        window.clearTimeout(scrollTimerRef.current);
+      }
+      scrollTimerRef.current = window.setTimeout(() => {
+        const windowId = windowIdRef.current;
+        if (windowId === null) return;
+        void patchSidepanelUiState(windowId, {
+          scroll: { [modeRef.current]: window.scrollY },
+        });
+      }, 120);
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+
+    return () => {
+      disposed = true;
+      window.removeEventListener("burbot:import-review-changed", changed);
+      window.removeEventListener("scroll", onScroll);
+      if (scrollTimerRef.current !== undefined) {
+        window.clearTimeout(scrollTimerRef.current);
+      }
+    };
   }, []);
+
+  useEffect(() => {
+    modeRef.current = mode;
+  }, [mode]);
 
   useEffect(() => {
     const reviewing = Boolean(session && mode === "review");
@@ -332,9 +428,21 @@ export function ImportReviewPanel() {
     ) {
       return;
     }
+    const windowId = windowIdRef.current;
+    let workspaceScroll = 0;
+    if (windowId !== null) {
+      const uiState = await readSidepanelUiState(windowId);
+      workspaceScroll = uiState.scroll.workspace;
+      await patchSidepanelUiState(windowId, {
+        mode: "workspace",
+        scroll: { review: window.scrollY },
+      });
+    }
     await clearImportReview();
     setSession(null);
+    modeRef.current = "workspace";
     setMode("workspace");
+    restoreScroll(workspaceScroll);
     await clearPageReviewHighlights();
     window.dispatchEvent(new Event("burbot:selector-highlights-refresh"));
   }
@@ -368,14 +476,14 @@ export function ImportReviewPanel() {
         <button
           type="button"
           className={mode === "workspace" ? "active" : ""}
-          onClick={() => setMode("workspace")}
+          onClick={() => void switchMode("workspace")}
         >
           Workspace
         </button>
         <button
           type="button"
           className={mode === "review" ? "active" : ""}
-          onClick={() => setMode("review")}
+          onClick={() => void switchMode("review")}
         >
           Import review <span>{view.pendingCount ?? 0}</span>
         </button>
