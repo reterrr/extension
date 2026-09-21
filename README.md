@@ -158,7 +158,7 @@ The existing **Export workspace state** action still exports the extension's int
 A one-off/idempotent importer is available for the operator workbook with columns:
 
 ```text
-operator_id | nazwa_operatora | NIP | strona_www
+operator_id | nazwa_operatora | NIP | strona_www | adres | email | telefon | uwagi
 ```
 
 Start the local SQLite service first:
@@ -179,7 +179,7 @@ Validation without writing:
 npm run import:operators -- /path/to/operatorzy.xlsx --dry-run
 ```
 
-The importer merges operators into the current workspace state instead of replacing it. `operator_id` is used as the stable import key (and as the object ID for new operators), and existing matching operators keep their internal IDs. The `Operatorzy` sheet may also provide `rola`, `adres`, `email`, `telefon`, `strona_www` and `uwagi`. Multiple email addresses and phone numbers are separated by semicolons or new lines and are stored as ordered contact variants in `operatorContacts` / the typed SQLite `operator_contacts` table. The first website URL is also used as `sourceUrl`. The import updates `last_checked_at` and increments the workspace revision once.
+The importer merges operators into the current workspace state instead of replacing it. `operator_id` is used as the stable import key (and as the object ID for new operators), existing matching operators keep their internal IDs, all URLs from `strona_www` are preserved in `values.website`, and the first URL is used as `sourceUrl`. When present, `adres`, `email`, `telefon` and `uwagi` are also persisted as normal operator fields. The import updates `last_checked_at` and increments the workspace revision once.
 
 ## Project + geography XLSX import
 
@@ -272,7 +272,17 @@ B2B financing becomes MICRO / SMALL / MEDIUM variants with base/standard refund 
 
 Geography is normalized through the same canonical Burbot geography catalog as Projects. `include` becomes `OBEJMUJE`; `exclude` becomes `WYKLUCZA`.
 
-Recruitment status export uses the same six-value vocabulary: `ogłoszony`, `planowany`, `aktywny`, `zawieszony`, `zamknięty`, `anulowany`. Legacy spreadsheet labels such as `otwarty`, `wkrótce`, `zakończony` and stored `ZAKONCZONY` remain accepted and are normalized to the canonical values.
+## Excel export
+
+The **Export Excel** action exports the committed SQLite state as a business workbook. The main sheets remain `Operatorzy`, `Projekty` and `Nabory`, but the export also includes normalized sheets for data that cannot be represented safely in one wide row:
+
+- `Finansowanie` — every funding variant and every current funding field,
+- `Dokumenty` — every document requirement with catalog name and requirement fields,
+- `Pliki` — all remote file sources attached to objects,
+- `Pola_Obiektow` — normalized object field/value dump so no current object value is lost,
+- the existing project/operator and geography relation sheets.
+
+`Operatorzy` exports address, email, phone, website and notes. `Nabory` includes all current recruitment date/planning/status/source fields. The final `Nabory` column is `ostatnia_zmiana`, sourced from the recruitment object's `updatedAt` timestamp. `ostatnio_sprawdzono` remains a separate system timestamp.
 
 ## Development
 

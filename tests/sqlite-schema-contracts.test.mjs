@@ -85,27 +85,21 @@ test("SQLite schema creates typed business and provenance tables", () => {
     db.prepare("PRAGMA table_info(operators)").all().map((row) => row.name),
   );
   for (const column of [
-    "role",
     "address",
+    "email",
+    "phone",
     "website",
     "notes",
+    "created_at",
+    "updated_at",
     "last_checked_at",
   ]) {
     assert.ok(operatorColumns.has(column), `missing operators.${column}`);
   }
-
-  const contactColumns = new Set(
-    db.prepare("PRAGMA table_info(operator_contacts)").all().map((row) => row.name),
-  );
-  for (const column of [
-    "contact_id",
-    "object_id",
-    "kind",
-    "variant_no",
-    "value",
-  ]) {
-    assert.ok(contactColumns.has(column), `missing operator_contacts.${column}`);
-  }
+  assert.ok(projectColumns.has("created_at"));
+  assert.ok(projectColumns.has("updated_at"));
+  assert.ok(recruitmentColumns.has("created_at"));
+  assert.ok(recruitmentColumns.has("updated_at"));
 
   const workspaceColumns = new Set(
     db.prepare("PRAGMA table_info(workspace_objects)").all().map((row) => row.name),

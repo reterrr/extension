@@ -1,69 +1,50 @@
-#!/usr/bin/env python3
 from __future__ import annotations
 
 import importlib.util
-import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-IMPORTER_PATH = ROOT / "scripts" / "import-operators-xlsx.py"
-_spec = importlib.util.spec_from_file_location(
-    "burbot_operator_importer_test_target",
-    IMPORTER_PATH,
-)
-if _spec is None or _spec.loader is None:
-    raise RuntimeError(f"Could not load {IMPORTER_PATH}.")
-importer = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(importer)
+SCRIPT = ROOT / "scripts" / "import-operators-xlsx.py"
+
+spec = importlib.util.spec_from_file_location("burbot_import_operators", SCRIPT)
+if spec is None or spec.loader is None:
+    raise RuntimeError("Could not load operator importer.")
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
 
 
-class OperatorImporterContracts(unittest.TestCase):
-    def test_operator_metadata_and_contact_variants_are_replaced_idempotently(self) -> None:
-        state = importer.empty_state()
-        record = {
-            "operator_id": "OP_TEST",
-            "name": "Operator Test",
-            "role": "OPERATOR",
-            "nip": "1234567890",
-            "address": "ul. Testowa 1",
-            "emails": ["a@example.test", "b@example.test"],
-            "phones": ["+48 17 123 45 67", "+48 600 700 800"],
-            "website": "https://example.test",
-            "notes": "Kontakt testowy",
-            "source_url": "https://example.test",
-        }
+def test_merge_operator_contacts() -> None:
+    state = module.empty_state()
+    record = {
+        "operator_id": "OP_TEST_001",
+        "name": "Operator Test",
+        "nip": "1234567890",
+        "address": "ul. Testowa 1, 00-001 Warszawa",
+        "email": "kontakt@example.org",
+        "phone": "+48 22 123 45 67",
+        "website": "https://example.org",
+        "notes": "Notatka operatora",
+        "source_url": "https://example.org",
+    }
 
-        importer.merge_operators(state, [record], "operators.xlsx")
-        operator = state["objects"][0]
-        self.assertEqual(operator["values"]["role"], "OPERATOR")
-        self.assertEqual(operator["values"]["address"], "ul. Testowa 1")
-        self.assertEqual(operator["values"]["notes"], "Kontakt testowy")
+    summary = module.merge_operators(state, [record], "operatorzy.xlsx")
+    assert summary["created"] == 1
+    operator = state["objects"][0]
+    values = operator["values"]
 
-        contacts = state["operatorContacts"]
-        self.assertEqual(
-            [(row["kind"], row["variant_no"], row["value"]) for row in contacts],
-            [
-                ("EMAIL", 1, "a@example.test"),
-                ("EMAIL", 2, "b@example.test"),
-                ("PHONE", 1, "+48 17 123 45 67"),
-                ("PHONE", 2, "+48 600 700 800"),
-            ],
-        )
+    assert values["name"] == "Operator Test"
+    assert values["nip"] == "1234567890"
+    assert values["address"] == "ul. Testowa 1, 00-001 Warszawa"
+    assert values["email"] == "kontakt@example.org"
+    assert values["phone"] == "+48 22 123 45 67"
+    assert values["website"] == "https://example.org"
+    assert values["notes"] == "Notatka operatora"
 
-        changed = {
-            **record,
-            "emails": ["new@example.test"],
-            "phones": ["+48 500 500 500"],
-        }
-        importer.merge_operators(state, [changed], "operators.xlsx")
-        self.assertEqual(
-            [(row["kind"], row["variant_no"], row["value"]) for row in state["operatorContacts"]],
-            [
-                ("EMAIL", 1, "new@example.test"),
-                ("PHONE", 1, "+48 500 500 500"),
-            ],
-        )
+
+def main() -> None:
+    test_merge_operator_contacts()
+    print("operator importer contracts: OK")
 
 
 if __name__ == "__main__":
-    unittest.main()
+    main()

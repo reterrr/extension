@@ -18,8 +18,8 @@ from xml.etree import ElementTree as ET
 NS_MAIN = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
 NS_REL = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
 NS_PKG_REL = "http://schemas.openxmlformats.org/package/2006/relationships"
-REQUIRED_HEADERS = ["operator_id", "nazwa_operatora", "NIP"]
-OPTIONAL_HEADERS = ["rola", "adres", "email", "telefon", "strona_www", "uwagi"]
+REQUIRED_HEADERS = ["operator_id", "nazwa_operatora", "NIP", "strona_www"]
+OPTIONAL_HEADERS = ["adres", "email", "telefon", "uwagi"]
 
 
 def col_index(cell_ref: str) -> int:
@@ -111,7 +111,27 @@ def read_xlsx(path: Path) -> list[dict[str, Any]]:
         selected = [row[positions[header]].strip() for header in REQUIRED_HEADERS]
         if not any(selected):
             continue
-        operator_id, name, nip = selected
+        operator_id, name, nip, website = selected
+        address = (
+            row[optional_positions["adres"]].strip()
+            if "adres" in optional_positions
+            else ""
+        )
+        email = (
+            row[optional_positions["email"]].strip()
+            if "email" in optional_positions
+            else ""
+        )
+        phone = (
+            row[optional_positions["telefon"]].strip()
+            if "telefon" in optional_positions
+            else ""
+        )
+        notes = (
+            row[optional_positions["uwagi"]].strip()
+            if "uwagi" in optional_positions
+            else ""
+        )
         if not operator_id or not name or not nip:
             raise ValueError(f"Row {row_no}: operator_id, name and NIP are required.")
         if not re.fullmatch(r"\d{10}", nip):
@@ -164,11 +184,11 @@ def read_xlsx(path: Path) -> list[dict[str, Any]]:
             "name": name,
             "role": role,
             "nip": nip,
-            "address": optional("adres") or None,
-            "emails": emails,
-            "phones": phones,
+            "address": address or None,
+            "email": email or None,
+            "phone": phone or None,
             "website": website or None,
-            "notes": optional("uwagi") or None,
+            "notes": notes or None,
             "source_url": urls[0] if urls else None,
         })
 
@@ -279,17 +299,9 @@ def merge_operators(state: dict[str, Any], records: list[dict[str, Any]], source
         values = existing.setdefault("values", {})
         values["name"] = record["name"]
         values["nip"] = record["nip"]
-        if record["role"]:
-            values["role"] = record["role"]
-        else:
-            values.pop("role", None)
-        for field, record_key in (
-            ("address", "address"),
-            ("website", "website"),
-            ("notes", "notes"),
-        ):
-            if record[record_key]:
-                values[field] = record[record_key]
+        for field in ("address", "email", "phone", "website", "notes"):
+            if record[field]:
+                values[field] = record[field]
             else:
                 values.pop(field, None)
         values["last_checked_at"] = now
@@ -350,6 +362,8 @@ def main() -> int:
 
     print(f"Validated {len(records)} operators from {args.xlsx.name}.")
     print(f"Operators with no website: {sum(not r['website'] for r in records)}.")
+    print(f"Operators with email: {sum(bool(r['email']) for r in records)}.")
+    print(f"Operators with phone: {sum(bool(r['phone']) for r in records)}.")
     print(f"Duplicate NIP groups kept as separate operators: {len(duplicate_nips)}.")
     for nip, ids in duplicate_nips.items():
         print(f"  NIP {nip}: {', '.join(ids)}")

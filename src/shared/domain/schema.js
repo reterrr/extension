@@ -325,18 +325,12 @@
           },
         ),
         nip: { label: "NIP", type: "nip", group: "Podstawowe" },
-        address: text("Adres", "Kontakt", { multiline: true }),
+        address: text("Adres", "Kontakt"),
+        email: text("Email", "Kontakt"),
+        phone: text("Telefon", "Kontakt"),
         website: url("Strona WWW", "Kontakt"),
         notes: text("Uwagi", "Kontakt", { multiline: true }),
         last_checked_at: systemDateTime(),
-        email: text("Email (legacy)", "Earlier captures", {
-          legacy: true,
-          hidden: true,
-        }),
-        phone: text("Telefon (legacy)", "Earlier captures", {
-          legacy: true,
-          hidden: true,
-        }),
       },
     },
 
