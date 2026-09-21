@@ -11,6 +11,7 @@ import {
   buildImportApprovalPlan,
   importReviewView,
   markImportObjectApproved,
+  markImportObjectLinked,
 } from "../shared/import/review";
 import {
   readImportReview,
@@ -625,7 +626,11 @@ async function approveCurrent(): Promise<void> {
     }
     const previewId = current.selectedObjectId;
     const plan: ImportApprovalPlanWithRules = {
-      ...buildImportApprovalPlan(current, previewId),
+      ...buildImportApprovalPlan(
+        current,
+        previewId,
+        draftCommit.workingState,
+      ),
       reviewRules: reviewedRules(current, previewId),
     };
     const now = new Date().toISOString();
@@ -639,6 +644,14 @@ async function approveCurrent(): Promise<void> {
     draftCommit.updatedAt = now;
     await writeActiveDraft(draftCommit);
     await publishUiState(draftCommit.workingState);
+    for (const link of plan.existingReferenceLinks) {
+      markImportObjectLinked(
+        current,
+        link.importKey,
+        link.targetObjectId,
+        now,
+      );
+    }
     markImportObjectApproved(current, previewId, staged.stagedObjectId, now);
     await writeImportReview(current);
     session = current;

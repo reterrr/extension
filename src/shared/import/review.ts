@@ -31,9 +31,82 @@ export interface ImportApprovalExistingReferenceLink {
 export interface ImportApprovalPlan {
   document: unknown;
   selectedImportKey: string;
+  existingTargetObjectId?: string;
+  selectedDataFields: string[];
+  financingFieldsByImportKey: Record<string, string[]>;
   referencePatches: ImportApprovalReferencePatch[];
   existingReferenceLinks: ImportApprovalExistingReferenceLink[];
   temporaryDependencyImportKeys: string[];
+}
+
+function recordValue(value: unknown): Record<string, unknown> | undefined {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+function importedFieldSets(
+  input: unknown,
+  previewState: LegacyStorageState,
+): {
+  objectFields: Record<string, string[]>;
+  financingFields: Record<string, Record<string, string[]>>;
+} {
+  const root = recordValue(input);
+  const rawObjects = Array.isArray(root?.objects) ? root.objects : [];
+  const byImportKey = new Map(
+    previewState.objects
+      .filter((object) => object.importKey)
+      .map((object) => [String(object.importKey), object]),
+  );
+
+  const objectFields: Record<string, string[]> = {};
+  const financingFields: Record<string, Record<string, string[]>> = {};
+
+  for (const raw of rawObjects) {
+    const object = recordValue(raw);
+    if (!object || typeof object.key !== "string") continue;
+    const preview = byImportKey.get(object.key);
+    if (!preview) continue;
+
+    const data = recordValue(object.data);
+    objectFields[preview.id] = data ? Object.keys(data) : [];
+
+    const financing = Array.isArray(object.financing) ? object.financing : [];
+    const fieldsByKey: Record<string, string[]> = {};
+    for (const rawVariant of financing) {
+      const variant = recordValue(rawVariant);
+      if (!variant || typeof variant.key !== "string") continue;
+      const variantData = recordValue(variant.data);
+      fieldsByKey[variant.key] = variantData ? Object.keys(variantData) : [];
+    }
+    financingFields[preview.id] = fieldsByKey;
+  }
+
+  return { objectFields, financingFields };
+}
+
+function includeImportedObjectField(
+  session: ImportReviewSession,
+  objectId: string,
+  field: string,
+): void {
+  const fields = (session.importedFieldsByObjectId ||= {})[objectId] ?? [];
+  if (!fields.includes(field)) fields.push(field);
+  session.importedFieldsByObjectId[objectId] = fields;
+}
+
+function includeImportedFinancingField(
+  session: ImportReviewSession,
+  objectId: string,
+  financingImportKey: string,
+  field: string,
+): void {
+  const byObject = (session.importedFinancingFieldsByObjectId ||= {});
+  const byVariant = (byObject[objectId] ||= {});
+  const fields = byVariant[financingImportKey] ?? [];
+  if (!fields.includes(field)) fields.push(field);
+  byVariant[financingImportKey] = fields;
 }
 
 function quoteContext(text: string, evidence: ImportedEvidence) {
@@ -64,6 +137,7 @@ export function createImportReviewSession(
   );
   previewState.revision = 0;
 
+  const fieldSets = importedFieldSets(input, previewState);
   const objectOrder = previewState.objects.map((object) => object.id);
   return {
     id: uuid(),
@@ -76,6 +150,8 @@ export function createImportReviewSession(
       objectOrder.map((objectId) => [objectId, "PENDING"]),
     ),
     approvedObjectIdByImportKey: {},
+    importedFieldsByObjectId: fieldSets.objectFields,
+    importedFinancingFieldsByObjectId: fieldSets.financingFields,
     selectedObjectId: objectOrder[0] ?? null,
   };
 }
@@ -361,6 +437,7 @@ export function editImportReviewObjectField(
     if (!Object.keys(object.evidence).length) delete object.evidence;
   }
   (object.manualFields ||= {})[field] = true;
+  includeImportedObjectField(session, object.id, field);
   touch(session, object, now);
 }
 
@@ -380,6 +457,12 @@ export function editImportReviewFinancingField(
   const definition = BurbotFunding.fields[field];
   if (!definition) throw new Error(`Unknown financing field ${field}.`);
   row[field] = BurbotCore.coerceField(input, definition, session.previewState);
+  includeImportedFinancingField(
+    session,
+    object.id,
+    String(row.importKey ?? row.id),
+    field,
+  );
   touch(session, object, now);
 }
 
@@ -478,13 +561,81 @@ function portableEvidence(
   return evidence;
 }
 
+function explicitObjectFields(
+  session: ImportReviewSession,
+  object: LegacyStoredObject,
+): string[] {
+  const tracked = session.importedFieldsByObjectId?.[object.id];
+  const selected = new Set<string>();
+
+  if (tracked !== undefined) {
+    for (const field of tracked) selected.add(field);
+  } else {
+    // Compatibility with an Import Review session created before update
+    // metadata existed. Infer conservatively so schema defaults never
+    // overwrite a real value in an existing object.
+    const schema = BurbotSchema[object.type];
+    if (schema?.primary) selected.add(schema.primary);
+    for (const field of Object.keys(object.evidence ?? {})) selected.add(field);
+
+    for (const [field, value] of Object.entries(object.values)) {
+      const definition = schema?.fields?.[field];
+      if (!definition || !BurbotCore.hasValue(value)) continue;
+      if (definition.type === "reference") {
+        selected.add(field);
+        continue;
+      }
+      if (!Object.prototype.hasOwnProperty.call(definition, "default")) {
+        selected.add(field);
+        continue;
+      }
+      if (JSON.stringify(value) !== JSON.stringify(definition.default)) {
+        selected.add(field);
+      }
+    }
+  }
+
+  for (const field of Object.keys(object.manualFields ?? {})) {
+    selected.add(field);
+  }
+  return [...selected];
+}
+
+function explicitFinancingFields(
+  session: ImportReviewSession,
+  objectId: string,
+  row: Record<string, unknown>,
+  importKey: string,
+): string[] {
+  const tracked =
+    session.importedFinancingFieldsByObjectId?.[objectId]?.[importKey];
+  if (tracked !== undefined) return [...new Set(tracked)];
+
+  // Older review sessions did not remember the raw JSON field set. Funding
+  // fields have no schema defaults except own_contribution_form, which the
+  // importer seeds as UNSPECIFIED. Exclude that synthetic default.
+  return Object.keys(BurbotFunding.fields).filter((field) => {
+    if (!Object.prototype.hasOwnProperty.call(row, field)) return false;
+    if (
+      field === "own_contribution_form" &&
+      row[field] === "UNSPECIFIED"
+    ) {
+      return false;
+    }
+    return true;
+  });
+}
+
 function portableData(
   session: ImportReviewSession,
   object: LegacyStoredObject,
 ): Record<string, unknown> {
   const fields = BurbotSchema[object.type]?.fields ?? {};
+  const selectedFields = new Set(explicitObjectFields(session, object));
+
   const data: Record<string, unknown> = {};
   for (const [field, value] of Object.entries(object.values)) {
+    if (!selectedFields.has(field)) continue;
     const definition = fields[field];
     if (definition?.type === "reference" && typeof value === "string") {
       const target = session.previewState.objects.find((entry) => entry.id === value);
@@ -593,6 +744,7 @@ export function buildImportApprovalPlan(
     throw new Error("This imported object is already approved.");
   }
 
+  const existingTarget = findExistingImportObjectMatch(object, existingState);
   const references = referencedObjects(session, object);
   const referencePatches: ImportApprovalReferencePatch[] = [];
   const existingReferenceLinks: ImportApprovalExistingReferenceLink[] = [];
@@ -664,13 +816,23 @@ export function buildImportApprovalPlan(
   const selectedFinancing = (session.previewState.financingRules ?? []).filter(
     (row) => row.objectId === object.id,
   );
+  const financingFieldsByImportKey: Record<string, string[]> = {};
   const portableFinancing = selectedFinancing.map((row) => {
+    const key = String(row.importKey ?? row.id);
+    const selectedFields = explicitFinancingFields(
+      session,
+      object.id,
+      row,
+      key,
+    );
+    financingFieldsByImportKey[key] = selectedFields;
+
     const data: Record<string, unknown> = {};
-    for (const field of Object.keys(BurbotFunding.fields)) {
+    for (const field of selectedFields) {
       if (Object.prototype.hasOwnProperty.call(row, field)) data[field] = row[field];
     }
     return {
-      key: String(row.importKey ?? row.id),
+      key,
       company_size: String(row.company_size),
       data,
     };
@@ -683,6 +845,9 @@ export function buildImportApprovalPlan(
 
   return {
     selectedImportKey: object.importKey,
+    ...(existingTarget ? { existingTargetObjectId: existingTarget.id } : {}),
+    selectedDataFields: explicitObjectFields(session, object),
+    financingFieldsByImportKey,
     referencePatches,
     existingReferenceLinks,
     temporaryDependencyImportKeys: [...dependencyMap.keys()],

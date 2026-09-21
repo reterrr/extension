@@ -6,6 +6,7 @@ import {
 } from "../shared/commits/draftStore";
 import {
   buildImportApprovalPlan,
+  findExistingImportObjectMatch,
   importReviewView,
   markImportObjectApproved,
   markImportObjectLinked,
@@ -207,6 +208,10 @@ export function ImportReviewPanel() {
   const [mode, setMode] = useState<"workspace" | "review">("workspace");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [existingTarget, setExistingTarget] = useState<{
+    id: string;
+    label: string;
+  } | null>(null);
   const windowIdRef = useRef<number | null>(null);
   const modeRef = useRef<SidepanelMode>("workspace");
   const scrollTimerRef = useRef<number | undefined>(undefined);
@@ -327,6 +332,41 @@ export function ImportReviewPanel() {
   useEffect(() => {
     modeRef.current = mode;
   }, [mode]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const selected =
+      session?.selectedObjectId
+        ? session.previewState.objects.find(
+            (object) => object.id === session.selectedObjectId,
+          )
+        : undefined;
+
+    if (!selected) {
+      setExistingTarget(null);
+      return;
+    }
+
+    void readActiveDraft().then((draft) => {
+      if (cancelled) return;
+      const match = findExistingImportObjectMatch(
+        selected,
+        draft?.workingState,
+      );
+      setExistingTarget(
+        match
+          ? {
+              id: match.id,
+              label: BurbotCore.displayName(match),
+            }
+          : null,
+      );
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [session?.selectedObjectId, session?.updatedAt]);
 
   useEffect(() => {
     const reviewing = Boolean(session && mode === "review");
@@ -754,6 +794,16 @@ export function ImportReviewPanel() {
                   <p className="import-review-hint">
                     Import Review służy wyłącznie do sprawdzenia danych i źródeł. Zmiany wykonuj po zatwierdzeniu w Workspace.
                   </p>
+                  {existingTarget && selected.status !== "APPROVED" && (
+                    <div className="import-review-update-existing">
+                      <strong>Aktualizacja istniejącego obiektu</strong>
+                      <span>{existingTarget.label}</span>
+                      <small>
+                        Zatwierdzenie zaktualizuje ten sam obiekt w aktywnym commicie.
+                        ID pozostanie bez zmian i duplikat nie zostanie utworzony.
+                      </small>
+                    </div>
+                  )}
                   <button
                     type="button"
                     className="primary import-review-approve"
@@ -762,7 +812,9 @@ export function ImportReviewPanel() {
                   >
                     {selected.status === "APPROVED"
                       ? "Zatwierdzono — obiekt jest w commicie"
-                      : "Zatwierdź obiekt → dodaj do commita"}
+                      : existingTarget
+                        ? "Zatwierdź zmiany → dodaj do commita"
+                        : "Zatwierdź obiekt → dodaj do commita"}
                   </button>
                 </>
               ) : (

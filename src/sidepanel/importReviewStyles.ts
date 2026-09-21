@@ -326,6 +326,30 @@ style.textContent = `
     color: #748178;
     font-size: 11px;
   }
+  .import-review-update-existing {
+    display: grid;
+    gap: 2px;
+    margin: 10px 0;
+    padding: 9px 10px;
+    border: 1px solid #bad4c2;
+    border-radius: 9px;
+    background: #eef7f1;
+    color: #365743;
+  }
+  .import-review-update-existing strong {
+    font-size: 11px;
+  }
+  .import-review-update-existing span {
+    color: #253a2e;
+    font-size: 12px;
+    font-weight: 650;
+    overflow-wrap: anywhere;
+  }
+  .import-review-update-existing small {
+    color: #65776c;
+    font-size: 9px;
+    line-height: 1.35;
+  }
   .import-review-approve { width: 100%; }
   .import-review-mode .commit-panel,
   .import-review-mode .connection-bar,

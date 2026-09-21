@@ -561,6 +561,286 @@ test("existing project can be resolved by unique project number when import keys
   );
 });
 
+test("approving an existing imported object updates it in place without duplicating it", () => {
+  const uuid = ids();
+  const now = "2026-09-21T12:00:00.000Z";
+  const sourceText =
+    "Generator Kompetencji 3.1. Maksymalna refundacja wynosi 85%.";
+
+  const document = {
+    version: 1,
+    offset_unit: "unicode_codepoint",
+    sources: [
+      {
+        key: "project-update-page",
+        type: "HTML",
+        url: "https://example.test/project-update",
+        snapshot: { text: sourceText },
+      },
+    ],
+    objects: [
+      {
+        key: "project-1",
+        type: "project",
+        data: {
+          name: "Generator Kompetencji 3.1",
+        },
+        evidence: {
+          name: [
+            {
+              source: "project-update-page",
+              ...range(sourceText, "Generator Kompetencji 3.1"),
+            },
+          ],
+        },
+        financing: [
+          {
+            key: "micro-default",
+            company_size: "MICRO",
+            data: {
+              refund_percent_max: 85,
+            },
+          },
+        ],
+      },
+    ],
+  };
+
+  const session = reviewModule.createImportReviewSession(
+    document,
+    "existing-project-update.burbot-import.json",
+    uuid,
+    now,
+  );
+  const imported = session.previewState.objects[0];
+
+  const existingState = BurbotCore.empty();
+  existingState.objects.push({
+    id: "existing-project-id",
+    type: "project",
+    importKey: "project-1",
+    label: "Generator Kompetencji 3.0",
+    values: {
+      name: "Generator Kompetencji 3.0",
+      number: "FEPK.01.01-KEEP",
+      status: "AKTYWNY",
+    },
+    evidence: {
+      number: [
+        {
+          sourceId: "old-source",
+          charStart: 0,
+          charEnd: 4,
+          rawValue: "KEEP",
+        },
+      ],
+    },
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+  });
+  existingState.financingRules = [
+    {
+      id: "existing-funding-id",
+      objectId: "existing-project-id",
+      importKey: "micro-default",
+      company_size: "MICRO",
+      variant_no: 1,
+      refund_percent_max: 80,
+      max_amount_pln: 130000,
+      own_contribution_form: "CASH",
+    },
+  ];
+
+  const plan = reviewModule.buildImportApprovalPlan(
+    session,
+    imported.id,
+    existingState,
+  );
+
+  assert.equal(plan.existingTargetObjectId, "existing-project-id");
+  assert.deepEqual(plan.selectedDataFields, ["name"]);
+  assert.deepEqual(plan.financingFieldsByImportKey["micro-default"], [
+    "refund_percent_max",
+  ]);
+
+  const staged = stageModule.stageImportReviewObject(
+    existingState,
+    plan,
+    uuid,
+    now,
+  );
+
+  assert.equal(staged.updatedExisting, true);
+  assert.equal(staged.stagedObjectId, "existing-project-id");
+  assert.equal(staged.state.objects.length, 1);
+
+  const project = staged.state.objects[0];
+  assert.equal(project.id, "existing-project-id");
+  assert.equal(project.values.name, "Generator Kompetencji 3.1");
+  assert.equal(project.values.number, "FEPK.01.01-KEEP");
+  assert.equal(project.values.status, "AKTYWNY");
+  assert.equal(project.label, "Generator Kompetencji 3.1");
+  assert.equal(project.evidence.number[0].rawValue, "KEEP");
+  assert.equal(project.evidence.name[0].rawValue, "Generator Kompetencji 3.1");
+
+  assert.equal(staged.state.financingRules.length, 1);
+  const funding = staged.state.financingRules[0];
+  assert.equal(funding.id, "existing-funding-id");
+  assert.equal(funding.refund_percent_max, 85);
+  assert.equal(funding.max_amount_pln, 130000);
+  assert.equal(funding.own_contribution_form, "CASH");
+
+  assert.equal(staged.state.importSources.length, 1);
+  assert.equal(
+    staged.state.importSources[0].importKey,
+    "project-update-page",
+  );
+});
+
+test("existing object IDs and legacy financing rows are reused when stable import keys are absent", () => {
+  const uuid = ids();
+  const now = "2026-09-21T12:05:00.000Z";
+  const document = {
+    version: 1,
+    offset_unit: "unicode_codepoint",
+    sources: [],
+    objects: [
+      {
+        key: "existing-project-id",
+        type: "project",
+        data: {
+          name: "Updated project",
+        },
+        financing: [
+          {
+            key: "micro-1",
+            company_size: "MICRO",
+            data: {
+              refund_percent_max: 90,
+            },
+          },
+        ],
+      },
+    ],
+  };
+
+  const session = reviewModule.createImportReviewSession(
+    document,
+    "legacy-existing-update.burbot-import.json",
+    uuid,
+    now,
+  );
+  const existingState = BurbotCore.empty();
+  existingState.objects.push({
+    id: "existing-project-id",
+    type: "project",
+    label: "Old project",
+    values: {
+      name: "Old project",
+      number: "UNCHANGED",
+    },
+  });
+  existingState.financingRules = [
+    {
+      id: "legacy-finance-id",
+      objectId: "existing-project-id",
+      company_size: "MICRO",
+      variant_no: 1,
+      refund_percent_max: 75,
+      max_amount_pln: 200000,
+      own_contribution_form: "CASH",
+    },
+  ];
+
+  const plan = reviewModule.buildImportApprovalPlan(
+    session,
+    session.previewState.objects[0].id,
+    existingState,
+  );
+  assert.equal(plan.existingTargetObjectId, "existing-project-id");
+
+  const staged = stageModule.stageImportReviewObject(
+    existingState,
+    plan,
+    uuid,
+    now,
+  );
+
+  assert.equal(staged.state.objects.length, 1);
+  assert.equal(staged.state.objects[0].id, "existing-project-id");
+  assert.equal(staged.state.objects[0].importKey, "existing-project-id");
+  assert.equal(staged.state.objects[0].values.name, "Updated project");
+  assert.equal(staged.state.objects[0].values.number, "UNCHANGED");
+
+  assert.equal(staged.state.financingRules.length, 1);
+  assert.equal(staged.state.financingRules[0].id, "legacy-finance-id");
+  assert.equal(staged.state.financingRules[0].importKey, "micro-1");
+  assert.equal(staged.state.financingRules[0].refund_percent_max, 90);
+  assert.equal(staged.state.financingRules[0].max_amount_pln, 200000);
+  assert.equal(staged.state.financingRules[0].own_contribution_form, "CASH");
+});
+
+test("fields omitted by AI are not overwritten by schema defaults during an existing-object update", () => {
+  const uuid = ids();
+  const now = "2026-09-21T12:10:00.000Z";
+  const document = {
+    version: 1,
+    offset_unit: "unicode_codepoint",
+    sources: [],
+    objects: [
+      {
+        key: "project-1",
+        type: "project",
+        data: {
+          name: "Only the name changed",
+        },
+      },
+    ],
+  };
+
+  const session = reviewModule.createImportReviewSession(
+    document,
+    "partial-update.burbot-import.json",
+    uuid,
+    now,
+  );
+  const imported = session.previewState.objects[0];
+  // Preview has schema defaults, but they were not present in the JSON.
+  assert.equal(imported.values.status, "PLANOWANY");
+
+  const existingState = BurbotCore.empty();
+  existingState.objects.push({
+    id: "existing-project-id",
+    type: "project",
+    importKey: "project-1",
+    label: "Old name",
+    values: {
+      name: "Old name",
+      type: "B2B",
+      status: "AKTYWNY",
+      number: "KEEP-ME",
+    },
+  });
+
+  const plan = reviewModule.buildImportApprovalPlan(
+    session,
+    imported.id,
+    existingState,
+  );
+  const staged = stageModule.stageImportReviewObject(
+    existingState,
+    plan,
+    uuid,
+    now,
+  );
+  const project = staged.state.objects[0];
+
+  assert.equal(project.values.name, "Only the name changed");
+  assert.equal(project.values.type, "B2B");
+  assert.equal(project.values.status, "AKTYWNY");
+  assert.equal(project.values.number, "KEEP-ME");
+});
+
 test("portable import cannot set system-managed last_checked_at", () => {
   const document = documentFixture();
   document.objects[0].data.last_checked_at = "2026-09-18T10:00:00Z";
