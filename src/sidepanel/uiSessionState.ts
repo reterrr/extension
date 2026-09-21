@@ -23,6 +23,12 @@ export interface SidepanelUiState {
     fundingSize: string;
     captureCollapsed: boolean;
     panels: Record<string, boolean>;
+    geography: {
+      role: string;
+      type: string;
+      query: string;
+      addOpen: boolean;
+    };
     switcher: {
       query: string;
       type: string;
@@ -59,6 +65,12 @@ function defaultState(): SidepanelUiState {
       fundingSize: "",
       captureCollapsed: false,
       panels: {},
+      geography: {
+        role: "OBEJMUJE",
+        type: "WOJEWODZTWO",
+        query: "",
+        addOpen: false,
+      },
       switcher: {
         query: "",
         type: "all",
@@ -85,6 +97,10 @@ export function normalizeSidepanelUiState(value: unknown): SidepanelUiState {
     workspace.switcher && typeof workspace.switcher === "object"
       ? workspace.switcher
       : fallback.workspace.switcher;
+  const geography =
+    workspace.geography && typeof workspace.geography === "object"
+      ? workspace.geography
+      : fallback.workspace.geography;
 
   const active =
     workspace.active &&
@@ -150,6 +166,15 @@ export function normalizeSidepanelUiState(value: unknown): SidepanelUiState {
               ),
             )
           : {},
+      geography: {
+        role: typeof geography.role === "string" ? geography.role : "OBEJMUJE",
+        type:
+          typeof geography.type === "string"
+            ? geography.type
+            : "WOJEWODZTWO",
+        query: typeof geography.query === "string" ? geography.query : "",
+        addOpen: geography.addOpen === true,
+      },
       switcher: {
         query: typeof switcher.query === "string" ? switcher.query : "",
         type: typeof switcher.type === "string" ? switcher.type : "all",
@@ -174,11 +199,12 @@ export type SidepanelUiPatch = Partial<
   workspace?: Partial<
     Omit<
       SidepanelUiState["workspace"],
-      "fieldSections" | "panels" | "switcher"
+      "fieldSections" | "panels" | "geography" | "switcher"
     >
   > & {
     fieldSections?: Record<string, boolean>;
     panels?: Record<string, boolean>;
+    geography?: Partial<SidepanelUiState["workspace"]["geography"]>;
     switcher?: Partial<SidepanelUiState["workspace"]["switcher"]>;
   };
 };
@@ -205,6 +231,10 @@ function mergeState(
       panels: {
         ...current.workspace.panels,
         ...(workspacePatch.panels ?? {}),
+      },
+      geography: {
+        ...current.workspace.geography,
+        ...(workspacePatch.geography ?? {}),
       },
       switcher: {
         ...current.workspace.switcher,
