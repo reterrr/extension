@@ -430,11 +430,11 @@ function enhanceAll(): void {
   workspaceObserver?.disconnect();
 
   try {
+    restoreBusinessPanels(restoredPanels);
     enhanceFieldGroups();
     enhanceFunding();
     enhanceDocuments();
     enhanceStaticStatuses();
-    restoreBusinessPanels(restoredPanels);
     enhanceCaptureDock();
   } finally {
     enhancing = false;
