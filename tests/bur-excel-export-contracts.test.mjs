@@ -154,9 +154,12 @@ test("BUR Excel export keeps workbook sheet contract and relations", () => {
     Object.fromEntries(SHEET_HEADERS.Geografia_Slownik.map((header, i) => [header, values[i]])),
   );
   const wroclaw = dictionary.find((item) => item.nazwa === "m. Wrocław");
-  const cityGmina = dictionary.find((item) => item.nazwa === "m. Wrocław" && item.poziom === "4");
+  const cityGmina = dictionary.find(
+    (item) => item.poziom === "4" && item.parent_geo_id === wroclaw?.geo_id,
+  );
   assert.equal(wroclaw?.geo_typ, "powiat");
-  assert.equal(cityGmina?.parent_geo_id, wroclaw?.geo_id);
+  assert.ok(cityGmina);
+  assert.equal(cityGmina.parent_geo_id, wroclaw?.geo_id);
 });
 
 test("XLSX builder returns a ZIP-based workbook payload", () => {
