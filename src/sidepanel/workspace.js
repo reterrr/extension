@@ -30,6 +30,9 @@ import { createPickerClient } from "./pickerRpc";
     draft = "",
     methodIndex = 0;
   let preview = null,
+    evidenceCandidate = null,
+    evidenceMethodIndex = 0,
+    evidencePicking = false,
     windowId,
     tabId = null,
     pageUrl = "",
@@ -49,6 +52,26 @@ import { createPickerClient } from "./pickerRpc";
   const chosen = () => db.objects.find((o) => o.id === objectId);
   const keyOf = (descriptor) =>
     descriptor ? C.targetKey(descriptor.target) + "/" + descriptor.field : "";
+  const fieldEvidenceFor = (descriptor = active) =>
+    descriptor
+      ? (db.fieldEvidence || []).filter(
+          (entry) =>
+            entry.objectId === objectId &&
+            entry.field === descriptor.field &&
+            C.targetKey(entry.target) === C.targetKey(descriptor.target),
+        )
+      : [];
+
+  const evidenceKindLabel = (entry) => {
+    const type = entry?.extraction?.type;
+    if (type === "selection") return "Zaznaczenie";
+    if (type === "pageUrl") return "URL strony";
+    if (type === "attribute")
+      return entry.extraction.attribute === "href" ? "Link" : "Atrybut";
+    if (type === "text") return "Element";
+    return "Evidence";
+  };
+
   const activeInfo = () =>
     active && chosen()
       ? C.fieldContext(db, chosen(), active.field, active.target)
@@ -234,6 +257,9 @@ import { createPickerClient } from "./pickerRpc";
   function resetCapture() {
     candidate = null;
     methodIndex = 0;
+    evidenceCandidate = null;
+    evidenceMethodIndex = 0;
+    evidencePicking = false;
     publishSelectorPreview();
     try {
       draft = activeInfo()?.values[active.field] ?? "";
@@ -275,10 +301,14 @@ import { createPickerClient } from "./pickerRpc";
       pickerClient = createPickerClient(port, (message) => {
         if (token !== generation) return;
         if (message.event === "CAPTURE") {
-          if (!busy && active) acceptCapture(message.candidate);
+          if (!busy && active) {
+            if (evidencePicking) acceptEvidenceCapture(message.candidate);
+            else acceptCapture(message.candidate);
+          }
         } else if (message.event === "ERROR") notice(message.error, true);
         else if (message.event === "MODE") {
           picking = message.picking;
+          if (!message.picking) evidencePicking = false;
           controls();
         }
       });
@@ -377,6 +407,29 @@ import { createPickerClient } from "./pickerRpc";
     controls();
     notice("Review the value, then save its extraction rule.");
   }
+  function acceptEvidenceCapture(value) {
+    if (!active || !chosen()) {
+      notice("Najpierw wybierz pole.");
+      return;
+    }
+    evidenceCandidate = value;
+    evidenceMethodIndex = 0;
+    const href = value.options.findIndex(
+      (option) => option.extraction?.type === "attribute" && option.extraction.attribute === "href",
+    );
+    const text = value.options.findIndex(
+      (option) => option.extraction?.type === "text",
+    );
+    if (href >= 0 && activeInfo()?.definition?.type === "url")
+      evidenceMethodIndex = href;
+    else if (text >= 0)
+      evidenceMethodIndex = text;
+    evidencePicking = false;
+    renderEditor();
+    controls();
+    notice("Evidence przygotowane. Sprawdź podgląd i zapisz.");
+  }
+
   function updateDraftFromCapture() {
     const raw = candidate.options[methodIndex]?.raw ?? "";
     try {
@@ -428,10 +481,15 @@ import { createPickerClient } from "./pickerRpc";
         C.formatValue(values[field], definition, db),
       ),
     );
-    button.append(
-      copy,
-      node("span", "field-mark", readOnly ? (set ? "AUTO" : "") : set ? "✓" : ""),
-    );
+    const evidenceCount = readOnly ? 0 : fieldEvidenceFor(descriptor).length;
+    const markText = readOnly
+      ? set
+        ? "AUTO"
+        : ""
+      : [set ? "✓" : "", evidenceCount ? "EV " + evidenceCount : ""]
+          .filter(Boolean)
+          .join(" · ");
+    button.append(copy, node("span", "field-mark", markText));
     if (!readOnly) button.onclick = () => selectField(descriptor);
     container.append(button);
   }
@@ -1143,6 +1201,163 @@ import { createPickerClient } from "./pickerRpc";
     renderResults();
   }
 
+  function renderFieldEvidence(root) {
+    if (!active || !chosen()) return;
+
+    const section = node("section", "field-evidence-editor");
+    const header = node("div", "field-evidence-header");
+    const headerCopy = node("div");
+    headerCopy.append(
+      node("strong", "", "Evidence"),
+      node("small", "", "Opcjonalne źródła potwierdzające wartość pola."),
+    );
+    const count = fieldEvidenceFor().length;
+    header.append(
+      headerCopy,
+      node("span", "field-evidence-count", count ? String(count) : "0"),
+    );
+    section.append(header);
+
+    const tools = node("div", "field-evidence-tools");
+    const pick = node(
+      "button",
+      "text-button field-evidence-action",
+      picking && evidencePicking ? "Anuluj wybór" : "Wybierz element",
+    );
+    pick.type = "button";
+    pick.disabled = !port || busy || (picking && !evidencePicking);
+    pick.onclick = action(async () => {
+      if (picking && evidencePicking) {
+        await rpc("STOP");
+        evidencePicking = false;
+        return;
+      }
+      if (picking) await rpc("STOP");
+      evidencePicking = true;
+      await rpc("PICK");
+    });
+
+    const selection = node(
+      "button",
+      "text-button field-evidence-action",
+      "Użyj zaznaczenia",
+    );
+    selection.type = "button";
+    selection.disabled = !port || busy || picking;
+    selection.onclick = action(async () => {
+      evidencePicking = false;
+      acceptEvidenceCapture(await rpc("SELECTION"));
+    });
+
+    const page = node(
+      "button",
+      "text-button field-evidence-action",
+      "Użyj URL strony",
+    );
+    page.type = "button";
+    page.disabled = !port || busy || picking;
+    page.onclick = action(async () => {
+      evidencePicking = false;
+      acceptEvidenceCapture(createPageUrlCandidate(await rpc("URL")));
+    });
+    tools.append(pick, selection, page);
+    section.append(tools);
+
+    if (evidenceCandidate) {
+      const previewBox = node("div", "field-evidence-preview");
+      const methodLabel = node("label", "", "Odczytaj jako");
+      const method = node("select", "field-evidence-method");
+      evidenceCandidate.options.forEach((option, index) =>
+        method.append(new Option(option.label, String(index))),
+      );
+      method.value = String(evidenceMethodIndex);
+      method.disabled = busy;
+      method.onchange = () => {
+        evidenceMethodIndex = Number(method.value);
+        renderEditor();
+        controls();
+      };
+
+      const option = evidenceCandidate.options[evidenceMethodIndex];
+      previewBox.append(
+        methodLabel,
+        method,
+        node("small", "field-evidence-source", evidenceCandidate.pageUrl),
+        node("div", "field-evidence-sample", option?.raw || ""),
+      );
+
+      const actions = node("div", "field-evidence-preview-actions");
+      const cancel = node("button", "text-button", "Anuluj");
+      cancel.type = "button";
+      cancel.disabled = busy;
+      cancel.onclick = () => {
+        evidenceCandidate = null;
+        evidenceMethodIndex = 0;
+        renderEditor();
+        controls();
+      };
+      const saveEvidence = node("button", "field-evidence-save", "Dodaj evidence");
+      saveEvidence.type = "button";
+      saveEvidence.disabled = busy || !option;
+      saveEvidence.onclick = action(async () => {
+        const selected = active;
+        const capture = evidenceCandidate;
+        const selectedOption = capture?.options[evidenceMethodIndex];
+        if (!selected || !capture || !selectedOption)
+          throw Error("Wybierz evidence.");
+        if ((await rpc("URL")) !== capture.pageUrl)
+          throw Error("Strona się zmieniła. Wybierz evidence ponownie.");
+
+        await data("ADD_FIELD_EVIDENCE", {
+          objectId,
+          field: selected.field,
+          target: selected.target,
+          candidate: createCapturedExtractionInput(capture, selectedOption),
+        });
+        evidenceCandidate = null;
+        evidenceMethodIndex = 0;
+        notice("Evidence dodane.");
+      });
+      actions.append(cancel, saveEvidence);
+      previewBox.append(actions);
+      section.append(previewBox);
+    }
+
+    const list = node("div", "field-evidence-list");
+    for (const entry of fieldEvidenceFor()) {
+      const row = node("div", "field-evidence-row");
+      const copy = node("div", "field-evidence-copy");
+      copy.append(
+        node("strong", "", evidenceKindLabel(entry)),
+        node("span", "field-evidence-raw", entry.rawValue),
+        node("small", "field-evidence-source", entry.pageUrl),
+      );
+      const remove = node("button", "text-button danger", "Usuń");
+      remove.type = "button";
+      remove.disabled = busy;
+      remove.onclick = action(async () => {
+        await data("REMOVE_FIELD_EVIDENCE", {
+          objectId,
+          evidenceId: entry.id,
+        });
+        notice("Evidence usunięte.");
+      });
+      row.append(copy, remove);
+      list.append(row);
+    }
+    if (!count) {
+      list.append(
+        node(
+          "div",
+          "field-evidence-empty",
+          "Brak evidence. Pole może pozostać bez evidence.",
+        ),
+      );
+    }
+    section.append(list);
+    root.append(section);
+  }
+
   function renderEditor() {
     const info = activeInfo();
     $("capture-area").hidden = !info;
@@ -1224,6 +1439,8 @@ import { createPickerClient } from "./pickerRpc";
         root.append(link);
       } catch {}
     }
+    renderFieldEvidence(root);
+
     const rule = activeRule();
     $("rule-details").hidden = !candidate && !rule;
     $("rule").textContent = JSON.stringify(
@@ -1368,6 +1585,7 @@ import { createPickerClient } from "./pickerRpc";
     void clearObjectView().catch((error) => notice(error.message, true));
   };
   $("pick").onclick = action(async () => {
+    evidencePicking = false;
     await rpc(picking ? "STOP" : "PICK");
   });
   $("selected-text").onclick = action(async () => {
