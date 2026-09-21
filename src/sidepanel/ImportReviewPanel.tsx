@@ -421,6 +421,27 @@ export function ImportReviewPanel() {
       await writeImportReview(session);
       setSession({ ...session, previewState: { ...session.previewState } });
 
+      const windowId = windowIdRef.current;
+      if (windowId !== null) {
+        await patchSidepanelUiState(windowId, {
+          workspace: {
+            objectId: staged.stagedObjectId,
+            active: null,
+          },
+        });
+        const focusResponse = (await browser.runtime.sendMessage({
+          type: "BURBOT_COMMIT",
+          op: "FOCUS",
+          windowId,
+          objectId: staged.stagedObjectId,
+        })) as { ok?: boolean };
+        // Approval itself is authoritative. Focusing the workspace is QoL only.
+        if (!focusResponse?.ok) {
+          // The remembered objectId above still restores the correct object
+          // when the sidepanel is reopened.
+        }
+      }
+
       window.dispatchEvent(new Event("burbot:commit-changed"));
       window.dispatchEvent(new CustomEvent("burbot:import-review-changed"));
     } catch (cause) {
