@@ -53,6 +53,10 @@ ensureColumn("recruitments", "refund_percent_min", "REAL");
 ensureColumn("recruitments", "refund_percent_max", "REAL");
 ensureColumn("workspace_objects", "last_checked_at", "TEXT");
 ensureColumn("projects", "last_checked_at", "TEXT");
+ensureColumn("operators", "role", "TEXT");
+ensureColumn("operators", "address", "TEXT");
+ensureColumn("operators", "website", "TEXT");
+ensureColumn("operators", "notes", "TEXT");
 ensureColumn("operators", "last_checked_at", "TEXT");
 ensureColumn("recruitments", "last_checked_at", "TEXT");
 ensureColumn("recruitments", "continuous", "INTEGER");
@@ -68,10 +72,10 @@ ensureColumn("recruitments", "notes", "TEXT");
 ensureColumn("recruitments", "funding_rules", "TEXT");
 ensureColumn("recruitments", "funding_verified_at", "TEXT");
 ensureColumn("recruitments", "funding_verification_url", "TEXT");
-db.pragma("user_version = 5");
+db.pragma("user_version = 6");
 
 db.prepare(
-  `INSERT INTO app_meta(key, value) VALUES ('schema_version', '5')
+  `INSERT INTO app_meta(key, value) VALUES ('schema_version', '6')
    ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
 ).run();
 
@@ -137,6 +141,7 @@ function geographyTable(type) {
 function clearMaterializedTables() {
   db.exec(`
     DELETE FROM projects_operators;
+    DELETE FROM operator_contacts;
     DELETE FROM recruitments;
     DELETE FROM projects;
     DELETE FROM operators;
@@ -270,8 +275,10 @@ function syncBusinessTables(state, groupByObject) {
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   const insertOperator = db.prepare(`
-    INSERT INTO operators(id, object_id, name, nip, last_checked_at)
-    VALUES (?, ?, ?, ?, ?)
+    INSERT INTO operators(
+      id, object_id, name, role, nip, address, website, notes, last_checked_at
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   const insertProjectOperator = db.prepare(`
     INSERT INTO projects_operators(project_id, operator_id, operator_type)
@@ -308,7 +315,11 @@ function syncBusinessTables(state, groupByObject) {
       id,
       String(object.id),
       nullableText(values.name) ?? object.label ?? "",
+      nullableText(values.role),
       nullableText(values.nip),
+      nullableText(values.address),
+      nullableText(values.website),
+      nullableText(values.notes),
       nullableText(values.last_checked_at),
     );
   }
@@ -377,6 +388,29 @@ function syncBusinessTables(state, groupByObject) {
       nullableText(values.funding_verification_url),
       nullableText(values.last_checked_at),
       groupByObject.get(String(object.id)) ?? null,
+    );
+  }
+}
+
+function syncOperatorContacts(state) {
+  const insert = db.prepare(`
+    INSERT INTO operator_contacts(
+      contact_id, object_id, kind, variant_no, value
+    ) VALUES (?, ?, ?, ?, ?)
+  `);
+
+  for (const contact of state.operatorContacts ?? []) {
+    if (!["EMAIL", "PHONE"].includes(String(contact.kind))) {
+      throw new Error(`Unsupported operator contact kind: ${String(contact.kind)}.`);
+    }
+    const value = String(contact.value ?? "").trim();
+    if (!value) continue;
+    insert.run(
+      String(contact.id),
+      String(contact.objectId),
+      String(contact.kind),
+      Number(contact.variant_no),
+      value,
     );
   }
 }
@@ -506,6 +540,7 @@ const persistStateTransaction = db.transaction((state) => {
   syncWorkspaceObjects(state);
   const groupByObject = syncGeographies(state);
   syncBusinessTables(state, groupByObject);
+  syncOperatorContacts(state);
   syncExtractionRules(state);
   syncFieldEvidence(state);
   syncFileSources(state);
