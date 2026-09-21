@@ -34,9 +34,13 @@ function persistWorkspaceChrome(
 function restoreBusinessPanels(panels: Record<string, boolean>): void {
   for (const id of BUSINESS_PANEL_IDS) {
     const panel = $(id) as HTMLDetailsElement | null;
-    if (!panel) continue;
+    if (!panel || panel.dataset.qolTracked === "true") continue;
+
+    // Restore persisted state only once. After that the native <details>
+    // interaction is authoritative. Re-applying the open state from every
+    // MutationObserver enhancement pass made panels impossible to close.
     if (typeof panels[id] === "boolean") panel.open = panels[id];
-    if (panel.dataset.qolTracked === "true") continue;
+
     panel.dataset.qolTracked = "true";
     panel.addEventListener("toggle", () => {
       if (!panel.isConnected) return;
@@ -148,7 +152,9 @@ function enhanceFieldGroups(): void {
     details.dataset.sectionKey = title;
 
     const remembered = fieldSectionOpen.get(title);
-    details.open = selected || (remembered ?? index === 0);
+    // An explicit user choice wins over automatic opening for the selected
+    // field. This keeps a manually collapsed section collapsed across rerenders.
+    details.open = remembered ?? (selected || index === 0);
     fieldSectionOpen.set(title, details.open);
 
     const summary = document.createElement("summary");
@@ -307,7 +313,13 @@ function enhanceFunding(): void {
   selectFundingTab(root, activeFundingSize || labels[0]);
 
   const panel = $("funding-panel") as HTMLDetailsElement | null;
-  if (panel && root.querySelector(".field-row.selected")) setOpen(panel, true);
+  if (
+    panel &&
+    root.querySelector(".field-row.selected") &&
+    typeof restoredPanels["funding-panel"] !== "boolean"
+  ) {
+    setOpen(panel, true);
+  }
 }
 
 function enhanceDocuments(): void {
@@ -343,7 +355,13 @@ function enhanceDocuments(): void {
   }
 
   const panel = $("documents-panel") as HTMLDetailsElement | null;
-  if (panel && root.querySelector(".field-row.selected")) setOpen(panel, true);
+  if (
+    panel &&
+    root.querySelector(".field-row.selected") &&
+    typeof restoredPanels["documents-panel"] !== "boolean"
+  ) {
+    setOpen(panel, true);
+  }
 }
 
 function translateObjectProgress(): void {
