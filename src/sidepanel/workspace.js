@@ -989,6 +989,9 @@ import {
         remove.onclick = action(async () => {
           if (!confirm("Remove this funding variant and its extraction rules?"))
             return;
+          rememberViewportAnchor(
+            '[data-funding-add="' + size + '"]',
+          );
           await data("REMOVE_FUNDING", { objectId, variantId: variant.id });
           if (active?.target?.id === variant.id) {
             active = null;
