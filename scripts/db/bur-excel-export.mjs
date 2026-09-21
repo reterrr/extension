@@ -1,10 +1,72 @@
 import { readFileSync } from "node:fs";
+import "../../src/shared/domain/schema.js";
 import { buildXlsxWorkbook, excelDate } from "./xlsx.mjs";
 
+const FUNDING_FIELD_KEYS = Object.freeze(
+  Object.keys(globalThis.BurbotFunding?.fields ?? {}),
+);
+const DOCUMENT_FIELD_KEYS = Object.freeze(
+  Object.keys(globalThis.BurbotDocuments?.fields ?? {}),
+);
+const DOCUMENT_CATALOG = new Map(
+  (globalThis.BurbotDocuments?.catalog ?? []).map((entry) => [entry.key, entry]),
+);
+
 export const SHEET_HEADERS = Object.freeze({
-  Operatorzy: ["operator_id", "nazwa_operatora", "rola", "NIP", "adres", "email", "telefon", "strona_www", "uwagi", "operatorzy_glowni_dodatkowi"],
-  Projekty: ["projekt_id", "nazwa_projektu", "typ_odbiorcy", "data_start", "data_koniec", "status_projektu", "link_do_harmonogramu", "link_do_dokumentow", "operator_id", "uwagi", "link_prowadzi_do_dokumentow", "Link do harmonogramu / naborów", "Uwaga", "operatorzy_dodatkowi", "uwagi_techniczne"],
-  Nabory: ["nabor_id", "nabor_nr", "operator_id", "projekt_id", "nabor_nazwa", "nabor_od", "nabor_do", "status", "link_nabor", "link_dokumenty", "mikro_procent", "mikro_max_na_firme", "mikro_max_na_uczestnika", "mala_procent", "mala_max_na_firme", "mala_max_na_uczestnika", "srednia_procent", "srednia_max_na_firme", "srednia_max_na_uczestnika", "kod_dzialania", "zrodlo_danych", "uwaga", "link_prowadzi_do_konkretnego_naboru", "mikro_procent_bazowy", "mala_procent_bazowy", "srednia_procent_bazowy", "zasady_dofinansowania", "data_weryfikacji_finansow", "zrodlo_weryfikacji_finansow", "b2c_procent_bazowy", "b2c_procent_max", "b2c_wklad_wlasny_standard", "b2c_wklad_wlasny_min", "b2c_max_wartosc_uslug", "b2c_max_refundacja_standard", "b2c_max_refundacja_max", "wojewodztwo", "lista_powiatow", "nazwa_operatora", "nazwa_projektu"],
+  Operatorzy: [
+    "operator_id", "nazwa_operatora", "rola", "NIP", "adres", "email",
+    "telefon", "strona_www", "uwagi", "operatorzy_glowni_dodatkowi",
+    "ostatnio_sprawdzono", "utworzono", "ostatnia_zmiana",
+  ],
+  Projekty: [
+    "projekt_id", "nazwa_projektu", "typ_odbiorcy", "data_start", "data_koniec",
+    "status_projektu", "link_do_harmonogramu", "link_do_dokumentow", "operator_id",
+    "uwagi", "link_prowadzi_do_dokumentow", "Link do harmonogramu / naborów",
+    "Uwaga", "operatorzy_dodatkowi", "uwagi_techniczne", "numer_projektu",
+    "ostatnio_sprawdzono", "utworzono", "ostatnia_zmiana",
+  ],
+  Nabory: [
+    "nabor_id", "nabor_nr", "operator_id", "projekt_id", "nabor_nazwa",
+    "nabor_od", "nabor_do", "status", "link_nabor", "link_dokumenty",
+    "mikro_procent", "mikro_max_na_firme", "mikro_max_na_uczestnika",
+    "mala_procent", "mala_max_na_firme", "mala_max_na_uczestnika",
+    "srednia_procent", "srednia_max_na_firme", "srednia_max_na_uczestnika",
+    "kod_dzialania", "zrodlo_danych", "uwaga",
+    "link_prowadzi_do_konkretnego_naboru", "mikro_procent_bazowy",
+    "mala_procent_bazowy", "srednia_procent_bazowy", "zasady_dofinansowania",
+    "data_weryfikacji_finansow", "zrodlo_weryfikacji_finansow",
+    "b2c_procent_bazowy", "b2c_procent_max", "b2c_wklad_wlasny_standard",
+    "b2c_wklad_wlasny_min", "b2c_max_wartosc_uslug",
+    "b2c_max_refundacja_standard", "b2c_max_refundacja_max", "wojewodztwo",
+    "lista_powiatow", "nazwa_operatora", "nazwa_projektu",
+    "numer_kolejny", "rok", "nabor_ciagly", "status_systemowy",
+    "data_rozpoczecia_od", "data_rozpoczecia_do",
+    "data_zakonczenia_od", "data_zakonczenia_do",
+    "planowana_data_rozpoczecia", "planowana_data_zakonczenia",
+    "planowany_start_rok", "planowany_start_miesiac", "planowany_start_kwartal",
+    "planowany_koniec_rok", "planowany_koniec_miesiac", "planowany_koniec_kwartal",
+    "status_zakonczenia", "powod_statusu", "ostatnio_sprawdzono", "utworzono",
+    "ostatnia_zmiana",
+  ],
+  Finansowanie: [
+    "finansowanie_id", "obiekt_id", "typ_obiektu", "nazwa_obiektu",
+    "wielkosc_firmy", "wariant_nr", ...FUNDING_FIELD_KEYS,
+    "ostatnia_zmiana_obiektu",
+  ],
+  Dokumenty: [
+    "dokument_id", "obiekt_id", "typ_obiektu", "nazwa_obiektu",
+    "document_type_key", "nazwa_dokumentu", "wewnetrzny",
+    ...DOCUMENT_FIELD_KEYS, "ostatnia_zmiana_obiektu",
+  ],
+  Pliki: [
+    "source_id", "obiekt_id", "typ_obiektu", "nazwa_obiektu", "file_type",
+    "nazwa_pliku", "url", "source_page_url", "added_at",
+    "ostatnia_zmiana_obiektu",
+  ],
+  Pola_Obiektow: [
+    "obiekt_id", "typ_obiektu", "nazwa_obiektu", "pole", "wartosc",
+    "utworzono", "ostatnia_zmiana",
+  ],
   Projekty_Operatorzy: ["id", "projekt_id", "operator_id", "typ"],
   Geografia_Slownik: ["geo_id", "parent_geo_id", "poziom", "geo_typ", "nazwa", "canonical_geo_id"],
   Geografia_Projekty: ["geo_projekt_id", "projekt_id", "geo_id"],
@@ -65,6 +127,19 @@ const row = (headers, values) => headers.map((header) => values[header] ?? null)
 const dateCell = (value) => value ? excelDate(new Date(`${String(value).slice(0, 10)}T00:00:00Z`)) : null;
 const yesNo = (value) => value === null || value === undefined ? null : value ? "tak" : "nie";
 const titleCase = (value) => String(value).toLocaleLowerCase("pl-PL").replace(/(^|[\s-])\p{L}/gu, (letter) => letter.toLocaleUpperCase("pl-PL"));
+
+const excelScalar = (value) => {
+  if (value === undefined || value === null || value === "") return null;
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") return value;
+  return JSON.stringify(value);
+};
+
+const objectName = (object) =>
+  object?.values?.name ??
+  object?.values?.external_number ??
+  object?.values?.title ??
+  object?.label ??
+  keyOf(object);
 
 function fundingFor(state, objectId, size) {
   return (state.financingRules ?? [])
@@ -195,6 +270,9 @@ export function buildBurSheets(snapshot, geographySource) {
       strona_www: values.website ?? object.sourceUrl,
       uwagi: values.notes ?? object.creationNote,
       operatorzy_glowni_dodatkowi: types.has("DODATKOWY") ? "dodatkowy" : types.has("GLOWNY") ? "główny" : null,
+      ostatnio_sprawdzono: values.last_checked_at,
+      utworzono: object.createdAt,
+      ostatnia_zmiana: object.updatedAt,
     });
   });
 
@@ -218,6 +296,10 @@ export function buildBurSheets(snapshot, geographySource) {
       link_prowadzi_do_dokumentow: documents || object.sourceUrl ? "tak" : null,
       "Link do harmonogramu / naborów": values.announcements_site_url,
       operatorzy_dodatkowi: additional.length ? additional.join("; ") : null,
+      numer_projektu: values.number,
+      ostatnio_sprawdzono: values.last_checked_at,
+      utworzono: object.createdAt,
+      ostatnia_zmiana: object.updatedAt,
     });
   });
 
@@ -259,8 +341,95 @@ export function buildBurSheets(snapshot, geographySource) {
       b2c_max_wartosc_uslug: b2c.max_service_value_pln, b2c_max_refundacja_standard: b2c.max_refund_standard_pln, b2c_max_refundacja_max: b2c.max_refund_max_pln,
       wojewodztwo: wojs.join(", "), lista_powiatow: powiats.join(", "),
       nazwa_operatora: operator?.values?.name ?? operator?.label, nazwa_projektu: project?.values?.name ?? project?.label,
+      numer_kolejny: values.sequence_number,
+      rok: values.year,
+      nabor_ciagly: yesNo(values.continuous),
+      status_systemowy: values.status,
+      data_rozpoczecia_od: dateCell(values.dataRozpoczeciaOd),
+      data_rozpoczecia_do: dateCell(values.dataRozpoczeciaDo),
+      data_zakonczenia_od: dateCell(values.dataZakonczeniaOd),
+      data_zakonczenia_do: dateCell(values.dataZakonczeniaDo),
+      planowana_data_rozpoczecia: dateCell(values.planned_start_date),
+      planowana_data_zakonczenia: dateCell(values.planned_end_date),
+      planowany_start_rok: values.planowanyStartRok,
+      planowany_start_miesiac: values.planowanyStartMiesiac,
+      planowany_start_kwartal: values.planowanyStartKwartal,
+      planowany_koniec_rok: values.planowanyKoniecRok,
+      planowany_koniec_miesiac: values.planowanyKoniecMiesiac,
+      planowany_koniec_kwartal: values.planowanyKoniecKwartal,
+      status_zakonczenia: values.statusZakonczenia,
+      powod_statusu: values.powodStatusu,
+      ostatnio_sprawdzono: values.last_checked_at,
+      utworzono: object.createdAt,
+      ostatnia_zmiana: object.updatedAt,
     });
   });
+
+  const financingRows = (state.financingRules ?? []).map((item, index) => {
+    const object = byId.get(String(item.objectId ?? ""));
+    const values = {
+      finansowanie_id: item.importKey ?? item.id ?? `FIN_${String(index + 1).padStart(6, "0")}`,
+      obiekt_id: keyOf(object),
+      typ_obiektu: object?.type,
+      nazwa_obiektu: objectName(object),
+      wielkosc_firmy: item.company_size,
+      wariant_nr: item.variant_no,
+      ostatnia_zmiana_obiektu: object?.updatedAt,
+    };
+    for (const field of FUNDING_FIELD_KEYS) values[field] = excelScalar(item[field]);
+    return row(SHEET_HEADERS.Finansowanie, values);
+  });
+
+  const documentRows = (state.documentRequirements ?? []).map((item, index) => {
+    const object = byId.get(String(item.objectId ?? ""));
+    const catalog = DOCUMENT_CATALOG.get(item.document_type_key);
+    const values = {
+      dokument_id: item.id ?? `DOC_${String(index + 1).padStart(6, "0")}`,
+      obiekt_id: keyOf(object),
+      typ_obiektu: object?.type,
+      nazwa_obiektu: objectName(object),
+      document_type_key: item.document_type_key,
+      nazwa_dokumentu: catalog?.name,
+      wewnetrzny: yesNo(catalog?.internal ?? false),
+      ostatnia_zmiana_obiektu: object?.updatedAt,
+    };
+    for (const field of DOCUMENT_FIELD_KEYS) values[field] = excelScalar(item[field]);
+    return row(SHEET_HEADERS.Dokumenty, values);
+  });
+
+  const fileRows = (state.fileSources ?? []).map((item) => {
+    const object = byId.get(String(item.objectId ?? ""));
+    return row(SHEET_HEADERS.Pliki, {
+      source_id: item.id,
+      obiekt_id: keyOf(object),
+      typ_obiektu: object?.type,
+      nazwa_obiektu: objectName(object),
+      file_type: item.fileType,
+      nazwa_pliku: item.name,
+      url: item.url,
+      source_page_url: item.sourcePageUrl,
+      added_at: item.addedAt,
+      ostatnia_zmiana_obiektu: object?.updatedAt,
+    });
+  });
+
+  const objectFieldRows = [];
+  for (const object of objects) {
+    for (const [field, value] of Object.entries(object.values ?? {})) {
+      const referenced = typeof value === "string" ? byId.get(String(value)) : undefined;
+      objectFieldRows.push(
+        row(SHEET_HEADERS.Pola_Obiektow, {
+          obiekt_id: keyOf(object),
+          typ_obiektu: object.type,
+          nazwa_obiektu: objectName(object),
+          pole: field,
+          wartosc: referenced ? keyOf(referenced) : excelScalar(value),
+          utworzono: object.createdAt,
+          ostatnia_zmiana: object.updatedAt,
+        }),
+      );
+    }
+  }
 
   const projectOperatorRows = relations.map((relation, index) => row(SHEET_HEADERS.Projekty_Operatorzy, {
     id: `PO_${String(index + 1).padStart(6, "0")}`,
@@ -303,6 +472,10 @@ export function buildBurSheets(snapshot, geographySource) {
     { name: "Operatorzy", headers: SHEET_HEADERS.Operatorzy, rows: operatorRows },
     { name: "Projekty", headers: SHEET_HEADERS.Projekty, rows: projectRows },
     { name: "Nabory", headers: SHEET_HEADERS.Nabory, rows: recruitmentRows },
+    { name: "Finansowanie", headers: SHEET_HEADERS.Finansowanie, rows: financingRows },
+    { name: "Dokumenty", headers: SHEET_HEADERS.Dokumenty, rows: documentRows },
+    { name: "Pliki", headers: SHEET_HEADERS.Pliki, rows: fileRows },
+    { name: "Pola_Obiektow", headers: SHEET_HEADERS.Pola_Obiektow, rows: objectFieldRows },
     { name: "Projekty_Operatorzy", headers: SHEET_HEADERS.Projekty_Operatorzy, rows: projectOperatorRows },
     { name: "Geografia_Slownik", headers: SHEET_HEADERS.Geografia_Slownik, rows: [...dictionary.values()].sort((a, b) => Number(a.poziom) - Number(b.poziom) || a.nazwa.localeCompare(b.nazwa, "pl")).map((item) => row(SHEET_HEADERS.Geografia_Slownik, item)) },
     { name: "Geografia_Projekty", headers: SHEET_HEADERS.Geografia_Projekty, rows: projectGeoRows },
