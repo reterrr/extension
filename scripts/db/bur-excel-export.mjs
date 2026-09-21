@@ -255,8 +255,7 @@ export function buildBurSheets(snapshot, geographySource) {
       link_do_dokumentow: documents ?? object.sourceUrl,
       operator_id: main ? keyOf(byId.get(String(main.operator_object_id))) : keyOf(byId.get(String(values.operator_id ?? ""))),
       uwagi: values.notes ?? object.creationNote,
-      link_prowadzi_do_dokumentow: yesNo(values.documents_link_direct) ??
-        (documents || object.sourceUrl ? "tak" : null),
+      link_prowadzi_do_dokumentow: yesNo(values.documents_link_direct),
       "Link do harmonogramu / naborów": values.announcements_site_url,
       Uwaga: values.schedule_note,
       operatorzy_dodatkowi: additional.length ? additional.join("; ") : null,
