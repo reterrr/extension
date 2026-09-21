@@ -40,6 +40,7 @@ function restoreBusinessPanels(panels: Record<string, boolean>): void {
     panel.dataset.qolTracked = "true";
     panel.addEventListener("toggle", () => {
       if (!panel.isConnected) return;
+      restoredPanels[id] = panel.open;
       persistWorkspaceChrome({ panels: { [id]: panel.open } });
     });
   }
