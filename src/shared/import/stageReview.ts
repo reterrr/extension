@@ -241,6 +241,21 @@ function stageExistingObjectUpdate(
     );
 
     if (!row) {
+      const legacyCandidates = (state.financingRules ?? []).filter(
+        (candidate) =>
+          candidate.objectId === target.id &&
+          !candidate.importKey &&
+          String(candidate.company_size) ===
+            String(importedRow.company_size) &&
+          Number(candidate.variant_no) === Number(importedRow.variant_no),
+      );
+      if (legacyCandidates.length === 1) {
+        row = legacyCandidates[0];
+        row.importKey = importKey;
+      }
+    }
+
+    if (!row) {
       row = {
         id: uuid(),
         objectId: target.id,
