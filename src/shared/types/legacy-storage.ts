@@ -1,4 +1,4 @@
-import type { ExecutableExtractionRule } from "./extraction";
+import type { ExecutableExtractionRule, ExtractionSpec } from "./extraction";
 import type { SourceFileType } from "./source";
 
 /**
@@ -34,6 +34,20 @@ export interface ImportedEvidence {
   charEnd: number;
   rawValue: string;
   normalizedValue?: unknown;
+}
+
+export interface LegacyStoredFieldEvidence {
+  id: string;
+  objectId: string;
+  field: string;
+  target?: { kind: string; id: string };
+  pageUrl: string;
+  selector: string | null;
+  selectorFallbacks?: string[];
+  extraction: ExtractionSpec;
+  rawValue: string;
+  valueAtCapture?: unknown;
+  createdAt: string;
 }
 
 export interface LegacyStoredObject {
@@ -100,4 +114,5 @@ export interface LegacyStorageState {
   importSources?: ImportedSource[];
   financingRules?: Array<Record<string, unknown>>;
   documentRequirements?: Array<Record<string, unknown>>;
+  fieldEvidence?: LegacyStoredFieldEvidence[];
 }
