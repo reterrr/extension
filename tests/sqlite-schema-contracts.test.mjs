@@ -74,7 +74,22 @@ test("SQLite schema creates typed business and provenance tables", () => {
   const operatorColumns = new Set(
     db.prepare("PRAGMA table_info(operators)").all().map((row) => row.name),
   );
-  assert.ok(operatorColumns.has("last_checked_at"));
+  for (const column of [
+    "address",
+    "email",
+    "phone",
+    "website",
+    "notes",
+    "created_at",
+    "updated_at",
+    "last_checked_at",
+  ]) {
+    assert.ok(operatorColumns.has(column), `missing operators.${column}`);
+  }
+  assert.ok(projectColumns.has("created_at"));
+  assert.ok(projectColumns.has("updated_at"));
+  assert.ok(recruitmentColumns.has("created_at"));
+  assert.ok(recruitmentColumns.has("updated_at"));
 
   const workspaceColumns = new Set(
     db.prepare("PRAGMA table_info(workspace_objects)").all().map((row) => row.name),
@@ -100,7 +115,7 @@ test("SQLite schema creates typed business and provenance tables", () => {
     assert.ok(evidenceColumns.has(column), `missing field_evidence.${column}`);
   }
 
-  assert.equal(db.pragma("user_version", { simple: true }), 5);
+  assert.equal(db.pragma("user_version", { simple: true }), 6);
   db.close();
 });
 
