@@ -49,6 +49,8 @@ CREATE TABLE IF NOT EXISTS projects (
   start_date TEXT,
   end_date TEXT,
   announcements_site_url TEXT,
+  created_at TEXT,
+  updated_at TEXT,
   last_checked_at TEXT,
   geography_group_id INTEGER,
   FOREIGN KEY (id) REFERENCES workspace_objects(db_id) ON DELETE CASCADE,
@@ -61,6 +63,13 @@ CREATE TABLE IF NOT EXISTS operators (
   object_id TEXT NOT NULL UNIQUE,
   name TEXT NOT NULL,
   nip TEXT,
+  address TEXT,
+  email TEXT,
+  phone TEXT,
+  website TEXT,
+  notes TEXT,
+  created_at TEXT,
+  updated_at TEXT,
   last_checked_at TEXT,
   FOREIGN KEY (id) REFERENCES workspace_objects(db_id) ON DELETE CASCADE,
   FOREIGN KEY (object_id) REFERENCES workspace_objects(object_id) ON DELETE CASCADE
@@ -102,6 +111,8 @@ CREATE TABLE IF NOT EXISTS recruitments (
   funding_rules TEXT,
   funding_verified_at TEXT,
   funding_verification_url TEXT,
+  created_at TEXT,
+  updated_at TEXT,
   last_checked_at TEXT,
   geography_group_id INTEGER,
   FOREIGN KEY (id) REFERENCES workspace_objects(db_id) ON DELETE CASCADE,
@@ -246,4 +257,4 @@ CREATE TABLE IF NOT EXISTS document_requirements (
   FOREIGN KEY (object_id) REFERENCES workspace_objects(object_id) ON DELETE CASCADE
 );
 
-PRAGMA user_version = 5;
+PRAGMA user_version = 6;
