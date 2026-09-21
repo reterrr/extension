@@ -89,6 +89,26 @@ function normalizeSearch(value: string): string {
     .trim();
 }
 
+function keepControlInPlace(
+  element: HTMLElement,
+  beforeTop: number,
+  focus?: HTMLElement,
+): void {
+  window.requestAnimationFrame(() => {
+    window.requestAnimationFrame(() => {
+      const delta = element.getBoundingClientRect().top - beforeTop;
+      if (Math.abs(delta) > 0.5) window.scrollBy(0, delta);
+      if (focus) {
+        try {
+          focus.focus({ preventScroll: true });
+        } catch {
+          focus.focus();
+        }
+      }
+    });
+  });
+}
+
 function matchingCatalog(type: string, query: string) {
   const needle = normalizeSearch(query);
   return BurbotGeography.catalog
@@ -269,6 +289,8 @@ function renderSearch(object: LegacyStoredObject): void {
     button.append(title, meta);
 
     button.onclick = () => {
+      const addPanel = $("geography-add");
+      const beforeTop = addPanel.getBoundingClientRect().top;
       void data("ADD_GEOGRAPHY", {
         objectId: object.id,
         geographyType: entry.type,
@@ -279,6 +301,7 @@ function renderSearch(object: LegacyStoredObject): void {
           search.value = "";
           notice(`Dodano: ${BurbotGeography.roles[role.value]} ${entry.label}.`);
           render();
+          keepControlInPlace(addPanel, beforeTop, search);
         })
         .catch((error: unknown) =>
           notice(error instanceof Error ? error.message : String(error), true),
