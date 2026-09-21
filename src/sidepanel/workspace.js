@@ -466,6 +466,10 @@ import {
     scheduleWorkspaceUiPersist();
     if (descriptor.target?.kind === "funding")
       expanded.add("funding:" + descriptor.target.id);
+    if (descriptor.target?.kind === "operator_contact") {
+      expanded.add("operator_contact:" + descriptor.target.id);
+      $("operator-contacts-panel").open = true;
+    }
     if (descriptor.target?.kind === "document") {
       expanded.add("document:" + descriptor.target.id);
       $("documents-panel").open = true;
@@ -877,6 +881,117 @@ import {
       results.scrollTop = switcherScrollTop;
     });
   }
+  function renderOperatorContacts(object) {
+    const root = $("operator-contacts");
+    root.replaceChildren();
+    const rows = (db.operatorContacts || []).filter(
+      (r) => r.objectId === object.id,
+    );
+    $("operator-contact-count").textContent = rows.length
+      ? rows.length + (rows.length === 1 ? " kontakt" : " kontaktów")
+      : "Brak kontaktów";
+
+    for (const [kind, label] of Object.entries(BurbotOperatorContacts.kinds)) {
+      const variants = rows
+        .filter((row) => row.kind === kind)
+        .sort((a, b) => a.variant_no - b.variant_no);
+      const group = node("div", "size-group");
+      const heading = node("div", "size-heading");
+      heading.append(
+        node("h3", "", label),
+        node(
+          "span",
+          "",
+          variants.length
+            ? variants.length +
+                (variants.length === 1 ? " wariant" : " wariantów")
+            : "Brak",
+        ),
+      );
+      group.append(heading);
+
+      for (const variant of variants) {
+        const details = node("details", "variant");
+        trackExpansion(details, "operator_contact:" + variant.id);
+        const summary = node(
+          "summary",
+          "variant-summary",
+          label + " " + variant.variant_no,
+        );
+        summary.append(
+          node(
+            "small",
+            "",
+            C.hasValue(variant.value) ? String(variant.value) : "Nie ustawiono",
+          ),
+        );
+        details.append(summary);
+
+        const grid = node("div", "funding-field-grid");
+        fieldRow(
+          grid,
+          "value",
+          BurbotOperatorContacts.fields[kind].value,
+          variant,
+          { kind: "operator_contact", id: variant.id },
+          label + " · Wariant " + variant.variant_no,
+        );
+        details.append(grid);
+
+        const remove = node("button", "text-button danger", "Usuń kontakt");
+        remove.disabled = busy;
+        remove.onclick = action(async () => {
+          if (!confirm("Usunąć ten kontakt i jego reguły ekstrakcji?")) return;
+          rememberViewportAnchor(
+            '[data-operator-contact-add="' + kind + '"]',
+          );
+          await data("REMOVE_OPERATOR_CONTACT", {
+            objectId,
+            contactId: variant.id,
+          });
+          if (active?.target?.id === variant.id) {
+            active = null;
+            resetCapture();
+          }
+        });
+        details.append(remove);
+        group.append(details);
+      }
+
+      const add = node("button", "text-button", "+ Dodaj " + label.toLowerCase());
+      add.dataset.operatorContactAdd = kind;
+      add.disabled = busy;
+      add.onclick = action(async () => {
+        rememberViewportAnchor(
+          '[data-operator-contact-add="' + kind + '"]',
+          true,
+        );
+        const id = objectId,
+          epoch = viewEpoch;
+        await data("ADD_OPERATOR_CONTACT", {
+          objectId: id,
+          contactKind: kind,
+        });
+        if (epoch !== viewEpoch) return;
+        const variant = (db.operatorContacts || [])
+          .filter((row) => row.objectId === id && row.kind === kind)
+          .sort((a, b) => a.variant_no - b.variant_no)
+          .at(-1);
+        if (!variant) throw Error("Nie udało się utworzyć kontaktu.");
+        expanded.add("operator_contact:" + variant.id);
+        active = {
+          field: "value",
+          target: { kind: "operator_contact", id: variant.id },
+          context: label + " · Wariant " + variant.variant_no,
+        };
+        resetCapture();
+        scheduleWorkspaceUiPersist();
+      });
+      group.append(add);
+      root.append(group);
+    }
+  }
+
   function renderFunding(object) {
     const root = $("funding");
     root.replaceChildren();
@@ -1695,6 +1810,10 @@ import {
           object.values,
         );
       }
+      const hasContacts = !!BurbotSchema[object.type]?.contacts;
+      $("operator-contacts-section").hidden = !hasContacts;
+      if (hasContacts) renderOperatorContacts(object);
+
       const configured = !!BurbotSchema[object.type]?.configuration;
       $("funding-section").hidden = !configured;
       $("documents-section").hidden = !configured;
