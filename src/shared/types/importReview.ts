@@ -12,6 +12,8 @@ export interface ImportReviewSession {
   objectOrder: string[];
   statusByObjectId: Record<string, ImportReviewObjectStatus>;
   approvedObjectIdByImportKey: Record<string, string>;
+  importedFieldsByObjectId: Record<string, string[]>;
+  importedFinancingFieldsByObjectId: Record<string, Record<string, string[]>>;
   selectedObjectId: string | null;
 }
 
