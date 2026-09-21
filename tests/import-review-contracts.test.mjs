@@ -504,7 +504,6 @@ test("approving an existing imported object updates it in-place without duplicat
   assert.deepEqual(
     plan.financingFieldsByImportKey["micro-default"].sort(),
     [
-      "max_amount_pln",
       "notes",
       "own_contribution_form",
       "refund_percent_avg",
