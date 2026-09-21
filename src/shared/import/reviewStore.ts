@@ -38,7 +38,11 @@ export async function readImportReview(): Promise<ImportReviewSession | null> {
     const value = await requestResult(transaction.objectStore(STORE).get(ACTIVE_KEY));
     await done;
     const session = (value as ImportReviewSession | undefined) ?? null;
-    if (session) migrateFundingRefundRanges(session.previewState);
+    if (session) {
+      migrateFundingRefundRanges(session.previewState);
+      session.importedFieldsByObjectId ||= {};
+      session.importedFinancingFieldsByObjectId ||= {};
+    }
     return session;
   } finally {
     database.close();
