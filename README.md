@@ -179,7 +179,7 @@ Validation without writing:
 npm run import:operators -- /path/to/operatorzy.xlsx --dry-run
 ```
 
-The importer merges operators into the current workspace state instead of replacing it. `operator_id` is used as the stable import key (and as the object ID for new operators), existing matching operators keep their internal IDs, all URLs from `strona_www` are preserved in `values.website`, and the first URL is used as `sourceUrl`. The import updates `last_checked_at` and increments the workspace revision once.
+The importer merges operators into the current workspace state instead of replacing it. `operator_id` is used as the stable import key (and as the object ID for new operators), and existing matching operators keep their internal IDs. The `Operatorzy` sheet may also provide `rola`, `adres`, `email`, `telefon`, `strona_www` and `uwagi`. Multiple email addresses and phone numbers are separated by semicolons or new lines and are stored as ordered contact variants in `operatorContacts` / the typed SQLite `operator_contacts` table. The first website URL is also used as `sourceUrl`. The import updates `last_checked_at` and increments the workspace revision once.
 
 ## Project + geography XLSX import
 
@@ -217,7 +217,12 @@ status_projektu             -> project.status
 data_start                  -> project.start_date
 data_koniec                 -> project.end_date
 Link do harmonogramu/naborów -> project.announcements_site_url
-import time                 -> project.last_checked_at
+link_do_dokumentow           -> project.documents_url
+link_prowadzi_do_dokumentow  -> project.documents_link_direct
+uwagi                         -> project.notes
+Uwaga                         -> project.schedule_note
+uwagi_techniczne              -> project.technical_notes
+import time                   -> project.last_checked_at
 ```
 
 Geography is normalized against `src/shared/types/geography.ts` before any database write. Powiaty, cities with powiat rights and gminas therefore use the same canonical values as the Workspace geography picker. All imported geography rows use role `OBEJMUJE`.
@@ -248,7 +253,7 @@ nabor_nazwa                      -> external_number
 nabor_nr                         -> source_number (+ sequence_number when numeric)
 projekt_id                       -> project_id
 operator_id                      -> operator_id
-status                           -> AKTYWNY / PLANOWANY / ZAKONCZONY
+status                           -> OGLOSZONY / PLANOWANY / AKTYWNY / ZAWIESZONY / ZAMKNIETY / ANULOWANY
 nabor_od / nabor_do              -> actual dates, or exact planned dates for PLANOWANY
 link_nabor                       -> urlOgloszenia
 link_dokumenty                   -> documents_url
@@ -266,6 +271,8 @@ zrodlo_weryfikacji_finansow      -> funding_verification_url
 B2B financing becomes MICRO / SMALL / MEDIUM variants with base/standard refund percentages and company/person limits. B2C financing becomes one `B2C` variant with base/max refund, own-contribution percentages and service/refund limits.
 
 Geography is normalized through the same canonical Burbot geography catalog as Projects. `include` becomes `OBEJMUJE`; `exclude` becomes `WYKLUCZA`.
+
+Recruitment status export uses the same six-value vocabulary: `ogłoszony`, `planowany`, `aktywny`, `zawieszony`, `zamknięty`, `anulowany`. Legacy spreadsheet labels such as `otwarty`, `wkrótce`, `zakończony` and stored `ZAKONCZONY` remain accepted and are normalized to the canonical values.
 
 ## Development
 
