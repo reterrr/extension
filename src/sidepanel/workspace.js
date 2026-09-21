@@ -1456,10 +1456,10 @@ import { createPickerClient } from "./pickerRpc";
     );
   }
   function controls() {
-    $("pick").disabled = !port || !active || busy;
-    $("pick").textContent = picking ? "Cancel picker" : "Pick element";
-    $("selected-text").disabled = !port || !active || busy;
-    $("page-url").disabled = !port || !active || busy;
+    $("pick").disabled = !port || !active || busy || evidencePicking;
+    $("pick").textContent = picking && !evidencePicking ? "Cancel picker" : "Pick element";
+    $("selected-text").disabled = !port || !active || busy || evidencePicking;
+    $("page-url").disabled = !port || !active || busy || evidencePicking;
     $("connect").disabled = busy;
     $("connect").textContent = port ? "Reconnect" : "Connect";
     $("preview").disabled =
