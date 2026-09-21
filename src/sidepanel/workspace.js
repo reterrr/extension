@@ -418,9 +418,10 @@ import {
   function normalFields(object) {
     return Object.entries(BurbotSchema[object.type]?.fields || {}).filter(
       ([key, definition]) =>
-        !definition.legacy ||
-        C.hasValue(object.values[key]) ||
-        db.rules.some((r) => C.matches(r, object.id, key)),
+        !definition.hidden &&
+        (!definition.legacy ||
+          C.hasValue(object.values[key]) ||
+          db.rules.some((r) => C.matches(r, object.id, key))),
     );
   }
   function chooseObject(id, next = false) {
@@ -1683,9 +1684,13 @@ import {
             ? "date"
             : definition.type === "url"
               ? "url"
-              : definition.type === "integer"
-                ? "number"
-                : "text";
+              : definition.type === "email"
+                ? "email"
+                : definition.type === "phone"
+                  ? "tel"
+                  : definition.type === "integer"
+                    ? "number"
+                    : "text";
       if (["money", "percentage", "number"].includes(definition.type))
         input.inputMode = "decimal";
       if (definition.type === "integer") {
