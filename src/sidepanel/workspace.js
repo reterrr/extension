@@ -126,6 +126,7 @@ import {
   }
 
   function restoreViewportAnchor() {
+    if (busy) return;
     const anchor = pendingViewportAnchor;
     pendingViewportAnchor = null;
     if (!anchor) return;
