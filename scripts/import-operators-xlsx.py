@@ -74,7 +74,7 @@ def cell_value(cell: ET.Element, shared: list[str]) -> str:
     return raw
 
 
-def read_xlsx(path: Path) -> list[dict[str, str | None]]:
+def read_xlsx(path: Path) -> list[dict[str, Any]]:
     with zipfile.ZipFile(path) as zf:
         shared = read_shared_strings(zf)
         sheet_path = first_sheet_path(zf)
@@ -144,14 +144,29 @@ def read_xlsx(path: Path) -> list[dict[str, str | None]]:
                 if part.strip()
             ]
 
+        emails = contacts("email")
+        for email in emails:
+            if not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", email):
+                raise ValueError(
+                    f"Row {row_no}: invalid email address: {email!r}."
+                )
+
+        phones = contacts("telefon")
+        for phone in phones:
+            digits = re.sub(r"\D", "", phone)
+            if not 6 <= len(digits) <= 18:
+                raise ValueError(
+                    f"Row {row_no}: invalid phone number: {phone!r}."
+                )
+
         records.append({
             "operator_id": operator_id,
             "name": name,
             "role": role,
             "nip": nip,
             "address": optional("adres") or None,
-            "emails": contacts("email"),
-            "phones": contacts("telefon"),
+            "emails": emails,
+            "phones": phones,
             "website": website or None,
             "notes": optional("uwagi") or None,
             "source_url": urls[0] if urls else None,
