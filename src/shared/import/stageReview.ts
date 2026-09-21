@@ -196,6 +196,16 @@ function stageExistingObjectUpdate(
       referenceValue ?? importedObject.values[field];
 
     if (target.manualFields) delete target.manualFields[field];
+    if (state.fieldEvidence) {
+      state.fieldEvidence = state.fieldEvidence.filter(
+        (entry) =>
+          !(
+            entry.objectId === target.id &&
+            entry.field === field &&
+            (!entry.target || entry.target.kind === "object")
+          ),
+      );
+    }
 
     if (importedObject.evidence?.[field]?.length) {
       (target.evidence ||= {})[field] = importedObject.evidence[field];
@@ -276,6 +286,17 @@ function stageExistingObjectUpdate(
     for (const field of selectedFields) {
       if (Object.prototype.hasOwnProperty.call(importedRow, field)) {
         row[field] = importedRow[field];
+        if (state.fieldEvidence) {
+          state.fieldEvidence = state.fieldEvidence.filter(
+            (entry) =>
+              !(
+                entry.objectId === target.id &&
+                entry.field === field &&
+                entry.target?.kind === "funding" &&
+                entry.target.id === String(row.id)
+              ),
+          );
+        }
       }
     }
     fundingIdByImportKey.set(importKey, String(row.id));
