@@ -566,8 +566,18 @@ function portableData(
   object: LegacyStoredObject,
 ): Record<string, unknown> {
   const fields = BurbotSchema[object.type]?.fields ?? {};
+  const tracked = session.importedFieldsByObjectId?.[object.id];
+  const selectedFields =
+    tracked?.length
+      ? new Set(tracked)
+      : new Set(Object.keys(object.values));
+  for (const field of Object.keys(object.manualFields ?? {})) {
+    selectedFields.add(field);
+  }
+
   const data: Record<string, unknown> = {};
   for (const [field, value] of Object.entries(object.values)) {
+    if (!selectedFields.has(field)) continue;
     const definition = fields[field];
     if (definition?.type === "reference" && typeof value === "string") {
       const target = session.previewState.objects.find((entry) => entry.id === value);
@@ -676,6 +686,7 @@ export function buildImportApprovalPlan(
     throw new Error("This imported object is already approved.");
   }
 
+  const existingTarget = findExistingImportObjectMatch(object, existingState);
   const references = referencedObjects(session, object);
   const referencePatches: ImportApprovalReferencePatch[] = [];
   const existingReferenceLinks: ImportApprovalExistingReferenceLink[] = [];
@@ -747,13 +758,25 @@ export function buildImportApprovalPlan(
   const selectedFinancing = (session.previewState.financingRules ?? []).filter(
     (row) => row.objectId === object.id,
   );
+  const financingFieldsByImportKey: Record<string, string[]> = {};
   const portableFinancing = selectedFinancing.map((row) => {
+    const key = String(row.importKey ?? row.id);
+    const tracked =
+      session.importedFinancingFieldsByObjectId?.[object.id]?.[key];
+    const selectedFields =
+      tracked?.length
+        ? [...new Set(tracked)]
+        : Object.keys(BurbotFunding.fields).filter((field) =>
+            Object.prototype.hasOwnProperty.call(row, field),
+          );
+    financingFieldsByImportKey[key] = selectedFields;
+
     const data: Record<string, unknown> = {};
-    for (const field of Object.keys(BurbotFunding.fields)) {
+    for (const field of selectedFields) {
       if (Object.prototype.hasOwnProperty.call(row, field)) data[field] = row[field];
     }
     return {
-      key: String(row.importKey ?? row.id),
+      key,
       company_size: String(row.company_size),
       data,
     };
@@ -766,6 +789,15 @@ export function buildImportApprovalPlan(
 
   return {
     selectedImportKey: object.importKey,
+    ...(existingTarget ? { existingTargetObjectId: existingTarget.id } : {}),
+    selectedDataFields:
+      session.importedFieldsByObjectId?.[object.id]?.length
+        ? [...new Set([
+            ...session.importedFieldsByObjectId[object.id],
+            ...Object.keys(object.manualFields ?? {}),
+          ])]
+        : Object.keys(portableData(session, object)),
+    financingFieldsByImportKey,
     referencePatches,
     existingReferenceLinks,
     temporaryDependencyImportKeys: [...dependencyMap.keys()],
