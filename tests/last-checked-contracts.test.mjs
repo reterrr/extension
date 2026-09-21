@@ -60,6 +60,7 @@ function baseState() {
     fileSources: [],
     financingRules: [],
     documentRequirements: [],
+    fieldEvidence: [],
   };
 }
 
@@ -98,6 +99,31 @@ test("related configuration changes also mark the owning object as checked", () 
   assert.equal(
     result.objects[0].values.last_checked_at,
     "2026-09-18T11:00:00.000Z",
+  );
+  assert.equal(
+    result.objects[1].values.last_checked_at,
+    "2026-09-02T08:00:00.000Z",
+  );
+});
+
+test("adding field evidence marks the owning object as checked", () => {
+  const base = baseState();
+  const working = structuredClone(base);
+  working.fieldEvidence.push({
+    id: "evidence-1",
+    objectId: "project-1",
+    field: "name",
+    pageUrl: "https://example.org/project",
+    selector: "#project",
+    extraction: { type: "text" },
+    rawValue: "Project A",
+    createdAt: "2026-09-18T11:30:00Z",
+  });
+
+  const result = stampLastCheckedAt(base, working, "2026-09-18T11:30:00Z");
+  assert.equal(
+    result.objects[0].values.last_checked_at,
+    "2026-09-18T11:30:00.000Z",
   );
   assert.equal(
     result.objects[1].values.last_checked_at,
