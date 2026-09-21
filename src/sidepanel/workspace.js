@@ -1076,7 +1076,7 @@ import {
         active = {
           field: "refund_percent_min",
           target: { kind: "funding", id: variant.id },
-          context: label + " · Variant " + variant.variant_no,
+          context: label + " · Wariant " + variant.variant_no,
         };
         resetCapture();
         scheduleWorkspaceUiPersist();
