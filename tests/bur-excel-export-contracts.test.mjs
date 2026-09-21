@@ -8,9 +8,20 @@ import {
 import { buildXlsxWorkbook } from "../scripts/db/xlsx.mjs";
 
 const geographySource = `
-export enum Wojewodztwo { PODKARPACKIE = "podkarpackie", }
-export enum Powiat { PODKARPACKIE_RZESZOWSKI = "podkarpackie|powiat|rzeszowski", }
-export enum Gmina { PODKARPACKIE_RZESZOWSKI_TRZEBOWNISKO_WIEJSKA = "1816132", }
+export enum Wojewodztwo {
+  PODKARPACKIE = "podkarpackie",
+  DOLNOSLASKIE = "dolnośląskie",
+}
+export enum Powiat {
+  PODKARPACKIE_RZESZOWSKI = "podkarpackie|powiat|rzeszowski",
+}
+export enum MiastoNaPrawachPowiatu {
+  DOLNOSLASKIE_MIASTO_WROCLAW = "dolnośląskie|miasto|Wrocław",
+}
+export enum Gmina {
+  PODKARPACKIE_RZESZOWSKI_TRZEBOWNISKO_WIEJSKA = "1816132",
+  DOLNOSLASKIE_WROCLAW_WROCLAW_MIEJSKA = "0264011",
+}
 `;
 
 function snapshot() {
@@ -82,6 +93,13 @@ function snapshot() {
           role: "OBEJMUJE",
           value: "1816132",
         },
+        {
+          id: "GNAB_2",
+          objectId: "NAB_1",
+          type: "GMINA",
+          role: "WYKLUCZA",
+          value: "0264011",
+        },
       ],
       financingRules: [
         {
@@ -130,6 +148,15 @@ test("BUR Excel export keeps workbook sheet contract and relations", () => {
   assert.equal(sheets[5].rows[0][1], "PR_1");
   assert.equal(sheets[6].rows[0][1], "NAB_1");
   assert.equal(sheets[6].rows[0][3], "include");
+  assert.equal(sheets[6].rows[1][3], "exclude");
+
+  const dictionary = sheets[4].rows.map((values) =>
+    Object.fromEntries(SHEET_HEADERS.Geografia_Slownik.map((header, i) => [header, values[i]])),
+  );
+  const wroclaw = dictionary.find((item) => item.nazwa === "m. Wrocław");
+  const cityGmina = dictionary.find((item) => item.nazwa === "m. Wrocław" && item.poziom === "4");
+  assert.equal(wroclaw?.geo_typ, "powiat");
+  assert.equal(cityGmina?.parent_geo_id, wroclaw?.geo_id);
 });
 
 test("XLSX builder returns a ZIP-based workbook payload", () => {
