@@ -896,8 +896,8 @@ import {
           "",
           variants.length
             ? variants.length +
-                (variants.length === 1 ? " variant" : " variants")
-            : "Not configured",
+                (variants.length === 1 ? " wariant" : " wariantów")
+            : "Nie skonfigurowano",
         ),
       );
       group.append(heading);
@@ -907,7 +907,7 @@ import {
         const summary = node(
           "summary",
           "variant-summary",
-          "Variant " + variant.variant_no,
+          "Wariant " + variant.variant_no,
         );
         const parts = [];
         const hasMin = C.hasValue(variant.refund_percent_min),
@@ -972,7 +972,7 @@ import {
               ),
           );
         summary.append(
-          node("small", "", parts.join(" · ") || "Ready to capture"),
+          node("small", "", parts.join(" · ") || "Brak danych"),
         );
         summary.append(
           node(
@@ -1010,7 +1010,7 @@ import {
             node(
               "small",
               "",
-              filled + "/" + fields.length + " uzupełnione",
+              filled + "/" + fields.length + " pól",
             ),
           );
 
@@ -1033,17 +1033,17 @@ import {
               definition,
               variant,
               { kind: "funding", id: variant.id },
-              label + " · Variant " + variant.variant_no,
+              label + " · Wariant " + variant.variant_no,
             );
 
           section.append(groupHeading, grid);
           details.append(section);
         }
 
-        const remove = node("button", "text-button danger", "Remove variant");
+        const remove = node("button", "text-button danger", "Usuń wariant");
         remove.disabled = busy;
         remove.onclick = action(async () => {
-          if (!confirm("Remove this funding variant and its extraction rules?"))
+          if (!confirm("Usunąć ten wariant finansowania i jego reguły ekstrakcji?"))
             return;
           rememberViewportAnchor(
             '[data-funding-add="' + size + '"]',
@@ -1057,7 +1057,7 @@ import {
         details.append(remove);
         group.append(details);
       }
-      const add = node("button", "text-button", "+ Add variant");
+      const add = node("button", "text-button", "+ Dodaj wariant");
       add.dataset.fundingAdd = size;
       add.disabled = busy;
       add.onclick = action(async () => {
