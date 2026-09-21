@@ -38,6 +38,8 @@ const ALLOWED_WRITES = new Set<string>([
   "REMOVE_FILE_SOURCE",
   "ADD_FUNDING",
   "REMOVE_FUNDING",
+  "ADD_FIELD_EVIDENCE",
+  "REMOVE_FIELD_EVIDENCE",
 ]);
 
 interface SelectionContextInfo {
