@@ -11,6 +11,9 @@
     objects: [],
     rules: [],
     geographies: [],
+    operatorContacts: [],
+    financingRules: [],
+    documentRequirements: [],
     fieldEvidence: [],
   });
 
@@ -24,6 +27,21 @@
       if (!["http:", "https:"].includes(url.protocol))
         throw Error("Use an HTTP(S) URL.");
       return url.href;
+    }
+
+    if (type === "email") {
+      const email = text.toLowerCase();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
+        throw Error("Wpisz poprawny adres email.");
+      return email;
+    }
+
+    if (type === "phone") {
+      const phone = text.replace(/\s+/g, " ").trim();
+      const digits = phone.replace(/\D/g, "");
+      if (digits.length < 6 || digits.length > 18)
+        throw Error("Wpisz poprawny numer telefonu.");
+      return phone;
     }
 
     if (type === "number") {
@@ -340,6 +358,15 @@
         );
         fields = globalThis.BurbotGeography?.fields;
         if (!values) throw Error("Geography entry no longer exists.");
+      } else if (target.kind === "operator_contact") {
+        if (object.type !== "operator" || !globalThis.BurbotSchema.operator?.contacts)
+          throw Error("Kontakty są dostępne tylko dla operatorów.");
+        values = (state.operatorContacts || []).find(
+          (row) => row.id === target.id && row.objectId === object.id,
+        );
+        if (!values) throw Error("Kontakt operatora już nie istnieje.");
+        fields = globalThis.BurbotOperatorContacts?.fields?.[values.kind];
+        if (!fields) throw Error("Nieznany rodzaj kontaktu operatora.");
       } else {
         if (!globalThis.BurbotSchema[object.type]?.configuration)
           throw Error("This object has no business configuration.");
@@ -558,6 +585,10 @@
       if (message.op === "DELETE") {
         state.objects = state.objects.filter((o) => o.id !== object.id);
         state.rules = state.rules.filter((r) => r.objectId !== object.id);
+        if (state.operatorContacts)
+          state.operatorContacts = state.operatorContacts.filter(
+            (r) => r.objectId !== object.id,
+          );
         if (state.financingRules)
           state.financingRules = state.financingRules.filter(
             (r) => r.objectId !== object.id,
@@ -694,6 +725,58 @@
               rule.objectId === object.id &&
               rule.target?.kind === "geography" &&
               rule.target.id === message.geographyId
+            ),
+        );
+        object.updatedAt = now;
+      } else if (message.op === "ADD_OPERATOR_CONTACT") {
+        if (
+          object.type !== "operator" ||
+          !globalThis.BurbotSchema.operator?.contacts ||
+          !own(globalThis.BurbotOperatorContacts.kinds, message.contactKind)
+        )
+          throw Error("Nieznany rodzaj kontaktu operatora.");
+        const rows = (state.operatorContacts ||= []);
+        const variant =
+          Math.max(
+            0,
+            ...rows
+              .filter(
+                (r) =>
+                  r.objectId === object.id &&
+                  r.kind === message.contactKind,
+              )
+              .map((r) => Number(r.variant_no) || 0),
+          ) + 1;
+        rows.push({
+          id: uuid(),
+          objectId: object.id,
+          kind: message.contactKind,
+          variant_no: variant,
+          value: "",
+        });
+        object.updatedAt = now;
+      } else if (message.op === "REMOVE_OPERATOR_CONTACT") {
+        fieldContext(state, object, "value", {
+          kind: "operator_contact",
+          id: message.contactId,
+        });
+        state.operatorContacts = (state.operatorContacts || []).filter(
+          (r) => !(r.id === message.contactId && r.objectId === object.id),
+        );
+        state.fieldEvidence = (state.fieldEvidence || []).filter(
+          (row) =>
+            !(
+              row.objectId === object.id &&
+              row.target?.kind === "operator_contact" &&
+              row.target.id === message.contactId
+            ),
+        );
+        state.rules = state.rules.filter(
+          (rule) =>
+            !(
+              rule.objectId === object.id &&
+              rule.target?.kind === "operator_contact" &&
+              rule.target.id === message.contactId
             ),
         );
         object.updatedAt = now;
