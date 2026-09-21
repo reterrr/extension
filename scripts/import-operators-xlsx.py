@@ -91,18 +91,21 @@ def read_xlsx(path: Path) -> list[dict[str, str | None]]:
     if not rows:
         raise ValueError("XLSX first worksheet is empty.")
     headers = [str(v).strip() for v in rows[0]]
-    if headers[:4] != REQUIRED_HEADERS:
+    missing = [header for header in REQUIRED_HEADERS if header not in headers]
+    if missing:
         raise ValueError(
-            "Expected first four columns: " + ", ".join(REQUIRED_HEADERS) +
-            f"; got: {headers[:4]}"
+            "Missing required columns: " + ", ".join(missing) +
+            f"; got: {headers}"
         )
+    positions = {header: headers.index(header) for header in REQUIRED_HEADERS}
 
     records: list[dict[str, str | None]] = []
     for row_no, row in enumerate(rows[1:], start=2):
-        row = row + [""] * (4 - len(row))
-        if not any(row[:4]):
+        row = row + [""] * (len(headers) - len(row))
+        selected = [row[positions[header]].strip() for header in REQUIRED_HEADERS]
+        if not any(selected):
             continue
-        operator_id, name, nip, website = (value.strip() for value in row[:4])
+        operator_id, name, nip, website = selected
         if not operator_id or not name or not nip:
             raise ValueError(f"Row {row_no}: operator_id, name and NIP are required.")
         if not re.fullmatch(r"\d{10}", nip):
