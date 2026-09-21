@@ -986,15 +986,60 @@ import {
           ),
         );
         details.append(summary);
-        for (const [field, definition] of Object.entries(BurbotFunding.fields))
-          fieldRow(
-            details,
-            field,
-            definition,
-            variant,
-            { kind: "funding", id: variant.id },
-            label + " · Variant " + variant.variant_no,
+
+        const fundingFieldGroups = new Map();
+        for (const [field, definition] of Object.entries(BurbotFunding.fields)) {
+          const groupName = definition.group || "Inne";
+          if (!fundingFieldGroups.has(groupName))
+            fundingFieldGroups.set(groupName, []);
+          fundingFieldGroups.get(groupName).push([field, definition]);
+        }
+
+        for (const [groupName, fields] of fundingFieldGroups) {
+          const section = node("section", "funding-field-group");
+          section.dataset.group = groupName;
+
+          const groupHeading = node("div", "funding-field-group-heading");
+          const headingCopy = node("div", "funding-field-group-heading-copy");
+          headingCopy.append(node("strong", "", groupName));
+
+          const filled = fields.filter(([field]) =>
+            C.hasValue(variant[field]),
+          ).length;
+          headingCopy.append(
+            node(
+              "small",
+              "",
+              filled + "/" + fields.length + " uzupełnione",
+            ),
           );
+
+          const unit = groupName.includes("(%)")
+            ? "%"
+            : groupName.includes("(PLN)")
+              ? "PLN"
+              : "";
+          groupHeading.append(headingCopy);
+          if (unit)
+            groupHeading.append(
+              node("span", "funding-field-group-unit", unit),
+            );
+
+          const grid = node("div", "funding-field-grid");
+          for (const [field, definition] of fields)
+            fieldRow(
+              grid,
+              field,
+              definition,
+              variant,
+              { kind: "funding", id: variant.id },
+              label + " · Variant " + variant.variant_no,
+            );
+
+          section.append(groupHeading, grid);
+          details.append(section);
+        }
+
         const remove = node("button", "text-button danger", "Remove variant");
         remove.disabled = busy;
         remove.onclick = action(async () => {
