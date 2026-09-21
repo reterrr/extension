@@ -49,7 +49,16 @@ test("SQLite schema creates typed business and provenance tables", () => {
   );
   assert.ok(projectColumns.has("refund_percent_min"));
   assert.ok(projectColumns.has("refund_percent_max"));
-  assert.ok(projectColumns.has("last_checked_at"));
+  for (const column of [
+    "documents_url",
+    "documents_link_direct",
+    "notes",
+    "schedule_note",
+    "technical_notes",
+    "last_checked_at",
+  ]) {
+    assert.ok(projectColumns.has(column), `missing projects.${column}`);
+  }
   assert.equal(projectColumns.has("operator_id"), false);
 
   const recruitmentColumns = new Set(
