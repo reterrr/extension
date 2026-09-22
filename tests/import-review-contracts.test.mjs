@@ -888,3 +888,58 @@ test("import review separates view acceptance from commit staging", () => {
   );
   assert.equal(session.statusByObjectId[objectId], "PENDING");
 });
+
+
+test("staged import statuses follow commit and discard lifecycle", () => {
+  const session = reviewModule.createImportReviewSession(
+    documentFixture(),
+    "lifecycle.burbot-import.json",
+    ids(),
+    "2026-09-22T11:00:00.000Z",
+  );
+  const first = session.objectOrder[0];
+  const second = session.objectOrder[1];
+
+  reviewModule.markImportObjectInView(
+    session,
+    first,
+    "2026-09-22T11:01:00.000Z",
+  );
+  reviewModule.markImportObjectInView(
+    session,
+    second,
+    "2026-09-22T11:01:00.000Z",
+  );
+  reviewModule.markImportObjectStaged(
+    session,
+    first,
+    "db-object-1",
+    "2026-09-22T11:02:00.000Z",
+  );
+  reviewModule.markImportObjectStaged(
+    session,
+    second,
+    "db-object-2",
+    "2026-09-22T11:02:00.000Z",
+  );
+
+  assert.equal(
+    reviewModule.returnStagedImportObjectToView(
+      session,
+      "db-object-1",
+      "2026-09-22T11:03:00.000Z",
+    ),
+    true,
+  );
+  assert.equal(session.statusByObjectId[first], "IN_VIEW");
+  assert.equal(session.statusByObjectId[second], "STAGED");
+
+  assert.equal(
+    reviewModule.markStagedImportObjectsCommitted(
+      session,
+      "2026-09-22T11:04:00.000Z",
+    ),
+    1,
+  );
+  assert.equal(session.statusByObjectId[second], "COMMITTED");
+});
