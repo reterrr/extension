@@ -110,6 +110,7 @@ export function ViewManagerPanel() {
       ]);
       setState(nextState);
       setCommit(nextCommit);
+      await refreshView(nextState);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
     }
@@ -148,8 +149,7 @@ export function ViewManagerPanel() {
         void refreshState();
       }
     };
-    const commitChanged = () =>
-      void refreshState().then(() => refreshView());
+    const commitChanged = () => void refreshState();
     const storageChanged = (
       changes: Record<string, { newValue?: unknown; oldValue?: unknown }>,
       area: string,
