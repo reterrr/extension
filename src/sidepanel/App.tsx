@@ -8,6 +8,7 @@ import "./workflowStyles";
 import { CommitPanel } from "./CommitPanel";
 import { ImportReviewPanel } from "./ImportReviewPanel";
 import { WorkflowTabs } from "./WorkflowTabs";
+import { ViewManagerPanel } from "./ViewManagerPanel";
 
 export function App() {
   useEffect(() => {
@@ -40,6 +41,7 @@ export function App() {
         <span className="local-badge">EXTRACTION WORKSPACE</span>
       </header>
       <WorkflowTabs />
+      <ViewManagerPanel />
       <ImportReviewPanel />
       <CommitPanel />
       <div className="connection-bar">
