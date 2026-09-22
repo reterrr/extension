@@ -10,6 +10,8 @@ import {
   importReviewView,
   markImportObjectApproved,
   markImportObjectLinked,
+  markImportObjectRejected,
+  restoreRejectedImportObject,
 } from "../shared/import/review";
 import {
   clearImportReview,
@@ -22,6 +24,10 @@ import {
   type ReviewedImportRule,
 } from "../shared/import/stageReview";
 import { selectorColor } from "../shared/selectorPalette";
+import {
+  OBJECT_VIEW_STORAGE_KEY,
+  addObjectToView,
+} from "../shared/search/objectView.js";
 import type {
   ImportReviewSession,
   ImportReviewView,
@@ -203,6 +209,12 @@ function reviewedRules(
     });
 }
 
+function requestWorkflowMode(mode: "view" | "commit" | "import"): void {
+  window.dispatchEvent(
+    new CustomEvent("burbot:request-workflow-mode", { detail: { mode } }),
+  );
+}
+
 export function ImportReviewPanel() {
   const [session, setSession] = useState<ImportReviewSession | null>(null);
   const [mode, setMode] = useState<"workspace" | "review">("workspace");
@@ -249,6 +261,7 @@ export function ImportReviewPanel() {
     const next = await readImportReview();
     setSession(next);
     if (open && next) {
+      requestWorkflowMode("import");
       const windowId = windowIdRef.current;
       if (windowId !== null) {
         await patchSidepanelUiState(windowId, {
@@ -293,6 +306,14 @@ export function ImportReviewPanel() {
     };
     window.addEventListener("burbot:import-review-changed", changed);
 
+    const workflowChanged = (event: Event) => {
+      const next = (event as CustomEvent<{ mode?: string }>).detail?.mode;
+      const reviewMode = next === "import" ? "review" : "workspace";
+      modeRef.current = reviewMode;
+      setMode(reviewMode);
+    };
+    window.addEventListener("burbot:workflow-mode", workflowChanged);
+
     const workspaceReady = () => {
       const windowId = windowIdRef.current;
       if (windowId === null || modeRef.current !== "workspace") return;
@@ -321,6 +342,7 @@ export function ImportReviewPanel() {
     return () => {
       disposed = true;
       window.removeEventListener("burbot:import-review-changed", changed);
+      window.removeEventListener("burbot:workflow-mode", workflowChanged);
       window.removeEventListener("burbot:workspace-ready", workspaceReady);
       window.removeEventListener("scroll", onScroll);
       if (scrollTimerRef.current !== undefined) {
@@ -420,10 +442,18 @@ export function ImportReviewPanel() {
     setBusy(true);
     setError("");
     try {
-      const draft = await readActiveDraft();
+      let draft = await readActiveDraft();
       if (!draft) {
-        throw new Error("Najpierw rozpocznij New commit w zakładce Workspace.");
+        const created = (await browser.runtime.sendMessage({
+          type: "BURBOT_COMMIT",
+          op: "NEW",
+        })) as { ok?: boolean; error?: string };
+        if (!created?.ok) {
+          throw new Error(created?.error ?? "Nie udało się uruchomić View.");
+        }
+        draft = await readActiveDraft();
       }
+      if (!draft) throw new Error("Nie udało się uruchomić View.");
 
       const previewId = session.selectedObjectId;
       const plan: ImportApprovalPlanWithRules = {
@@ -442,6 +472,18 @@ export function ImportReviewPanel() {
       draft.updatedAt = now;
       await writeActiveDraft(draft);
       await publishUiState(draft.workingState);
+
+      const storedView = (await browser.storage.session.get(OBJECT_VIEW_STORAGE_KEY))[
+        OBJECT_VIEW_STORAGE_KEY
+      ];
+      const nextView = addObjectToView(
+        storedView,
+        staged.stagedObjectId,
+        draft.workingState.objects,
+      );
+      await browser.storage.session.set({
+        [OBJECT_VIEW_STORAGE_KEY]: nextView,
+      });
 
       for (const link of plan.existingReferenceLinks) {
         markImportObjectLinked(
@@ -491,6 +533,30 @@ export function ImportReviewPanel() {
     }
   }
 
+  async function rejectSelected() {
+    if (!session?.selectedObjectId) return;
+    markImportObjectRejected(
+      session,
+      session.selectedObjectId,
+      new Date().toISOString(),
+    );
+    await writeImportReview(session);
+    setSession({ ...session });
+    window.dispatchEvent(new CustomEvent("burbot:import-review-changed"));
+  }
+
+  async function restoreSelected() {
+    if (!session?.selectedObjectId) return;
+    restoreRejectedImportObject(
+      session,
+      session.selectedObjectId,
+      new Date().toISOString(),
+    );
+    await writeImportReview(session);
+    setSession({ ...session });
+    window.dispatchEvent(new CustomEvent("burbot:import-review-changed"));
+  }
+
   async function closeReview() {
     if (!session) return;
     if (
@@ -517,6 +583,7 @@ export function ImportReviewPanel() {
     setMode("workspace");
     restoreScroll(workspaceScroll);
     await clearPageReviewHighlights();
+    requestWorkflowMode("view");
     window.dispatchEvent(new Event("burbot:selector-highlights-refresh"));
   }
 
