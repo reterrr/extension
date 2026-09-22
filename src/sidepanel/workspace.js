@@ -240,7 +240,7 @@ import {
       : "wszystkie obiekty";
     $("active-object-view-query").textContent = query;
     $("active-object-view-query").hidden = false;
-    $("remove-current-from-view").hidden = !view;
+    $("remove-current-from-view").hidden = false;
     $("clear-object-view").hidden = !view;
     $("export-object-view").hidden = !view;
     root.title = view
@@ -1949,7 +1949,7 @@ import {
   $("remove-current-from-view").onclick = () => {
     void (async () => {
       const view = normalizedObjectView();
-      if (!view || !objectId) return;
+      if (!objectId) return;
       const next = removeObjectFromView(
         view,
         objectId,
