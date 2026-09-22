@@ -11,6 +11,7 @@ import {
   normalizeObjectView,
   removeObjectFromView,
 } from "../shared/search/objectView.js";
+import type { CommitSessionObject, CommitSessionView } from "../shared/types/commit";
 import type {
   LegacyStorageState,
   LegacyStoredObject,
@@ -37,6 +38,12 @@ const EMPTY_STATE: LegacyStorageState = {
   rules: [],
 };
 
+const EMPTY_COMMIT: CommitSessionView = {
+  active: false,
+  dirty: false,
+  objects: [],
+};
+
 function globals() {
   return globalThis as typeof globalThis & {
     BurbotCore?: { displayName?: (object: LegacyStoredObject) => string };
@@ -61,6 +68,13 @@ function typeLabel(object: LegacyStoredObject): string {
   return globals().BurbotSchema?.[key]?.label ?? key;
 }
 
+function statusLabel(entry: CommitSessionObject | undefined): string {
+  if (!entry || entry.status === "UNCHANGED") return "";
+  if (entry.status === "NEW") return "NEW";
+  if (entry.status === "DELETED") return "DELETED";
+  return "MODIFIED";
+}
+
 async function send<T>(
   type: "BURBOT_DATA" | "BURBOT_COMMIT",
   op: string,
@@ -77,13 +91,20 @@ async function send<T>(
 
 export function ViewManagerPanel() {
   const [state, setState] = useState<LegacyStorageState>(EMPTY_STATE);
+  const [commit, setCommit] = useState<CommitSessionView>(EMPTY_COMMIT);
   const [view, setView] = useState<ObjectView | null>(null);
   const [query, setQuery] = useState("");
   const [error, setError] = useState("");
+  const [busyObjectId, setBusyObjectId] = useState("");
 
   async function refreshState() {
     try {
-      setState(await send<LegacyStorageState>("BURBOT_DATA", "GET"));
+      const [nextState, nextCommit] = await Promise.all([
+        send<LegacyStorageState>("BURBOT_DATA", "GET"),
+        send<CommitSessionView>("BURBOT_COMMIT", "GET"),
+      ]);
+      setState(nextState);
+      setCommit(nextCommit);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
     }
@@ -101,8 +122,12 @@ export function ViewManagerPanel() {
 
   useEffect(() => {
     void (async () => {
-      const next = await send<LegacyStorageState>("BURBOT_DATA", "GET");
+      const [next, nextCommit] = await Promise.all([
+        send<LegacyStorageState>("BURBOT_DATA", "GET"),
+        send<CommitSessionView>("BURBOT_COMMIT", "GET"),
+      ]);
       setState(next);
+      setCommit(nextCommit);
       await refreshView(next);
     })().catch((cause) =>
       setError(cause instanceof Error ? cause.message : String(cause)),
@@ -118,7 +143,8 @@ export function ViewManagerPanel() {
         void refreshState();
       }
     };
-    const commitChanged = () => void refreshState();
+    const commitChanged = () =>
+      void refreshState().then(() => refreshView());
     const storageChanged = (
       changes: Record<string, { newValue?: unknown; oldValue?: unknown }>,
       area: string,
