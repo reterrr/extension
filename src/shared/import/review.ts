@@ -904,7 +904,7 @@ export function markImportObjectApproved(
   session.updatedAt = now;
   session.selectedObjectId =
     session.objectOrder.find(
-      (id) => session.statusByObjectId[id] !== "APPROVED",
+      (id) => (session.statusByObjectId[id] ?? "PENDING") === "PENDING",
     ) ?? previewObjectId;
 }
 
