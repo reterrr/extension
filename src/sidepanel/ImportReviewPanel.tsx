@@ -292,8 +292,12 @@ export function ImportReviewPanel() {
       ]);
       if (disposed) return;
 
+      const globalImport =
+        document.documentElement.dataset.workflowMode === "import";
       const initialMode: SidepanelMode =
-        nextSession && uiState.mode === "review" ? "review" : "workspace";
+        nextSession && (globalImport || uiState.mode === "review")
+          ? "review"
+          : "workspace";
       modeRef.current = initialMode;
       setMode(initialMode);
       setSession(nextSession);
