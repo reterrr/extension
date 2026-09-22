@@ -13,10 +13,12 @@ import {
 } from "../shared/export/aiViewExport.js";
 import {
   OBJECT_VIEW_STORAGE_KEY,
+  addObjectToView,
   createObjectView,
   normalizeObjectView,
   objectInView,
   objectsInView,
+  removeObjectFromView,
 } from "../shared/search/objectView.js";
 import { createPickerClient } from "./pickerRpc";
 import {
@@ -275,6 +277,41 @@ import {
     scheduleWorkspaceUiPersist();
     render();
     notice("Widok wyczyszczony. Pokazuję wszystkie obiekty.");
+  }
+
+  async function addToObjectView(id) {
+    const next = addObjectToView(objectView, id, db.objects);
+    await persistObjectView(next);
+    render();
+    notice("Dodano obiekt do View.");
+  }
+
+  async function removeFromObjectView(id) {
+    if (!objectView) {
+      throw new Error("Najpierw ustaw aktywny View.");
+    }
+    const next = removeObjectFromView(objectView, id, db.objects);
+    await persistObjectView(next);
+    if (objectId === id && !objectInView(objectView, id)) {
+      objectId = objectView?.objectIds?.[0] || "";
+      active = null;
+      preview = null;
+      resetCapture();
+    }
+    render();
+    notice("Usunięto obiekt z View.");
+  }
+
+  async function stageCurrentObject() {
+    if (!objectId) throw new Error("Wybierz obiekt.");
+    const result = await browser.runtime.sendMessage({
+      type: "BURBOT_COMMIT",
+      op: "STAGE_OBJECT",
+      objectId,
+    });
+    if (!result?.ok) throw new Error(result?.error || "Nie udało się dodać do commita.");
+    window.dispatchEvent(new Event("burbot:commit-changed"));
+    notice("Obiekt dodany do Commit.");
   }
   function downloadJsonFile(filename, value) {
     const url = URL.createObjectURL(
@@ -618,6 +655,7 @@ import {
       geographyByObject.get(object.id) || {};
 
     const scopedObjects = objectsInView(db.objects, normalizedObjectView());
+    const searchableObjects = db.objects;
 
     const picker = node("div", "object-picker");
     const toolbar = node("div", "object-picker-toolbar");
@@ -707,6 +745,7 @@ import {
     };
 
     function objectButton(object) {
+      const row = node("div", "object-option-row");
       const button = node("button", "object-option");
       button.type = "button";
       button.dataset.objectId = object.id;
@@ -731,7 +770,31 @@ import {
 
       button.onclick = () => chooseObject(object.id);
       button.onkeydown = (event) => chooseFromKeyboard(button, event);
-      return button;
+
+      const inView = objectInView(objectView, object.id);
+      const toggle = node(
+        "button",
+        "object-option-view-toggle",
+        objectView ? (inView ? "−" : "+") : "+",
+      );
+      toggle.type = "button";
+      toggle.title = objectView
+        ? inView
+          ? "Usuń z View"
+          : "Dodaj do View"
+        : "Utwórz View z tym obiektem";
+      toggle.setAttribute("aria-label", toggle.title);
+      toggle.onclick = (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        const work = objectView && inView
+          ? removeFromObjectView(object.id)
+          : addToObjectView(object.id);
+        void work.catch((error) => notice(error.message, true));
+      };
+
+      row.append(button, toggle);
+      return row;
     }
 
     function appendGroup(title, objects) {
@@ -782,7 +845,7 @@ import {
         );
       };
 
-      currentMatches = scopedObjects.filter(matches);
+      currentMatches = searchableObjects.filter(matches);
       const localObjects = [...currentMatches.filter((o) => local(o))].reverse();
       const saved = currentMatches.filter((o) => !local(o));
 
