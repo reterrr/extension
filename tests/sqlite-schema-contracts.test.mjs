@@ -85,6 +85,7 @@ test("SQLite schema creates typed business and provenance tables", () => {
     db.prepare("PRAGMA table_info(operators)").all().map((row) => row.name),
   );
   for (const column of [
+    "role",
     "address",
     "email",
     "phone",
