@@ -279,7 +279,6 @@ import {
     $("switcher").open = false;
     scheduleWorkspaceUiPersist();
     render();
-    window.dispatchEvent(new Event("burbot:object-view-changed"));
     notice("Widok roboczy ustawiony: " + objectView.objectIds.length + " obiektów.");
   }
 
