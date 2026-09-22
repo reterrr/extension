@@ -18,6 +18,47 @@ function restoreOwnedRows<T>(
   ];
 }
 
+function pruneUnusedNewImportSources(
+  working: DraftCommit["workingState"],
+  base: DraftCommit["baseState"],
+): void {
+  const baseIds = new Set(
+    (base.importSources ?? []).map((source) => String(source.id)),
+  );
+  const usedIds = new Set<string>();
+  const usedKeys = new Set<string>();
+
+  for (const object of working.objects) {
+    for (const entries of Object.values(object.evidence ?? {})) {
+      for (const evidence of entries) usedIds.add(String(evidence.sourceId));
+    }
+  }
+  for (const file of working.fileSources ?? []) {
+    if (file.sourceImportKey) usedKeys.add(String(file.sourceImportKey));
+    if (file.sourcePageImportKey) {
+      usedKeys.add(String(file.sourcePageImportKey));
+    }
+  }
+
+  working.importSources = (working.importSources ?? []).filter(
+    (source) =>
+      baseIds.has(String(source.id)) ||
+      usedIds.has(String(source.id)) ||
+      usedKeys.has(String(source.importKey)),
+  );
+}
+
+function semanticallyEqual(
+  left: DraftCommit["baseState"],
+  right: DraftCommit["workingState"],
+): boolean {
+  const a = structuredClone(left);
+  const b = structuredClone(right);
+  a.revision = 0;
+  b.revision = 0;
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
 /**
  * Reverts one object's staged changes without discarding the rest of the draft.
  * Object-owned relations/provenance are restored together with the object row.
@@ -80,8 +121,11 @@ export function discardObjectChanges(
     draft.baseState.fieldEvidence,
     objectId,
   );
+  pruneUnusedNewImportSources(working, draft.baseState);
 
-  working.revision += 1;
+  working.revision = semanticallyEqual(draft.baseState, working)
+    ? draft.baseState.revision
+    : working.revision + 1;
   return {
     ...draft,
     updatedAt: now,
