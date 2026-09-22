@@ -9,6 +9,7 @@ import type {
   LegacyStorageState,
   LegacyStoredObject,
 } from "../types/legacy-storage";
+import { changedObjectIds } from "./staging";
 
 function stable(value: unknown): string {
   return JSON.stringify(value ?? null) ?? String(value);
@@ -208,6 +209,7 @@ export function projectCommitObjects(draft: DraftCommit): CommitSessionObject[] 
         draft.workingState,
       ),
       relatedChanges: nestedChanges,
+      staged: (draft.stagedObjectIds ?? []).includes(object.id),
     } satisfies CommitSessionObject;
   });
 
@@ -222,6 +224,7 @@ export function projectCommitObjects(draft: DraftCommit): CommitSessionObject[] 
           status: "DELETED",
           changes: [],
           relatedChanges: relatedChanges(draft, object.id),
+          staged: (draft.stagedObjectIds ?? []).includes(object.id),
         }) satisfies CommitSessionObject,
     );
 
@@ -234,7 +237,9 @@ export function commitSessionView(draft: DraftCommit | null): CommitSessionView 
   }
 
   const objects = projectCommitObjects(draft);
-  const dirty = JSON.stringify(draft.baseState) !== JSON.stringify(draft.workingState);
+  const changedIds = new Set(changedObjectIds(draft));
+  const stagedIds = new Set(draft.stagedObjectIds ?? []);
+  const dirty = [...stagedIds].some((id) => changedIds.has(id));
   return {
     active: true,
     id: draft.id,
@@ -243,6 +248,7 @@ export function commitSessionView(draft: DraftCommit | null): CommitSessionView 
     baseRevision: draft.baseRevision,
     workingRevision: draft.workingState.revision,
     dirty,
+    pendingViewCount: [...changedIds].filter((id) => !stagedIds.has(id)).length,
     objects,
   };
 }
