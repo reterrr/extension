@@ -13,6 +13,7 @@ import {
   changedObjectIds,
   discardViewObject,
   hasViewChanges,
+  missingReferences,
   stageObject,
   unstageObject,
 } from "../shared/commits/staging";
@@ -90,20 +91,21 @@ function cloneState(state: LegacyStorageState): LegacyStorageState {
   return JSON.parse(JSON.stringify(state)) as LegacyStorageState;
 }
 function validateCommittedReferences(state: LegacyStorageState): void {
-  const byId = new Set(state.objects.map((object) => object.id));
-  for (const object of state.objects) {
-    const fields = BurbotSchema[object.type]?.fields ?? {};
-    for (const [field, definition] of Object.entries(fields)) {
-      if (definition.type !== "reference") continue;
-      const value = object.values?.[field];
-      if (typeof value !== "string" || !value) continue;
-      if (!byId.has(value)) {
-        throw new Error(
-          `Nie można wykonać commita: „${BurbotCore.displayName(object)}” wskazuje przez pole „${definition.label ?? field}” na obiekt, który pozostaje tylko w View. Dodaj powiązany obiekt do Commit albo usuń tę zmianę.`,
-        );
-      }
-    }
-  }
+  const missing = missingReferences(
+    state,
+    BurbotSchema as Record<
+      string,
+      { fields?: Record<string, { type?: string; label?: string }> }
+    >,
+  );
+  if (!missing.length) return;
+
+  const first = missing[0];
+  const object = state.objects.find((entry) => entry.id === first.objectId);
+  const definition = BurbotSchema[object?.type ?? ""]?.fields?.[first.field];
+  throw new Error(
+    `Nie można wykonać commita: „${object ? BurbotCore.displayName(object) : first.objectId}” wskazuje przez pole „${definition?.label ?? first.field}” na obiekt, który pozostaje tylko w View. Dodaj powiązany obiekt do Commit albo usuń tę zmianę.`,
+  );
 }
 
 
