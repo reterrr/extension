@@ -854,13 +854,11 @@ import {
       viewInfo.textContent = objectView
         ? "Aktywny widok: " + scopedObjects.length + " obiektów"
         : "Wyniki: " + currentMatches.length;
-      setViewButton.textContent = objectView
-        ? hasRestriction
-          ? "Zawęź widok · " + currentMatches.length
-          : "Widok aktywny · " + scopedObjects.length
-        : hasRestriction
-          ? "Ustaw widok · " + currentMatches.length
-          : "Wyszukaj obiekty, aby ustawić widok";
+      setViewButton.textContent = hasRestriction
+        ? "Ustaw View · " + currentMatches.length
+        : objectView
+          ? "View aktywny · " + scopedObjects.length
+          : "Wyszukaj obiekty, aby ustawić View";
       setViewButton.disabled =
         Boolean(compiled.error) || !currentMatches.length || !hasRestriction;
       clearViewButton.hidden = !objectView;
@@ -1837,9 +1835,10 @@ import {
   function render() {
     renderObjectViewIndicator();
     if (!chosen()) {
+      const view = normalizedObjectView();
       objectId =
-        objectsInView(db.objects, normalizedObjectView()).at(0)?.id ||
-        db.objects.at(-1)?.id ||
+        objectsInView(db.objects, view).at(0)?.id ||
+        (!view ? db.objects.at(-1)?.id : "") ||
         "";
       active = null;
       resetCapture();
