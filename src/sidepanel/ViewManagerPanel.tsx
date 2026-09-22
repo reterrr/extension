@@ -324,7 +324,6 @@ export function ViewManagerPanel() {
       });
       await syncDiscardedImport(objectId);
       await refreshState();
-      await refreshView();
     } finally {
       setBusyObjectId("");
     }
