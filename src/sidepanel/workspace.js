@@ -1933,6 +1933,11 @@ import {
   $("clear-object-view").onclick = () => {
     void clearObjectView().catch((error) => notice(error.message, true));
   };
+  $("stage-object").onclick = action(stageCurrentObject);
+  $("remove-object-from-view").onclick = action(async () => {
+    if (!objectId) return;
+    await removeFromObjectView(objectId);
+  });
   $("pick").onclick = action(async () => {
     evidencePicking = false;
     await rpc(picking ? "STOP" : "PICK");
