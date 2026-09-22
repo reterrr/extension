@@ -312,75 +312,58 @@ export function ImportReviewPanel({
     }
   }
 
-  async function approve() {
+  async function acceptToView() {
     if (!session?.selectedObjectId) return;
     setBusy(true);
     setError("");
     try {
-      const draft = await readActiveDraft();
-      if (!draft) {
-        throw new Error("Najpierw rozpocznij New commit w zakładce Workspace.");
-      }
-
-      const previewId = session.selectedObjectId;
-      const plan: ImportApprovalPlanWithRules = {
-        ...buildImportApprovalPlan(session, previewId, draft.workingState),
-        reviewRules: reviewedRules(session, previewId),
-      };
       const now = new Date().toISOString();
-      const staged = stageImportReviewObject(
-        draft.workingState,
-        plan,
-        () => crypto.randomUUID(),
-        now,
-      );
-
-      draft.workingState = staged.state;
-      draft.updatedAt = now;
-      await writeActiveDraft(draft);
-      await publishUiState(draft.workingState);
-
-      for (const link of plan.existingReferenceLinks) {
-        markImportObjectLinked(
-          session,
-          link.importKey,
-          link.targetObjectId,
-          now,
-        );
-      }
-
-      markImportObjectApproved(
-        session,
-        previewId,
-        staged.stagedObjectId,
-        now,
-      );
+      markImportObjectInView(session, session.selectedObjectId, now);
       await writeImportReview(session);
       setSession({ ...session, previewState: { ...session.previewState } });
+      window.dispatchEvent(
+        new CustomEvent("burbot:import-review-changed"),
+      );
+      window.dispatchEvent(new Event("burbot:object-view-changed"));
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setBusy(false);
+    }
+  }
 
-      const windowId = windowIdRef.current;
-      if (windowId !== null) {
-        await patchSidepanelUiState(windowId, {
-          workspace: {
-            objectId: staged.stagedObjectId,
-            active: null,
-          },
-        });
-        const focusResponse = (await browser.runtime.sendMessage({
-          type: "BURBOT_COMMIT",
-          op: "FOCUS",
-          windowId,
-          objectId: staged.stagedObjectId,
-        })) as { ok?: boolean };
-        // Approval itself is authoritative. Focusing the workspace is QoL only.
-        if (!focusResponse?.ok) {
-          // The remembered objectId above still restores the correct object
-          // when the sidepanel is reopened.
-        }
-      }
+  async function rejectSelected() {
+    if (!session?.selectedObjectId) return;
+    setBusy(true);
+    setError("");
+    try {
+      const now = new Date().toISOString();
+      markImportObjectRejected(session, session.selectedObjectId, now);
+      await writeImportReview(session);
+      setSession({ ...session, previewState: { ...session.previewState } });
+      window.dispatchEvent(
+        new CustomEvent("burbot:import-review-changed"),
+      );
+      window.dispatchEvent(new Event("burbot:object-view-changed"));
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setBusy(false);
+    }
+  }
 
-      window.dispatchEvent(new Event("burbot:commit-changed"));
-      window.dispatchEvent(new CustomEvent("burbot:import-review-changed"));
+  async function restoreSelected() {
+    if (!session?.selectedObjectId) return;
+    setBusy(true);
+    setError("");
+    try {
+      const now = new Date().toISOString();
+      markImportObjectPending(session, session.selectedObjectId, now);
+      await writeImportReview(session);
+      setSession({ ...session, previewState: { ...session.previewState } });
+      window.dispatchEvent(
+        new CustomEvent("burbot:import-review-changed"),
+      );
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
@@ -390,31 +373,22 @@ export function ImportReviewPanel({
 
   async function closeReview() {
     if (!session) return;
+    const remaining =
+      (view.pendingCount ?? 0) + (view.inViewCount ?? 0);
     if (
-      (view.pendingCount ?? 0) > 0 &&
+      remaining > 0 &&
       !confirm(
-        "Zamknąć import review? Niezatwierdzone obiekty zostaną odrzucone.",
+        "Zamknąć import? Obiekty oczekujące i zaakceptowane do Widoku zostaną usunięte z tej sesji importu.",
       )
     ) {
       return;
     }
-    const windowId = windowIdRef.current;
-    let workspaceScroll = 0;
-    if (windowId !== null) {
-      const uiState = await readSidepanelUiState(windowId);
-      workspaceScroll = uiState.scroll.workspace;
-      await patchSidepanelUiState(windowId, {
-        mode: "workspace",
-        scroll: { review: window.scrollY },
-      });
-    }
     await clearImportReview();
     setSession(null);
-    modeRef.current = "workspace";
-    setMode("workspace");
-    restoreScroll(workspaceScroll);
+    onNavigate("view");
     await clearPageReviewHighlights();
     window.dispatchEvent(new Event("burbot:selector-highlights-refresh"));
+    window.dispatchEvent(new Event("burbot:object-view-changed"));
   }
 
   if (!session) return null;
