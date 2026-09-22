@@ -311,7 +311,38 @@ import {
     });
     if (!result?.ok) throw new Error(result?.error || "Nie udało się dodać do commita.");
     window.dispatchEvent(new Event("burbot:commit-changed"));
+    await syncObjectWorkflowControls();
     notice("Obiekt dodany do Commit.");
+  }
+
+  async function syncObjectWorkflowControls() {
+    const stage = $("stage-object");
+    const remove = $("remove-object-from-view");
+    if (!stage || !remove) return;
+
+    remove.hidden = !objectView || !objectInView(objectView, objectId);
+    if (!objectId) {
+      stage.disabled = true;
+      stage.textContent = "Dodaj do Commit";
+      return;
+    }
+
+    const response = await browser.runtime.sendMessage({
+      type: "BURBOT_COMMIT",
+      op: "GET",
+    });
+    if (!response?.ok) {
+      stage.disabled = true;
+      return;
+    }
+    const entry = response.value?.objects?.find((object) => object.id === objectId);
+    const changed = entry && entry.status !== "UNCHANGED";
+    stage.disabled = busy || !changed || Boolean(entry?.staged);
+    stage.textContent = entry?.staged
+      ? "✓ W Commit"
+      : changed
+        ? "Dodaj do Commit"
+        : "Brak zmian";
   }
   function downloadJsonFile(filename, value) {
     const url = URL.createObjectURL(
@@ -1896,6 +1927,7 @@ import {
     $("results").hidden = !preview;
     renderEditor();
     controls();
+    void syncObjectWorkflowControls();
     restoreViewportAnchor();
   }
   function action(handler) {
@@ -2099,6 +2131,9 @@ import {
       );
       render();
     }
+  });
+  window.addEventListener("burbot:commit-changed", () => {
+    void syncObjectWorkflowControls();
   });
   window.addEventListener("pagehide", () => {
     void persistWorkspaceUi();
