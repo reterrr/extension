@@ -82,13 +82,38 @@ export function applyStagedObjects(draft: DraftCommit): LegacyStorageState {
     replaceObject(committed, draft.workingState, objectId);
   }
 
-  // Import source records are shared provenance. Keep the union so evidence
-  // committed for one object never points at a source omitted from SQLite.
+  // Keep committed provenance plus only new import sources actually used by
+  // staged objects. Sources belonging exclusively to unstaged View objects stay
+  // in the draft and do not leak into SQLite.
+  const usedSourceIds = new Set<string>();
+  const usedImportKeys = new Set<string>();
+  const stagedIds = new Set(draft.stagedObjectIds ?? []);
+
+  for (const object of draft.workingState.objects) {
+    if (!stagedIds.has(object.id)) continue;
+    for (const entries of Object.values(object.evidence ?? {})) {
+      for (const evidence of entries) usedSourceIds.add(String(evidence.sourceId));
+    }
+  }
+
+  for (const file of draft.workingState.fileSources ?? []) {
+    if (!stagedIds.has(file.objectId)) continue;
+    if (file.sourceImportKey) usedImportKeys.add(String(file.sourceImportKey));
+    if (file.sourcePageImportKey) {
+      usedImportKeys.add(String(file.sourcePageImportKey));
+    }
+  }
+
   const imported = new Map(
     (draft.baseState.importSources ?? []).map((row) => [String(row.id), row]),
   );
   for (const row of draft.workingState.importSources ?? []) {
-    imported.set(String(row.id), row);
+    if (
+      usedSourceIds.has(String(row.id)) ||
+      usedImportKeys.has(String(row.importKey))
+    ) {
+      imported.set(String(row.id), row);
+    }
   }
   committed.importSources = [...imported.values()].map((row) =>
     JSON.parse(JSON.stringify(row)),
