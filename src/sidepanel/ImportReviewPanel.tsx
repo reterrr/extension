@@ -15,6 +15,7 @@ import {
 } from "../shared/import/reviewStore";
 import { selectorColor } from "../shared/selectorPalette";
 import type {
+  ImportReviewObjectStatus,
   ImportReviewSession,
   ImportReviewView,
 } from "../shared/types/importReview";
@@ -169,6 +170,13 @@ function groupLabel(type: string): string {
   if (type === "project") return "Projekty";
   if (type === "operator") return "Operatorzy";
   return "Nabory";
+}
+
+function reviewStatusLabel(status: ImportReviewObjectStatus): string {
+  if (status === "IN_VIEW") return "w Widoku";
+  if (status === "STAGED") return "w commicie";
+  if (status === "REJECTED") return "odrzucono";
+  return "do sprawdzenia";
 }
 
 export function ImportReviewPanel({
@@ -391,7 +399,14 @@ export function ImportReviewPanel({
     window.dispatchEvent(new Event("burbot:object-view-changed"));
   }
 
-  if (!session) return null;
+  if (!session) {
+    return (
+      <section className="import-review-empty">
+        <strong>Brak aktywnego importu</strong>
+        <p>Wybierz plik JSON, aby rozpocząć review.</p>
+      </section>
+    );
+  }
 
   const groups = ["operator", "project", "recruitment"].map((type) => ({
     type,
@@ -414,33 +429,20 @@ export function ImportReviewPanel({
     ]),
   ];
 
+  const reviewedCount =
+    view.objects.length - (view.pendingCount ?? 0);
+
   return (
     <section className="import-review-shell">
-      <nav className="workspace-mode-tabs" aria-label="Tryb pracy">
-        <button
-          type="button"
-          className={mode === "workspace" ? "active" : ""}
-          onClick={() => void switchMode("workspace")}
-        >
-          Workspace
-        </button>
-        <button
-          type="button"
-          className={mode === "review" ? "active" : ""}
-          onClick={() => void switchMode("review")}
-        >
-          Import review <span>{view.pendingCount ?? 0}</span>
-        </button>
-      </nav>
-
-      {mode === "review" && (
-        <div className="import-review-panel">
+      <div className="import-review-panel">
           <header className="import-review-header">
             <div>
               <span className="eyebrow">IMPORT REVIEW</span>
               <strong>{view.fileName}</strong>
               <small>
-                {view.approvedCount}/{view.objects.length} zatwierdzono
+                {reviewedCount}/{view.objects.length} przejrzano ·{" "}
+                {view.inViewCount ?? 0} w Widoku ·{" "}
+                {view.stagedCount ?? 0} w commicie
               </small>
             </div>
             <button
@@ -456,7 +458,7 @@ export function ImportReviewPanel({
               style={{
                 width: `${
                   view.objects.length
-                    ? ((view.approvedCount ?? 0) / view.objects.length) * 100
+                    ? (reviewedCount / view.objects.length) * 100
                     : 0
                 }%`,
               }}
@@ -479,13 +481,13 @@ export function ImportReviewPanel({
                           type="button"
                           className={`${
                             object.id === view.selectedObjectId ? "selected " : ""
-                          }${object.status === "APPROVED" ? "approved" : ""}`}
+                          }${object.status !== "PENDING" ? " reviewed" : ""} status-${object.status.toLowerCase()}`}
                           onClick={() => void select(object.id)}
                         >
                           <span>{object.label}</span>
                           <small>
-                            {object.status === "APPROVED"
-                              ? "✓"
+                            {object.status !== "PENDING"
+                              ? reviewStatusLabel(object.status)
                               : [
                                   object.evidenceCount
                                     ? `${object.evidenceCount} ev`
@@ -496,7 +498,7 @@ export function ImportReviewPanel({
                                     : "",
                                 ]
                                   .filter(Boolean)
-                                  .join(" · ") || "do sprawdzenia"}
+                                  .join(" · ") || reviewStatusLabel(object.status)}
                           </small>
                         </button>
                       ))}
@@ -694,8 +696,7 @@ export function ImportReviewPanel({
               {error && <p className="commit-error">{error}</p>}
             </div>
           </div>
-        </div>
-      )}
+      </div>
     </section>
   );
 }
