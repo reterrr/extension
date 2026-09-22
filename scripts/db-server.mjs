@@ -52,9 +52,15 @@ ensureColumn("projects", "refund_percent_max", "REAL");
 ensureColumn("recruitments", "refund_percent_min", "REAL");
 ensureColumn("recruitments", "refund_percent_max", "REAL");
 ensureColumn("workspace_objects", "last_checked_at", "TEXT");
+ensureColumn("projects", "documents_url", "TEXT");
+ensureColumn("projects", "documents_link_direct", "INTEGER");
+ensureColumn("projects", "notes", "TEXT");
+ensureColumn("projects", "schedule_note", "TEXT");
+ensureColumn("projects", "technical_notes", "TEXT");
 ensureColumn("projects", "created_at", "TEXT");
 ensureColumn("projects", "updated_at", "TEXT");
 ensureColumn("projects", "last_checked_at", "TEXT");
+ensureColumn("operators", "role", "TEXT");
 ensureColumn("operators", "address", "TEXT");
 ensureColumn("operators", "email", "TEXT");
 ensureColumn("operators", "phone", "TEXT");
@@ -278,16 +284,17 @@ function syncBusinessTables(state, groupByObject) {
       id, object_id, type, name, number, status,
       refund_percent_min, refund_percent_max,
       start_date, end_date, announcements_site_url,
+      documents_url, documents_link_direct, notes, schedule_note, technical_notes,
       created_at, updated_at, last_checked_at,
       geography_group_id
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   const insertOperator = db.prepare(`
     INSERT INTO operators(
-      id, object_id, name, nip, address, email, phone, website, notes,
+      id, object_id, name, role, nip, address, email, phone, website, notes,
       created_at, updated_at, last_checked_at
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   const insertProjectOperator = db.prepare(`
     INSERT INTO projects_operators(project_id, operator_id, operator_type)
@@ -353,6 +360,11 @@ function syncBusinessTables(state, groupByObject) {
       nullableText(values.start_date),
       nullableText(values.end_date),
       nullableText(values.announcements_site_url),
+      nullableText(values.documents_url),
+      nullableBoolean(values.documents_link_direct),
+      nullableText(values.notes),
+      nullableText(values.schedule_note),
+      nullableText(values.technical_notes),
       nullableText(object.createdAt),
       nullableText(object.updatedAt),
       nullableText(values.last_checked_at),
