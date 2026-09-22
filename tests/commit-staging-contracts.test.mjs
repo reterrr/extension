@@ -123,3 +123,111 @@ test("unstage keeps View changes while discard restores one object", () => {
   assert.equal(draft.workingState.objects[1].values.number, "OLD-B");
   assert.deepEqual(draft.stagedObjectIds, []);
 });
+
+
+test("partial commit keeps import provenance only for staged objects", () => {
+  const base = state([projectA, projectB]);
+  const working = structuredClone(base);
+  working.objects[0].values.number = "NEW-A";
+  working.objects[1].values.number = "NEW-B";
+  working.objects[0].evidence = {
+    number: [
+      {
+        sourceId: "source-a",
+        charStart: 0,
+        charEnd: 5,
+        rawValue: "NEW-A",
+      },
+    ],
+  };
+  working.objects[1].evidence = {
+    number: [
+      {
+        sourceId: "source-b",
+        charStart: 0,
+        charEnd: 5,
+        rawValue: "NEW-B",
+      },
+    ],
+  };
+  working.importSources = [
+    {
+      id: "source-a",
+      importKey: "page-a",
+      type: "HTML",
+      snapshot: { text: "NEW-A" },
+      importedAt: "2026-09-22T10:00:00.000Z",
+    },
+    {
+      id: "source-b",
+      importKey: "page-b",
+      type: "HTML",
+      snapshot: { text: "NEW-B" },
+      importedAt: "2026-09-22T10:00:00.000Z",
+    },
+  ];
+
+  const draft = {
+    id: "draft",
+    createdAt: "2026-09-22T10:00:00.000Z",
+    updatedAt: "2026-09-22T10:00:00.000Z",
+    baseRevision: 7,
+    baseState: base,
+    workingState: working,
+    stagedObjectIds: ["project-a"],
+  };
+
+  const committed = staging.applyStagedObjects(draft);
+  assert.deepEqual(
+    committed.importSources.map((row) => row.id),
+    ["source-a"],
+  );
+});
+
+test("partial commit reports references to new objects left only in View", () => {
+  const recruitment = {
+    id: "recruitment-1",
+    type: "recruitment",
+    label: "Nabór",
+    values: {
+      external_number: "Nabór",
+      project_id: "project-new",
+    },
+  };
+  const newProject = {
+    id: "project-new",
+    type: "project",
+    label: "Nowy projekt",
+    values: { name: "Nowy projekt" },
+  };
+  const candidate = state([recruitment]);
+
+  const missing = staging.missingReferences(candidate, {
+    recruitment: {
+      fields: {
+        project_id: { type: "reference" },
+      },
+    },
+    project: { fields: {} },
+  });
+  assert.deepEqual(missing, [
+    {
+      objectId: "recruitment-1",
+      field: "project_id",
+      targetId: "project-new",
+    },
+  ]);
+
+  candidate.objects.push(newProject);
+  assert.deepEqual(
+    staging.missingReferences(candidate, {
+      recruitment: {
+        fields: {
+          project_id: { type: "reference" },
+        },
+      },
+      project: { fields: {} },
+    }),
+    [],
+  );
+});
