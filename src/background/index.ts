@@ -7,10 +7,16 @@ import {
   readActiveDraft,
   writeActiveDraft,
 } from "../shared/commits/draftStore";
+import { discardObjectChanges } from "../shared/commits/discardObject";
 import { commitSessionView } from "../shared/commits/session";
 import { createCapturedExtractionInput } from "../shared/extraction/rules";
 import { discardStaleImportedEvidence } from "../shared/import/evidence";
 import { importDocumentIntoState } from "../shared/import/format";
+import { returnStagedImportObjectToView } from "../shared/import/review";
+import {
+  readImportReview,
+  writeImportReview,
+} from "../shared/import/reviewStore";
 import { isPickerSelectionResponse } from "../shared/messaging/picker";
 import {
   assignPdfRuleIntoState,
@@ -386,6 +392,25 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
         return commitSessionView(await readActiveDraft());
       }
 
+      if (message.op === "ENSURE") {
+        const existing = await readActiveDraft();
+        if (existing) return commitSessionView(existing);
+        const baseState = await loadState();
+        const now = new Date().toISOString();
+        const draft: DraftCommit = {
+          id: crypto.randomUUID(),
+          createdAt: now,
+          updatedAt: now,
+          baseRevision: baseState.revision,
+          baseState: cloneState(baseState),
+          workingState: cloneState(baseState),
+        };
+        await writeActiveDraft(draft);
+        await publishUiState(draft.workingState);
+        await notifyCommitChanged();
+        return commitSessionView(draft);
+      }
+
       if (message.op === "NEW") {
         if (await readActiveDraft()) {
           throw new Error("A commit is already in progress.");
@@ -415,6 +440,29 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
         await clearActiveDraft();
         await notifyCommitChanged();
         return { session: commitSessionView(null), state: committed };
+      }
+
+      if (message.op === "DISCARD_OBJECT") {
+        if (typeof message.objectId !== "string" || !message.objectId) {
+          throw new Error("Object id is required.");
+        }
+        const draft = await requireDraft();
+        const now = new Date().toISOString();
+        const next = discardObjectChanges(draft, message.objectId, now);
+        await writeActiveDraft(next);
+        await publishUiState(next.workingState);
+
+        const review = await readImportReview();
+        if (
+          review &&
+          returnStagedImportObjectToView(review, message.objectId, now)
+        ) {
+          await writeImportReview(review);
+          await broadcast({ type: "BURBOT_IMPORT_REVIEW_CHANGED" });
+        }
+
+        await notifyCommitChanged();
+        return commitSessionView(next);
       }
 
       if (message.op === "DISCARD") {
