@@ -8,6 +8,13 @@ import {
   writeActiveDraft,
 } from "../shared/commits/draftStore";
 import { commitSessionView } from "../shared/commits/session";
+import {
+  applyStagedObjects,
+  discardViewObject,
+  hasViewChanges,
+  stageObject,
+  unstageObject,
+} from "../shared/commits/staging";
 import { createCapturedExtractionInput } from "../shared/extraction/rules";
 import { discardStaleImportedEvidence } from "../shared/import/evidence";
 import { importDocumentIntoState } from "../shared/import/format";
@@ -399,7 +406,45 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
           baseRevision: baseState.revision,
           baseState: cloneState(baseState),
           workingState: cloneState(baseState),
+          stagedObjectIds: [],
         };
+        await writeActiveDraft(draft);
+        await publishUiState(draft.workingState);
+        await notifyCommitChanged();
+        return commitSessionView(draft);
+      }
+
+      if (message.op === "STAGE_OBJECT") {
+        const draft = await requireDraft();
+        if (typeof message.objectId !== "string") {
+          throw new Error("Object id is required.");
+        }
+        stageObject(draft, message.objectId);
+        draft.updatedAt = new Date().toISOString();
+        await writeActiveDraft(draft);
+        await notifyCommitChanged();
+        return commitSessionView(draft);
+      }
+
+      if (message.op === "UNSTAGE_OBJECT") {
+        const draft = await requireDraft();
+        if (typeof message.objectId !== "string") {
+          throw new Error("Object id is required.");
+        }
+        unstageObject(draft, message.objectId);
+        draft.updatedAt = new Date().toISOString();
+        await writeActiveDraft(draft);
+        await notifyCommitChanged();
+        return commitSessionView(draft);
+      }
+
+      if (message.op === "DISCARD_OBJECT") {
+        const draft = await requireDraft();
+        if (typeof message.objectId !== "string") {
+          throw new Error("Object id is required.");
+        }
+        discardViewObject(draft, message.objectId);
+        draft.updatedAt = new Date().toISOString();
         await writeActiveDraft(draft);
         await publishUiState(draft.workingState);
         await notifyCommitChanged();
@@ -408,11 +453,27 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
 
       if (message.op === "COMMIT") {
         const draft = await requireDraft();
-        if (JSON.stringify(draft.baseState) === JSON.stringify(draft.workingState)) {
-          throw new Error("There are no staged changes to commit.");
+        if (!(draft.stagedObjectIds ?? []).length) {
+          throw new Error("Nie ma obiektów dodanych do commita.");
         }
-        const committed = await commitState(draft.baseRevision, draft.workingState);
+
+        const candidate = applyStagedObjects(draft);
+        const committed = await commitState(draft.baseRevision, candidate);
+
+        draft.baseRevision = committed.revision;
+        draft.baseState = cloneState(committed);
+        draft.stagedObjectIds = [];
+        draft.updatedAt = new Date().toISOString();
+
+        if (hasViewChanges(draft)) {
+          await writeActiveDraft(draft);
+          await publishUiState(draft.workingState);
+          await notifyCommitChanged();
+          return { session: commitSessionView(draft), state: committed };
+        }
+
         await clearActiveDraft();
+        await publishUiState(committed);
         await notifyCommitChanged();
         return { session: commitSessionView(null), state: committed };
       }
@@ -477,7 +538,7 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
           objectId: object.id,
           tabId,
           stamp: crypto.randomUUID(),
-          note: "New object staged in this commit.",
+          note: "Nowy obiekt został dodany do View. Dodaj go do Commit, gdy będzie gotowy.",
         });
         return commitSessionView(await readActiveDraft());
       }
