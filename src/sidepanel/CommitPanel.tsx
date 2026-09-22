@@ -318,7 +318,16 @@ export function CommitPanel() {
   async function focusObject(objectId: string) {
     await run(async () => {
       const windowId = await currentWindowId();
-      return sendCommit<CommitSessionView>("FOCUS", { windowId, objectId });
+      const result = await sendCommit<CommitSessionView>("FOCUS", {
+        windowId,
+        objectId,
+      });
+      window.dispatchEvent(
+        new CustomEvent("burbot:request-workflow-mode", {
+          detail: { mode: "view" },
+        }),
+      );
+      return result;
     });
   }
 
@@ -356,7 +365,7 @@ export function CommitPanel() {
             )
           }
         >
-          New commit
+          Start View
         </button>
         {error && <p className="commit-error">{error}</p>}
       </section>
