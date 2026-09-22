@@ -167,10 +167,14 @@ function ChangeCard({
   object,
   busy,
   onFocus,
+  onUnstage,
+  onDiscard,
 }: {
   object: CommitSessionObject;
   busy: boolean;
   onFocus: (objectId: string) => Promise<void>;
+  onUnstage: (objectId: string) => Promise<void>;
+  onDiscard: (objectId: string) => Promise<void>;
 }) {
   const deleted = object.status === "DELETED";
   const count = objectChangeCount(object);
@@ -218,16 +222,34 @@ function ChangeCard({
           </div>
         )}
 
-        {!deleted && (
+        <div className="commit-object-actions">
+          {!deleted && (
+            <button
+              type="button"
+              className="commit-focus"
+              disabled={busy}
+              onClick={() => void onFocus(object.id)}
+            >
+              Otwórz w View
+            </button>
+          )}
           <button
             type="button"
-            className="commit-focus"
+            className="commit-unstage"
             disabled={busy}
-            onClick={() => void onFocus(object.id)}
+            onClick={() => void onUnstage(object.id)}
           >
-            Otwórz obiekt
+            Usuń z commita
           </button>
-        )}
+          <button
+            type="button"
+            className="commit-discard-object"
+            disabled={busy}
+            onClick={() => void onDiscard(object.id)}
+          >
+            Odrzuć zmiany obiektu
+          </button>
+        </div>
       </div>
     </details>
   );
@@ -272,7 +294,7 @@ export function CommitPanel() {
   const stagedObjects = useMemo(() => {
     const rank = { NEW: 0, MODIFIED: 1, DELETED: 2, UNCHANGED: 3 } as const;
     return session.objects
-      .filter((object) => object.status !== "UNCHANGED")
+      .filter((object) => object.status !== "UNCHANGED" && object.staged)
       .sort(
         (a, b) =>
           rank[a.status] - rank[b.status] ||
@@ -300,25 +322,28 @@ export function CommitPanel() {
     });
   }
 
-  async function createObject(type: "project" | "operator" | "recruitment") {
+  async function unstageObject(objectId: string) {
     await run(
-      async () => {
-        const windowId = await currentWindowId();
-        return sendCommit<CommitSessionView>("CREATE_OBJECT", {
-          windowId,
-          objectType: type,
-        });
-      },
+      () => sendCommit<CommitSessionView>("UNSTAGE_OBJECT", { objectId }),
       setSession,
     );
   }
+
+  async function discardObject(objectId: string) {
+    if (!confirm("Odrzucić wszystkie zmiany tego obiektu z View?")) return;
+    await run(
+      () => sendCommit<CommitSessionView>("DISCARD_OBJECT", { objectId }),
+      setSession,
+    );
+  }
+
 
   if (!session.active) {
     return (
       <section className="commit-panel commit-panel-idle">
         <div>
           <strong>Zmiany w bazie</strong>
-          <p>Rozpocznij commit przed edycją danych.</p>
+          <p>Uruchom View, aby rozpocząć pracę na zmianach przed zapisem do SQLite.</p>
         </div>
         <button
           type="button"
@@ -344,27 +369,15 @@ export function CommitPanel() {
         <div className="commit-title">
           <strong>Commit {session.id?.slice(0, 8)}</strong>
           <small>
-            r{session.baseRevision} · {stagedObjects.length}{" "}
-            {stagedObjects.length === 1
-              ? "obiekt zmieniony"
-              : "obiektów zmienionych"}
+            r{session.baseRevision} · {stagedObjects.length} w commicie
+            {(session.pendingViewCount ?? 0) > 0
+              ? " · " + session.pendingViewCount + " tylko w View"
+              : ""}
           </small>
         </div>
         <span className={session.dirty ? "commit-dirty" : "commit-clean"}>
           {session.dirty ? "UNCOMMITTED" : "CLEAN"}
         </span>
-      </div>
-
-      <div className="commit-create-actions" aria-label="Dodaj obiekt z zaznaczenia">
-        <button disabled={busy} onClick={() => void createObject("operator")}>
-          + Operator
-        </button>
-        <button disabled={busy} onClick={() => void createObject("project")}>
-          + Projekt
-        </button>
-        <button disabled={busy} onClick={() => void createObject("recruitment")}>
-          + Nabór
-        </button>
       </div>
 
       <div className="commit-staged">
@@ -375,10 +388,12 @@ export function CommitPanel() {
               object={object}
               busy={busy}
               onFocus={focusObject}
+              onUnstage={unstageObject}
+              onDiscard={discardObject}
             />
           ))
         ) : (
-          <p className="commit-empty">Brak zmian do zapisania.</p>
+          <p className="commit-empty">Brak obiektów w commicie. Dodaj obiekt z zakładki View.</p>
         )}
       </div>
 
@@ -388,7 +403,7 @@ export function CommitPanel() {
           className="commit-discard"
           disabled={busy}
           onClick={() => {
-            if (!confirm("Odrzucić wszystkie staged zmiany w tym commicie?")) return;
+            if (!confirm("Odrzucić cały View i wszystkie niezapisane zmiany?")) return;
             void run(
               () => sendCommit<CommitResult>("DISCARD"),
               (value) => setSession(value.session),
