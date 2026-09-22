@@ -372,6 +372,9 @@ export function importReviewView(
   const pendingCount = objects.filter((entry) => entry.status === "PENDING").length;
   const inViewCount = objects.filter((entry) => entry.status === "IN_VIEW").length;
   const stagedCount = objects.filter((entry) => entry.status === "STAGED").length;
+  const committedCount = objects.filter(
+    (entry) => entry.status === "COMMITTED",
+  ).length;
   const rejectedCount = objects.filter((entry) => entry.status === "REJECTED").length;
   return {
     active: true,
@@ -382,8 +385,9 @@ export function importReviewView(
     pendingCount,
     inViewCount,
     stagedCount,
+    committedCount,
     rejectedCount,
-    approvedCount: stagedCount,
+    approvedCount: stagedCount + committedCount,
     objects,
     fields: fieldViews(session, object),
     evidence: evidenceViews(session, object),
@@ -401,6 +405,9 @@ function requirePendingObject(
   const status = session.statusByObjectId[objectId] ?? "PENDING";
   if (status === "STAGED") {
     throw new Error("Obiekt jest już w commicie i nie można go edytować w imporcie.");
+  }
+  if (status === "COMMITTED") {
+    throw new Error("Obiekt został już zapisany do SQLite.");
   }
   if (status === "REJECTED") {
     throw new Error("Odrzucony obiekt trzeba najpierw przywrócić do review.");
@@ -755,6 +762,9 @@ export function buildImportApprovalPlan(
   if (status === "STAGED") {
     throw new Error("This imported object is already staged.");
   }
+  if (status === "COMMITTED") {
+    throw new Error("This imported object is already committed.");
+  }
   if (status === "REJECTED") {
     throw new Error("Restore the rejected imported object before staging it.");
   }
@@ -981,6 +991,41 @@ export function markImportObjectApproved(
   now: string,
 ): void {
   markImportObjectStaged(session, previewObjectId, stagedObjectId, now);
+}
+
+export function markStagedImportObjectsCommitted(
+  session: ImportReviewSession,
+  now: string,
+): number {
+  let changed = 0;
+  for (const objectId of session.objectOrder) {
+    if ((session.statusByObjectId[objectId] ?? "PENDING") !== "STAGED") {
+      continue;
+    }
+    session.statusByObjectId[objectId] = "COMMITTED";
+    changed += 1;
+  }
+  if (changed) session.updatedAt = now;
+  return changed;
+}
+
+export function returnAllStagedImportObjectsToView(
+  session: ImportReviewSession,
+  now: string,
+): number {
+  let changed = 0;
+  for (const object of session.previewState.objects) {
+    if ((session.statusByObjectId[object.id] ?? "PENDING") !== "STAGED") {
+      continue;
+    }
+    session.statusByObjectId[object.id] = "IN_VIEW";
+    if (object.importKey) {
+      delete session.approvedObjectIdByImportKey[object.importKey];
+    }
+    changed += 1;
+  }
+  if (changed) session.updatedAt = now;
+  return changed;
 }
 
 export function returnStagedImportObjectToView(
