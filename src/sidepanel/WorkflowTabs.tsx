@@ -49,10 +49,18 @@ export function WorkflowTabs() {
     void refreshImportCount();
 
     const importChanged = () => void refreshImportCount();
+    const modeRequested = (event: Event) => {
+      const requested = (event as CustomEvent<{ mode?: WorkflowMode }>).detail?.mode;
+      if (requested === "view" || requested === "commit" || requested === "import") {
+        void setMode(requested);
+      }
+    };
     window.addEventListener("burbot:import-review-changed", importChanged);
+    window.addEventListener("burbot:request-workflow-mode", modeRequested);
     return () => {
       disposed = true;
       window.removeEventListener("burbot:import-review-changed", importChanged);
+      window.removeEventListener("burbot:request-workflow-mode", modeRequested);
     };
   }, []);
 
