@@ -673,6 +673,19 @@ export function ImportReviewPanel() {
   const selected = view.objects.find(
     (object) => object.id === view.selectedObjectId,
   );
+  const importedFieldNames = new Set(
+    selected
+      ? session.importedFieldsByObjectId[selected.id] ?? []
+      : [],
+  );
+  const visibleFields = selected
+    ? view.fields.filter(
+        (field) =>
+          importedFieldNames.size === 0 ||
+          importedFieldNames.has(field.field) ||
+          field.evidenceCount > 0,
+      )
+    : view.fields;
   const sourceUrls = [
     ...new Set([
       ...view.evidence.flatMap((entry) =>
@@ -788,12 +801,12 @@ export function ImportReviewPanel() {
                     <div className="import-review-section-heading">
                       <div>
                         <span className="eyebrow">DANE OBIEKTU</span>
-                        <strong>{view.fields.length} pól</strong>
+                        <strong>{visibleFields.length} pól</strong>
                       </div>
                       <small>Dane z importu są tylko do odczytu.</small>
                     </div>
                     <div className="import-review-fields">
-                      {view.fields.map((field) => {
+                      {visibleFields.map((field) => {
                         const evidence = view.evidence.filter(
                           (entry) => entry.field === field.field,
                         );
