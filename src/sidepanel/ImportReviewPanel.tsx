@@ -665,30 +665,103 @@ export function ImportReviewPanel({
                   )}
 
                   <p className="import-review-hint">
-                    Import Review służy wyłącznie do sprawdzenia danych i źródeł. Zmiany wykonuj po zatwierdzeniu w Workspace.
+                    Import jest oddzielony od commita. Najpierw zaakceptuj obiekt
+                    do Widoku. Dopiero z Widoku zdecydujesz, co ma trafić do
+                    commita.
                   </p>
-                  {existingTarget && selected.status !== "APPROVED" && (
+                  {existingTarget && selected.status !== "STAGED" && (
                     <div className="import-review-update-existing">
                       <strong>Aktualizacja istniejącego obiektu</strong>
                       <span>{existingTarget.label}</span>
                       <small>
-                        Zatwierdzenie zaktualizuje ten sam obiekt w aktywnym commicie.
-                        ID pozostanie bez zmian i duplikat nie zostanie utworzony.
+                        Po dodaniu z Widoku do commita zmiany zostaną naniesione
+                        na ten sam obiekt. ID pozostanie bez zmian i duplikat nie
+                        zostanie utworzony.
                       </small>
                     </div>
                   )}
-                  <button
-                    type="button"
-                    className="primary import-review-approve"
-                    disabled={busy || selected.status === "APPROVED"}
-                    onClick={() => void approve()}
-                  >
-                    {selected.status === "APPROVED"
-                      ? "Zatwierdzono — obiekt jest w commicie"
-                      : existingTarget
-                        ? "Zatwierdź zmiany → dodaj do commita"
-                        : "Zatwierdź obiekt → dodaj do commita"}
-                  </button>
+
+                  <div className="import-review-decision-actions">
+                    {selected.status === "PENDING" && (
+                      <>
+                        <button
+                          type="button"
+                          className="text-button danger"
+                          disabled={busy}
+                          onClick={() => void rejectSelected()}
+                        >
+                          Odrzuć
+                        </button>
+                        <button
+                          type="button"
+                          className="primary import-review-approve"
+                          disabled={busy}
+                          onClick={() => void acceptToView()}
+                        >
+                          Zaakceptuj → Widok
+                        </button>
+                      </>
+                    )}
+
+                    {selected.status === "IN_VIEW" && (
+                      <>
+                        <button
+                          type="button"
+                          className="text-button danger"
+                          disabled={busy}
+                          onClick={() => void rejectSelected()}
+                        >
+                          Odrzuć import
+                        </button>
+                        <button
+                          type="button"
+                          className="text-button"
+                          disabled={busy}
+                          onClick={() => void restoreSelected()}
+                        >
+                          Wycofaj z Widoku
+                        </button>
+                        <button
+                          type="button"
+                          className="primary"
+                          onClick={() => onNavigate("view")}
+                        >
+                          Przejdź do Widoku
+                        </button>
+                      </>
+                    )}
+
+                    {selected.status === "STAGED" && (
+                      <>
+                        <span className="import-review-state-badge staged">
+                          W commicie
+                        </span>
+                        <button
+                          type="button"
+                          className="primary"
+                          onClick={() => onNavigate("commit")}
+                        >
+                          Pokaż commit
+                        </button>
+                      </>
+                    )}
+
+                    {selected.status === "REJECTED" && (
+                      <>
+                        <span className="import-review-state-badge rejected">
+                          Odrzucono
+                        </span>
+                        <button
+                          type="button"
+                          className="primary"
+                          disabled={busy}
+                          onClick={() => void restoreSelected()}
+                        >
+                          Przywróć do review
+                        </button>
+                      </>
+                    )}
+                  </div>
                 </>
               ) : (
                 <p>Wybierz obiekt do sprawdzenia.</p>
