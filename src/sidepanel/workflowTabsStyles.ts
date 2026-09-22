@@ -237,6 +237,10 @@ if (!document.querySelector("style[data-burbot-workflow-tabs]")) {
   background: #e7eef7;
   color: #365a79;
 }
+.import-review-state-badge.committed {
+  background: #e5f2e9;
+  color: #2f6b49;
+}
 .import-review-state-badge.rejected {
   background: #f7e8e8;
   color: #8c4a4a;
@@ -246,6 +250,10 @@ if (!document.querySelector("style[data-burbot-workflow-tabs]")) {
 }
 .import-review-list button.reviewed.status-staged {
   color: #51687b;
+}
+.import-review-list button.reviewed.status-committed {
+  color: #356449;
+  background: #eef6f1;
 }
 .import-review-list button.reviewed.status-rejected {
   opacity: .65;
