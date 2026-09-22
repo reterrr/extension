@@ -686,6 +686,19 @@ export function ImportReviewPanel() {
           field.evidenceCount > 0,
       )
     : view.fields;
+  const visibleFinancingFields = (
+    variant: ImportReviewView["financing"][number],
+  ) => {
+    if (!selected) return variant.fields;
+    const tracked =
+      session.importedFinancingFieldsByObjectId[selected.id]?.[variant.key];
+    if (!tracked?.length) {
+      return variant.fields.filter((field) => Boolean(field.value));
+    }
+    const selectedFields = new Set(tracked);
+    return variant.fields.filter((field) => selectedFields.has(field.field));
+  };
+
   const sourceUrls = [
     ...new Set([
       ...view.evidence.flatMap((entry) =>
@@ -902,7 +915,7 @@ export function ImportReviewPanel() {
                       </div>
                       <div className="import-review-financing">
                         {view.financing.map((variant) => (
-                          <details key={variant.id} open className="import-review-finance-card">
+                          <details key={variant.id} className="import-review-finance-card">
                             <summary>
                               <span>
                                 {variant.companySizeLabel} · wariant {variant.variantNo}
@@ -910,7 +923,7 @@ export function ImportReviewPanel() {
                               <small>{variant.key}</small>
                             </summary>
                             <div className="import-review-finance-fields">
-                              {variant.fields.map((field) => (
+                              {visibleFinancingFields(variant).map((field) => (
                                 <label
                                   key={field.field}
                                   className="import-review-workspace-field"
