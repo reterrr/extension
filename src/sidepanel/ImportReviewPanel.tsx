@@ -175,6 +175,7 @@ function groupLabel(type: string): string {
 function reviewStatusLabel(status: ImportReviewObjectStatus): string {
   if (status === "IN_VIEW") return "w Widoku";
   if (status === "STAGED") return "w commicie";
+  if (status === "COMMITTED") return "zapisano";
   if (status === "REJECTED") return "odrzucono";
   return "do sprawdzenia";
 }
@@ -381,6 +382,12 @@ export function ImportReviewPanel({
 
   async function closeReview() {
     if (!session) return;
+    if ((view.stagedCount ?? 0) > 0) {
+      setError(
+        "Najpierw zapisz aktywny commit do SQLite albo go odrzuć. Obiekty staged muszą pozostać powiązane z importem.",
+      );
+      return;
+    }
     const remaining =
       (view.pendingCount ?? 0) + (view.inViewCount ?? 0);
     if (
@@ -442,7 +449,8 @@ export function ImportReviewPanel({
               <small>
                 {reviewedCount}/{view.objects.length} przejrzano ·{" "}
                 {view.inViewCount ?? 0} w Widoku ·{" "}
-                {view.stagedCount ?? 0} w commicie
+                {view.stagedCount ?? 0} w commicie ·{" "}
+                {view.committedCount ?? 0} zapisano
               </small>
             </div>
             <button
@@ -742,6 +750,21 @@ export function ImportReviewPanel({
                           onClick={() => onNavigate("commit")}
                         >
                           Pokaż commit
+                        </button>
+                      </>
+                    )}
+
+                    {selected.status === "COMMITTED" && (
+                      <>
+                        <span className="import-review-state-badge committed">
+                          Zapisano do SQLite
+                        </span>
+                        <button
+                          type="button"
+                          className="primary"
+                          onClick={() => onNavigate("view")}
+                        >
+                          Przejdź do Widoku
                         </button>
                       </>
                     )}
