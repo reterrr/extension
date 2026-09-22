@@ -53,6 +53,7 @@ export async function readImportReview(): Promise<ImportReviewSession | null> {
             ? "STAGED"
             : rawStatus === "IN_VIEW" ||
                 rawStatus === "STAGED" ||
+                rawStatus === "COMMITTED" ||
                 rawStatus === "REJECTED"
               ? rawStatus
               : "PENDING";
