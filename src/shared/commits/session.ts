@@ -137,13 +137,15 @@ function relatedRows(
 ): RelatedRow[] {
   const value = state[key];
   if (!Array.isArray(value)) return [];
-  return value.filter(
-    (row): row is RelatedRow =>
-      typeof row === "object" &&
-      row !== null &&
-      "objectId" in row &&
-      String((row as RelatedRow).objectId) === objectId,
-  );
+  return (value as unknown[])
+    .filter(
+      (row) =>
+        typeof row === "object" &&
+        row !== null &&
+        "objectId" in row &&
+        String((row as RelatedRow).objectId) === objectId,
+    )
+    .map((row) => row as RelatedRow);
 }
 
 const RELATED_COLLECTIONS: Array<{
