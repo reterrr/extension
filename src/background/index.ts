@@ -89,6 +89,23 @@ function enqueue<T>(work: () => Promise<T>): Promise<T> {
 function cloneState(state: LegacyStorageState): LegacyStorageState {
   return JSON.parse(JSON.stringify(state)) as LegacyStorageState;
 }
+function validateCommittedReferences(state: LegacyStorageState): void {
+  const byId = new Set(state.objects.map((object) => object.id));
+  for (const object of state.objects) {
+    const fields = BurbotSchema[object.type]?.fields ?? {};
+    for (const [field, definition] of Object.entries(fields)) {
+      if (definition.type !== "reference") continue;
+      const value = object.values?.[field];
+      if (typeof value !== "string" || !value) continue;
+      if (!byId.has(value)) {
+        throw new Error(
+          `Nie można wykonać commita: „${BurbotCore.displayName(object)}” wskazuje przez pole „${definition.label ?? field}” na obiekt, który pozostaje tylko w View. Dodaj powiązany obiekt do Commit albo usuń tę zmianę.`,
+        );
+      }
+    }
+  }
+}
+
 
 async function broadcast(message: Record<string, unknown>): Promise<void> {
   await browser.runtime.sendMessage(message).catch(() => undefined);
@@ -112,7 +129,7 @@ async function workspaceState(): Promise<LegacyStorageState> {
 async function requireDraft(): Promise<DraftCommit> {
   const draft = await readActiveDraft();
   if (!draft) {
-    throw new Error('Start with "New commit" before changing objects.');
+    throw new Error('Uruchom View przed zmianą obiektów.');
   }
   return draft;
 }
@@ -358,7 +375,7 @@ browser.contextMenus.onClicked.addListener((info, tab) => {
       stamp: crypto.randomUUID(),
       note:
         object.creationNote ??
-        "Object staged in the active commit. Choose the next field to capture.",
+        "Obiekt został dodany do View. Uzupełnij dane, a potem dodaj go do Commit.",
     });
     await opening;
   }).catch((error: unknown) => {
@@ -462,6 +479,7 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
         }
 
         const candidate = applyStagedObjects(draft);
+        validateCommittedReferences(candidate);
         const committed = await commitState(draft.baseRevision, candidate);
 
         draft.baseRevision = committed.revision;
