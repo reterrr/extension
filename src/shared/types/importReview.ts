@@ -1,6 +1,10 @@
 import type { LegacyStorageState } from "./legacy-storage";
 
-export type ImportReviewObjectStatus = "PENDING" | "APPROVED";
+export type ImportReviewObjectStatus =
+  | "PENDING"
+  | "IN_VIEW"
+  | "STAGED"
+  | "REJECTED";
 export type ImportReviewEditorType = "text" | "number" | "date" | "select";
 
 export interface ImportReviewSession {
@@ -87,6 +91,9 @@ export interface ImportReviewView {
   createdAt?: string;
   selectedObjectId?: string | null;
   pendingCount?: number;
+  inViewCount?: number;
+  stagedCount?: number;
+  rejectedCount?: number;
   approvedCount?: number;
   objects: ImportReviewObjectView[];
   fields: ImportReviewFieldView[];
