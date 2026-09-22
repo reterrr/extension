@@ -435,6 +435,12 @@ export function ImportReviewPanel({
       ...view.files.flatMap((file) => [file.sourcePageUrl, file.url]),
     ]),
   ];
+  const configuredFields = view.fields.filter(
+    (field) => field.value !== "Nie ustawiono" || field.evidenceCount > 0,
+  );
+  const unsetFields = view.fields.filter(
+    (field) => field.value === "Nie ustawiono" && field.evidenceCount === 0,
+  );
 
   const reviewedCount =
     view.objects.length - (view.pendingCount ?? 0);
@@ -545,12 +551,12 @@ export function ImportReviewPanel({
                     <div className="import-review-section-heading">
                       <div>
                         <span className="eyebrow">DANE OBIEKTU</span>
-                        <strong>{view.fields.length} pól</strong>
+                        <strong>{configuredFields.length} ustawionych</strong>
                       </div>
                       <small>Dane z importu są tylko do odczytu.</small>
                     </div>
                     <div className="import-review-fields">
-                      {view.fields.map((field) => {
+                      {configuredFields.map((field) => {
                         const evidence = view.evidence.filter(
                           (entry) => entry.field === field.field,
                         );
@@ -602,6 +608,18 @@ export function ImportReviewPanel({
                         );
                       })}
                     </div>
+                    {unsetFields.length > 0 && (
+                      <details className="import-review-unset-fields">
+                        <summary>
+                          Puste pola <span>{unsetFields.length}</span>
+                        </summary>
+                        <div>
+                          {unsetFields.map((field) => (
+                            <span key={field.field}>{field.label}</span>
+                          ))}
+                        </div>
+                      </details>
+                    )}
                   </section>
 
                   {view.files.length > 0 && (
@@ -646,7 +664,7 @@ export function ImportReviewPanel({
                       </div>
                       <div className="import-review-financing">
                         {view.financing.map((variant) => (
-                          <details key={variant.id} open className="import-review-finance-card">
+                          <details key={variant.id} className="import-review-finance-card">
                             <summary>
                               <span>
                                 {variant.companySizeLabel} · wariant {variant.variantNo}
