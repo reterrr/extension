@@ -197,6 +197,18 @@ export function ViewManagerPanel() {
       .filter((object): object is LegacyStoredObject => Boolean(object));
   }, [state.objects, view]);
 
+  const commitById = useMemo(
+    () => new Map(commit.objects.map((entry) => [entry.id, entry])),
+    [commit.objects],
+  );
+
+  const catalogObjects = useMemo(() => {
+    const source = query.trim() && !compiled.error ? matches : state.objects;
+    return [...source]
+      .sort((a, b) => displayName(a).localeCompare(displayName(b), "pl"))
+      .slice(0, 80);
+  }, [compiled.error, matches, query, state.objects]);
+
   async function persist(next: ObjectView | null) {
     if (next) {
       await browser.storage.session.set({ [OBJECT_VIEW_STORAGE_KEY]: next });
@@ -239,6 +251,50 @@ export function ViewManagerPanel() {
 
   async function clear() {
     await persist(null);
+  }
+
+  async function stageObject(objectId: string) {
+    setBusyObjectId(objectId);
+    try {
+      const next = await send<CommitSessionView>(
+        "BURBOT_COMMIT",
+        "STAGE_OBJECT",
+        { objectId },
+      );
+      setCommit(next);
+    } finally {
+      setBusyObjectId("");
+    }
+  }
+
+  async function unstageObject(objectId: string) {
+    setBusyObjectId(objectId);
+    try {
+      const next = await send<CommitSessionView>(
+        "BURBOT_COMMIT",
+        "UNSTAGE_OBJECT",
+        { objectId },
+      );
+      setCommit(next);
+    } finally {
+      setBusyObjectId("");
+    }
+  }
+
+  async function discardObjectChanges(objectId: string, label: string) {
+    if (!confirm("Odrzucić wszystkie niezapisane zmiany obiektu „" + label + "”?")) {
+      return;
+    }
+    setBusyObjectId(objectId);
+    try {
+      await send<CommitSessionView>("BURBOT_COMMIT", "DISCARD_OBJECT", {
+        objectId,
+      });
+      await refreshState();
+      await refreshView();
+    } finally {
+      setBusyObjectId("");
+    }
   }
 
   async function openObject(objectId: string) {
