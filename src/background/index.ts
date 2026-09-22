@@ -12,7 +12,11 @@ import { commitSessionView } from "../shared/commits/session";
 import { createCapturedExtractionInput } from "../shared/extraction/rules";
 import { discardStaleImportedEvidence } from "../shared/import/evidence";
 import { importDocumentIntoState } from "../shared/import/format";
-import { returnStagedImportObjectToView } from "../shared/import/review";
+import {
+  markStagedImportObjectsCommitted,
+  returnAllStagedImportObjectsToView,
+  returnStagedImportObjectToView,
+} from "../shared/import/review";
 import {
   readImportReview,
   writeImportReview,
@@ -437,6 +441,12 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
           throw new Error("There are no staged changes to commit.");
         }
         const committed = await commitState(draft.baseRevision, draft.workingState);
+        const now = new Date().toISOString();
+        const review = await readImportReview();
+        if (review && markStagedImportObjectsCommitted(review, now) > 0) {
+          await writeImportReview(review);
+          await broadcast({ type: "BURBOT_IMPORT_REVIEW_CHANGED" });
+        }
         await clearActiveDraft();
         await notifyCommitChanged();
         return { session: commitSessionView(null), state: committed };
@@ -467,6 +477,12 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
 
       if (message.op === "DISCARD") {
         await requireDraft();
+        const now = new Date().toISOString();
+        const review = await readImportReview();
+        if (review && returnAllStagedImportObjectsToView(review, now) > 0) {
+          await writeImportReview(review);
+          await broadcast({ type: "BURBOT_IMPORT_REVIEW_CHANGED" });
+        }
         await clearActiveDraft();
         const committed = await loadState();
         await publishUiState(committed);
