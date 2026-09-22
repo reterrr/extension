@@ -22,7 +22,7 @@ async function commitCount(): Promise<number> {
     type: "BURBOT_COMMIT",
     op: "GET",
   })) as CommitResponse<CommitSessionView>;
-  if (!response?.ok) return 0;
+  if (!response?.ok || !response.value) return 0;
   return response.value.objects.filter(
     (object) => object.staged && object.status !== "UNCHANGED",
   ).length;
