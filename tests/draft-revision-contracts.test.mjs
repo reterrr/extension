@@ -51,6 +51,7 @@ test("staged writes keep working state on the commit base revision", () => {
   const result = normalize.normalizeDraftWorkingRevision(draft);
   assert.equal(result.workingState.revision, 4);
   assert.equal(result.baseRevision, 4);
+  assert.deepEqual(result.stagedObjectIds, []);
   assert.equal(result, draft);
 });
 
