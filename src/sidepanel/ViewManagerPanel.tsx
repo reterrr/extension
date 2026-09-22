@@ -118,12 +118,33 @@ export function ViewManagerPanel() {
 
   async function refreshView(nextState = state) {
     const stored = await browser.storage.session.get(OBJECT_VIEW_STORAGE_KEY);
-    setView(
-      normalizeObjectView(
-        stored[OBJECT_VIEW_STORAGE_KEY],
-        nextState.objects,
-      ) as ObjectView | null,
-    );
+    const raw = stored[OBJECT_VIEW_STORAGE_KEY];
+    const normalized = normalizeObjectView(
+      raw,
+      nextState.objects,
+    ) as ObjectView | null;
+    setView(normalized);
+
+    if (!raw) return;
+    if (!normalized) {
+      await browser.storage.session.remove(OBJECT_VIEW_STORAGE_KEY);
+      return;
+    }
+
+    const rawIds =
+      typeof raw === "object" &&
+      raw !== null &&
+      Array.isArray((raw as { objectIds?: unknown }).objectIds)
+        ? (raw as { objectIds: unknown[] }).objectIds.map(String)
+        : [];
+    if (
+      rawIds.length !== normalized.objectIds.length ||
+      rawIds.some((id, index) => id !== normalized.objectIds[index])
+    ) {
+      await browser.storage.session.set({
+        [OBJECT_VIEW_STORAGE_KEY]: normalized,
+      });
+    }
   }
 
   useEffect(() => {
