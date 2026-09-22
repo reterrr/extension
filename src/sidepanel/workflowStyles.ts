@@ -43,9 +43,13 @@ if (!document.querySelector("style[data-burbot-workflow-tabs]")) {
 }
 
 /* View owns the editor. */
-html[data-workflow-mode="view"] .commit-panel,
+html[data-workflow-mode="view"] .commit-panel-active,
 html[data-workflow-mode="view"] .import-review-panel {
   display: none !important;
+}
+html[data-workflow-mode="view"] .commit-panel-idle {
+  display: grid !important;
+  margin-top: 6px;
 }
 
 /* Commit is a focused staged-diff surface. */
@@ -147,6 +151,27 @@ html[data-workflow-mode="import"] #capture-area {
 }
 .import-review-list button.rejected > span {
   text-decoration: line-through;
+}
+
+.import-empty-state {
+  max-width: 520px;
+  margin: 28px auto;
+  padding: 28px 24px;
+  border: 1px solid #dce5de;
+  border-radius: 12px;
+  background: #fff;
+  text-align: center;
+}
+.import-empty-state h2 {
+  margin: 5px 0 7px;
+  font-size: 16px;
+}
+.import-empty-state p {
+  margin: 0 auto 14px;
+  max-width: 390px;
+  color: #728078;
+  font-size: 10px;
+  line-height: 1.45;
 }
 `;
   document.head.append(style);
