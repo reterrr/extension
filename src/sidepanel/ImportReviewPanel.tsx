@@ -12,6 +12,7 @@ import {
   markImportObjectLinked,
   markImportObjectRejected,
   restoreRejectedImportObject,
+  revokeApprovedImportObject,
 } from "../shared/import/review";
 import {
   clearImportReview,
