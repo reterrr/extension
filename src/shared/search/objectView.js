@@ -93,7 +93,9 @@ export function removeObjectFromView(
     ? normalized.objectIds
     : (objects ?? []).map((object) => String(object?.id ?? "")).filter(Boolean);
   const objectIds = sourceIds.filter((entry) => entry !== id);
-  if (!objectIds.length) return null;
+  if (!objectIds.length) {
+    throw new Error("Widok musi zawierać co najmniej jeden obiekt.");
+  }
 
   return {
     version: 1,
