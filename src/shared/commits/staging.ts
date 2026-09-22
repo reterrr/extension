@@ -122,6 +122,30 @@ export function applyStagedObjects(draft: DraftCommit): LegacyStorageState {
   return committed;
 }
 
+export function rebaseCommittedObjects(
+  draft: DraftCommit,
+  committed: LegacyStorageState,
+  objectIds: string[],
+): DraftCommit {
+  for (const objectId of objectIds) {
+    replaceObject(draft.workingState, committed, objectId);
+  }
+
+  const committedSourceIds = new Set(
+    (committed.importSources ?? []).map((row) => String(row.id)),
+  );
+  const pendingSources = (draft.workingState.importSources ?? []).filter(
+    (row) => !committedSourceIds.has(String(row.id)),
+  );
+  draft.workingState.importSources = [
+    ...(committed.importSources ?? []).map((row) =>
+      JSON.parse(JSON.stringify(row)),
+    ),
+    ...pendingSources,
+  ];
+  return draft;
+}
+
 export function discardViewObject(
   draft: DraftCommit,
   objectId: string,
