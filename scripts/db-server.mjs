@@ -284,10 +284,10 @@ function syncBusinessTables(state, groupByObject) {
   `);
   const insertOperator = db.prepare(`
     INSERT INTO operators(
-      id, object_id, name, nip, address, email, phone, website, notes,
+      id, object_id, name, role, nip, address, email, phone, website, notes,
       created_at, updated_at, last_checked_at
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   const insertProjectOperator = db.prepare(`
     INSERT INTO projects_operators(project_id, operator_id, operator_type)
