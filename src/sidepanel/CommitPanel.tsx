@@ -255,6 +255,53 @@ function ChangeCard({
   );
 }
 
+function PendingViewRow({
+  object,
+  busy,
+  onStage,
+  onDiscard,
+}: {
+  object: CommitSessionObject;
+  busy: boolean;
+  onStage: (objectId: string) => Promise<void>;
+  onDiscard: (objectId: string) => Promise<void>;
+}) {
+  const count = objectChangeCount(object);
+  return (
+    <div className="commit-pending-row">
+      <span
+        className={"commit-status commit-status-" + object.status.toLowerCase()}
+      >
+        {statusLabel(object.status)}
+      </span>
+      <span className="commit-pending-copy">
+        <strong>{object.label}</strong>
+        <small>
+          {typeLabel(object.type)}
+          {count ? " · " + count + " " + (count === 1 ? "zmiana" : "zmian") : ""}
+        </small>
+      </span>
+      <button
+        type="button"
+        className="commit-stage-pending"
+        disabled={busy}
+        onClick={() => void onStage(object.id)}
+      >
+        + Commit
+      </button>
+      <button
+        type="button"
+        className="commit-discard-pending"
+        disabled={busy}
+        aria-label={"Odrzuć zmiany " + object.label}
+        onClick={() => void onDiscard(object.id)}
+      >
+        ×
+      </button>
+    </div>
+  );
+}
+
 export function CommitPanel() {
   const [session, setSession] = useState<CommitSessionView>(EMPTY_SESSION);
   const [busy, setBusy] = useState(false);
@@ -302,6 +349,17 @@ export function CommitPanel() {
       );
   }, [session.objects]);
 
+  const pendingObjects = useMemo(() => {
+    const rank = { NEW: 0, MODIFIED: 1, DELETED: 2, UNCHANGED: 3 } as const;
+    return session.objects
+      .filter((object) => object.status !== "UNCHANGED" && !object.staged)
+      .sort(
+        (a, b) =>
+          rank[a.status] - rank[b.status] ||
+          a.label.localeCompare(b.label, "pl"),
+      );
+  }, [session.objects]);
+
   async function run<T>(work: () => Promise<T>, apply?: (value: T) => void) {
     setBusy(true);
     setError("");
@@ -329,6 +387,13 @@ export function CommitPanel() {
       );
       return result;
     });
+  }
+
+  async function stageObject(objectId: string) {
+    await run(
+      () => sendCommit<CommitSessionView>("STAGE_OBJECT", { objectId }),
+      setSession,
+    );
   }
 
   async function unstageObject(objectId: string) {
@@ -406,6 +471,26 @@ export function CommitPanel() {
         )}
       </div>
 
+      {pendingObjects.length > 0 && (
+        <details className="commit-pending-view">
+          <summary>
+            Tylko w View
+            <span>{pendingObjects.length}</span>
+          </summary>
+          <div className="commit-pending-list">
+            {pendingObjects.map((object) => (
+              <PendingViewRow
+                key={object.id}
+                object={object}
+                busy={busy}
+                onStage={stageObject}
+                onDiscard={discardObject}
+              />
+            ))}
+          </div>
+        </details>
+      )}
+
       <div className="commit-actions">
         <button
           type="button"
@@ -419,7 +504,7 @@ export function CommitPanel() {
             );
           }}
         >
-          Discard
+          Odrzuć cały View
         </button>
         <button
           type="button"
