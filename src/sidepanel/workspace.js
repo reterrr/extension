@@ -13,12 +13,15 @@ import {
 } from "../shared/export/aiViewExport.js";
 import {
   OBJECT_VIEW_STORAGE_KEY,
+  addObjectToView,
   createObjectView,
   normalizeObjectView,
   objectInView,
   objectsInView,
+  removeObjectFromView,
 } from "../shared/search/objectView.js";
 import { createPickerClient } from "./pickerRpc";
+import { ensureObjectEditableInCommit } from "./importWorkflow";
 import {
   patchSidepanelUiState,
   readSidepanelUiState,
@@ -225,17 +228,26 @@ import {
     const root = $("active-object-view");
     if (!root) return;
     const view = normalizedObjectView();
-    root.hidden = !view;
-    if (!view) return;
-    const count = view.objectIds.length;
+    const object = chosen();
+    root.hidden = !object;
+    if (!object) return;
+
+    const count = view?.objectIds.length ?? db.objects.length;
     $("active-object-view-count").textContent =
       count + (count === 1 ? " obiekt" : " obiektów");
-    const query = view.query || (view.type !== "all" ? "type:" + view.type : "");
+    const query = view
+      ? view.query || (view.type !== "all" ? "type:" + view.type : "")
+      : "wszystkie obiekty";
     $("active-object-view-query").textContent = query;
-    $("active-object-view-query").hidden = !query;
-    root.title = query
-      ? "Widok utworzony z: " + query
-      : "Tymczasowy widok roboczy";
+    $("active-object-view-query").hidden = false;
+    $("remove-current-from-view").hidden = !view;
+    $("clear-object-view").hidden = !view;
+    $("export-object-view").hidden = !view;
+    root.title = view
+      ? query
+        ? "Widok utworzony z: " + query
+        : "Tymczasowy widok roboczy"
+      : "Widok obejmuje wszystkie obiekty";
   }
 
   async function persistObjectView(next) {
@@ -247,6 +259,7 @@ import {
     } else {
       await browser.storage.session.remove(OBJECT_VIEW_STORAGE_KEY);
     }
+    window.dispatchEvent(new Event("burbot:object-view-changed"));
   }
 
   async function setObjectView(objects, query, type) {
@@ -266,6 +279,7 @@ import {
     $("switcher").open = false;
     scheduleWorkspaceUiPersist();
     render();
+    window.dispatchEvent(new Event("burbot:object-view-changed"));
     notice("Widok roboczy ustawiony: " + objectView.objectIds.length + " obiektów.");
   }
 
@@ -274,6 +288,7 @@ import {
     await browser.storage.session.remove(OBJECT_VIEW_STORAGE_KEY);
     scheduleWorkspaceUiPersist();
     render();
+    window.dispatchEvent(new Event("burbot:object-view-changed"));
     notice("Widok wyczyszczony. Pokazuję wszystkie obiekty.");
   }
   function downloadJsonFile(filename, value) {
