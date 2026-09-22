@@ -512,7 +512,7 @@ test("recruitment reference reuses an existing workspace project instead of dupl
     "existing-project-id",
     now,
   );
-  assert.equal(session.statusByObjectId[project.id], "STAGED");
+  assert.equal(session.statusByObjectId[project.id], "PENDING");
   assert.equal(
     session.approvedObjectIdByImportKey["project-1"],
     "existing-project-id",
