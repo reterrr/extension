@@ -694,7 +694,7 @@ export function ImportReviewPanel({
                         </button>
                         <button
                           type="button"
-                          className="primary import-review-approve"
+                          className="primary import-review-to-view"
                           disabled={busy}
                           onClick={() => void acceptToView()}
                         >
