@@ -591,7 +591,25 @@ export function ImportReviewPanel() {
     window.dispatchEvent(new Event("burbot:selector-highlights-refresh"));
   }
 
-  if (!session) return null;
+  if (!session) {
+    if (mode !== "review") return null;
+    return (
+      <section className="import-review-shell">
+        <div className="import-empty-state">
+          <span className="eyebrow">IMPORT</span>
+          <h2>Brak aktywnego importu</h2>
+          <p>Zaimportuj portable JSON. Obiekty pojawią się tutaj do sprawdzenia, a potem możesz dodać je do View.</p>
+          <button
+            type="button"
+            className="primary"
+            onClick={() => document.getElementById("import")?.click()}
+          >
+            Import JSON
+          </button>
+        </div>
+      </section>
+    );
+  }
 
   const groups = ["operator", "project", "recruitment"].map((type) => ({
     type,
