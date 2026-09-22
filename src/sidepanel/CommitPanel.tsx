@@ -167,10 +167,12 @@ function ChangeCard({
   object,
   busy,
   onFocus,
+  onDiscard,
 }: {
   object: CommitSessionObject;
   busy: boolean;
   onFocus: (objectId: string) => Promise<void>;
+  onDiscard: (objectId: string) => Promise<void>;
 }) {
   const deleted = object.status === "DELETED";
   const count = objectChangeCount(object);
@@ -218,16 +220,35 @@ function ChangeCard({
           </div>
         )}
 
-        {!deleted && (
+        <div className="commit-object-actions">
+          {!deleted && (
+            <button
+              type="button"
+              className="commit-focus"
+              disabled={busy}
+              onClick={() => void onFocus(object.id)}
+            >
+              Otwórz obiekt
+            </button>
+          )}
           <button
             type="button"
-            className="commit-focus"
+            className="commit-discard-object"
             disabled={busy}
-            onClick={() => void onFocus(object.id)}
+            onClick={() => {
+              if (
+                !confirm(
+                  "Odrzucić zmiany tylko dla obiektu „" + object.label + "”?",
+                )
+              ) {
+                return;
+              }
+              void onDiscard(object.id);
+            }}
           >
-            Otwórz obiekt
+            Discard object
           </button>
-        )}
+        </div>
       </div>
     </details>
   );
@@ -298,6 +319,13 @@ export function CommitPanel() {
       const windowId = await currentWindowId();
       return sendCommit<CommitSessionView>("FOCUS", { windowId, objectId });
     });
+  }
+
+  async function discardObject(objectId: string) {
+    await run(
+      () => sendCommit<CommitSessionView>("DISCARD_OBJECT", { objectId }),
+      setSession,
+    );
   }
 
   async function createObject(type: "project" | "operator" | "recruitment") {
@@ -375,6 +403,7 @@ export function CommitPanel() {
               object={object}
               busy={busy}
               onFocus={focusObject}
+              onDiscard={discardObject}
             />
           ))
         ) : (

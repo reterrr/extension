@@ -394,6 +394,109 @@ style.textContent = `
       max-width: 170px;
     }
   }
+  /* Workflow redesign: use a readable left object list on normal sidepanel widths. */
+  .import-review-layout {
+    display: grid !important;
+    grid-template-columns: minmax(180px, 30%) minmax(0, 1fr) !important;
+    align-items: start;
+  }
+
+  .import-review-list {
+    display: block !important;
+    max-height: calc(100vh - 190px);
+    overflow-x: hidden;
+    overflow-y: auto;
+    padding: 9px 8px 12px;
+    border-right: 1px solid var(--line) !important;
+    border-bottom: 0 !important;
+    background: #fafcf9;
+  }
+
+  .import-review-list details {
+    display: block;
+    margin: 0 !important;
+    white-space: normal;
+  }
+
+  .import-review-list details + details {
+    margin-top: 10px !important;
+  }
+
+  .import-review-list summary {
+    width: 100%;
+    margin-bottom: 3px;
+    padding: 4px 5px;
+  }
+
+  .import-review-list button {
+    display: flex !important;
+    width: 100% !important;
+    min-width: 0;
+    max-width: none;
+    min-height: 38px;
+    margin: 2px 0 !important;
+    padding: 6px 7px !important;
+  }
+
+  .import-review-list button > span {
+    max-width: none;
+    flex: 1;
+  }
+
+  .import-review-detail {
+    padding: 0 12px 18px !important;
+  }
+
+  .import-review-fields > div.import-review-workspace-field {
+    min-height: 43px;
+    padding: 6px 8px;
+  }
+
+  .import-review-to-view {
+    min-height: 34px;
+  }
+
+  @media (max-width: 620px) {
+    .import-review-layout {
+      display: block !important;
+    }
+
+    .import-review-list {
+      display: flex !important;
+      align-items: flex-start;
+      gap: 10px;
+      max-height: 80px;
+      overflow-x: auto;
+      overflow-y: hidden;
+      padding: 7px 10px 8px;
+      border-right: 0 !important;
+      border-bottom: 1px solid var(--line) !important;
+      background: #fff;
+    }
+
+    .import-review-list details {
+      flex: none;
+      white-space: nowrap;
+    }
+
+    .import-review-list details + details {
+      margin-top: 0 !important;
+    }
+
+    .import-review-list summary {
+      width: fit-content;
+      padding: 0;
+    }
+
+    .import-review-list button {
+      display: inline-flex !important;
+      width: auto !important;
+      min-width: 118px;
+      max-width: 170px;
+      margin-right: 3px !important;
+    }
+  }
+
 `;
 
 document.head.append(style);

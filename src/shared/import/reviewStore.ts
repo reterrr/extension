@@ -42,6 +42,22 @@ export async function readImportReview(): Promise<ImportReviewSession | null> {
       migrateFundingRefundRanges(session.previewState);
       session.importedFieldsByObjectId ||= {};
       session.importedFinancingFieldsByObjectId ||= {};
+      for (const objectId of session.objectOrder ?? []) {
+        const rawStatus = String(
+          (session.statusByObjectId as Record<string, string> | undefined)?.[
+            objectId
+          ] ?? "PENDING",
+        );
+        session.statusByObjectId[objectId] =
+          rawStatus === "APPROVED"
+            ? "STAGED"
+            : rawStatus === "IN_VIEW" ||
+                rawStatus === "STAGED" ||
+                rawStatus === "COMMITTED" ||
+                rawStatus === "REJECTED"
+              ? rawStatus
+              : "PENDING";
+      }
     }
     return session;
   } finally {

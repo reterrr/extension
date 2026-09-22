@@ -81,9 +81,12 @@ test("UI state normalization is conservative and session-scoped", () => {
     },
   });
 
-  assert.equal(normalized.mode, "review");
-  assert.equal(normalized.scroll.workspace, 0);
-  assert.equal(normalized.scroll.review, 420.5);
+  assert.equal(normalized.mode, "import");
+  assert.deepEqual(normalized.scroll, {
+    commit: 0,
+    view: 0,
+    import: 420.5,
+  });
   assert.equal(normalized.workspace.objectId, "project-1");
   assert.equal(normalized.workspace.focusStamp, "focus-1");
   assert.deepEqual(normalized.workspace.expanded, ["funding:1"]);
@@ -102,8 +105,8 @@ test("UI state normalization is conservative and session-scoped", () => {
 
 test("independent UI patches merge instead of clobbering remembered state", async () => {
   await moduleUnderTest.patchSidepanelUiState(7, {
-    mode: "review",
-    scroll: { workspace: 310 },
+    mode: "commit",
+    scroll: { view: 310 },
     workspace: {
       objectId: "recruitment-1",
       focusStamp: "focus-7",
@@ -121,7 +124,7 @@ test("independent UI patches merge instead of clobbering remembered state", asyn
   });
 
   await moduleUnderTest.patchSidepanelUiState(7, {
-    scroll: { review: 912 },
+    scroll: { import: 912 },
     workspace: {
       fieldSections: { Terminy: false },
       panels: { "geography-panel": true },
@@ -137,8 +140,8 @@ test("independent UI patches merge instead of clobbering remembered state", asyn
   });
 
   const state = await moduleUnderTest.readSidepanelUiState(7);
-  assert.equal(state.mode, "review");
-  assert.deepEqual(state.scroll, { workspace: 310, review: 912 });
+  assert.equal(state.mode, "commit");
+  assert.deepEqual(state.scroll, { commit: 0, view: 310, import: 912 });
   assert.equal(state.workspace.objectId, "recruitment-1");
   assert.equal(state.workspace.focusStamp, "focus-7");
   assert.equal(state.workspace.active.field, "status");
@@ -171,4 +174,18 @@ test("clearing the active field does not erase other workspace preferences", asy
   assert.equal(state.workspace.captureCollapsed, false);
   assert.equal(state.workspace.objectId, "recruitment-1");
   assert.equal(state.workspace.panels["geography-panel"], true);
+});
+
+
+test("legacy workspace mode migrates to the View tab", () => {
+  const normalized = moduleUnderTest.normalizeSidepanelUiState({
+    mode: "workspace",
+    scroll: { workspace: 125, review: 33 },
+  });
+  assert.equal(normalized.mode, "view");
+  assert.deepEqual(normalized.scroll, {
+    commit: 0,
+    view: 125,
+    import: 33,
+  });
 });

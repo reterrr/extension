@@ -363,7 +363,7 @@ function renderCaptureDock(): void {
   document.getElementById("import-review-capture-area")?.remove();
   if (!session || !active || !document.documentElement.classList.contains("import-review-mode")) return;
   const object = session.previewState.objects.find((entry) => entry.id === active!.objectId);
-  if (!object || session.statusByObjectId[object.id] === "APPROVED") return;
+  if (!object || session.statusByObjectId[object.id] === "STAGED") return;
   const info = fieldInfo();
   const detail = document.querySelector(".import-review-detail");
   if (!info || !detail) return;

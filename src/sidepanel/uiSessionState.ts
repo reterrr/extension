@@ -1,4 +1,4 @@
-export type SidepanelMode = "workspace" | "review";
+export type SidepanelMode = "commit" | "view" | "import";
 
 export interface SidepanelActiveField {
   objectId: string;
@@ -11,8 +11,9 @@ export interface SidepanelUiState {
   version: 1;
   mode: SidepanelMode;
   scroll: {
-    workspace: number;
-    review: number;
+    commit: number;
+    view: number;
+    import: number;
   };
   workspace: {
     objectId?: string;
@@ -52,10 +53,11 @@ function finiteScroll(value: unknown): number {
 function defaultState(): SidepanelUiState {
   return {
     version: 1,
-    mode: "workspace",
+    mode: "view",
     scroll: {
-      workspace: 0,
-      review: 0,
+      commit: 0,
+      view: 0,
+      import: 0,
     },
     workspace: {
       focusStamp: "",
@@ -84,7 +86,10 @@ export function normalizeSidepanelUiState(value: unknown): SidepanelUiState {
   const fallback = defaultState();
   if (!value || typeof value !== "object") return fallback;
 
-  const raw = value as Partial<SidepanelUiState>;
+  const raw = value as Partial<SidepanelUiState> & {
+    mode?: unknown;
+    scroll?: Record<string, unknown>;
+  };
   const workspace =
     raw.workspace && typeof raw.workspace === "object"
       ? raw.workspace
@@ -126,12 +131,21 @@ export function normalizeSidepanelUiState(value: unknown): SidepanelUiState {
         }
       : null;
 
+  const rawMode = String(raw.mode ?? "");
+  const mode: SidepanelMode =
+    rawMode === "commit"
+      ? "commit"
+      : rawMode === "import" || rawMode === "review"
+        ? "import"
+        : "view";
+  const scrollRecord = scroll as Record<string, unknown>;
   return {
     version: 1,
-    mode: raw.mode === "review" ? "review" : "workspace",
+    mode,
     scroll: {
-      workspace: finiteScroll(scroll.workspace),
-      review: finiteScroll(scroll.review),
+      commit: finiteScroll(scrollRecord.commit),
+      view: finiteScroll(scrollRecord.view ?? scrollRecord.workspace),
+      import: finiteScroll(scrollRecord.import ?? scrollRecord.review),
     },
     workspace: {
       ...(typeof workspace.objectId === "string" && workspace.objectId

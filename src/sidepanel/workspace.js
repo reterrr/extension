@@ -13,12 +13,15 @@ import {
 } from "../shared/export/aiViewExport.js";
 import {
   OBJECT_VIEW_STORAGE_KEY,
+  addObjectToView,
   createObjectView,
   normalizeObjectView,
   objectInView,
   objectsInView,
+  removeObjectFromView,
 } from "../shared/search/objectView.js";
 import { createPickerClient } from "./pickerRpc";
+import { ensureObjectEditableInCommit } from "./importWorkflow";
 import {
   patchSidepanelUiState,
   readSidepanelUiState,
@@ -225,17 +228,26 @@ import {
     const root = $("active-object-view");
     if (!root) return;
     const view = normalizedObjectView();
-    root.hidden = !view;
-    if (!view) return;
-    const count = view.objectIds.length;
+    const object = chosen();
+    root.hidden = !object;
+    if (!object) return;
+
+    const count = view?.objectIds.length ?? db.objects.length;
     $("active-object-view-count").textContent =
       count + (count === 1 ? " obiekt" : " obiektów");
-    const query = view.query || (view.type !== "all" ? "type:" + view.type : "");
+    const query = view
+      ? view.query || (view.type !== "all" ? "type:" + view.type : "")
+      : "wszystkie obiekty";
     $("active-object-view-query").textContent = query;
-    $("active-object-view-query").hidden = !query;
-    root.title = query
-      ? "Widok utworzony z: " + query
-      : "Tymczasowy widok roboczy";
+    $("active-object-view-query").hidden = false;
+    $("remove-current-from-view").hidden = false;
+    $("clear-object-view").hidden = !view;
+    $("export-object-view").hidden = !view;
+    root.title = view
+      ? query
+        ? "Widok utworzony z: " + query
+        : "Tymczasowy widok roboczy"
+      : "Widok obejmuje wszystkie obiekty";
   }
 
   async function persistObjectView(next) {
@@ -247,6 +259,7 @@ import {
     } else {
       await browser.storage.session.remove(OBJECT_VIEW_STORAGE_KEY);
     }
+    window.dispatchEvent(new Event("burbot:object-view-changed"));
   }
 
   async function setObjectView(objects, query, type) {
@@ -266,6 +279,7 @@ import {
     $("switcher").open = false;
     scheduleWorkspaceUiPersist();
     render();
+    window.dispatchEvent(new Event("burbot:object-view-changed"));
     notice("Widok roboczy ustawiony: " + objectView.objectIds.length + " obiektów.");
   }
 
@@ -274,6 +288,7 @@ import {
     await browser.storage.session.remove(OBJECT_VIEW_STORAGE_KEY);
     scheduleWorkspaceUiPersist();
     render();
+    window.dispatchEvent(new Event("burbot:object-view-changed"));
     notice("Widok wyczyszczony. Pokazuję wszystkie obiekty.");
   }
   function downloadJsonFile(filename, value) {
@@ -706,7 +721,43 @@ import {
       }
     };
 
+    async function toggleViewMembership(object) {
+      const currentView = normalizedObjectView();
+      const included = objectInView(currentView, object.id);
+      const next = included
+        ? removeObjectFromView(
+            currentView,
+            object.id,
+            db.objects,
+            new Date().toISOString(),
+          )
+        : addObjectToView(
+            currentView,
+            object.id,
+            db.objects,
+            new Date().toISOString(),
+          );
+      await persistObjectView(next);
+
+      if (!objectInView(objectView, objectId)) {
+        objectId =
+          objectsInView(db.objects, objectView).at(0)?.id ||
+          db.objects.at(-1)?.id ||
+          "";
+        active = null;
+        preview = null;
+        resetCapture();
+      }
+      render();
+      notice(
+        included
+          ? "Usunięto obiekt z Widoku."
+          : "Dodano obiekt do Widoku.",
+      );
+    }
+
     function objectButton(object) {
+      const row = node("div", "object-option-row");
       const button = node("button", "object-option");
       button.type = "button";
       button.dataset.objectId = object.id;
@@ -731,7 +782,31 @@ import {
 
       button.onclick = () => chooseObject(object.id);
       button.onkeydown = (event) => chooseFromKeyboard(button, event);
-      return button;
+
+      const included = objectInView(normalizedObjectView(), object.id);
+      const toggle = node(
+        "button",
+        "object-view-toggle",
+        included ? "−" : "+",
+      );
+      toggle.type = "button";
+      toggle.title = included ? "Usuń z Widoku" : "Dodaj do Widoku";
+      toggle.setAttribute(
+        "aria-label",
+        (included ? "Usuń z Widoku: " : "Dodaj do Widoku: ") +
+          C.displayName(object),
+      );
+      toggle.disabled = busy;
+      toggle.onclick = (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        void toggleViewMembership(object).catch((error) =>
+          notice(error.message, true),
+        );
+      };
+
+      row.append(button, toggle);
+      return row;
     }
 
     function appendGroup(title, objects) {
@@ -782,18 +857,19 @@ import {
         );
       };
 
-      currentMatches = scopedObjects.filter(matches);
+      const hasRestriction =
+        Boolean(switcherQuery.trim()) || switcherType !== "all";
+      const searchPool = hasRestriction ? db.objects : scopedObjects;
+      currentMatches = searchPool.filter(matches);
       const localObjects = [...currentMatches.filter((o) => local(o))].reverse();
       const saved = currentMatches.filter((o) => !local(o));
 
-      const hasRestriction =
-        Boolean(switcherQuery.trim()) || switcherType !== "all";
       viewInfo.textContent = objectView
         ? "Aktywny widok: " + scopedObjects.length + " obiektów"
         : "Wyniki: " + currentMatches.length;
       setViewButton.textContent = objectView
         ? hasRestriction
-          ? "Zawęź widok · " + currentMatches.length
+          ? "Ustaw widok · " + currentMatches.length
           : "Widok aktywny · " + scopedObjects.length
         : hasRestriction
           ? "Ustaw widok · " + currentMatches.length
@@ -1772,7 +1848,6 @@ import {
       : "Save value & next";
   }
   function render() {
-    renderObjectViewIndicator();
     if (!chosen()) {
       objectId =
         objectsInView(db.objects, normalizedObjectView()).at(0)?.id ||
@@ -1781,6 +1856,7 @@ import {
       active = null;
       resetCapture();
     }
+    renderObjectViewIndicator();
     const object = chosen();
     $("empty").hidden = !!object;
     $("workspace").hidden = !object;
@@ -1869,6 +1945,38 @@ import {
   };
   $("clear-object-view").onclick = () => {
     void clearObjectView().catch((error) => notice(error.message, true));
+  };
+  $("remove-current-from-view").onclick = () => {
+    void (async () => {
+      const view = normalizedObjectView();
+      if (!objectId) return;
+      const next = removeObjectFromView(
+        view,
+        objectId,
+        db.objects,
+        new Date().toISOString(),
+      );
+      await persistObjectView(next);
+      objectId =
+        objectsInView(db.objects, objectView).at(0)?.id ||
+        db.objects.at(-1)?.id ||
+        "";
+      active = null;
+      preview = null;
+      resetCapture();
+      scheduleWorkspaceUiPersist();
+      render();
+      notice("Usunięto bieżący obiekt z Widoku.");
+    })().catch((error) => notice(error.message, true));
+  };
+  $("edit-current-in-commit").onclick = () => {
+    void (async () => {
+      if (!objectId) throw Error("Wybierz obiekt.");
+      await ensureObjectEditableInCommit(objectId);
+      notice(
+        "Commit jest aktywny. Zmiany tego obiektu będą teraz staged w commicie.",
+      );
+    })().catch((error) => notice(error.message, true));
   };
   $("pick").onclick = action(async () => {
     evidencePicking = false;

@@ -1,37 +1,25 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { publishUiState } from "../shared/api/storage";
+import { loadState } from "../shared/api/storage";
+import { readActiveDraft } from "../shared/commits/draftStore";
 import {
-  readActiveDraft,
-  writeActiveDraft,
-} from "../shared/commits/draftStore";
-import {
-  buildImportApprovalPlan,
   findExistingImportObjectMatch,
   importReviewView,
-  markImportObjectApproved,
-  markImportObjectLinked,
+  markImportObjectInView,
+  markImportObjectPending,
+  markImportObjectRejected,
 } from "../shared/import/review";
 import {
   clearImportReview,
   readImportReview,
   writeImportReview,
 } from "../shared/import/reviewStore";
-import {
-  stageImportReviewObject,
-  type ImportApprovalPlanWithRules,
-  type ReviewedImportRule,
-} from "../shared/import/stageReview";
 import { selectorColor } from "../shared/selectorPalette";
 import type {
+  ImportReviewObjectStatus,
   ImportReviewSession,
   ImportReviewView,
 } from "../shared/types/importReview";
-import type { LegacyStoredRule } from "../shared/types/legacy-storage";
-import {
-  patchSidepanelUiState,
-  readSidepanelUiState,
-  type SidepanelMode,
-} from "./uiSessionState";
+import type { SidepanelMode } from "./uiSessionState";
 
 async function activeTab(): Promise<browser.tabs.Tab | undefined> {
   const window = await browser.windows.getCurrent();
@@ -184,28 +172,22 @@ function groupLabel(type: string): string {
   return "Nabory";
 }
 
-function reviewedRules(
-  current: ImportReviewSession,
-  objectId: string,
-): ReviewedImportRule[] {
-  return current.previewState.rules
-    .filter((rule) => rule.objectId === objectId)
-    .map((rule: LegacyStoredRule) => {
-      if (rule.target?.kind !== "funding") return { ...rule };
-      const row = (current.previewState.financingRules ?? []).find(
-        (entry) =>
-          entry.objectId === objectId && String(entry.id) === rule.target!.id,
-      );
-      if (!row?.importKey) {
-        throw new Error("Nie udało się zmapować reguły wariantu finansowania.");
-      }
-      return { ...rule, targetImportKey: String(row.importKey) };
-    });
+function reviewStatusLabel(status: ImportReviewObjectStatus): string {
+  if (status === "IN_VIEW") return "w Widoku";
+  if (status === "STAGED") return "w commicie";
+  if (status === "COMMITTED") return "zapisano";
+  if (status === "REJECTED") return "odrzucono";
+  return "do sprawdzenia";
 }
 
-export function ImportReviewPanel() {
+export function ImportReviewPanel({
+  active,
+  onNavigate,
+}: {
+  active: boolean;
+  onNavigate: (mode: SidepanelMode) => void;
+}) {
   const [session, setSession] = useState<ImportReviewSession | null>(null);
-  const [mode, setMode] = useState<"workspace" | "review">("workspace");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [existingTarget, setExistingTarget] = useState<{
@@ -213,56 +195,12 @@ export function ImportReviewPanel() {
     label: string;
   } | null>(null);
   const windowIdRef = useRef<number | null>(null);
-  const modeRef = useRef<SidepanelMode>("workspace");
-  const scrollTimerRef = useRef<number | undefined>(undefined);
   const view = useMemo(() => importReviewView(session), [session]);
-
-  function restoreScroll(top: number): void {
-    window.requestAnimationFrame(() => {
-      window.requestAnimationFrame(() => {
-        window.scrollTo({ top: Math.max(0, top), behavior: "auto" });
-      });
-    });
-  }
-
-  async function switchMode(nextMode: SidepanelMode): Promise<void> {
-    if (nextMode === modeRef.current) return;
-    const windowId = windowIdRef.current;
-    const previousMode = modeRef.current;
-    let targetScroll = 0;
-
-    if (windowId !== null) {
-      const saved = await readSidepanelUiState(windowId);
-      targetScroll = saved.scroll[nextMode];
-      await patchSidepanelUiState(windowId, {
-        mode: nextMode,
-        scroll: { [previousMode]: window.scrollY },
-      });
-    }
-
-    modeRef.current = nextMode;
-    setMode(nextMode);
-    restoreScroll(targetScroll);
-  }
 
   async function refresh(open = false) {
     const next = await readImportReview();
     setSession(next);
-    if (open && next) {
-      const windowId = windowIdRef.current;
-      if (windowId !== null) {
-        await patchSidepanelUiState(windowId, {
-          mode: "review",
-          scroll: {
-            [modeRef.current]: window.scrollY,
-            review: 0,
-          },
-        });
-      }
-      modeRef.current = "review";
-      setMode("review");
-      restoreScroll(0);
-    }
+    if (open && next) onNavigate("import");
   }
 
   useEffect(() => {
@@ -270,68 +208,36 @@ export function ImportReviewPanel() {
 
     void (async () => {
       const currentWindow = await browser.windows.getCurrent();
-      if (disposed || currentWindow.id === undefined) return;
-      windowIdRef.current = currentWindow.id;
-
-      const [uiState, nextSession] = await Promise.all([
-        readSidepanelUiState(currentWindow.id),
-        readImportReview(),
-      ]);
       if (disposed) return;
-
-      const initialMode: SidepanelMode =
-        nextSession && uiState.mode === "review" ? "review" : "workspace";
-      modeRef.current = initialMode;
-      setMode(initialMode);
-      setSession(nextSession);
-      restoreScroll(uiState.scroll[initialMode]);
+      if (currentWindow.id !== undefined) windowIdRef.current = currentWindow.id;
+      const nextSession = await readImportReview();
+      if (!disposed) setSession(nextSession);
     })();
 
     const changed = (event: Event) => {
       const detail = (event as CustomEvent<{ open?: boolean }>).detail;
       void refresh(detail?.open === true);
     };
-    window.addEventListener("burbot:import-review-changed", changed);
-
-    const workspaceReady = () => {
-      const windowId = windowIdRef.current;
-      if (windowId === null || modeRef.current !== "workspace") return;
-      void readSidepanelUiState(windowId).then((state) => {
-        if (modeRef.current === "workspace") {
-          restoreScroll(state.scroll.workspace);
-        }
-      });
-    };
-    window.addEventListener("burbot:workspace-ready", workspaceReady);
-
-    const onScroll = () => {
-      if (scrollTimerRef.current !== undefined) {
-        window.clearTimeout(scrollTimerRef.current);
+    const runtimeChanged = (message: unknown) => {
+      if (
+        typeof message === "object" &&
+        message !== null &&
+        (message as { type?: unknown }).type ===
+          "BURBOT_IMPORT_REVIEW_CHANGED"
+      ) {
+        void refresh(false);
       }
-      scrollTimerRef.current = window.setTimeout(() => {
-        const windowId = windowIdRef.current;
-        if (windowId === null) return;
-        void patchSidepanelUiState(windowId, {
-          scroll: { [modeRef.current]: window.scrollY },
-        });
-      }, 120);
+      return undefined;
     };
-    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("burbot:import-review-changed", changed);
+    browser.runtime.onMessage.addListener(runtimeChanged);
 
     return () => {
       disposed = true;
       window.removeEventListener("burbot:import-review-changed", changed);
-      window.removeEventListener("burbot:workspace-ready", workspaceReady);
-      window.removeEventListener("scroll", onScroll);
-      if (scrollTimerRef.current !== undefined) {
-        window.clearTimeout(scrollTimerRef.current);
-      }
+      browser.runtime.onMessage.removeListener(runtimeChanged);
     };
   }, []);
-
-  useEffect(() => {
-    modeRef.current = mode;
-  }, [mode]);
 
   useEffect(() => {
     let cancelled = false;
@@ -347,12 +253,11 @@ export function ImportReviewPanel() {
       return;
     }
 
-    void readActiveDraft().then((draft) => {
+    void (async () => {
+      const draft = await readActiveDraft();
+      const state = draft?.workingState ?? (await loadState());
       if (cancelled) return;
-      const match = findExistingImportObjectMatch(
-        selected,
-        draft?.workingState,
-      );
+      const match = findExistingImportObjectMatch(selected, state);
       setExistingTarget(
         match
           ? {
@@ -361,7 +266,7 @@ export function ImportReviewPanel() {
             }
           : null,
       );
-    });
+    })();
 
     return () => {
       cancelled = true;
@@ -369,14 +274,15 @@ export function ImportReviewPanel() {
   }, [session?.selectedObjectId, session?.updatedAt]);
 
   useEffect(() => {
-    const reviewing = Boolean(session && mode === "review");
+    const reviewing = Boolean(session && active);
     document.documentElement.classList.toggle("import-review-mode", reviewing);
 
     if (!reviewing) {
       void clearPageReviewHighlights().finally(() => {
         window.dispatchEvent(new Event("burbot:selector-highlights-refresh"));
       });
-      return () => document.documentElement.classList.remove("import-review-mode");
+      return () =>
+        document.documentElement.classList.remove("import-review-mode");
     }
 
     void sendReviewHighlights(view);
@@ -395,7 +301,7 @@ export function ImportReviewPanel() {
       browser.tabs.onUpdated.removeListener(updated);
       document.documentElement.classList.remove("import-review-mode");
     };
-  }, [session, mode, view.selectedObjectId, view.evidence]);
+  }, [session, active, view.selectedObjectId, view.evidence]);
 
   async function select(objectId: string) {
     if (!session) return;
@@ -415,75 +321,58 @@ export function ImportReviewPanel() {
     }
   }
 
-  async function approve() {
+  async function acceptToView() {
     if (!session?.selectedObjectId) return;
     setBusy(true);
     setError("");
     try {
-      const draft = await readActiveDraft();
-      if (!draft) {
-        throw new Error("Najpierw rozpocznij New commit w zakładce Workspace.");
-      }
-
-      const previewId = session.selectedObjectId;
-      const plan: ImportApprovalPlanWithRules = {
-        ...buildImportApprovalPlan(session, previewId, draft.workingState),
-        reviewRules: reviewedRules(session, previewId),
-      };
       const now = new Date().toISOString();
-      const staged = stageImportReviewObject(
-        draft.workingState,
-        plan,
-        () => crypto.randomUUID(),
-        now,
-      );
-
-      draft.workingState = staged.state;
-      draft.updatedAt = now;
-      await writeActiveDraft(draft);
-      await publishUiState(draft.workingState);
-
-      for (const link of plan.existingReferenceLinks) {
-        markImportObjectLinked(
-          session,
-          link.importKey,
-          link.targetObjectId,
-          now,
-        );
-      }
-
-      markImportObjectApproved(
-        session,
-        previewId,
-        staged.stagedObjectId,
-        now,
-      );
+      markImportObjectInView(session, session.selectedObjectId, now);
       await writeImportReview(session);
       setSession({ ...session, previewState: { ...session.previewState } });
+      window.dispatchEvent(
+        new CustomEvent("burbot:import-review-changed"),
+      );
+      window.dispatchEvent(new Event("burbot:object-view-changed"));
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setBusy(false);
+    }
+  }
 
-      const windowId = windowIdRef.current;
-      if (windowId !== null) {
-        await patchSidepanelUiState(windowId, {
-          workspace: {
-            objectId: staged.stagedObjectId,
-            active: null,
-          },
-        });
-        const focusResponse = (await browser.runtime.sendMessage({
-          type: "BURBOT_COMMIT",
-          op: "FOCUS",
-          windowId,
-          objectId: staged.stagedObjectId,
-        })) as { ok?: boolean };
-        // Approval itself is authoritative. Focusing the workspace is QoL only.
-        if (!focusResponse?.ok) {
-          // The remembered objectId above still restores the correct object
-          // when the sidepanel is reopened.
-        }
-      }
+  async function rejectSelected() {
+    if (!session?.selectedObjectId) return;
+    setBusy(true);
+    setError("");
+    try {
+      const now = new Date().toISOString();
+      markImportObjectRejected(session, session.selectedObjectId, now);
+      await writeImportReview(session);
+      setSession({ ...session, previewState: { ...session.previewState } });
+      window.dispatchEvent(
+        new CustomEvent("burbot:import-review-changed"),
+      );
+      window.dispatchEvent(new Event("burbot:object-view-changed"));
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setBusy(false);
+    }
+  }
 
-      window.dispatchEvent(new Event("burbot:commit-changed"));
-      window.dispatchEvent(new CustomEvent("burbot:import-review-changed"));
+  async function restoreSelected() {
+    if (!session?.selectedObjectId) return;
+    setBusy(true);
+    setError("");
+    try {
+      const now = new Date().toISOString();
+      markImportObjectPending(session, session.selectedObjectId, now);
+      await writeImportReview(session);
+      setSession({ ...session, previewState: { ...session.previewState } });
+      window.dispatchEvent(
+        new CustomEvent("burbot:import-review-changed"),
+      );
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
@@ -493,34 +382,38 @@ export function ImportReviewPanel() {
 
   async function closeReview() {
     if (!session) return;
+    if ((view.stagedCount ?? 0) > 0) {
+      setError(
+        "Najpierw zapisz aktywny commit do SQLite albo go odrzuć. Obiekty staged muszą pozostać powiązane z importem.",
+      );
+      return;
+    }
+    const remaining =
+      (view.pendingCount ?? 0) + (view.inViewCount ?? 0);
     if (
-      (view.pendingCount ?? 0) > 0 &&
+      remaining > 0 &&
       !confirm(
-        "Zamknąć import review? Niezatwierdzone obiekty zostaną odrzucone.",
+        "Zamknąć import? Obiekty oczekujące i zaakceptowane do Widoku zostaną usunięte z tej sesji importu.",
       )
     ) {
       return;
     }
-    const windowId = windowIdRef.current;
-    let workspaceScroll = 0;
-    if (windowId !== null) {
-      const uiState = await readSidepanelUiState(windowId);
-      workspaceScroll = uiState.scroll.workspace;
-      await patchSidepanelUiState(windowId, {
-        mode: "workspace",
-        scroll: { review: window.scrollY },
-      });
-    }
     await clearImportReview();
     setSession(null);
-    modeRef.current = "workspace";
-    setMode("workspace");
-    restoreScroll(workspaceScroll);
+    onNavigate("view");
     await clearPageReviewHighlights();
     window.dispatchEvent(new Event("burbot:selector-highlights-refresh"));
+    window.dispatchEvent(new Event("burbot:object-view-changed"));
   }
 
-  if (!session) return null;
+  if (!session) {
+    return (
+      <section className="import-review-empty">
+        <strong>Brak aktywnego importu</strong>
+        <p>Wybierz plik JSON, aby rozpocząć review.</p>
+      </section>
+    );
+  }
 
   const groups = ["operator", "project", "recruitment"].map((type) => ({
     type,
@@ -542,34 +435,28 @@ export function ImportReviewPanel() {
       ...view.files.flatMap((file) => [file.sourcePageUrl, file.url]),
     ]),
   ];
+  const configuredFields = view.fields.filter(
+    (field) => field.value !== "Nie ustawiono" || field.evidenceCount > 0,
+  );
+  const unsetFields = view.fields.filter(
+    (field) => field.value === "Nie ustawiono" && field.evidenceCount === 0,
+  );
+
+  const reviewedCount =
+    view.objects.length - (view.pendingCount ?? 0);
 
   return (
     <section className="import-review-shell">
-      <nav className="workspace-mode-tabs" aria-label="Tryb pracy">
-        <button
-          type="button"
-          className={mode === "workspace" ? "active" : ""}
-          onClick={() => void switchMode("workspace")}
-        >
-          Workspace
-        </button>
-        <button
-          type="button"
-          className={mode === "review" ? "active" : ""}
-          onClick={() => void switchMode("review")}
-        >
-          Import review <span>{view.pendingCount ?? 0}</span>
-        </button>
-      </nav>
-
-      {mode === "review" && (
-        <div className="import-review-panel">
+      <div className="import-review-panel">
           <header className="import-review-header">
             <div>
               <span className="eyebrow">IMPORT REVIEW</span>
               <strong>{view.fileName}</strong>
               <small>
-                {view.approvedCount}/{view.objects.length} zatwierdzono
+                {reviewedCount}/{view.objects.length} przejrzano ·{" "}
+                {view.inViewCount ?? 0} w Widoku ·{" "}
+                {view.stagedCount ?? 0} w commicie ·{" "}
+                {view.committedCount ?? 0} zapisano
               </small>
             </div>
             <button
@@ -585,7 +472,7 @@ export function ImportReviewPanel() {
               style={{
                 width: `${
                   view.objects.length
-                    ? ((view.approvedCount ?? 0) / view.objects.length) * 100
+                    ? (reviewedCount / view.objects.length) * 100
                     : 0
                 }%`,
               }}
@@ -608,13 +495,13 @@ export function ImportReviewPanel() {
                           type="button"
                           className={`${
                             object.id === view.selectedObjectId ? "selected " : ""
-                          }${object.status === "APPROVED" ? "approved" : ""}`}
+                          }${object.status !== "PENDING" ? " reviewed" : ""} status-${object.status.toLowerCase()}`}
                           onClick={() => void select(object.id)}
                         >
                           <span>{object.label}</span>
                           <small>
-                            {object.status === "APPROVED"
-                              ? "✓"
+                            {object.status !== "PENDING"
+                              ? reviewStatusLabel(object.status)
                               : [
                                   object.evidenceCount
                                     ? `${object.evidenceCount} ev`
@@ -625,7 +512,7 @@ export function ImportReviewPanel() {
                                     : "",
                                 ]
                                   .filter(Boolean)
-                                  .join(" · ") || "do sprawdzenia"}
+                                  .join(" · ") || reviewStatusLabel(object.status)}
                           </small>
                         </button>
                       ))}
@@ -664,12 +551,12 @@ export function ImportReviewPanel() {
                     <div className="import-review-section-heading">
                       <div>
                         <span className="eyebrow">DANE OBIEKTU</span>
-                        <strong>{view.fields.length} pól</strong>
+                        <strong>{configuredFields.length} ustawionych</strong>
                       </div>
                       <small>Dane z importu są tylko do odczytu.</small>
                     </div>
                     <div className="import-review-fields">
-                      {view.fields.map((field) => {
+                      {configuredFields.map((field) => {
                         const evidence = view.evidence.filter(
                           (entry) => entry.field === field.field,
                         );
@@ -721,6 +608,18 @@ export function ImportReviewPanel() {
                         );
                       })}
                     </div>
+                    {unsetFields.length > 0 && (
+                      <details className="import-review-unset-fields">
+                        <summary>
+                          Puste pola <span>{unsetFields.length}</span>
+                        </summary>
+                        <div>
+                          {unsetFields.map((field) => (
+                            <span key={field.field}>{field.label}</span>
+                          ))}
+                        </div>
+                      </details>
+                    )}
                   </section>
 
                   {view.files.length > 0 && (
@@ -765,7 +664,7 @@ export function ImportReviewPanel() {
                       </div>
                       <div className="import-review-financing">
                         {view.financing.map((variant) => (
-                          <details key={variant.id} open className="import-review-finance-card">
+                          <details key={variant.id} className="import-review-finance-card">
                             <summary>
                               <span>
                                 {variant.companySizeLabel} · wariant {variant.variantNo}
@@ -792,30 +691,118 @@ export function ImportReviewPanel() {
                   )}
 
                   <p className="import-review-hint">
-                    Import Review służy wyłącznie do sprawdzenia danych i źródeł. Zmiany wykonuj po zatwierdzeniu w Workspace.
+                    Import jest oddzielony od commita. Najpierw zaakceptuj obiekt
+                    do Widoku. Dopiero z Widoku zdecydujesz, co ma trafić do
+                    commita.
                   </p>
-                  {existingTarget && selected.status !== "APPROVED" && (
+                  {existingTarget && selected.status !== "STAGED" && (
                     <div className="import-review-update-existing">
                       <strong>Aktualizacja istniejącego obiektu</strong>
                       <span>{existingTarget.label}</span>
                       <small>
-                        Zatwierdzenie zaktualizuje ten sam obiekt w aktywnym commicie.
-                        ID pozostanie bez zmian i duplikat nie zostanie utworzony.
+                        Po dodaniu z Widoku do commita zmiany zostaną naniesione
+                        na ten sam obiekt. ID pozostanie bez zmian i duplikat nie
+                        zostanie utworzony.
                       </small>
                     </div>
                   )}
-                  <button
-                    type="button"
-                    className="primary import-review-approve"
-                    disabled={busy || selected.status === "APPROVED"}
-                    onClick={() => void approve()}
-                  >
-                    {selected.status === "APPROVED"
-                      ? "Zatwierdzono — obiekt jest w commicie"
-                      : existingTarget
-                        ? "Zatwierdź zmiany → dodaj do commita"
-                        : "Zatwierdź obiekt → dodaj do commita"}
-                  </button>
+
+                  <div className="import-review-decision-actions">
+                    {selected.status === "PENDING" && (
+                      <>
+                        <button
+                          type="button"
+                          className="text-button danger"
+                          disabled={busy}
+                          onClick={() => void rejectSelected()}
+                        >
+                          Odrzuć
+                        </button>
+                        <button
+                          type="button"
+                          className="primary import-review-to-view"
+                          disabled={busy}
+                          onClick={() => void acceptToView()}
+                        >
+                          Zaakceptuj → Widok
+                        </button>
+                      </>
+                    )}
+
+                    {selected.status === "IN_VIEW" && (
+                      <>
+                        <button
+                          type="button"
+                          className="text-button danger"
+                          disabled={busy}
+                          onClick={() => void rejectSelected()}
+                        >
+                          Odrzuć import
+                        </button>
+                        <button
+                          type="button"
+                          className="text-button"
+                          disabled={busy}
+                          onClick={() => void restoreSelected()}
+                        >
+                          Wycofaj z Widoku
+                        </button>
+                        <button
+                          type="button"
+                          className="primary"
+                          onClick={() => onNavigate("view")}
+                        >
+                          Przejdź do Widoku
+                        </button>
+                      </>
+                    )}
+
+                    {selected.status === "STAGED" && (
+                      <>
+                        <span className="import-review-state-badge staged">
+                          W commicie
+                        </span>
+                        <button
+                          type="button"
+                          className="primary"
+                          onClick={() => onNavigate("commit")}
+                        >
+                          Pokaż commit
+                        </button>
+                      </>
+                    )}
+
+                    {selected.status === "COMMITTED" && (
+                      <>
+                        <span className="import-review-state-badge committed">
+                          Zapisano do SQLite
+                        </span>
+                        <button
+                          type="button"
+                          className="primary"
+                          onClick={() => onNavigate("view")}
+                        >
+                          Przejdź do Widoku
+                        </button>
+                      </>
+                    )}
+
+                    {selected.status === "REJECTED" && (
+                      <>
+                        <span className="import-review-state-badge rejected">
+                          Odrzucono
+                        </span>
+                        <button
+                          type="button"
+                          className="primary"
+                          disabled={busy}
+                          onClick={() => void restoreSelected()}
+                        >
+                          Przywróć do review
+                        </button>
+                      </>
+                    )}
+                  </div>
                 </>
               ) : (
                 <p>Wybierz obiekt do sprawdzenia.</p>
@@ -823,8 +810,7 @@ export function ImportReviewPanel() {
               {error && <p className="commit-error">{error}</p>}
             </div>
           </div>
-        </div>
-      )}
+      </div>
     </section>
   );
 }
