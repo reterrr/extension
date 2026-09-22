@@ -1,4 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
+import { revokeApprovedImportObject } from "../shared/import/review";
+import {
+  readImportReview,
+  writeImportReview,
+} from "../shared/import/reviewStore";
 import type {
   CommitRelatedChange,
   CommitSessionObject,
@@ -331,13 +336,6 @@ export function CommitPanel() {
     });
   }
 
-  async function stageObject(objectId: string) {
-    await run(
-      () => sendCommit<CommitSessionView>("STAGE_OBJECT", { objectId }),
-      setSession,
-    );
-  }
-
   async function unstageObject(objectId: string) {
     await run(
       () => sendCommit<CommitSessionView>("UNSTAGE_OBJECT", { objectId }),
@@ -357,12 +355,44 @@ export function CommitPanel() {
     });
   }
 
+  async function syncDiscardedImport(objectId: string) {
+    const review = await readImportReview();
+    if (!review) return;
+
+    const importKeys = Object.entries(review.approvedObjectIdByImportKey)
+      .filter(([, targetId]) => targetId === objectId)
+      .map(([importKey]) => importKey);
+    if (!importKeys.length) return;
+
+    const now = new Date().toISOString();
+    for (const importKey of importKeys) {
+      const preview = review.previewState.objects.find(
+        (object) => object.importKey === importKey,
+      );
+      if (
+        preview &&
+        review.statusByObjectId[preview.id] === "APPROVED"
+      ) {
+        revokeApprovedImportObject(review, preview.id, now);
+      }
+    }
+
+    await writeImportReview(review);
+    window.dispatchEvent(
+      new CustomEvent("burbot:import-review-changed"),
+    );
+  }
+
   async function discardObject(objectId: string) {
     if (!confirm("Odrzucić wszystkie zmiany tego obiektu z View?")) return;
-    await run(
-      () => sendCommit<CommitSessionView>("DISCARD_OBJECT", { objectId }),
-      setSession,
-    );
+    await run(async () => {
+      const next = await sendCommit<CommitSessionView>("DISCARD_OBJECT", {
+        objectId,
+      });
+      await syncDiscardedImport(objectId);
+      setSession(next);
+      return next;
+    });
   }
 
 
