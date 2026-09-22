@@ -322,19 +322,19 @@ export function ViewManagerPanel() {
           <strong>
             {view
               ? `${activeObjects.length} ${activeObjects.length === 1 ? "obiekt" : "obiektów"}`
-              : "Cała baza"}
+              : "Brak ograniczenia · cała baza"}
           </strong>
           <small>
             {view?.query
-              ? `Z filtra: ${view.query}`
+              ? `Filtr: ${view.query}`
               : view
                 ? "Ręcznie wybrany zestaw"
-                : "Ustaw View filtrem albo dodaj obiekty przyciskiem +"}
+                : "Ustaw regex/filtr albo dodawaj obiekty ręcznie przyciskiem +"}
           </small>
         </div>
         {view && (
           <button type="button" className="text-button" onClick={() => run(clear)}>
-            Wyczyść
+            Wyczyść View
           </button>
         )}
       </header>
@@ -342,26 +342,72 @@ export function ViewManagerPanel() {
       {view && (
         <div className="view-members">
           {activeObjects.length ? (
-            activeObjects.map((object) => (
-              <div key={object.id} className="view-member">
-                <button
-                  type="button"
-                  className="view-member-open"
-                  onClick={() => run(() => openObject(object.id))}
-                >
-                  <strong>{displayName(object)}</strong>
-                  <small>{typeLabel(object)}</small>
-                </button>
-                <button
-                  type="button"
-                  className="view-member-remove"
-                  aria-label={`Usuń ${displayName(object)} z View`}
-                  onClick={() => run(() => remove(object.id))}
-                >
-                  −
-                </button>
-              </div>
-            ))
+            activeObjects.map((object) => {
+              const entry = commitById.get(object.id);
+              const changed = Boolean(entry && entry.status !== "UNCHANGED");
+              const busy = busyObjectId === object.id;
+              return (
+                <div key={object.id} className="view-member">
+                  <button
+                    type="button"
+                    className="view-member-open"
+                    onClick={() => run(() => openObject(object.id))}
+                  >
+                    <strong>{displayName(object)}</strong>
+                    <small>
+                      {typeLabel(object)}
+                      {changed ? " · " + statusLabel(entry) : ""}
+                    </small>
+                  </button>
+
+                  {changed && (
+                    <button
+                      type="button"
+                      className={
+                        entry?.staged
+                          ? "view-member-stage is-staged"
+                          : "view-member-stage"
+                      }
+                      disabled={busy}
+                      onClick={() =>
+                        run(() =>
+                          entry?.staged
+                            ? unstageObject(object.id)
+                            : stageObject(object.id),
+                        )
+                      }
+                    >
+                      {entry?.staged ? "✓ Commit" : "→ Commit"}
+                    </button>
+                  )}
+
+                  {changed && (
+                    <button
+                      type="button"
+                      className="view-member-discard"
+                      disabled={busy}
+                      title="Odrzuć zmiany obiektu i wróć do stanu z SQLite"
+                      onClick={() =>
+                        run(() =>
+                          discardObjectChanges(object.id, displayName(object)),
+                        )
+                      }
+                    >
+                      ↶
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    className="view-member-remove"
+                    aria-label={"Usuń " + displayName(object) + " z View"}
+                    onClick={() => run(() => remove(object.id))}
+                  >
+                    −
+                  </button>
+                </div>
+              );
+            })
           ) : (
             <p className="view-manager-empty">
               View jest pusty. Dodaj obiekty poniżej.
@@ -369,13 +415,12 @@ export function ViewManagerPanel() {
           )}
         </div>
       )}
-
       <div className="view-search">
         <input
           type="search"
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          placeholder='Filtr, np. woj:małopolskie /Nowy Sącz/i type:nabory'
+          placeholder='Regex / filtr, np. woj:małopolskie /Nowy Sącz/i type:nabory'
           aria-label="Filtr View"
         />
         <button
