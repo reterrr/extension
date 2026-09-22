@@ -869,7 +869,7 @@ import {
         : "Wyniki: " + currentMatches.length;
       setViewButton.textContent = objectView
         ? hasRestriction
-          ? "Zawęź widok · " + currentMatches.length
+          ? "Ustaw widok · " + currentMatches.length
           : "Widok aktywny · " + scopedObjects.length
         : hasRestriction
           ? "Ustaw widok · " + currentMatches.length
