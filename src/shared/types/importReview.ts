@@ -4,6 +4,7 @@ export type ImportReviewObjectStatus =
   | "PENDING"
   | "IN_VIEW"
   | "STAGED"
+  | "COMMITTED"
   | "REJECTED";
 export type ImportReviewEditorType = "text" | "number" | "date" | "select";
 
@@ -93,6 +94,7 @@ export interface ImportReviewView {
   pendingCount?: number;
   inViewCount?: number;
   stagedCount?: number;
+  committedCount?: number;
   rejectedCount?: number;
   approvedCount?: number;
   objects: ImportReviewObjectView[];
