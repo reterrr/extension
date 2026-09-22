@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import type {
+  CommitRelatedChange,
   CommitSessionObject,
   CommitSessionView,
+  CommitValueChange,
 } from "../shared/types/commit";
 
 interface CommitResponse<T> {
@@ -18,6 +20,51 @@ const EMPTY_SESSION: CommitSessionView = {
   active: false,
   dirty: false,
   objects: [],
+};
+
+const VALUE_LABELS: Record<string, string> = {
+  OGLOSZONY: "Ogłoszony",
+  PLANOWANY: "Planowany",
+  AKTYWNY: "Aktywny",
+  ZAWIESZONY: "Zawieszony",
+  ZAMKNIETY: "Zamknięty",
+  ZAKONCZONY: "Zakończony",
+  ANULOWANY: "Anulowany",
+  OPERATOR: "Operator",
+  PARTNER: "Partner",
+  GLOWNY: "Główny",
+  DODATKOWY: "Dodatkowy",
+};
+
+const FIELD_LABELS: Record<string, string> = {
+  name: "Nazwa",
+  external_number: "Numer / nazwa naboru",
+  source_number: "Numer źródłowy",
+  sequence_number: "Numer kolejny",
+  number: "Numer projektu",
+  status: "Status",
+  operator_id: "Operator",
+  project_id: "Projekt",
+  type: "Typ",
+  nip: "NIP",
+  role: "Rola",
+  address: "Adres",
+  website: "Strona WWW",
+  notes: "Uwagi",
+  sourceUrl: "Źródło",
+  start_date: "Data rozpoczęcia",
+  end_date: "Data zakończenia",
+  planned_start_date: "Planowana data rozpoczęcia",
+  planned_end_date: "Planowana data zakończenia",
+  dataRozpoczeciaOd: "Rozpoczęcie od",
+  dataRozpoczeciaDo: "Rozpoczęcie do",
+  dataZakonczeniaOd: "Zakończenie od",
+  dataZakonczeniaDo: "Zakończenie do",
+  announcements_site_url: "Strona naborów",
+  documents_url: "Strona dokumentów",
+  action_code: "Kod działania",
+  direct_recruitment_link: "Bezpośredni link do naboru",
+  funding_rules: "Zasady dofinansowania",
 };
 
 async function sendCommit<T>(
@@ -42,71 +89,144 @@ async function currentWindowId(): Promise<number> {
   return window.id;
 }
 
-function statusLabel(status: CommitSessionObject["status"]): string | null {
+function statusLabel(status: CommitSessionObject["status"]): string {
   if (status === "NEW") return "NEW";
   if (status === "MODIFIED") return "MODIFIED";
   if (status === "DELETED") return "DELETED";
-  return null;
+  return "UNCHANGED";
 }
 
-function ObjectGroup({
-  label,
-  createType,
-  objects,
+function typeLabel(type: CommitSessionObject["type"]): string {
+  if (type === "operator") return "Operator";
+  if (type === "project") return "Projekt";
+  return "Nabór";
+}
+
+function fieldLabel(field: string): string {
+  if (FIELD_LABELS[field]) return FIELD_LABELS[field];
+  return field
+    .replaceAll("_", " ")
+    .replace(/\b\w/g, (letter) => letter.toLocaleUpperCase("pl-PL"));
+}
+
+function displayDiffValue(value: string | undefined): string {
+  if (!value) return "";
+  return VALUE_LABELS[value] ?? value;
+}
+
+function relatedCount(change: CommitRelatedChange): number {
+  return change.added + change.modified + change.removed;
+}
+
+function objectChangeCount(object: CommitSessionObject): number {
+  return (
+    object.changes.length +
+    object.relatedChanges.reduce((sum, change) => sum + relatedCount(change), 0)
+  );
+}
+
+function RelatedChange({ change }: { change: CommitRelatedChange }) {
+  return (
+    <div className="commit-related-change">
+      <span>{change.label}</span>
+      <span className="commit-related-counts">
+        {change.added > 0 && <b className="is-added">+{change.added}</b>}
+        {change.modified > 0 && <b className="is-modified">~{change.modified}</b>}
+        {change.removed > 0 && <b className="is-removed">−{change.removed}</b>}
+      </span>
+    </div>
+  );
+}
+
+function FieldChange({ change }: { change: CommitValueChange }) {
+  return (
+    <div className="commit-field-change">
+      <span className="commit-field-name">{fieldLabel(change.field)}</span>
+      <div className="commit-field-values">
+        {change.status === "ADDED" ? (
+          <span className="commit-value-after">+ {displayDiffValue(change.after)}</span>
+        ) : change.status === "REMOVED" ? (
+          <>
+            <span className="commit-value-before">{displayDiffValue(change.before)}</span>
+            <span className="commit-arrow">→</span>
+            <span className="commit-value-removed">usunięto</span>
+          </>
+        ) : (
+          <>
+            <span className="commit-value-before">{displayDiffValue(change.before)}</span>
+            <span className="commit-arrow">→</span>
+            <span className="commit-value-after">{displayDiffValue(change.after)}</span>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ChangeCard({
+  object,
   busy,
   onFocus,
-  onCreate,
 }: {
-  label: string;
-  createType: "project" | "operator" | "recruitment";
-  objects: CommitSessionObject[];
+  object: CommitSessionObject;
   busy: boolean;
   onFocus: (objectId: string) => Promise<void>;
-  onCreate: (type: "project" | "operator" | "recruitment") => Promise<void>;
 }) {
+  const deleted = object.status === "DELETED";
+  const count = objectChangeCount(object);
+
   return (
-    <details className="commit-group">
+    <details
+      className={"commit-change-card commit-change-" + object.status.toLowerCase()}
+    >
       <summary>
-        <span>{label}</span>
-        <span className="commit-count">{objects.length}</span>
-      </summary>
-      <div className="commit-group-body">
-        <button
-          type="button"
-          className="commit-add-object"
-          disabled={busy}
-          onClick={() => void onCreate(createType)}
-          title="Najpierw zaznacz nazwę obiektu na aktywnej stronie"
+        <span
+          className={"commit-status commit-status-" + object.status.toLowerCase()}
         >
-          + Dodaj z zaznaczenia
-        </button>
-        {objects.length === 0 ? (
-          <p className="commit-empty">Brak obiektów w bazie.</p>
-        ) : (
-          <div className="commit-object-list">
-            {objects.map((object) => {
-              const badge = statusLabel(object.status);
-              const deleted = object.status === "DELETED";
-              return (
-                <button
-                  key={object.id}
-                  type="button"
-                  className={`commit-object-row${deleted ? " commit-object-deleted" : ""}`}
-                  disabled={busy || deleted}
-                  onClick={() => void onFocus(object.id)}
-                >
-                  <span className="commit-object-label">{object.label}</span>
-                  {badge && (
-                    <span
-                      className={`commit-status commit-status-${object.status.toLowerCase()}`}
-                    >
-                      {badge}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
+          {statusLabel(object.status)}
+        </span>
+        <span className="commit-change-copy">
+          <strong>{object.label}</strong>
+          <small>
+            {typeLabel(object.type)}
+            {count > 0
+              ? " · " + count + " " + (count === 1 ? "zmiana" : "zmian")
+              : ""}
+          </small>
+        </span>
+        <span className="commit-chevron" aria-hidden="true">›</span>
+      </summary>
+
+      <div className="commit-change-body">
+        {deleted && (
+          <p className="commit-delete-note">Obiekt zostanie usunięty z SQLite.</p>
+        )}
+
+        {object.changes.length > 0 && (
+          <div className="commit-field-diff">
+            {object.changes.map((change) => (
+              <FieldChange key={change.field} change={change} />
+            ))}
           </div>
+        )}
+
+        {object.relatedChanges.length > 0 && (
+          <div className="commit-related-diff">
+            {object.relatedChanges.map((change) => (
+              <RelatedChange key={change.key} change={change} />
+            ))}
+          </div>
+        )}
+
+        {!deleted && (
+          <button
+            type="button"
+            className="commit-focus"
+            disabled={busy}
+            onClick={() => void onFocus(object.id)}
+          >
+            Otwórz obiekt
+          </button>
         )}
       </div>
     </details>
@@ -149,26 +269,16 @@ export function CommitPanel() {
     };
   }, []);
 
-  const groups = useMemo(() => {
-    const sort = (items: CommitSessionObject[]) =>
-      [...items].sort((a, b) => {
-        const rank = { NEW: 0, MODIFIED: 1, DELETED: 2, UNCHANGED: 3 } as const;
-        return rank[a.status] - rank[b.status] || a.label.localeCompare(b.label, "pl");
-      });
-    return {
-      operators: sort(session.objects.filter((object) => object.type === "operator")),
-      projects: sort(session.objects.filter((object) => object.type === "project")),
-      recruitments: sort(
-        session.objects.filter(
-          (object) => object.type === "recruitment" || object.type === "nabor",
-        ),
-      ),
-    };
+  const stagedObjects = useMemo(() => {
+    const rank = { NEW: 0, MODIFIED: 1, DELETED: 2, UNCHANGED: 3 } as const;
+    return session.objects
+      .filter((object) => object.status !== "UNCHANGED")
+      .sort(
+        (a, b) =>
+          rank[a.status] - rank[b.status] ||
+          a.label.localeCompare(b.label, "pl"),
+      );
   }, [session.objects]);
-
-  const stagedObjectCount = session.objects.filter(
-    (object) => object.status !== "UNCHANGED",
-  ).length;
 
   async function run<T>(work: () => Promise<T>, apply?: (value: T) => void) {
     setBusy(true);
@@ -208,7 +318,7 @@ export function CommitPanel() {
       <section className="commit-panel commit-panel-idle">
         <div>
           <strong>Zmiany w bazie</strong>
-          <p>Rozpocznij commit, zanim zaczniesz dodawać lub zmieniać obiekty.</p>
+          <p>Rozpocznij commit przed edycją danych.</p>
         </div>
         <button
           type="button"
@@ -231,11 +341,13 @@ export function CommitPanel() {
   return (
     <section className="commit-panel commit-panel-active">
       <div className="commit-header">
-        <div>
-          <span className="commit-eyebrow">ACTIVE COMMIT</span>
+        <div className="commit-title">
           <strong>Commit {session.id?.slice(0, 8)}</strong>
           <small>
-            baza r{session.baseRevision} · {stagedObjectCount} zmian obiektowych
+            r{session.baseRevision} · {stagedObjects.length}{" "}
+            {stagedObjects.length === 1
+              ? "obiekt zmieniony"
+              : "obiektów zmienionych"}
           </small>
         </div>
         <span className={session.dirty ? "commit-dirty" : "commit-clean"}>
@@ -243,37 +355,32 @@ export function CommitPanel() {
         </span>
       </div>
 
-      <div className="commit-groups">
-        <ObjectGroup
-          label="Operatorzy"
-          createType="operator"
-          objects={groups.operators}
-          busy={busy}
-          onFocus={focusObject}
-          onCreate={createObject}
-        />
-        <ObjectGroup
-          label="Projekty"
-          createType="project"
-          objects={groups.projects}
-          busy={busy}
-          onFocus={focusObject}
-          onCreate={createObject}
-        />
-        <ObjectGroup
-          label="Nabory"
-          createType="recruitment"
-          objects={groups.recruitments}
-          busy={busy}
-          onFocus={focusObject}
-          onCreate={createObject}
-        />
+      <div className="commit-create-actions" aria-label="Dodaj obiekt z zaznaczenia">
+        <button disabled={busy} onClick={() => void createObject("operator")}>
+          + Operator
+        </button>
+        <button disabled={busy} onClick={() => void createObject("project")}>
+          + Projekt
+        </button>
+        <button disabled={busy} onClick={() => void createObject("recruitment")}>
+          + Nabór
+        </button>
       </div>
 
-      <p className="commit-hint">
-        Nowy obiekt: zaznacz jego nazwę na stronie i kliknij „Dodaj z zaznaczenia” albo użyj
-        prawego przycisku → Create Burbot object.
-      </p>
+      <div className="commit-staged">
+        {stagedObjects.length ? (
+          stagedObjects.map((object) => (
+            <ChangeCard
+              key={object.id}
+              object={object}
+              busy={busy}
+              onFocus={focusObject}
+            />
+          ))
+        ) : (
+          <p className="commit-empty">Brak zmian do zapisania.</p>
+        )}
+      </div>
 
       <div className="commit-actions">
         <button

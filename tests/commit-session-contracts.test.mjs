@@ -90,6 +90,21 @@ test("new and edited objects are marked in commit projection", () => {
 
   const view = session.commitSessionView(draft);
   assert.equal(view.dirty, true);
+  assert.deepEqual(view.objects[0].changes, [
+    {
+      field: "status",
+      status: "MODIFIED",
+      before: "AKTYWNY",
+      after: "ZAKONCZONY",
+    },
+  ]);
+  assert.deepEqual(view.objects[1].changes, [
+    {
+      field: "name",
+      status: "ADDED",
+      after: "RARR",
+    },
+  ]);
   assert.deepEqual(
     view.objects.map(({ id, status }) => [id, status]),
     [
@@ -125,4 +140,40 @@ test("deleted database objects remain visible in the draft as DELETED", () => {
       ["operator-1", "DELETED"],
     ],
   );
+});
+
+
+test("related-only changes are visible in the commit diff", () => {
+  const base = state([project]);
+  const working = structuredClone(base);
+  working.revision = 5;
+  working.geographies.push({
+    id: "geo-1",
+    objectId: "project-1",
+    type: "WOJEWODZTWO",
+    role: "OBEJMUJE",
+    value: "podkarpackie",
+  });
+
+  const draft = {
+    id: "commit-4",
+    createdAt: "2026-09-16T10:00:00.000Z",
+    updatedAt: "2026-09-16T12:00:00.000Z",
+    baseRevision: 4,
+    baseState: base,
+    workingState: working,
+  };
+
+  const view = session.commitSessionView(draft);
+  assert.equal(view.objects[0].status, "MODIFIED");
+  assert.deepEqual(view.objects[0].changes, []);
+  assert.deepEqual(view.objects[0].relatedChanges, [
+    {
+      key: "geographies",
+      label: "Geografia",
+      added: 1,
+      modified: 0,
+      removed: 0,
+    },
+  ]);
 });
