@@ -512,7 +512,7 @@ test("recruitment reference reuses an existing workspace project instead of dupl
     "existing-project-id",
     now,
   );
-  assert.equal(session.statusByObjectId[project.id], "APPROVED");
+  assert.equal(session.statusByObjectId[project.id], "STAGED");
   assert.equal(
     session.approvedObjectIdByImportKey["project-1"],
     "existing-project-id",
@@ -855,4 +855,36 @@ test("portable import cannot set system-managed last_checked_at", () => {
       ),
     /managed automatically/,
   );
+});
+
+
+test("import review separates view acceptance from commit staging", () => {
+  const session = reviewModule.createImportReviewSession(
+    documentFixture(),
+    "workflow.burbot-import.json",
+    ids(),
+    "2026-09-22T10:00:00.000Z",
+  );
+  const objectId = session.objectOrder[0];
+
+  reviewModule.markImportObjectInView(
+    session,
+    objectId,
+    "2026-09-22T10:01:00.000Z",
+  );
+  assert.equal(session.statusByObjectId[objectId], "IN_VIEW");
+
+  reviewModule.markImportObjectRejected(
+    session,
+    objectId,
+    "2026-09-22T10:02:00.000Z",
+  );
+  assert.equal(session.statusByObjectId[objectId], "REJECTED");
+
+  reviewModule.markImportObjectPending(
+    session,
+    objectId,
+    "2026-09-22T10:03:00.000Z",
+  );
+  assert.equal(session.statusByObjectId[objectId], "PENDING");
 });
