@@ -1,4 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
+import { revokeApprovedImportObject } from "../shared/import/review";
+import {
+  readImportReview,
+  writeImportReview,
+} from "../shared/import/reviewStore";
 import type {
   CommitRelatedChange,
   CommitSessionObject,
@@ -255,53 +260,6 @@ function ChangeCard({
   );
 }
 
-function PendingViewRow({
-  object,
-  busy,
-  onStage,
-  onDiscard,
-}: {
-  object: CommitSessionObject;
-  busy: boolean;
-  onStage: (objectId: string) => Promise<void>;
-  onDiscard: (objectId: string) => Promise<void>;
-}) {
-  const count = objectChangeCount(object);
-  return (
-    <div className="commit-pending-row">
-      <span
-        className={"commit-status commit-status-" + object.status.toLowerCase()}
-      >
-        {statusLabel(object.status)}
-      </span>
-      <span className="commit-pending-copy">
-        <strong>{object.label}</strong>
-        <small>
-          {typeLabel(object.type)}
-          {count ? " · " + count + " " + (count === 1 ? "zmiana" : "zmian") : ""}
-        </small>
-      </span>
-      <button
-        type="button"
-        className="commit-stage-pending"
-        disabled={busy}
-        onClick={() => void onStage(object.id)}
-      >
-        + Commit
-      </button>
-      <button
-        type="button"
-        className="commit-discard-pending"
-        disabled={busy}
-        aria-label={"Odrzuć zmiany " + object.label}
-        onClick={() => void onDiscard(object.id)}
-      >
-        ×
-      </button>
-    </div>
-  );
-}
-
 export function CommitPanel() {
   const [session, setSession] = useState<CommitSessionView>(EMPTY_SESSION);
   const [busy, setBusy] = useState(false);
@@ -349,17 +307,6 @@ export function CommitPanel() {
       );
   }, [session.objects]);
 
-  const pendingObjects = useMemo(() => {
-    const rank = { NEW: 0, MODIFIED: 1, DELETED: 2, UNCHANGED: 3 } as const;
-    return session.objects
-      .filter((object) => object.status !== "UNCHANGED" && !object.staged)
-      .sort(
-        (a, b) =>
-          rank[a.status] - rank[b.status] ||
-          a.label.localeCompare(b.label, "pl"),
-      );
-  }, [session.objects]);
-
   async function run<T>(work: () => Promise<T>, apply?: (value: T) => void) {
     setBusy(true);
     setError("");
@@ -389,13 +336,6 @@ export function CommitPanel() {
     });
   }
 
-  async function stageObject(objectId: string) {
-    await run(
-      () => sendCommit<CommitSessionView>("STAGE_OBJECT", { objectId }),
-      setSession,
-    );
-  }
-
   async function unstageObject(objectId: string) {
     await run(
       () => sendCommit<CommitSessionView>("UNSTAGE_OBJECT", { objectId }),
@@ -403,12 +343,56 @@ export function CommitPanel() {
     );
   }
 
+  async function unstageAll() {
+    await run(async () => {
+      let next = session;
+      for (const object of stagedObjects) {
+        next = await sendCommit<CommitSessionView>("UNSTAGE_OBJECT", {
+          objectId: object.id,
+        });
+      }
+      setSession(next);
+    });
+  }
+
+  async function syncDiscardedImport(objectId: string) {
+    const review = await readImportReview();
+    if (!review) return;
+
+    const importKeys = Object.entries(review.approvedObjectIdByImportKey)
+      .filter(([, targetId]) => targetId === objectId)
+      .map(([importKey]) => importKey);
+    if (!importKeys.length) return;
+
+    const now = new Date().toISOString();
+    for (const importKey of importKeys) {
+      const preview = review.previewState.objects.find(
+        (object) => object.importKey === importKey,
+      );
+      if (
+        preview &&
+        review.statusByObjectId[preview.id] === "APPROVED"
+      ) {
+        revokeApprovedImportObject(review, preview.id, now);
+      }
+    }
+
+    await writeImportReview(review);
+    window.dispatchEvent(
+      new CustomEvent("burbot:import-review-changed"),
+    );
+  }
+
   async function discardObject(objectId: string) {
     if (!confirm("Odrzucić wszystkie zmiany tego obiektu z View?")) return;
-    await run(
-      () => sendCommit<CommitSessionView>("DISCARD_OBJECT", { objectId }),
-      setSession,
-    );
+    await run(async () => {
+      const next = await sendCommit<CommitSessionView>("DISCARD_OBJECT", {
+        objectId,
+      });
+      await syncDiscardedImport(objectId);
+      setSession(next);
+      return next;
+    });
   }
 
 
@@ -444,9 +428,6 @@ export function CommitPanel() {
           <strong>Commit {session.id?.slice(0, 8)}</strong>
           <small>
             r{session.baseRevision} · {stagedObjects.length} w commicie
-            {(session.pendingViewCount ?? 0) > 0
-              ? " · " + session.pendingViewCount + " tylko w View"
-              : ""}
           </small>
         </div>
         <span className={session.dirty ? "commit-dirty" : "commit-clean"}>
@@ -471,40 +452,14 @@ export function CommitPanel() {
         )}
       </div>
 
-      {pendingObjects.length > 0 && (
-        <details className="commit-pending-view">
-          <summary>
-            Tylko w View
-            <span>{pendingObjects.length}</span>
-          </summary>
-          <div className="commit-pending-list">
-            {pendingObjects.map((object) => (
-              <PendingViewRow
-                key={object.id}
-                object={object}
-                busy={busy}
-                onStage={stageObject}
-                onDiscard={discardObject}
-              />
-            ))}
-          </div>
-        </details>
-      )}
-
       <div className="commit-actions">
         <button
           type="button"
           className="commit-discard"
-          disabled={busy}
-          onClick={() => {
-            if (!confirm("Odrzucić cały View i wszystkie niezapisane zmiany?")) return;
-            void run(
-              () => sendCommit<CommitResult>("DISCARD"),
-              (value) => setSession(value.session),
-            );
-          }}
+          disabled={busy || !stagedObjects.length}
+          onClick={() => void unstageAll()}
         >
-          Odrzuć cały View
+          Wyczyść Commit
         </button>
         <button
           type="button"

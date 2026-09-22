@@ -886,3 +886,46 @@ test("import review objects can be rejected and restored without entering View",
   assert.equal(view.rejectedCount, 0);
   assert.equal(view.pendingCount, 2);
 });
+
+
+test("approved import can be revoked after its View changes are discarded", () => {
+  const uuid = ids();
+  const now = "2026-09-22T12:30:00.000Z";
+  const session = reviewModule.createImportReviewSession(
+    documentFixture(),
+    "revoke-approved-import.burbot-import.json",
+    uuid,
+    now,
+  );
+  const project = session.previewState.objects[0];
+
+  reviewModule.markImportObjectApproved(
+    session,
+    project.id,
+    "working-project-id",
+    now,
+  );
+  assert.equal(session.statusByObjectId[project.id], "APPROVED");
+  assert.equal(
+    session.approvedObjectIdByImportKey[project.importKey],
+    "working-project-id",
+  );
+
+  reviewModule.revokeApprovedImportObject(
+    session,
+    project.id,
+    "2026-09-22T12:31:00.000Z",
+  );
+
+  const view = reviewModule.importReviewView(session);
+  assert.equal(session.statusByObjectId[project.id], "REJECTED");
+  assert.equal(
+    Object.prototype.hasOwnProperty.call(
+      session.approvedObjectIdByImportKey,
+      project.importKey,
+    ),
+    false,
+  );
+  assert.equal(view.rejectedCount, 1);
+  assert.equal(view.approvedCount, 0);
+});

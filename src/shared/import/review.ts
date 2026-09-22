@@ -909,6 +909,25 @@ export function markImportObjectApproved(
 }
 
 
+export function revokeApprovedImportObject(
+  session: ImportReviewSession,
+  previewObjectId: string,
+  now: string,
+): void {
+  const object = session.previewState.objects.find(
+    (entry) => entry.id === previewObjectId,
+  );
+  if (!object?.importKey) throw new Error("Imported object not found.");
+  if (session.statusByObjectId[previewObjectId] !== "APPROVED") {
+    throw new Error("Ten obiekt nie został jeszcze dodany do View.");
+  }
+
+  session.statusByObjectId[previewObjectId] = "REJECTED";
+  delete session.approvedObjectIdByImportKey[object.importKey];
+  session.updatedAt = now;
+  session.selectedObjectId = previewObjectId;
+}
+
 export function markImportObjectRejected(
   session: ImportReviewSession,
   previewObjectId: string,

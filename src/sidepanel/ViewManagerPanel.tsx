@@ -5,12 +5,18 @@ import {
   createObjectSearchDocument,
 } from "../shared/search/objectSearch.js";
 import {
+  readImportReview,
+  writeImportReview,
+} from "../shared/import/reviewStore";
+import { revokeApprovedImportObject } from "../shared/import/review";
+import {
   OBJECT_VIEW_STORAGE_KEY,
   addObjectToView,
   createObjectView,
   normalizeObjectView,
   removeObjectFromView,
 } from "../shared/search/objectView.js";
+import type { CommitSessionObject, CommitSessionView } from "../shared/types/commit";
 import type {
   LegacyStorageState,
   LegacyStoredObject,
@@ -37,6 +43,12 @@ const EMPTY_STATE: LegacyStorageState = {
   rules: [],
 };
 
+const EMPTY_COMMIT: CommitSessionView = {
+  active: false,
+  dirty: false,
+  objects: [],
+};
+
 function globals() {
   return globalThis as typeof globalThis & {
     BurbotCore?: { displayName?: (object: LegacyStoredObject) => string };
@@ -61,6 +73,13 @@ function typeLabel(object: LegacyStoredObject): string {
   return globals().BurbotSchema?.[key]?.label ?? key;
 }
 
+function statusLabel(entry: CommitSessionObject | undefined): string {
+  if (!entry || entry.status === "UNCHANGED") return "";
+  if (entry.status === "NEW") return "NEW";
+  if (entry.status === "DELETED") return "DELETED";
+  return "MODIFIED";
+}
+
 async function send<T>(
   type: "BURBOT_DATA" | "BURBOT_COMMIT",
   op: string,
@@ -77,13 +96,21 @@ async function send<T>(
 
 export function ViewManagerPanel() {
   const [state, setState] = useState<LegacyStorageState>(EMPTY_STATE);
+  const [commit, setCommit] = useState<CommitSessionView>(EMPTY_COMMIT);
   const [view, setView] = useState<ObjectView | null>(null);
   const [query, setQuery] = useState("");
   const [error, setError] = useState("");
+  const [busyObjectId, setBusyObjectId] = useState("");
 
   async function refreshState() {
     try {
-      setState(await send<LegacyStorageState>("BURBOT_DATA", "GET"));
+      const [nextState, nextCommit] = await Promise.all([
+        send<LegacyStorageState>("BURBOT_DATA", "GET"),
+        send<CommitSessionView>("BURBOT_COMMIT", "GET"),
+      ]);
+      setState(nextState);
+      setCommit(nextCommit);
+      await refreshView(nextState);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
     }
@@ -91,18 +118,43 @@ export function ViewManagerPanel() {
 
   async function refreshView(nextState = state) {
     const stored = await browser.storage.session.get(OBJECT_VIEW_STORAGE_KEY);
-    setView(
-      normalizeObjectView(
-        stored[OBJECT_VIEW_STORAGE_KEY],
-        nextState.objects,
-      ) as ObjectView | null,
-    );
+    const raw = stored[OBJECT_VIEW_STORAGE_KEY];
+    const normalized = normalizeObjectView(
+      raw,
+      nextState.objects,
+    ) as ObjectView | null;
+    setView(normalized);
+
+    if (!raw) return;
+    if (!normalized) {
+      await browser.storage.session.remove(OBJECT_VIEW_STORAGE_KEY);
+      return;
+    }
+
+    const rawIds =
+      typeof raw === "object" &&
+      raw !== null &&
+      Array.isArray((raw as { objectIds?: unknown }).objectIds)
+        ? (raw as { objectIds: unknown[] }).objectIds.map(String)
+        : [];
+    if (
+      rawIds.length !== normalized.objectIds.length ||
+      rawIds.some((id, index) => id !== normalized.objectIds[index])
+    ) {
+      await browser.storage.session.set({
+        [OBJECT_VIEW_STORAGE_KEY]: normalized,
+      });
+    }
   }
 
   useEffect(() => {
     void (async () => {
-      const next = await send<LegacyStorageState>("BURBOT_DATA", "GET");
+      const [next, nextCommit] = await Promise.all([
+        send<LegacyStorageState>("BURBOT_DATA", "GET"),
+        send<CommitSessionView>("BURBOT_COMMIT", "GET"),
+      ]);
       setState(next);
+      setCommit(nextCommit);
       await refreshView(next);
     })().catch((cause) =>
       setError(cause instanceof Error ? cause.message : String(cause)),
@@ -171,6 +223,18 @@ export function ViewManagerPanel() {
       .filter((object): object is LegacyStoredObject => Boolean(object));
   }, [state.objects, view]);
 
+  const commitById = useMemo(
+    () => new Map(commit.objects.map((entry) => [entry.id, entry])),
+    [commit.objects],
+  );
+
+  const catalogObjects = useMemo(() => {
+    const source = query.trim() && !compiled.error ? matches : state.objects;
+    return [...source]
+      .sort((a, b) => displayName(a).localeCompare(displayName(b), "pl"))
+      .slice(0, 80);
+  }, [compiled.error, matches, query, state.objects]);
+
   async function persist(next: ObjectView | null) {
     if (next) {
       await browser.storage.session.set({ [OBJECT_VIEW_STORAGE_KEY]: next });
@@ -215,8 +279,86 @@ export function ViewManagerPanel() {
     await persist(null);
   }
 
+  async function stageObject(objectId: string) {
+    setBusyObjectId(objectId);
+    try {
+      const next = await send<CommitSessionView>(
+        "BURBOT_COMMIT",
+        "STAGE_OBJECT",
+        { objectId },
+      );
+      setCommit(next);
+    } finally {
+      setBusyObjectId("");
+    }
+  }
+
+  async function unstageObject(objectId: string) {
+    setBusyObjectId(objectId);
+    try {
+      const next = await send<CommitSessionView>(
+        "BURBOT_COMMIT",
+        "UNSTAGE_OBJECT",
+        { objectId },
+      );
+      setCommit(next);
+    } finally {
+      setBusyObjectId("");
+    }
+  }
+
+  async function syncDiscardedImport(objectId: string) {
+    const review = await readImportReview();
+    if (!review) return;
+
+    const importKeys = Object.entries(review.approvedObjectIdByImportKey)
+      .filter(([, targetId]) => targetId === objectId)
+      .map(([importKey]) => importKey);
+    if (!importKeys.length) return;
+
+    const now = new Date().toISOString();
+    for (const importKey of importKeys) {
+      const preview = review.previewState.objects.find(
+        (object) => object.importKey === importKey,
+      );
+      if (
+        preview &&
+        review.statusByObjectId[preview.id] === "APPROVED"
+      ) {
+        revokeApprovedImportObject(review, preview.id, now);
+      }
+    }
+    await writeImportReview(review);
+    window.dispatchEvent(
+      new CustomEvent("burbot:import-review-changed"),
+    );
+  }
+
+  async function discardObjectChanges(objectId: string, label: string) {
+    if (!confirm("Odrzucić wszystkie niezapisane zmiany obiektu „" + label + "”?")) {
+      return;
+    }
+    setBusyObjectId(objectId);
+    try {
+      await send<CommitSessionView>("BURBOT_COMMIT", "DISCARD_OBJECT", {
+        objectId,
+      });
+      await syncDiscardedImport(objectId);
+      await refreshState();
+    } finally {
+      setBusyObjectId("");
+    }
+  }
+
+  async function ensureWorkingView() {
+    if (commit.active) return;
+    const next = await send<CommitSessionView>("BURBOT_COMMIT", "NEW");
+    setCommit(next);
+  }
+
   async function openObject(objectId: string) {
     if (!view?.objectIds.includes(objectId)) await add(objectId);
+    await ensureWorkingView();
     const currentWindow = await browser.windows.getCurrent();
     if (currentWindow.id === undefined) return;
     await send("BURBOT_COMMIT", "FOCUS", {
@@ -240,46 +382,103 @@ export function ViewManagerPanel() {
           <strong>
             {view
               ? `${activeObjects.length} ${activeObjects.length === 1 ? "obiekt" : "obiektów"}`
-              : "Cała baza"}
+              : "Brak ograniczenia · cała baza"}
           </strong>
           <small>
             {view?.query
-              ? `Z filtra: ${view.query}`
+              ? `Filtr: ${view.query}`
               : view
                 ? "Ręcznie wybrany zestaw"
-                : "Ustaw View filtrem albo dodaj obiekty przyciskiem +"}
+                : "Ustaw regex/filtr albo dodawaj obiekty ręcznie przyciskiem +"}
           </small>
         </div>
-        {view && (
-          <button type="button" className="text-button" onClick={() => run(clear)}>
-            Wyczyść
-          </button>
-        )}
+        <div className="view-manager-header-actions">
+          {!commit.active && (
+            <button
+              type="button"
+              className="view-start"
+              onClick={() => run(ensureWorkingView)}
+            >
+              Rozpocznij pracę
+            </button>
+          )}
+          {view && (
+            <button type="button" className="text-button" onClick={() => run(clear)}>
+              Wyczyść View
+            </button>
+          )}
+        </div>
       </header>
 
       {view && (
         <div className="view-members">
           {activeObjects.length ? (
-            activeObjects.map((object) => (
-              <div key={object.id} className="view-member">
-                <button
-                  type="button"
-                  className="view-member-open"
-                  onClick={() => run(() => openObject(object.id))}
-                >
-                  <strong>{displayName(object)}</strong>
-                  <small>{typeLabel(object)}</small>
-                </button>
-                <button
-                  type="button"
-                  className="view-member-remove"
-                  aria-label={`Usuń ${displayName(object)} z View`}
-                  onClick={() => run(() => remove(object.id))}
-                >
-                  −
-                </button>
-              </div>
-            ))
+            activeObjects.map((object) => {
+              const entry = commitById.get(object.id);
+              const changed = Boolean(entry && entry.status !== "UNCHANGED");
+              const busy = busyObjectId === object.id;
+              return (
+                <div key={object.id} className="view-member">
+                  <button
+                    type="button"
+                    className="view-member-open"
+                    onClick={() => run(() => openObject(object.id))}
+                  >
+                    <strong>{displayName(object)}</strong>
+                    <small>
+                      {typeLabel(object)}
+                      {changed ? " · " + statusLabel(entry) : ""}
+                    </small>
+                  </button>
+
+                  {changed && (
+                    <button
+                      type="button"
+                      className={
+                        entry?.staged
+                          ? "view-member-stage is-staged"
+                          : "view-member-stage"
+                      }
+                      disabled={busy}
+                      onClick={() =>
+                        run(() =>
+                          entry?.staged
+                            ? unstageObject(object.id)
+                            : stageObject(object.id),
+                        )
+                      }
+                    >
+                      {entry?.staged ? "✓ Commit" : "→ Commit"}
+                    </button>
+                  )}
+
+                  {changed && (
+                    <button
+                      type="button"
+                      className="view-member-discard"
+                      disabled={busy}
+                      title="Odrzuć zmiany obiektu i wróć do stanu z SQLite"
+                      onClick={() =>
+                        run(() =>
+                          discardObjectChanges(object.id, displayName(object)),
+                        )
+                      }
+                    >
+                      ↶
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    className="view-member-remove"
+                    aria-label={"Usuń " + displayName(object) + " z View"}
+                    onClick={() => run(() => remove(object.id))}
+                  >
+                    −
+                  </button>
+                </div>
+              );
+            })
           ) : (
             <p className="view-manager-empty">
               View jest pusty. Dodaj obiekty poniżej.
@@ -287,13 +486,12 @@ export function ViewManagerPanel() {
           )}
         </div>
       )}
-
       <div className="view-search">
         <input
           type="search"
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          placeholder='Filtr, np. woj:małopolskie /Nowy Sącz/i type:nabory'
+          placeholder='Regex / filtr, np. woj:małopolskie /Nowy Sącz/i type:nabory'
           aria-label="Filtr View"
         />
         <button
@@ -307,10 +505,20 @@ export function ViewManagerPanel() {
 
       {compiled.error && <p className="view-manager-error">{compiled.error}</p>}
 
-      {query.trim() && !compiled.error && (
+      <div className="view-catalog-head">
+        <strong>{query.trim() ? "Wyniki filtra" : "Obiekty"}</strong>
+        <small>
+          {query.trim()
+            ? matches.length + " wyników · kliknij + / −"
+            : "Kliknij +, aby dodać ręcznie do View"}
+        </small>
+      </div>
+
+      {!compiled.error && (
         <div className="view-search-results">
-          {matches.slice(0, 60).map((object) => {
+          {catalogObjects.map((object) => {
             const inView = Boolean(view?.objectIds.includes(object.id));
+            const entry = commitById.get(object.id);
             return (
               <div key={object.id} className="view-search-result">
                 <button
@@ -319,15 +527,20 @@ export function ViewManagerPanel() {
                   onClick={() => run(() => openObject(object.id))}
                 >
                   <strong>{displayName(object)}</strong>
-                  <small>{typeLabel(object)}</small>
+                  <small>
+                    {typeLabel(object)}
+                    {entry && entry.status !== "UNCHANGED"
+                      ? " · " + statusLabel(entry)
+                      : ""}
+                  </small>
                 </button>
                 <button
                   type="button"
                   className="view-search-toggle"
                   aria-label={
-                    inView
-                      ? `Usuń ${displayName(object)} z View`
-                      : `Dodaj ${displayName(object)} do View`
+                    (inView ? "Usuń " : "Dodaj ") +
+                    displayName(object) +
+                    (inView ? " z View" : " do View")
                   }
                   onClick={() =>
                     run(() => (inView ? remove(object.id) : add(object.id)))
@@ -338,17 +551,16 @@ export function ViewManagerPanel() {
               </div>
             );
           })}
-          {!matches.length && (
+          {!catalogObjects.length && (
             <p className="view-manager-empty">Brak pasujących obiektów.</p>
           )}
-          {matches.length > 60 && (
+          {(query.trim() ? matches.length : state.objects.length) > 80 && (
             <small className="view-manager-more">
-              Pokazano pierwsze 60 z {matches.length}. Zawęź filtr.
+              Pokazano pierwsze 80. Zawęź filtr, aby znaleźć konkretny obiekt.
             </small>
           )}
         </div>
       )}
-
       {error && <p className="view-manager-error">{error}</p>}
     </section>
   );

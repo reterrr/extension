@@ -390,6 +390,254 @@ html[data-workflow-mode="import"] #capture-area {
   font-size: 10px;
   line-height: 1.45;
 }
+
+/* --- Three-surface workflow polish --------------------------------------- */
+
+html[data-workflow-mode="view"] .commit-panel {
+  display: none !important;
+}
+
+/* View: active set + explicit working actions. */
+.view-manager {
+  margin: 6px 10px 4px;
+  padding: 9px;
+}
+.view-manager-header {
+  align-items: center;
+}
+.view-manager-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.view-start {
+  min-height: 27px;
+  padding: 4px 8px;
+  border: 1px solid #b7cdbd;
+  border-radius: 7px;
+  background: #edf5f0;
+  color: #315e47;
+  font-size: 9px;
+  font-weight: 700;
+}
+.view-members {
+  max-height: 190px;
+  margin-top: 7px;
+}
+.view-member {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+.view-member-open {
+  flex: 1;
+}
+.view-member-stage,
+.view-member-discard,
+.view-member-remove {
+  flex: none;
+  min-height: 27px;
+  border: 1px solid #dce5de;
+  border-radius: 6px;
+  background: #f8faf8;
+  font-size: 8px;
+}
+.view-member-stage {
+  padding: 4px 7px;
+  color: #315e47;
+  font-weight: 700;
+}
+.view-member-stage.is-staged {
+  border-color: #9ebca8;
+  background: #e7f2ea;
+  color: #28543b;
+}
+.view-member-discard {
+  width: 28px;
+  padding: 0;
+  color: #9a5959;
+  font-size: 13px;
+}
+.view-member-remove {
+  width: 28px;
+}
+.view-catalog-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 7px;
+  padding: 6px 2px 4px;
+  border-top: 1px solid #edf1ee;
+}
+.view-catalog-head strong {
+  color: #45564c;
+  font-size: 9px;
+}
+.view-catalog-head small {
+  color: #849087;
+  font-size: 8px;
+}
+.view-search-results {
+  max-height: 220px;
+}
+.view-search-result {
+  grid-template-columns: minmax(0, 1fr) 28px;
+}
+
+/* Import is its own compact surface. */
+.import-review-panel {
+  margin: 6px 10px 8px;
+  border-radius: 9px;
+}
+.import-review-header {
+  align-items: center;
+  padding: 9px 10px 7px;
+}
+.import-review-header strong {
+  max-width: min(68vw, 620px);
+  overflow: hidden;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.import-review-header small {
+  font-size: 8px;
+}
+.import-review-layout {
+  grid-template-columns: minmax(190px, 26%) minmax(0, 1fr);
+  min-height: 0;
+}
+.import-review-list {
+  max-height: calc(100vh - 155px);
+  overflow-y: auto;
+  padding: 7px;
+}
+.import-review-list details + details {
+  margin-top: 5px;
+}
+.import-review-list summary {
+  font-size: 9px;
+}
+.import-review-list button {
+  margin-top: 3px;
+  padding: 6px 7px;
+  border-radius: 6px;
+}
+.import-review-list button > span {
+  font-size: 9px;
+}
+.import-review-list button small {
+  font-size: 7px;
+}
+.import-review-detail {
+  padding: 9px 10px 76px;
+}
+.import-review-object-title {
+  margin-bottom: 6px;
+}
+.import-review-object-title h2 {
+  margin-top: 1px;
+  font-size: 14px;
+}
+.import-review-edit-badge {
+  padding: 2px 6px;
+  font-size: 7px;
+}
+.import-review-sources {
+  gap: 5px;
+  margin-bottom: 7px;
+}
+.import-review-sources button {
+  min-height: 24px;
+  padding: 3px 5px;
+  font-size: 8px;
+}
+.import-review-section {
+  gap: 5px;
+  margin-top: 8px;
+}
+.import-review-section + .import-review-section {
+  padding-top: 8px;
+}
+.import-review-section-heading strong {
+  font-size: 10px;
+}
+.import-review-section-heading > small {
+  font-size: 8px;
+}
+.import-review-fields {
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 4px;
+}
+.import-review-fields > div {
+  gap: 3px;
+  padding: 6px 7px;
+  border-radius: 6px;
+}
+.import-review-field-head small,
+.import-review-field-meta span {
+  font-size: 8px;
+}
+.import-review-workspace-value {
+  font-size: 10px;
+  line-height: 1.3;
+}
+.import-review-field-meta {
+  gap: 5px;
+}
+.import-review-source-button {
+  font-size: 8px;
+}
+.import-review-finance-card > summary {
+  padding: 6px 7px;
+  font-size: 9px;
+}
+.import-review-finance-fields {
+  gap: 4px;
+  padding: 0 6px 6px;
+}
+.import-review-file-card {
+  gap: 4px;
+  padding: 6px 7px;
+}
+.import-review-hint {
+  margin: 8px 0;
+  font-size: 9px;
+}
+.import-review-update-existing {
+  margin: 7px 0;
+  padding: 7px 8px;
+}
+.import-review-actions {
+  position: sticky;
+  z-index: 4;
+  bottom: 0;
+  margin: 9px -10px -76px;
+  padding: 8px 10px;
+  border-top: 1px solid #dfe6df;
+  background: rgba(255, 255, 255, .97);
+  backdrop-filter: blur(6px);
+}
+.import-review-actions button {
+  min-height: 30px;
+  font-size: 9px;
+}
+
+@media (max-width: 640px) {
+  .import-review-layout {
+    grid-template-columns: 1fr;
+  }
+  .import-review-list {
+    max-height: 150px;
+    border-right: 0;
+    border-bottom: 1px solid #edf1ed;
+  }
+  .import-review-fields {
+    grid-template-columns: 1fr;
+  }
+}
+
 `;
   document.head.append(style);
 }

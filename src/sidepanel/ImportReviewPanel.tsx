@@ -12,6 +12,7 @@ import {
   markImportObjectLinked,
   markImportObjectRejected,
   restoreRejectedImportObject,
+  revokeApprovedImportObject,
 } from "../shared/import/review";
 import {
   clearImportReview,
@@ -536,6 +537,56 @@ export function ImportReviewPanel() {
     }
   }
 
+  async function discardApprovedSelected() {
+    if (!session?.selectedObjectId) return;
+    const previewId = session.selectedObjectId;
+    const preview = session.previewState.objects.find(
+      (object) => object.id === previewId,
+    );
+    if (!preview?.importKey) {
+      setError("Nie udało się znaleźć zaimportowanego obiektu.");
+      return;
+    }
+    const targetObjectId =
+      session.approvedObjectIdByImportKey[preview.importKey];
+    if (!targetObjectId) {
+      setError("Nie udało się znaleźć obiektu dodanego do View.");
+      return;
+    }
+
+    setBusy(true);
+    setError("");
+    try {
+      const response = (await browser.runtime.sendMessage({
+        type: "BURBOT_COMMIT",
+        op: "DISCARD_OBJECT",
+        objectId: targetObjectId,
+      })) as { ok?: boolean; error?: string };
+      if (!response?.ok) {
+        throw new Error(
+          response?.error ?? "Nie udało się odrzucić zmian z View.",
+        );
+      }
+
+      revokeApprovedImportObject(
+        session,
+        previewId,
+        new Date().toISOString(),
+      );
+      await writeImportReview(session);
+      setSession({ ...session });
+
+      window.dispatchEvent(new Event("burbot:commit-changed"));
+      window.dispatchEvent(
+        new CustomEvent("burbot:import-review-changed"),
+      );
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function rejectSelected() {
     if (!session?.selectedObjectId) return;
     markImportObjectRejected(
@@ -622,6 +673,32 @@ export function ImportReviewPanel() {
   const selected = view.objects.find(
     (object) => object.id === view.selectedObjectId,
   );
+  const importedFieldNames = new Set(
+    selected
+      ? session.importedFieldsByObjectId[selected.id] ?? []
+      : [],
+  );
+  const visibleFields = selected
+    ? view.fields.filter(
+        (field) =>
+          importedFieldNames.size === 0 ||
+          importedFieldNames.has(field.field) ||
+          field.evidenceCount > 0,
+      )
+    : view.fields;
+  const visibleFinancingFields = (
+    variant: ImportReviewView["financing"][number],
+  ) => {
+    if (!selected) return variant.fields;
+    const tracked =
+      session.importedFinancingFieldsByObjectId[selected.id]?.[variant.key];
+    if (!tracked?.length) {
+      return variant.fields.filter((field) => Boolean(field.value));
+    }
+    const selectedFields = new Set(tracked);
+    return variant.fields.filter((field) => selectedFields.has(field.field));
+  };
+
   const sourceUrls = [
     ...new Set([
       ...view.evidence.flatMap((entry) =>
@@ -737,12 +814,12 @@ export function ImportReviewPanel() {
                     <div className="import-review-section-heading">
                       <div>
                         <span className="eyebrow">DANE OBIEKTU</span>
-                        <strong>{view.fields.length} pól</strong>
+                        <strong>{visibleFields.length} pól</strong>
                       </div>
                       <small>Dane z importu są tylko do odczytu.</small>
                     </div>
                     <div className="import-review-fields">
-                      {view.fields.map((field) => {
+                      {visibleFields.map((field) => {
                         const evidence = view.evidence.filter(
                           (entry) => entry.field === field.field,
                         );
@@ -838,7 +915,7 @@ export function ImportReviewPanel() {
                       </div>
                       <div className="import-review-financing">
                         {view.financing.map((variant) => (
-                          <details key={variant.id} open className="import-review-finance-card">
+                          <details key={variant.id} className="import-review-finance-card">
                             <summary>
                               <span>
                                 {variant.companySizeLabel} · wariant {variant.variantNo}
@@ -846,7 +923,7 @@ export function ImportReviewPanel() {
                               <small>{variant.key}</small>
                             </summary>
                             <div className="import-review-finance-fields">
-                              {variant.fields.map((field) => (
+                              {visibleFinancingFields(variant).map((field) => (
                                 <label
                                   key={field.field}
                                   className="import-review-workspace-field"
@@ -887,12 +964,31 @@ export function ImportReviewPanel() {
                       >
                         Przywróć do sprawdzenia
                       </button>
+                    ) : selected.status === "APPROVED" ? (
+                      <>
+                        <button
+                          type="button"
+                          className="text-button danger"
+                          disabled={busy}
+                          onClick={() => void discardApprovedSelected()}
+                        >
+                          Odrzuć zmiany z View
+                        </button>
+                        <button
+                          type="button"
+                          className="primary import-review-approve"
+                          disabled={busy}
+                          onClick={() => requestWorkflowMode("view")}
+                        >
+                          Przejdź do View
+                        </button>
+                      </>
                     ) : (
                       <>
                         <button
                           type="button"
                           className="text-button danger"
-                          disabled={busy || selected.status === "APPROVED"}
+                          disabled={busy}
                           onClick={() => void rejectSelected()}
                         >
                           Odrzuć import
@@ -900,14 +996,12 @@ export function ImportReviewPanel() {
                         <button
                           type="button"
                           className="primary import-review-approve"
-                          disabled={busy || selected.status === "APPROVED"}
+                          disabled={busy}
                           onClick={() => void approve()}
                         >
-                          {selected.status === "APPROVED"
-                            ? "Obiekt jest już w View"
-                            : existingTarget
-                              ? "Zastosuj zmiany → dodaj do View"
-                              : "Dodaj obiekt do View"}
+                          {existingTarget
+                            ? "Zastosuj zmiany → View"
+                            : "Dodaj obiekt → View"}
                         </button>
                       </>
                     )}
