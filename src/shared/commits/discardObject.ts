@@ -81,6 +81,24 @@ export function discardObjectChanges(
     if (workingIndex >= 0) working.objects[workingIndex] = restored;
     else working.objects.push(restored);
   } else if (workingIndex >= 0) {
+    const dependants = working.objects.filter(
+      (object) =>
+        String(object.id) !== objectId &&
+        Object.values(object.values ?? {}).some(
+          (value) => String(value ?? "") === objectId,
+        ),
+    );
+    if (dependants.length) {
+      const labels = dependants
+        .slice(0, 3)
+        .map((object) => String(object.label ?? object.values?.name ?? object.id))
+        .join(", ");
+      throw new Error(
+        "Nie można odrzucić tego nowego obiektu, ponieważ odwołują się do niego inne staged obiekty: " +
+          labels +
+          ". Najpierw odrzuć obiekty zależne.",
+      );
+    }
     working.objects.splice(workingIndex, 1);
   } else {
     throw new Error("Object is not part of this commit.");
