@@ -1251,6 +1251,105 @@ progress {
     margin-right: 8px;
   }
 }
+/* Denser workspace: keep hierarchy, remove unnecessary vertical chrome. */
+.brandbar {
+  padding: 9px 12px;
+}
+.connection-bar {
+  padding: 5px 10px;
+}
+main {
+  padding: 0 9px 8px;
+}
+.object-header {
+  margin: 7px 0 6px;
+  padding: 9px 10px;
+  border-radius: 9px;
+}
+.object-header h1 {
+  margin: 3px 0 5px;
+  font-size: 17px;
+}
+.object-header .eyebrow {
+  font-size: 8px;
+}
+.active-object-view {
+  margin-top: 5px;
+  padding: 4px 6px;
+}
+.progress-label {
+  margin-top: 5px;
+  font-size: 9px;
+}
+#progress-bar {
+  height: 4px;
+}
+.workspace-section-card {
+  margin: 5px 0;
+  border-radius: 9px;
+}
+.workspace-section-summary,
+#documents-panel > .section-summary {
+  min-height: 40px;
+  padding: 6px 8px;
+}
+.workspace-section-title strong,
+#documents-panel > .section-summary strong {
+  font-size: 11px;
+}
+.workspace-section-title small,
+#documents-panel > .section-summary small {
+  margin-top: 1px;
+  font-size: 9px;
+}
+.workspace-section-status,
+#document-count {
+  font-size: 9px;
+}
+.field-group-card .workspace-section-body {
+  padding: 3px 5px 6px;
+}
+.field-row {
+  min-height: 40px;
+  margin: 3px 0;
+  padding: 6px 7px;
+  border-radius: 7px;
+}
+.field-label {
+  font-size: 9px;
+}
+.field-value {
+  margin-top: 1px;
+  font-size: 11.5px;
+}
+.field-value.empty {
+  font-size: 10px;
+}
+.field-mark {
+  font-size: 8px;
+}
+#file-sources-section .workspace-section-body,
+#operator-contacts-section .workspace-section-body,
+#geography-section .workspace-section-body,
+#funding-section .workspace-section-body,
+#documents-section .workspace-section-body {
+  padding: 7px 8px 9px;
+}
+.review-section {
+  margin: 5px 0 2px;
+  padding: 4px 1px;
+}
+.capture-hint {
+  margin: 5px 10px 7px;
+  padding: 7px 9px;
+}
+.capture-area {
+  bottom: 6px;
+  margin: 6px 10px 8px;
+  padding: 9px;
+  border-radius: 9px;
+}
+
 `;
   document.head.append(style);
 }
