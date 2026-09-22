@@ -721,7 +721,43 @@ import {
       }
     };
 
+    async function toggleViewMembership(object) {
+      const currentView = normalizedObjectView();
+      const included = objectInView(currentView, object.id);
+      const next = included
+        ? removeObjectFromView(
+            currentView,
+            object.id,
+            db.objects,
+            new Date().toISOString(),
+          )
+        : addObjectToView(
+            currentView,
+            object.id,
+            db.objects,
+            new Date().toISOString(),
+          );
+      await persistObjectView(next);
+
+      if (!objectInView(objectView, objectId)) {
+        objectId =
+          objectsInView(db.objects, objectView).at(0)?.id ||
+          db.objects.at(-1)?.id ||
+          "";
+        active = null;
+        preview = null;
+        resetCapture();
+      }
+      render();
+      notice(
+        included
+          ? "Usunięto obiekt z Widoku."
+          : "Dodano obiekt do Widoku.",
+      );
+    }
+
     function objectButton(object) {
+      const row = node("div", "object-option-row");
       const button = node("button", "object-option");
       button.type = "button";
       button.dataset.objectId = object.id;
@@ -746,7 +782,31 @@ import {
 
       button.onclick = () => chooseObject(object.id);
       button.onkeydown = (event) => chooseFromKeyboard(button, event);
-      return button;
+
+      const included = objectInView(normalizedObjectView(), object.id);
+      const toggle = node(
+        "button",
+        "object-view-toggle",
+        included ? "−" : "+",
+      );
+      toggle.type = "button";
+      toggle.title = included ? "Usuń z Widoku" : "Dodaj do Widoku";
+      toggle.setAttribute(
+        "aria-label",
+        (included ? "Usuń z Widoku: " : "Dodaj do Widoku: ") +
+          C.displayName(object),
+      );
+      toggle.disabled = busy;
+      toggle.onclick = (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        void toggleViewMembership(object).catch((error) =>
+          notice(error.message, true),
+        );
+      };
+
+      row.append(button, toggle);
+      return row;
     }
 
     function appendGroup(title, objects) {
@@ -797,12 +857,13 @@ import {
         );
       };
 
-      currentMatches = scopedObjects.filter(matches);
+      const hasRestriction =
+        Boolean(switcherQuery.trim()) || switcherType !== "all";
+      const searchPool = hasRestriction ? db.objects : scopedObjects;
+      currentMatches = searchPool.filter(matches);
       const localObjects = [...currentMatches.filter((o) => local(o))].reverse();
       const saved = currentMatches.filter((o) => !local(o));
 
-      const hasRestriction =
-        Boolean(switcherQuery.trim()) || switcherType !== "all";
       viewInfo.textContent = objectView
         ? "Aktywny widok: " + scopedObjects.length + " obiektów"
         : "Wyniki: " + currentMatches.length;
