@@ -286,18 +286,17 @@ export function ImportReviewPanel() {
       if (disposed || currentWindow.id === undefined) return;
       windowIdRef.current = currentWindow.id;
 
-      const [uiState, nextSession] = await Promise.all([
+      const [uiState, nextSession, workflowStorage] = await Promise.all([
         readSidepanelUiState(currentWindow.id),
         readImportReview(),
+        browser.storage.session.get("burbot:workflow-mode"),
       ]);
       if (disposed) return;
 
-      const globalImport =
-        document.documentElement.dataset.workflowMode === "import";
+      const workflowMode = workflowStorage["burbot:workflow-mode"];
+      const globalImport = workflowMode === "import";
       const initialMode: SidepanelMode =
-        nextSession && (globalImport || uiState.mode === "review")
-          ? "review"
-          : "workspace";
+        nextSession && globalImport ? "review" : "workspace";
       modeRef.current = initialMode;
       setMode(initialMode);
       setSession(nextSession);
