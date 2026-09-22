@@ -221,6 +221,10 @@ if (!document.querySelector("style[data-burbot-commit-panel]")) {
 .commit-staged {
   display: grid;
   gap: 4px;
+  max-height: min(30vh, 240px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 2px;
 }
 .commit-change-card {
   overflow: hidden;
