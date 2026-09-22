@@ -22,6 +22,20 @@ const EMPTY_SESSION: CommitSessionView = {
   objects: [],
 };
 
+const VALUE_LABELS: Record<string, string> = {
+  OGLOSZONY: "Ogłoszony",
+  PLANOWANY: "Planowany",
+  AKTYWNY: "Aktywny",
+  ZAWIESZONY: "Zawieszony",
+  ZAMKNIETY: "Zamknięty",
+  ZAKONCZONY: "Zakończony",
+  ANULOWANY: "Anulowany",
+  OPERATOR: "Operator",
+  PARTNER: "Partner",
+  GLOWNY: "Główny",
+  DODATKOWY: "Dodatkowy",
+};
+
 const FIELD_LABELS: Record<string, string> = {
   name: "Nazwa",
   external_number: "Numer / nazwa naboru",
@@ -95,6 +109,11 @@ function fieldLabel(field: string): string {
     .replace(/\b\w/g, (letter) => letter.toLocaleUpperCase("pl-PL"));
 }
 
+function displayDiffValue(value: string | undefined): string {
+  if (!value) return "";
+  return VALUE_LABELS[value] ?? value;
+}
+
 function relatedCount(change: CommitRelatedChange): number {
   return change.added + change.modified + change.removed;
 }
@@ -125,18 +144,18 @@ function FieldChange({ change }: { change: CommitValueChange }) {
       <span className="commit-field-name">{fieldLabel(change.field)}</span>
       <div className="commit-field-values">
         {change.status === "ADDED" ? (
-          <span className="commit-value-after">+ {change.after}</span>
+          <span className="commit-value-after">+ {displayDiffValue(change.after)}</span>
         ) : change.status === "REMOVED" ? (
           <>
-            <span className="commit-value-before">{change.before}</span>
+            <span className="commit-value-before">{displayDiffValue(change.before)}</span>
             <span className="commit-arrow">→</span>
             <span className="commit-value-removed">usunięto</span>
           </>
         ) : (
           <>
-            <span className="commit-value-before">{change.before}</span>
+            <span className="commit-value-before">{displayDiffValue(change.before)}</span>
             <span className="commit-arrow">→</span>
-            <span className="commit-value-after">{change.after}</span>
+            <span className="commit-value-after">{displayDiffValue(change.after)}</span>
           </>
         )}
       </div>
