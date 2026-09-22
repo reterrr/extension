@@ -441,13 +441,22 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
           throw new Error("There are no staged changes to commit.");
         }
         const committed = await commitState(draft.baseRevision, draft.workingState);
-        const now = new Date().toISOString();
-        const review = await readImportReview();
-        if (review && markStagedImportObjectsCommitted(review, now) > 0) {
-          await writeImportReview(review);
-          await broadcast({ type: "BURBOT_IMPORT_REVIEW_CHANGED" });
-        }
         await clearActiveDraft();
+
+        try {
+          const now = new Date().toISOString();
+          const review = await readImportReview();
+          if (review && markStagedImportObjectsCommitted(review, now) > 0) {
+            await writeImportReview(review);
+            await broadcast({ type: "BURBOT_IMPORT_REVIEW_CHANGED" });
+          }
+        } catch (cause) {
+          console.warn(
+            "SQLite commit succeeded, but import review status could not be finalized.",
+            cause,
+          );
+        }
+
         await notifyCommitChanged();
         return { session: commitSessionView(null), state: committed };
       }
