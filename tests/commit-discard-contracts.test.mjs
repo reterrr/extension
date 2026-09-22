@@ -160,3 +160,45 @@ test("discarding a newly staged object removes it without touching others", () =
   );
   assert.equal(next.workingState.objects.length, base.objects.length);
 });
+
+
+test("new staged object cannot be discarded while another staged object references it", () => {
+  const base = state();
+  const working = structuredClone(base);
+  working.objects.push(
+    {
+      id: "new-project",
+      type: "project",
+      label: "New project",
+      values: { name: "New project" },
+    },
+    {
+      id: "new-recruitment",
+      type: "recruitment",
+      label: "New recruitment",
+      values: {
+        external_number: "Nabór X",
+        project_id: "new-project",
+      },
+    },
+  );
+
+  const draft = {
+    id: "commit-3",
+    createdAt: "2026-09-22T10:00:00.000Z",
+    updatedAt: "2026-09-22T10:10:00.000Z",
+    baseRevision: 10,
+    baseState: base,
+    workingState: working,
+  };
+
+  assert.throws(
+    () =>
+      moduleUnderTest.discardObjectChanges(
+        draft,
+        "new-project",
+        "2026-09-22T10:20:00.000Z",
+      ),
+    /Najpierw odrzuć obiekty zależne/,
+  );
+});
