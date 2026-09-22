@@ -1,16 +1,19 @@
 import type { DraftCommit } from "../types/commit";
 
-type ObjectOwnedRow = { objectId: string; [key: string]: unknown };
+function rowObjectId(row: unknown): string {
+  if (!row || typeof row !== "object" || !("objectId" in row)) return "";
+  return String((row as { objectId?: unknown }).objectId ?? "");
+}
 
-function restoreOwnedRows<T extends ObjectOwnedRow>(
+function restoreOwnedRows<T>(
   working: T[] | undefined,
   base: T[] | undefined,
   objectId: string,
 ): T[] {
   return [
-    ...(working ?? []).filter((row) => String(row.objectId) !== objectId),
+    ...(working ?? []).filter((row) => rowObjectId(row) !== objectId),
     ...(base ?? [])
-      .filter((row) => String(row.objectId) === objectId)
+      .filter((row) => rowObjectId(row) === objectId)
       .map((row) => structuredClone(row)),
   ];
 }
@@ -43,10 +46,10 @@ export function discardObjectChanges(
   }
 
   working.rules = restoreOwnedRows(
-    working.rules as ObjectOwnedRow[],
-    draft.baseState.rules as ObjectOwnedRow[],
+    working.rules,
+    draft.baseState.rules,
     objectId,
-  ) as typeof working.rules;
+  );
   working.geographies = restoreOwnedRows(
     working.geographies,
     draft.baseState.geographies,
@@ -63,13 +66,13 @@ export function discardObjectChanges(
     objectId,
   );
   working.financingRules = restoreOwnedRows(
-    working.financingRules as ObjectOwnedRow[] | undefined,
-    draft.baseState.financingRules as ObjectOwnedRow[] | undefined,
+    working.financingRules,
+    draft.baseState.financingRules,
     objectId,
   );
   working.documentRequirements = restoreOwnedRows(
-    working.documentRequirements as ObjectOwnedRow[] | undefined,
-    draft.baseState.documentRequirements as ObjectOwnedRow[] | undefined,
+    working.documentRequirements,
+    draft.baseState.documentRequirements,
     objectId,
   );
   working.fieldEvidence = restoreOwnedRows(
