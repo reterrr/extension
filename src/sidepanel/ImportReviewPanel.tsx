@@ -612,23 +612,6 @@ export function ImportReviewPanel() {
 
   return (
     <section className="import-review-shell">
-      <nav className="workspace-mode-tabs" aria-label="Tryb pracy">
-        <button
-          type="button"
-          className={mode === "workspace" ? "active" : ""}
-          onClick={() => void switchMode("workspace")}
-        >
-          Workspace
-        </button>
-        <button
-          type="button"
-          className={mode === "review" ? "active" : ""}
-          onClick={() => void switchMode("review")}
-        >
-          Import review <span>{view.pendingCount ?? 0}</span>
-        </button>
-      </nav>
-
       {mode === "review" && (
         <div className="import-review-panel">
           <header className="import-review-header">
@@ -636,7 +619,7 @@ export function ImportReviewPanel() {
               <span className="eyebrow">IMPORT REVIEW</span>
               <strong>{view.fileName}</strong>
               <small>
-                {view.approvedCount}/{view.objects.length} zatwierdzono
+                {view.approvedCount ?? 0} w View · {view.rejectedCount ?? 0} odrzucono · {view.pendingCount ?? 0} oczekuje
               </small>
             </div>
             <button
@@ -675,14 +658,16 @@ export function ImportReviewPanel() {
                           type="button"
                           className={`${
                             object.id === view.selectedObjectId ? "selected " : ""
-                          }${object.status === "APPROVED" ? "approved" : ""}`}
+                          }${object.status === "APPROVED" ? "approved" : object.status === "REJECTED" ? "rejected" : ""}`}
                           onClick={() => void select(object.id)}
                         >
                           <span>{object.label}</span>
                           <small>
                             {object.status === "APPROVED"
-                              ? "✓"
-                              : [
+                              ? "w View"
+                              : object.status === "REJECTED"
+                                ? "odrzucono"
+                                : [
                                   object.evidenceCount
                                     ? `${object.evidenceCount} ev`
                                     : "",
@@ -859,30 +844,53 @@ export function ImportReviewPanel() {
                   )}
 
                   <p className="import-review-hint">
-                    Import Review służy wyłącznie do sprawdzenia danych i źródeł. Zmiany wykonuj po zatwierdzeniu w Workspace.
+                    Import służy do sprawdzenia danych i źródeł. Zaakceptowany obiekt trafia najpierw do View — nie do Commit.
                   </p>
                   {existingTarget && selected.status !== "APPROVED" && (
                     <div className="import-review-update-existing">
                       <strong>Aktualizacja istniejącego obiektu</strong>
                       <span>{existingTarget.label}</span>
                       <small>
-                        Zatwierdzenie zaktualizuje ten sam obiekt w aktywnym commicie.
+                        Dodanie do View zaktualizuje ten sam obiekt roboczy.
                         ID pozostanie bez zmian i duplikat nie zostanie utworzony.
                       </small>
                     </div>
                   )}
-                  <button
-                    type="button"
-                    className="primary import-review-approve"
-                    disabled={busy || selected.status === "APPROVED"}
-                    onClick={() => void approve()}
-                  >
-                    {selected.status === "APPROVED"
-                      ? "Zatwierdzono — obiekt jest w commicie"
-                      : existingTarget
-                        ? "Zatwierdź zmiany → dodaj do commita"
-                        : "Zatwierdź obiekt → dodaj do commita"}
-                  </button>
+                  <div className="import-review-actions">
+                    {selected.status === "REJECTED" ? (
+                      <button
+                        type="button"
+                        className="text-button"
+                        disabled={busy}
+                        onClick={() => void restoreSelected()}
+                      >
+                        Przywróć do sprawdzenia
+                      </button>
+                    ) : (
+                      <>
+                        <button
+                          type="button"
+                          className="text-button danger"
+                          disabled={busy || selected.status === "APPROVED"}
+                          onClick={() => void rejectSelected()}
+                        >
+                          Odrzuć import
+                        </button>
+                        <button
+                          type="button"
+                          className="primary import-review-approve"
+                          disabled={busy || selected.status === "APPROVED"}
+                          onClick={() => void approve()}
+                        >
+                          {selected.status === "APPROVED"
+                            ? "Obiekt jest już w View"
+                            : existingTarget
+                              ? "Zastosuj zmiany → dodaj do View"
+                              : "Dodaj obiekt do View"}
+                        </button>
+                      </>
+                    )}
+                  </div>
                 </>
               ) : (
                 <p>Wybierz obiekt do sprawdzenia.</p>
