@@ -14,6 +14,7 @@ import {
   discardViewObject,
   hasViewChanges,
   missingReferences,
+  rebaseCommittedObjects,
   stageObject,
   unstageObject,
 } from "../shared/commits/staging";
@@ -480,10 +481,12 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
           throw new Error("Nie ma obiektów dodanych do commita.");
         }
 
+        const stagedObjectIds = [...draft.stagedObjectIds];
         const candidate = applyStagedObjects(draft);
         validateCommittedReferences(candidate);
         const committed = await commitState(draft.baseRevision, candidate);
 
+        rebaseCommittedObjects(draft, committed, stagedObjectIds);
         draft.baseRevision = committed.revision;
         draft.baseState = cloneState(committed);
         draft.stagedObjectIds = [];
