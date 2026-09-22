@@ -253,6 +253,88 @@ html[data-workflow-mode="import"] #capture-area {
   border-color: #b6cfbf;
 }
 
+.commit-pending-view {
+  margin-top: 6px;
+  overflow: hidden;
+  border: 1px dashed #d6dfd8;
+  border-radius: 7px;
+  background: #fafbfa;
+}
+.commit-pending-view > summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 7px;
+  list-style: none;
+  color: #68766d;
+  font-size: 9px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.commit-pending-view > summary::-webkit-details-marker {
+  display: none;
+}
+.commit-pending-view > summary::before {
+  content: "▸";
+  color: #8b978f;
+}
+.commit-pending-view[open] > summary::before {
+  content: "▾";
+}
+.commit-pending-view > summary span {
+  margin-left: auto;
+  min-width: 18px;
+  padding: 1px 5px;
+  border-radius: 999px;
+  background: #edf1ee;
+  text-align: center;
+  font-size: 8px;
+}
+.commit-pending-list {
+  padding: 0 6px 6px;
+  border-top: 1px solid #edf1ee;
+}
+.commit-pending-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto 25px;
+  gap: 5px;
+  align-items: center;
+  padding: 5px 1px;
+}
+.commit-pending-row + .commit-pending-row {
+  border-top: 1px solid #edf1ee;
+}
+.commit-pending-copy {
+  min-width: 0;
+}
+.commit-pending-copy strong {
+  overflow: hidden;
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.commit-pending-copy small {
+  display: block;
+  color: #849087;
+  font-size: 7px;
+}
+.commit-stage-pending {
+  min-height: 25px;
+  padding: 4px 6px;
+  border: 1px solid #b8cebf;
+  border-radius: 6px;
+  background: #edf5f0;
+  color: #315e47;
+  font-size: 8px;
+  font-weight: 700;
+}
+.commit-discard-pending {
+  min-height: 25px;
+  padding: 0;
+  color: #9b4a4a;
+  font-size: 13px;
+}
+
 .commit-object-actions {
   display: flex;
   flex-wrap: wrap;
