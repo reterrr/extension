@@ -1848,7 +1848,6 @@ import {
       : "Save value & next";
   }
   function render() {
-    renderObjectViewIndicator();
     if (!chosen()) {
       objectId =
         objectsInView(db.objects, normalizedObjectView()).at(0)?.id ||
@@ -1857,6 +1856,7 @@ import {
       active = null;
       resetCapture();
     }
+    renderObjectViewIndicator();
     const object = chosen();
     $("empty").hidden = !!object;
     $("workspace").hidden = !object;
@@ -1945,6 +1945,38 @@ import {
   };
   $("clear-object-view").onclick = () => {
     void clearObjectView().catch((error) => notice(error.message, true));
+  };
+  $("remove-current-from-view").onclick = () => {
+    void (async () => {
+      const view = normalizedObjectView();
+      if (!view || !objectId) return;
+      const next = removeObjectFromView(
+        view,
+        objectId,
+        db.objects,
+        new Date().toISOString(),
+      );
+      await persistObjectView(next);
+      objectId =
+        objectsInView(db.objects, objectView).at(0)?.id ||
+        db.objects.at(-1)?.id ||
+        "";
+      active = null;
+      preview = null;
+      resetCapture();
+      scheduleWorkspaceUiPersist();
+      render();
+      notice("Usunięto bieżący obiekt z Widoku.");
+    })().catch((error) => notice(error.message, true));
+  };
+  $("edit-current-in-commit").onclick = () => {
+    void (async () => {
+      if (!objectId) throw Error("Wybierz obiekt.");
+      await ensureObjectEditableInCommit(objectId);
+      notice(
+        "Commit jest aktywny. Zmiany tego obiektu będą teraz staged w commicie.",
+      );
+    })().catch((error) => notice(error.message, true));
   };
   $("pick").onclick = action(async () => {
     evidencePicking = false;
