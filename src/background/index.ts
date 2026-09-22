@@ -10,6 +10,7 @@ import {
 import { commitSessionView } from "../shared/commits/session";
 import {
   applyStagedObjects,
+  changedObjectIds,
   discardViewObject,
   hasViewChanges,
   stageObject,
@@ -418,6 +419,9 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
         const draft = await requireDraft();
         if (typeof message.objectId !== "string") {
           throw new Error("Object id is required.");
+        }
+        if (!changedObjectIds(draft).includes(message.objectId)) {
+          throw new Error("Ten obiekt nie ma zmian do dodania do Commit.");
         }
         stageObject(draft, message.objectId);
         draft.updatedAt = new Date().toISOString();
