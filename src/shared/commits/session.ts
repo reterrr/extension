@@ -189,13 +189,14 @@ export function projectCommitObjects(draft: DraftCommit): CommitSessionObject[] 
 
   const working = draft.workingState.objects.map((object) => {
     const base = baseById.get(object.id);
+    const nestedChanges = relatedChanges(draft, object.id);
     return {
       id: object.id,
       type: object.type,
       label: labelOf(object),
       status: !base
         ? "NEW"
-        : stableObject(base) === stableObject(object)
+        : stableObject(base) === stableObject(object) && nestedChanges.length === 0
           ? "UNCHANGED"
           : "MODIFIED",
       changes: valueChanges(
@@ -204,7 +205,7 @@ export function projectCommitObjects(draft: DraftCommit): CommitSessionObject[] 
         draft.baseState,
         draft.workingState,
       ),
-      relatedChanges: relatedChanges(draft, object.id),
+      relatedChanges: nestedChanges,
     } satisfies CommitSessionObject;
   });
 
