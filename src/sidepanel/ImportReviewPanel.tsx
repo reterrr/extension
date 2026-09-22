@@ -1,37 +1,24 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { publishUiState } from "../shared/api/storage";
+import { loadState } from "../shared/api/storage";
+import { readActiveDraft } from "../shared/commits/draftStore";
 import {
-  readActiveDraft,
-  writeActiveDraft,
-} from "../shared/commits/draftStore";
-import {
-  buildImportApprovalPlan,
   findExistingImportObjectMatch,
   importReviewView,
-  markImportObjectApproved,
-  markImportObjectLinked,
+  markImportObjectInView,
+  markImportObjectPending,
+  markImportObjectRejected,
 } from "../shared/import/review";
 import {
   clearImportReview,
   readImportReview,
   writeImportReview,
 } from "../shared/import/reviewStore";
-import {
-  stageImportReviewObject,
-  type ImportApprovalPlanWithRules,
-  type ReviewedImportRule,
-} from "../shared/import/stageReview";
 import { selectorColor } from "../shared/selectorPalette";
 import type {
   ImportReviewSession,
   ImportReviewView,
 } from "../shared/types/importReview";
-import type { LegacyStoredRule } from "../shared/types/legacy-storage";
-import {
-  patchSidepanelUiState,
-  readSidepanelUiState,
-  type SidepanelMode,
-} from "./uiSessionState";
+import type { SidepanelMode } from "./uiSessionState";
 
 async function activeTab(): Promise<browser.tabs.Tab | undefined> {
   const window = await browser.windows.getCurrent();
@@ -184,28 +171,14 @@ function groupLabel(type: string): string {
   return "Nabory";
 }
 
-function reviewedRules(
-  current: ImportReviewSession,
-  objectId: string,
-): ReviewedImportRule[] {
-  return current.previewState.rules
-    .filter((rule) => rule.objectId === objectId)
-    .map((rule: LegacyStoredRule) => {
-      if (rule.target?.kind !== "funding") return { ...rule };
-      const row = (current.previewState.financingRules ?? []).find(
-        (entry) =>
-          entry.objectId === objectId && String(entry.id) === rule.target!.id,
-      );
-      if (!row?.importKey) {
-        throw new Error("Nie udało się zmapować reguły wariantu finansowania.");
-      }
-      return { ...rule, targetImportKey: String(row.importKey) };
-    });
-}
-
-export function ImportReviewPanel() {
+export function ImportReviewPanel({
+  active,
+  onNavigate,
+}: {
+  active: boolean;
+  onNavigate: (mode: SidepanelMode) => void;
+}) {
   const [session, setSession] = useState<ImportReviewSession | null>(null);
-  const [mode, setMode] = useState<"workspace" | "review">("workspace");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [existingTarget, setExistingTarget] = useState<{
@@ -213,56 +186,12 @@ export function ImportReviewPanel() {
     label: string;
   } | null>(null);
   const windowIdRef = useRef<number | null>(null);
-  const modeRef = useRef<SidepanelMode>("workspace");
-  const scrollTimerRef = useRef<number | undefined>(undefined);
   const view = useMemo(() => importReviewView(session), [session]);
-
-  function restoreScroll(top: number): void {
-    window.requestAnimationFrame(() => {
-      window.requestAnimationFrame(() => {
-        window.scrollTo({ top: Math.max(0, top), behavior: "auto" });
-      });
-    });
-  }
-
-  async function switchMode(nextMode: SidepanelMode): Promise<void> {
-    if (nextMode === modeRef.current) return;
-    const windowId = windowIdRef.current;
-    const previousMode = modeRef.current;
-    let targetScroll = 0;
-
-    if (windowId !== null) {
-      const saved = await readSidepanelUiState(windowId);
-      targetScroll = saved.scroll[nextMode];
-      await patchSidepanelUiState(windowId, {
-        mode: nextMode,
-        scroll: { [previousMode]: window.scrollY },
-      });
-    }
-
-    modeRef.current = nextMode;
-    setMode(nextMode);
-    restoreScroll(targetScroll);
-  }
 
   async function refresh(open = false) {
     const next = await readImportReview();
     setSession(next);
-    if (open && next) {
-      const windowId = windowIdRef.current;
-      if (windowId !== null) {
-        await patchSidepanelUiState(windowId, {
-          mode: "review",
-          scroll: {
-            [modeRef.current]: window.scrollY,
-            review: 0,
-          },
-        });
-      }
-      modeRef.current = "review";
-      setMode("review");
-      restoreScroll(0);
-    }
+    if (open && next) onNavigate("import");
   }
 
   useEffect(() => {
