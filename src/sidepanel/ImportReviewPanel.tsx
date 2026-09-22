@@ -199,68 +199,36 @@ export function ImportReviewPanel({
 
     void (async () => {
       const currentWindow = await browser.windows.getCurrent();
-      if (disposed || currentWindow.id === undefined) return;
-      windowIdRef.current = currentWindow.id;
-
-      const [uiState, nextSession] = await Promise.all([
-        readSidepanelUiState(currentWindow.id),
-        readImportReview(),
-      ]);
       if (disposed) return;
-
-      const initialMode: SidepanelMode =
-        nextSession && uiState.mode === "review" ? "review" : "workspace";
-      modeRef.current = initialMode;
-      setMode(initialMode);
-      setSession(nextSession);
-      restoreScroll(uiState.scroll[initialMode]);
+      if (currentWindow.id !== undefined) windowIdRef.current = currentWindow.id;
+      const nextSession = await readImportReview();
+      if (!disposed) setSession(nextSession);
     })();
 
     const changed = (event: Event) => {
       const detail = (event as CustomEvent<{ open?: boolean }>).detail;
       void refresh(detail?.open === true);
     };
-    window.addEventListener("burbot:import-review-changed", changed);
-
-    const workspaceReady = () => {
-      const windowId = windowIdRef.current;
-      if (windowId === null || modeRef.current !== "workspace") return;
-      void readSidepanelUiState(windowId).then((state) => {
-        if (modeRef.current === "workspace") {
-          restoreScroll(state.scroll.workspace);
-        }
-      });
-    };
-    window.addEventListener("burbot:workspace-ready", workspaceReady);
-
-    const onScroll = () => {
-      if (scrollTimerRef.current !== undefined) {
-        window.clearTimeout(scrollTimerRef.current);
+    const runtimeChanged = (message: unknown) => {
+      if (
+        typeof message === "object" &&
+        message !== null &&
+        (message as { type?: unknown }).type ===
+          "BURBOT_IMPORT_REVIEW_CHANGED"
+      ) {
+        void refresh(false);
       }
-      scrollTimerRef.current = window.setTimeout(() => {
-        const windowId = windowIdRef.current;
-        if (windowId === null) return;
-        void patchSidepanelUiState(windowId, {
-          scroll: { [modeRef.current]: window.scrollY },
-        });
-      }, 120);
+      return undefined;
     };
-    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("burbot:import-review-changed", changed);
+    browser.runtime.onMessage.addListener(runtimeChanged);
 
     return () => {
       disposed = true;
       window.removeEventListener("burbot:import-review-changed", changed);
-      window.removeEventListener("burbot:workspace-ready", workspaceReady);
-      window.removeEventListener("scroll", onScroll);
-      if (scrollTimerRef.current !== undefined) {
-        window.clearTimeout(scrollTimerRef.current);
-      }
+      browser.runtime.onMessage.removeListener(runtimeChanged);
     };
   }, []);
-
-  useEffect(() => {
-    modeRef.current = mode;
-  }, [mode]);
 
   useEffect(() => {
     let cancelled = false;
@@ -276,12 +244,11 @@ export function ImportReviewPanel({
       return;
     }
 
-    void readActiveDraft().then((draft) => {
+    void (async () => {
+      const draft = await readActiveDraft();
+      const state = draft?.workingState ?? (await loadState());
       if (cancelled) return;
-      const match = findExistingImportObjectMatch(
-        selected,
-        draft?.workingState,
-      );
+      const match = findExistingImportObjectMatch(selected, state);
       setExistingTarget(
         match
           ? {
@@ -290,7 +257,7 @@ export function ImportReviewPanel({
             }
           : null,
       );
-    });
+    })();
 
     return () => {
       cancelled = true;
@@ -298,14 +265,15 @@ export function ImportReviewPanel({
   }, [session?.selectedObjectId, session?.updatedAt]);
 
   useEffect(() => {
-    const reviewing = Boolean(session && mode === "review");
+    const reviewing = Boolean(session && active);
     document.documentElement.classList.toggle("import-review-mode", reviewing);
 
     if (!reviewing) {
       void clearPageReviewHighlights().finally(() => {
         window.dispatchEvent(new Event("burbot:selector-highlights-refresh"));
       });
-      return () => document.documentElement.classList.remove("import-review-mode");
+      return () =>
+        document.documentElement.classList.remove("import-review-mode");
     }
 
     void sendReviewHighlights(view);
@@ -324,7 +292,7 @@ export function ImportReviewPanel({
       browser.tabs.onUpdated.removeListener(updated);
       document.documentElement.classList.remove("import-review-mode");
     };
-  }, [session, mode, view.selectedObjectId, view.evidence]);
+  }, [session, active, view.selectedObjectId, view.evidence]);
 
   async function select(objectId: string) {
     if (!session) return;
