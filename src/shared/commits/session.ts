@@ -11,11 +11,11 @@ import type {
 } from "../types/legacy-storage";
 
 function stable(value: unknown): string {
-  return JSON.stringify(value ?? null);
+  return JSON.stringify(value ?? null) ?? String(value);
 }
 
 function stableObject(value: LegacyStoredObject | undefined): string {
-  return value ? JSON.stringify(value) : "";
+  return value ? (JSON.stringify(value) ?? "") : "";
 }
 
 function labelOf(object: LegacyStoredObject): string {
@@ -39,7 +39,7 @@ function displayValue(value: unknown, state: LegacyStorageState): string {
   if (typeof value === "number") return String(value);
   if (Array.isArray(value)) return value.map((item) => displayValue(item, state)).join(", ");
   try {
-    return JSON.stringify(value);
+    return JSON.stringify(value) ?? String(value);
   } catch {
     return String(value);
   }
