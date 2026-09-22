@@ -188,3 +188,42 @@ export function changedObjectIds(draft: DraftCommit): string[] {
 export function hasViewChanges(draft: DraftCommit): boolean {
   return changedObjectIds(draft).length > 0;
 }
+
+
+export interface MissingReference {
+  objectId: string;
+  field: string;
+  targetId: string;
+}
+
+export function missingReferences(
+  state: LegacyStorageState,
+  schema: Record<
+    string,
+    { fields?: Record<string, { type?: string }> }
+  >,
+): MissingReference[] {
+  const existing = new Set(state.objects.map((object) => object.id));
+  const missing: MissingReference[] = [];
+
+  for (const object of state.objects) {
+    const fields = schema[object.type]?.fields ?? {};
+    for (const [field, definition] of Object.entries(fields)) {
+      if (definition.type !== "reference") continue;
+      const targetId = object.values?.[field];
+      if (
+        typeof targetId === "string" &&
+        targetId &&
+        !existing.has(targetId)
+      ) {
+        missing.push({
+          objectId: object.id,
+          field,
+          targetId,
+        });
+      }
+    }
+  }
+
+  return missing;
+}
