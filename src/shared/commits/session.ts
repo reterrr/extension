@@ -1,5 +1,18 @@
-import type { DraftCommit, CommitSessionObject, CommitSessionView } from "../types/commit";
-import type { LegacyStoredObject } from "../types/legacy-storage";
+import type {
+  CommitRelatedChange,
+  CommitSessionObject,
+  CommitSessionView,
+  CommitValueChange,
+  DraftCommit,
+} from "../types/commit";
+import type {
+  LegacyStorageState,
+  LegacyStoredObject,
+} from "../types/legacy-storage";
+
+function stable(value: unknown): string {
+  return JSON.stringify(value ?? null);
+}
 
 function stableObject(value: LegacyStoredObject | undefined): string {
   return value ? JSON.stringify(value) : "";
@@ -14,6 +27,158 @@ function labelOf(object: LegacyStoredObject): string {
     object.label ??
     object.id;
   return String(candidate);
+}
+
+function displayValue(value: unknown, state: LegacyStorageState): string {
+  if (value === undefined || value === null || value === "") return "";
+  if (typeof value === "boolean") return value ? "Tak" : "Nie";
+  if (typeof value === "string") {
+    const referenced = state.objects.find((object) => object.id === value);
+    return referenced ? labelOf(referenced) : value;
+  }
+  if (typeof value === "number") return String(value);
+  if (Array.isArray(value)) return value.map((item) => displayValue(item, state)).join(", ");
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+}
+
+function valueChanges(
+  base: LegacyStoredObject | undefined,
+  working: LegacyStoredObject | undefined,
+  baseState: LegacyStorageState,
+  workingState: LegacyStorageState,
+): CommitValueChange[] {
+  if (!working) return [];
+
+  const before = base?.values ?? {};
+  const after = working.values ?? {};
+  const keys = new Set([...Object.keys(before), ...Object.keys(after)]);
+  const changes: CommitValueChange[] = [];
+
+  for (const field of [...keys].sort((a, b) => a.localeCompare(b))) {
+    const oldValue = before[field];
+    const newValue = after[field];
+    if (stable(oldValue) === stable(newValue)) continue;
+
+    const oldText = displayValue(oldValue, baseState);
+    const newText = displayValue(newValue, workingState);
+    changes.push({
+      field,
+      status:
+        oldText === ""
+          ? "ADDED"
+          : newText === ""
+            ? "REMOVED"
+            : "MODIFIED",
+      ...(oldText !== "" ? { before: oldText } : {}),
+      ...(newText !== "" ? { after: newText } : {}),
+    });
+  }
+
+  if ((base?.sourceUrl ?? "") !== (working.sourceUrl ?? "")) {
+    changes.push({
+      field: "sourceUrl",
+      status: !base?.sourceUrl
+        ? "ADDED"
+        : !working.sourceUrl
+          ? "REMOVED"
+          : "MODIFIED",
+      ...(base?.sourceUrl ? { before: base.sourceUrl } : {}),
+      ...(working.sourceUrl ? { after: working.sourceUrl } : {}),
+    });
+  }
+
+  return changes;
+}
+
+type RelatedRow = Record<string, unknown>;
+
+function rowId(row: RelatedRow, index: number): string {
+  const value =
+    row.id ??
+    row.ruleId ??
+    row.evidenceId ??
+    row.sourceId ??
+    row.row_key ??
+    row.document_type_key;
+  return value === undefined || value === null
+    ? `index:${index}:${stable(row)}`
+    : String(value);
+}
+
+function collectionDelta(
+  baseRows: RelatedRow[],
+  workingRows: RelatedRow[],
+): Pick<CommitRelatedChange, "added" | "modified" | "removed"> {
+  const before = new Map(baseRows.map((row, index) => [rowId(row, index), row]));
+  const after = new Map(workingRows.map((row, index) => [rowId(row, index), row]));
+  let added = 0;
+  let modified = 0;
+  let removed = 0;
+
+  for (const [id, row] of after) {
+    const old = before.get(id);
+    if (!old) added += 1;
+    else if (stable(old) !== stable(row)) modified += 1;
+  }
+  for (const id of before.keys()) {
+    if (!after.has(id)) removed += 1;
+  }
+  return { added, modified, removed };
+}
+
+function relatedRows(
+  state: LegacyStorageState,
+  key: keyof LegacyStorageState,
+  objectId: string,
+): RelatedRow[] {
+  const value = state[key];
+  if (!Array.isArray(value)) return [];
+  return value.filter(
+    (row): row is RelatedRow =>
+      typeof row === "object" &&
+      row !== null &&
+      "objectId" in row &&
+      String((row as RelatedRow).objectId) === objectId,
+  );
+}
+
+const RELATED_COLLECTIONS: Array<{
+  key: keyof LegacyStorageState;
+  label: string;
+}> = [
+  { key: "geographies", label: "Geografia" },
+  { key: "operatorContacts", label: "Kontakty" },
+  { key: "financingRules", label: "Dofinansowanie" },
+  { key: "documentRequirements", label: "Dokumenty" },
+  { key: "fileSources", label: "Pliki" },
+  { key: "rules", label: "Reguły ekstrakcji" },
+  { key: "fieldEvidence", label: "Evidence" },
+];
+
+function relatedChanges(
+  draft: DraftCommit,
+  objectId: string,
+): CommitRelatedChange[] {
+  const changes: CommitRelatedChange[] = [];
+
+  for (const collection of RELATED_COLLECTIONS) {
+    const delta = collectionDelta(
+      relatedRows(draft.baseState, collection.key, objectId),
+      relatedRows(draft.workingState, collection.key, objectId),
+    );
+    if (!delta.added && !delta.modified && !delta.removed) continue;
+    changes.push({
+      key: String(collection.key),
+      label: collection.label,
+      ...delta,
+    });
+  }
+
+  return changes;
 }
 
 export function projectCommitObjects(draft: DraftCommit): CommitSessionObject[] {
@@ -33,6 +198,13 @@ export function projectCommitObjects(draft: DraftCommit): CommitSessionObject[] 
         : stableObject(base) === stableObject(object)
           ? "UNCHANGED"
           : "MODIFIED",
+      changes: valueChanges(
+        base,
+        object,
+        draft.baseState,
+        draft.workingState,
+      ),
+      relatedChanges: relatedChanges(draft, object.id),
     } satisfies CommitSessionObject;
   });
 
@@ -45,6 +217,8 @@ export function projectCommitObjects(draft: DraftCommit): CommitSessionObject[] 
           type: object.type,
           label: labelOf(object),
           status: "DELETED",
+          changes: [],
+          relatedChanges: relatedChanges(draft, object.id),
         }) satisfies CommitSessionObject,
     );
 
