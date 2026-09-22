@@ -7,6 +7,8 @@ export interface DraftCommit {
   baseRevision: number;
   baseState: LegacyStorageState;
   workingState: LegacyStorageState;
+  /** Object-level staging boundary between View and Commit. */
+  stagedObjectIds: string[];
 }
 
 export type CommitObjectStatus = "UNCHANGED" | "MODIFIED" | "NEW" | "DELETED";
@@ -34,6 +36,7 @@ export interface CommitSessionObject {
   status: CommitObjectStatus;
   changes: CommitValueChange[];
   relatedChanges: CommitRelatedChange[];
+  staged: boolean;
 }
 
 export interface CommitSessionView {
@@ -43,6 +46,9 @@ export interface CommitSessionView {
   updatedAt?: string;
   baseRevision?: number;
   workingRevision?: number;
+  /** True when at least one object is staged for SQLite. */
   dirty: boolean;
+  /** Number of changed objects still present in View but not staged. */
+  pendingViewCount?: number;
   objects: CommitSessionObject[];
 }
