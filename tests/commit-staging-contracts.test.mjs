@@ -231,3 +231,47 @@ test("partial commit reports references to new objects left only in View", () =>
     [],
   );
 });
+
+
+test("rebase after partial commit clears committed changes but preserves unstaged View edits", () => {
+  const base = state([projectA, projectB]);
+  const working = structuredClone(base);
+  working.objects[0].values.number = "NEW-A";
+  working.objects[1].values.number = "NEW-B";
+
+  const draft = {
+    id: "draft",
+    createdAt: "2026-09-22T10:00:00.000Z",
+    updatedAt: "2026-09-22T10:00:00.000Z",
+    baseRevision: 7,
+    baseState: base,
+    workingState: working,
+    stagedObjectIds: ["project-a"],
+  };
+
+  const committed = state([
+    {
+      ...structuredClone(projectA),
+      values: {
+        ...projectA.values,
+        number: "NEW-A",
+        last_checked_at: "2026-09-22T11:00:00.000Z",
+      },
+    },
+    structuredClone(projectB),
+  ]);
+  committed.revision = 8;
+
+  staging.rebaseCommittedObjects(draft, committed, ["project-a"]);
+  draft.baseState = structuredClone(committed);
+  draft.baseRevision = 8;
+  draft.stagedObjectIds = [];
+
+  assert.equal(
+    draft.workingState.objects[0].values.last_checked_at,
+    "2026-09-22T11:00:00.000Z",
+  );
+  assert.equal(draft.workingState.objects[0].values.number, "NEW-A");
+  assert.equal(draft.workingState.objects[1].values.number, "NEW-B");
+  assert.deepEqual(staging.changedObjectIds(draft), ["project-b"]);
+});
