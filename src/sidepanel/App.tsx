@@ -4,6 +4,7 @@ import "./fileSourceStyles";
 import "./commitStyles";
 import "./workspaceRedesignStyles";
 import "./importReviewStyles";
+import "./workflowStyles";
 import { CommitPanel } from "./CommitPanel";
 import { ImportReviewPanel } from "./ImportReviewPanel";
 import { WorkflowTabs } from "./WorkflowTabs";
