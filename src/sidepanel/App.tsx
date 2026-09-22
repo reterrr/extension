@@ -86,6 +86,14 @@ export function App() {
                 Wyczyść
               </button>
             </div>
+            <div className="object-workflow-actions">
+              <button id="stage-object" type="button" className="primary">
+                Dodaj do Commit
+              </button>
+              <button id="remove-object-from-view" type="button" className="text-button">
+                Usuń z View
+              </button>
+            </div>
             <div className="progress-label">
               <span id="progress" /><span id="rule-count" />
             </div>
