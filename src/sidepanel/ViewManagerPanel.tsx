@@ -434,10 +434,20 @@ export function ViewManagerPanel() {
 
       {compiled.error && <p className="view-manager-error">{compiled.error}</p>}
 
-      {query.trim() && !compiled.error && (
+      <div className="view-catalog-head">
+        <strong>{query.trim() ? "Wyniki filtra" : "Obiekty"}</strong>
+        <small>
+          {query.trim()
+            ? matches.length + " wyników · kliknij + / −"
+            : "Kliknij +, aby dodać ręcznie do View"}
+        </small>
+      </div>
+
+      {!compiled.error && (
         <div className="view-search-results">
-          {matches.slice(0, 60).map((object) => {
+          {catalogObjects.map((object) => {
             const inView = Boolean(view?.objectIds.includes(object.id));
+            const entry = commitById.get(object.id);
             return (
               <div key={object.id} className="view-search-result">
                 <button
@@ -446,15 +456,20 @@ export function ViewManagerPanel() {
                   onClick={() => run(() => openObject(object.id))}
                 >
                   <strong>{displayName(object)}</strong>
-                  <small>{typeLabel(object)}</small>
+                  <small>
+                    {typeLabel(object)}
+                    {entry && entry.status !== "UNCHANGED"
+                      ? " · " + statusLabel(entry)
+                      : ""}
+                  </small>
                 </button>
                 <button
                   type="button"
                   className="view-search-toggle"
                   aria-label={
-                    inView
-                      ? `Usuń ${displayName(object)} z View`
-                      : `Dodaj ${displayName(object)} do View`
+                    (inView ? "Usuń " : "Dodaj ") +
+                    displayName(object) +
+                    (inView ? " z View" : " do View")
                   }
                   onClick={() =>
                     run(() => (inView ? remove(object.id) : add(object.id)))
@@ -465,17 +480,16 @@ export function ViewManagerPanel() {
               </div>
             );
           })}
-          {!matches.length && (
+          {!catalogObjects.length && (
             <p className="view-manager-empty">Brak pasujących obiektów.</p>
           )}
-          {matches.length > 60 && (
+          {(query.trim() ? matches.length : state.objects.length) > 80 && (
             <small className="view-manager-more">
-              Pokazano pierwsze 60 z {matches.length}. Zawęź filtr.
+              Pokazano pierwsze 80. Zawęź filtr, aby znaleźć konkretny obiekt.
             </small>
           )}
         </div>
       )}
-
       {error && <p className="view-manager-error">{error}</p>}
     </section>
   );
