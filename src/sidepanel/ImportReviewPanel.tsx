@@ -537,6 +537,56 @@ export function ImportReviewPanel() {
     }
   }
 
+  async function discardApprovedSelected() {
+    if (!session?.selectedObjectId) return;
+    const previewId = session.selectedObjectId;
+    const preview = session.previewState.objects.find(
+      (object) => object.id === previewId,
+    );
+    if (!preview?.importKey) {
+      setError("Nie udało się znaleźć zaimportowanego obiektu.");
+      return;
+    }
+    const targetObjectId =
+      session.approvedObjectIdByImportKey[preview.importKey];
+    if (!targetObjectId) {
+      setError("Nie udało się znaleźć obiektu dodanego do View.");
+      return;
+    }
+
+    setBusy(true);
+    setError("");
+    try {
+      const response = (await browser.runtime.sendMessage({
+        type: "BURBOT_COMMIT",
+        op: "DISCARD_OBJECT",
+        objectId: targetObjectId,
+      })) as { ok?: boolean; error?: string };
+      if (!response?.ok) {
+        throw new Error(
+          response?.error ?? "Nie udało się odrzucić zmian z View.",
+        );
+      }
+
+      revokeApprovedImportObject(
+        session,
+        previewId,
+        new Date().toISOString(),
+      );
+      await writeImportReview(session);
+      setSession({ ...session });
+
+      window.dispatchEvent(new Event("burbot:commit-changed"));
+      window.dispatchEvent(
+        new CustomEvent("burbot:import-review-changed"),
+      );
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function rejectSelected() {
     if (!session?.selectedObjectId) return;
     markImportObjectRejected(
