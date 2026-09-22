@@ -350,15 +350,7 @@ style.textContent = `
     font-size: 9px;
     line-height: 1.35;
   }
-  .import-review-approve { width: 100%; }
-  .import-review-mode .commit-panel,
-  .import-review-mode .connection-bar,
-  .import-review-mode main,
-  .import-review-mode #notice,
-  .import-review-mode #capture-hint,
-  .import-review-mode #capture-area {
-    display: none !important;
-  }
+  .import-review-to-view { width: 100%; }
   @media (max-width: 520px) {
     .import-review-layout { grid-template-columns: 1fr; }
     .import-review-list { border-right: 0; border-bottom: 1px solid #edf1ed; }
