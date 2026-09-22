@@ -951,12 +951,31 @@ export function ImportReviewPanel() {
                       >
                         Przywróć do sprawdzenia
                       </button>
+                    ) : selected.status === "APPROVED" ? (
+                      <>
+                        <button
+                          type="button"
+                          className="text-button danger"
+                          disabled={busy}
+                          onClick={() => void discardApprovedSelected()}
+                        >
+                          Odrzuć zmiany z View
+                        </button>
+                        <button
+                          type="button"
+                          className="primary import-review-approve"
+                          disabled={busy}
+                          onClick={() => requestWorkflowMode("view")}
+                        >
+                          Przejdź do View
+                        </button>
+                      </>
                     ) : (
                       <>
                         <button
                           type="button"
                           className="text-button danger"
-                          disabled={busy || selected.status === "APPROVED"}
+                          disabled={busy}
                           onClick={() => void rejectSelected()}
                         >
                           Odrzuć import
@@ -964,14 +983,12 @@ export function ImportReviewPanel() {
                         <button
                           type="button"
                           className="primary import-review-approve"
-                          disabled={busy || selected.status === "APPROVED"}
+                          disabled={busy}
                           onClick={() => void approve()}
                         >
-                          {selected.status === "APPROVED"
-                            ? "Obiekt jest już w View"
-                            : existingTarget
-                              ? "Zastosuj zmiany → dodaj do View"
-                              : "Dodaj obiekt do View"}
+                          {existingTarget
+                            ? "Zastosuj zmiany → View"
+                            : "Dodaj obiekt → View"}
                         </button>
                       </>
                     )}
