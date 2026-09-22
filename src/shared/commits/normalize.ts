@@ -8,6 +8,9 @@ import type { DraftCommit } from "../types/commit";
  */
 export function normalizeDraftWorkingRevision(draft: DraftCommit): DraftCommit {
   migrateFundingRefundRanges(draft.workingState);
+  draft.stagedObjectIds = Array.isArray(draft.stagedObjectIds)
+    ? [...new Set(draft.stagedObjectIds.map(String))]
+    : [];
   draft.workingState.revision = draft.baseRevision;
   return draft;
 }

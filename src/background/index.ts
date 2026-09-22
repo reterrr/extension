@@ -8,6 +8,16 @@ import {
   writeActiveDraft,
 } from "../shared/commits/draftStore";
 import { commitSessionView } from "../shared/commits/session";
+import {
+  applyStagedObjects,
+  changedObjectIds,
+  discardViewObject,
+  hasViewChanges,
+  missingReferences,
+  rebaseCommittedObjects,
+  stageObject,
+  unstageObject,
+} from "../shared/commits/staging";
 import { createCapturedExtractionInput } from "../shared/extraction/rules";
 import { discardStaleImportedEvidence } from "../shared/import/evidence";
 import { importDocumentIntoState } from "../shared/import/format";
@@ -81,6 +91,24 @@ function enqueue<T>(work: () => Promise<T>): Promise<T> {
 function cloneState(state: LegacyStorageState): LegacyStorageState {
   return JSON.parse(JSON.stringify(state)) as LegacyStorageState;
 }
+function validateCommittedReferences(state: LegacyStorageState): void {
+  const missing = missingReferences(
+    state,
+    BurbotSchema as Record<
+      string,
+      { fields?: Record<string, { type?: string; label?: string }> }
+    >,
+  );
+  if (!missing.length) return;
+
+  const first = missing[0];
+  const object = state.objects.find((entry) => entry.id === first.objectId);
+  const definition = BurbotSchema[object?.type ?? ""]?.fields?.[first.field];
+  throw new Error(
+    `Nie można wykonać commita: „${object ? BurbotCore.displayName(object) : first.objectId}” wskazuje przez pole „${definition?.label ?? first.field}” na obiekt, który pozostaje tylko w View. Dodaj powiązany obiekt do Commit albo usuń tę zmianę.`,
+  );
+}
+
 
 async function broadcast(message: Record<string, unknown>): Promise<void> {
   await browser.runtime.sendMessage(message).catch(() => undefined);
@@ -104,7 +132,7 @@ async function workspaceState(): Promise<LegacyStorageState> {
 async function requireDraft(): Promise<DraftCommit> {
   const draft = await readActiveDraft();
   if (!draft) {
-    throw new Error('Start with "New commit" before changing objects.');
+    throw new Error('Uruchom View przed zmianą obiektów.');
   }
   return draft;
 }
@@ -350,7 +378,7 @@ browser.contextMenus.onClicked.addListener((info, tab) => {
       stamp: crypto.randomUUID(),
       note:
         object.creationNote ??
-        "Object staged in the active commit. Choose the next field to capture.",
+        "Obiekt został dodany do View. Uzupełnij dane, a potem dodaj go do Commit.",
     });
     await opening;
   }).catch((error: unknown) => {
@@ -399,7 +427,48 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
           baseRevision: baseState.revision,
           baseState: cloneState(baseState),
           workingState: cloneState(baseState),
+          stagedObjectIds: [],
         };
+        await writeActiveDraft(draft);
+        await publishUiState(draft.workingState);
+        await notifyCommitChanged();
+        return commitSessionView(draft);
+      }
+
+      if (message.op === "STAGE_OBJECT") {
+        const draft = await requireDraft();
+        if (typeof message.objectId !== "string") {
+          throw new Error("Object id is required.");
+        }
+        if (!changedObjectIds(draft).includes(message.objectId)) {
+          throw new Error("Ten obiekt nie ma zmian do dodania do Commit.");
+        }
+        stageObject(draft, message.objectId);
+        draft.updatedAt = new Date().toISOString();
+        await writeActiveDraft(draft);
+        await notifyCommitChanged();
+        return commitSessionView(draft);
+      }
+
+      if (message.op === "UNSTAGE_OBJECT") {
+        const draft = await requireDraft();
+        if (typeof message.objectId !== "string") {
+          throw new Error("Object id is required.");
+        }
+        unstageObject(draft, message.objectId);
+        draft.updatedAt = new Date().toISOString();
+        await writeActiveDraft(draft);
+        await notifyCommitChanged();
+        return commitSessionView(draft);
+      }
+
+      if (message.op === "DISCARD_OBJECT") {
+        const draft = await requireDraft();
+        if (typeof message.objectId !== "string") {
+          throw new Error("Object id is required.");
+        }
+        discardViewObject(draft, message.objectId);
+        draft.updatedAt = new Date().toISOString();
         await writeActiveDraft(draft);
         await publishUiState(draft.workingState);
         await notifyCommitChanged();
@@ -408,11 +477,30 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
 
       if (message.op === "COMMIT") {
         const draft = await requireDraft();
-        if (JSON.stringify(draft.baseState) === JSON.stringify(draft.workingState)) {
-          throw new Error("There are no staged changes to commit.");
+        if (!(draft.stagedObjectIds ?? []).length) {
+          throw new Error("Nie ma obiektów dodanych do commita.");
         }
-        const committed = await commitState(draft.baseRevision, draft.workingState);
+
+        const stagedObjectIds = [...draft.stagedObjectIds];
+        const candidate = applyStagedObjects(draft);
+        validateCommittedReferences(candidate);
+        const committed = await commitState(draft.baseRevision, candidate);
+
+        rebaseCommittedObjects(draft, committed, stagedObjectIds);
+        draft.baseRevision = committed.revision;
+        draft.baseState = cloneState(committed);
+        draft.stagedObjectIds = [];
+        draft.updatedAt = new Date().toISOString();
+
+        if (hasViewChanges(draft)) {
+          await writeActiveDraft(draft);
+          await publishUiState(draft.workingState);
+          await notifyCommitChanged();
+          return { session: commitSessionView(draft), state: committed };
+        }
+
         await clearActiveDraft();
+        await publishUiState(committed);
         await notifyCommitChanged();
         return { session: commitSessionView(null), state: committed };
       }
@@ -477,7 +565,7 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
           objectId: object.id,
           tabId,
           stamp: crypto.randomUUID(),
-          note: "New object staged in this commit.",
+          note: "Nowy obiekt został dodany do View. Dodaj go do Commit, gdy będzie gotowy.",
         });
         return commitSessionView(await readActiveDraft());
       }

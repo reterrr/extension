@@ -60,6 +60,7 @@ test("fresh draft exposes committed objects as unchanged and is clean", () => {
     baseRevision: 4,
     baseState: structuredClone(base),
     workingState: structuredClone(base),
+    stagedObjectIds: [],
   };
 
   const view = session.commitSessionView(draft);
@@ -86,10 +87,14 @@ test("new and edited objects are marked in commit projection", () => {
     baseRevision: 4,
     baseState: structuredClone(base),
     workingState: state([edited, operator], 6),
+    stagedObjectIds: ["project-1"],
   };
 
   const view = session.commitSessionView(draft);
   assert.equal(view.dirty, true);
+  assert.equal(view.pendingViewCount, 1);
+  assert.equal(view.objects[0].staged, true);
+  assert.equal(view.objects[1].staged, false);
   assert.deepEqual(view.objects[0].changes, [
     {
       field: "status",
@@ -129,6 +134,7 @@ test("deleted database objects remain visible in the draft as DELETED", () => {
     baseRevision: 4,
     baseState: structuredClone(base),
     workingState: state([project], 5),
+    stagedObjectIds: ["operator-1"],
   };
 
   const view = session.commitSessionView(draft);
@@ -162,10 +168,14 @@ test("related-only changes are visible in the commit diff", () => {
     baseRevision: 4,
     baseState: base,
     workingState: working,
+    stagedObjectIds: [],
   };
 
   const view = session.commitSessionView(draft);
   assert.equal(view.objects[0].status, "MODIFIED");
+  assert.equal(view.objects[0].staged, false);
+  assert.equal(view.dirty, false);
+  assert.equal(view.pendingViewCount, 1);
   assert.deepEqual(view.objects[0].changes, []);
   assert.deepEqual(view.objects[0].relatedChanges, [
     {

@@ -2,10 +2,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  addObjectToView,
   createObjectView,
   normalizeObjectView,
   objectInView,
   objectsInView,
+  removeObjectFromView,
 } from "../src/shared/search/objectView.js";
 
 const objects = [
@@ -53,18 +55,30 @@ test("view membership limits the active object set", () => {
   assert.equal(objectInView(null, "project-2"), true);
 });
 
-test("empty or fully stale views collapse to no active view", () => {
-  assert.equal(
-    normalizeObjectView(
-      {
-        version: 1,
-        objectIds: ["missing"],
-        query: "",
-        type: "all",
-        createdAt: "2026-09-20T12:00:00.000Z",
-      },
-      objects,
-    ),
-    null,
+test("an active View can remain empty after manual removal", () => {
+  const normalized = normalizeObjectView(
+    {
+      version: 1,
+      objectIds: ["missing"],
+      query: "",
+      type: "all",
+      createdAt: "2026-09-20T12:00:00.000Z",
+    },
+    objects,
   );
+  assert.deepEqual(normalized.objectIds, []);
+  assert.deepEqual(objectsInView(objects, normalized), []);
+});
+
+test("objects can be added to and removed from View manually", () => {
+  let view = createObjectView([objects[0]], "", "all");
+  view = addObjectToView(view, "operator-1", objects, "2026-09-20T12:00:00.000Z");
+  assert.deepEqual(view.objectIds, ["project-1", "operator-1"]);
+
+  view = removeObjectFromView(view, "project-1", objects);
+  assert.deepEqual(view.objectIds, ["operator-1"]);
+
+  view = removeObjectFromView(view, "operator-1", objects);
+  assert.deepEqual(view.objectIds, []);
+  assert.equal(objectInView(view, "project-2"), false);
 });

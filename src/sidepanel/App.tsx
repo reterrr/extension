@@ -4,8 +4,11 @@ import "./fileSourceStyles";
 import "./commitStyles";
 import "./workspaceRedesignStyles";
 import "./importReviewStyles";
+import "./workflowStyles";
 import { CommitPanel } from "./CommitPanel";
 import { ImportReviewPanel } from "./ImportReviewPanel";
+import { WorkflowTabs } from "./WorkflowTabs";
+import { ViewManagerPanel } from "./ViewManagerPanel";
 
 export function App() {
   useEffect(() => {
@@ -37,6 +40,8 @@ export function App() {
         <span className="brand">Burbot<span className="brand-dot">.</span></span>
         <span className="local-badge">EXTRACTION WORKSPACE</span>
       </header>
+      <WorkflowTabs />
+      <ViewManagerPanel />
       <ImportReviewPanel />
       <CommitPanel />
       <div className="connection-bar">
@@ -84,6 +89,14 @@ export function App() {
               </button>
               <button id="clear-object-view" type="button" className="text-button">
                 Wyczyść
+              </button>
+            </div>
+            <div className="object-workflow-actions">
+              <button id="stage-object" type="button" className="primary">
+                Dodaj do Commit
+              </button>
+              <button id="remove-object-from-view" type="button" className="text-button">
+                Usuń z View
               </button>
             </div>
             <div className="progress-label">

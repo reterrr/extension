@@ -10,6 +10,8 @@ import {
   importReviewView,
   markImportObjectApproved,
   markImportObjectLinked,
+  markImportObjectRejected,
+  restoreRejectedImportObject,
 } from "../shared/import/review";
 import {
   clearImportReview,
@@ -22,6 +24,10 @@ import {
   type ReviewedImportRule,
 } from "../shared/import/stageReview";
 import { selectorColor } from "../shared/selectorPalette";
+import {
+  OBJECT_VIEW_STORAGE_KEY,
+  addObjectToView,
+} from "../shared/search/objectView.js";
 import type {
   ImportReviewSession,
   ImportReviewView,
@@ -203,6 +209,12 @@ function reviewedRules(
     });
 }
 
+function requestWorkflowMode(mode: "view" | "commit" | "import"): void {
+  window.dispatchEvent(
+    new CustomEvent("burbot:request-workflow-mode", { detail: { mode } }),
+  );
+}
+
 export function ImportReviewPanel() {
   const [session, setSession] = useState<ImportReviewSession | null>(null);
   const [mode, setMode] = useState<"workspace" | "review">("workspace");
@@ -249,6 +261,7 @@ export function ImportReviewPanel() {
     const next = await readImportReview();
     setSession(next);
     if (open && next) {
+      requestWorkflowMode("import");
       const windowId = windowIdRef.current;
       if (windowId !== null) {
         await patchSidepanelUiState(windowId, {
@@ -273,14 +286,17 @@ export function ImportReviewPanel() {
       if (disposed || currentWindow.id === undefined) return;
       windowIdRef.current = currentWindow.id;
 
-      const [uiState, nextSession] = await Promise.all([
+      const [uiState, nextSession, workflowStorage] = await Promise.all([
         readSidepanelUiState(currentWindow.id),
         readImportReview(),
+        browser.storage.session.get("burbot:workflow-mode"),
       ]);
       if (disposed) return;
 
+      const workflowMode = workflowStorage["burbot:workflow-mode"];
+      const globalImport = workflowMode === "import";
       const initialMode: SidepanelMode =
-        nextSession && uiState.mode === "review" ? "review" : "workspace";
+        nextSession && globalImport ? "review" : "workspace";
       modeRef.current = initialMode;
       setMode(initialMode);
       setSession(nextSession);
@@ -292,6 +308,14 @@ export function ImportReviewPanel() {
       void refresh(detail?.open === true);
     };
     window.addEventListener("burbot:import-review-changed", changed);
+
+    const workflowChanged = (event: Event) => {
+      const next = (event as CustomEvent<{ mode?: string }>).detail?.mode;
+      const reviewMode = next === "import" ? "review" : "workspace";
+      modeRef.current = reviewMode;
+      setMode(reviewMode);
+    };
+    window.addEventListener("burbot:workflow-mode", workflowChanged);
 
     const workspaceReady = () => {
       const windowId = windowIdRef.current;
@@ -321,6 +345,7 @@ export function ImportReviewPanel() {
     return () => {
       disposed = true;
       window.removeEventListener("burbot:import-review-changed", changed);
+      window.removeEventListener("burbot:workflow-mode", workflowChanged);
       window.removeEventListener("burbot:workspace-ready", workspaceReady);
       window.removeEventListener("scroll", onScroll);
       if (scrollTimerRef.current !== undefined) {
@@ -420,10 +445,18 @@ export function ImportReviewPanel() {
     setBusy(true);
     setError("");
     try {
-      const draft = await readActiveDraft();
+      let draft = await readActiveDraft();
       if (!draft) {
-        throw new Error("Najpierw rozpocznij New commit w zakładce Workspace.");
+        const created = (await browser.runtime.sendMessage({
+          type: "BURBOT_COMMIT",
+          op: "NEW",
+        })) as { ok?: boolean; error?: string };
+        if (!created?.ok) {
+          throw new Error(created?.error ?? "Nie udało się uruchomić View.");
+        }
+        draft = await readActiveDraft();
       }
+      if (!draft) throw new Error("Nie udało się uruchomić View.");
 
       const previewId = session.selectedObjectId;
       const plan: ImportApprovalPlanWithRules = {
@@ -442,6 +475,18 @@ export function ImportReviewPanel() {
       draft.updatedAt = now;
       await writeActiveDraft(draft);
       await publishUiState(draft.workingState);
+
+      const storedView = (await browser.storage.session.get(OBJECT_VIEW_STORAGE_KEY))[
+        OBJECT_VIEW_STORAGE_KEY
+      ];
+      const nextView = addObjectToView(
+        storedView,
+        staged.stagedObjectId,
+        draft.workingState.objects,
+      );
+      await browser.storage.session.set({
+        [OBJECT_VIEW_STORAGE_KEY]: nextView,
+      });
 
       for (const link of plan.existingReferenceLinks) {
         markImportObjectLinked(
@@ -491,6 +536,30 @@ export function ImportReviewPanel() {
     }
   }
 
+  async function rejectSelected() {
+    if (!session?.selectedObjectId) return;
+    markImportObjectRejected(
+      session,
+      session.selectedObjectId,
+      new Date().toISOString(),
+    );
+    await writeImportReview(session);
+    setSession({ ...session });
+    window.dispatchEvent(new CustomEvent("burbot:import-review-changed"));
+  }
+
+  async function restoreSelected() {
+    if (!session?.selectedObjectId) return;
+    restoreRejectedImportObject(
+      session,
+      session.selectedObjectId,
+      new Date().toISOString(),
+    );
+    await writeImportReview(session);
+    setSession({ ...session });
+    window.dispatchEvent(new CustomEvent("burbot:import-review-changed"));
+  }
+
   async function closeReview() {
     if (!session) return;
     if (
@@ -517,10 +586,29 @@ export function ImportReviewPanel() {
     setMode("workspace");
     restoreScroll(workspaceScroll);
     await clearPageReviewHighlights();
+    requestWorkflowMode("view");
     window.dispatchEvent(new Event("burbot:selector-highlights-refresh"));
   }
 
-  if (!session) return null;
+  if (!session) {
+    if (mode !== "review") return null;
+    return (
+      <section className="import-review-shell">
+        <div className="import-empty-state">
+          <span className="eyebrow">IMPORT</span>
+          <h2>Brak aktywnego importu</h2>
+          <p>Zaimportuj portable JSON. Obiekty pojawią się tutaj do sprawdzenia, a potem możesz dodać je do View.</p>
+          <button
+            type="button"
+            className="primary"
+            onClick={() => document.getElementById("import")?.click()}
+          >
+            Import JSON
+          </button>
+        </div>
+      </section>
+    );
+  }
 
   const groups = ["operator", "project", "recruitment"].map((type) => ({
     type,
@@ -545,23 +633,6 @@ export function ImportReviewPanel() {
 
   return (
     <section className="import-review-shell">
-      <nav className="workspace-mode-tabs" aria-label="Tryb pracy">
-        <button
-          type="button"
-          className={mode === "workspace" ? "active" : ""}
-          onClick={() => void switchMode("workspace")}
-        >
-          Workspace
-        </button>
-        <button
-          type="button"
-          className={mode === "review" ? "active" : ""}
-          onClick={() => void switchMode("review")}
-        >
-          Import review <span>{view.pendingCount ?? 0}</span>
-        </button>
-      </nav>
-
       {mode === "review" && (
         <div className="import-review-panel">
           <header className="import-review-header">
@@ -569,7 +640,7 @@ export function ImportReviewPanel() {
               <span className="eyebrow">IMPORT REVIEW</span>
               <strong>{view.fileName}</strong>
               <small>
-                {view.approvedCount}/{view.objects.length} zatwierdzono
+                {view.approvedCount ?? 0} w View · {view.rejectedCount ?? 0} odrzucono · {view.pendingCount ?? 0} oczekuje
               </small>
             </div>
             <button
@@ -608,14 +679,16 @@ export function ImportReviewPanel() {
                           type="button"
                           className={`${
                             object.id === view.selectedObjectId ? "selected " : ""
-                          }${object.status === "APPROVED" ? "approved" : ""}`}
+                          }${object.status === "APPROVED" ? "approved" : object.status === "REJECTED" ? "rejected" : ""}`}
                           onClick={() => void select(object.id)}
                         >
                           <span>{object.label}</span>
                           <small>
                             {object.status === "APPROVED"
-                              ? "✓"
-                              : [
+                              ? "w View"
+                              : object.status === "REJECTED"
+                                ? "odrzucono"
+                                : [
                                   object.evidenceCount
                                     ? `${object.evidenceCount} ev`
                                     : "",
@@ -792,30 +865,53 @@ export function ImportReviewPanel() {
                   )}
 
                   <p className="import-review-hint">
-                    Import Review służy wyłącznie do sprawdzenia danych i źródeł. Zmiany wykonuj po zatwierdzeniu w Workspace.
+                    Import służy do sprawdzenia danych i źródeł. Zaakceptowany obiekt trafia najpierw do View — nie do Commit.
                   </p>
                   {existingTarget && selected.status !== "APPROVED" && (
                     <div className="import-review-update-existing">
                       <strong>Aktualizacja istniejącego obiektu</strong>
                       <span>{existingTarget.label}</span>
                       <small>
-                        Zatwierdzenie zaktualizuje ten sam obiekt w aktywnym commicie.
+                        Dodanie do View zaktualizuje ten sam obiekt roboczy.
                         ID pozostanie bez zmian i duplikat nie zostanie utworzony.
                       </small>
                     </div>
                   )}
-                  <button
-                    type="button"
-                    className="primary import-review-approve"
-                    disabled={busy || selected.status === "APPROVED"}
-                    onClick={() => void approve()}
-                  >
-                    {selected.status === "APPROVED"
-                      ? "Zatwierdzono — obiekt jest w commicie"
-                      : existingTarget
-                        ? "Zatwierdź zmiany → dodaj do commita"
-                        : "Zatwierdź obiekt → dodaj do commita"}
-                  </button>
+                  <div className="import-review-actions">
+                    {selected.status === "REJECTED" ? (
+                      <button
+                        type="button"
+                        className="text-button"
+                        disabled={busy}
+                        onClick={() => void restoreSelected()}
+                      >
+                        Przywróć do sprawdzenia
+                      </button>
+                    ) : (
+                      <>
+                        <button
+                          type="button"
+                          className="text-button danger"
+                          disabled={busy || selected.status === "APPROVED"}
+                          onClick={() => void rejectSelected()}
+                        >
+                          Odrzuć import
+                        </button>
+                        <button
+                          type="button"
+                          className="primary import-review-approve"
+                          disabled={busy || selected.status === "APPROVED"}
+                          onClick={() => void approve()}
+                        >
+                          {selected.status === "APPROVED"
+                            ? "Obiekt jest już w View"
+                            : existingTarget
+                              ? "Zastosuj zmiany → dodaj do View"
+                              : "Dodaj obiekt do View"}
+                        </button>
+                      </>
+                    )}
+                  </div>
                 </>
               ) : (
                 <p>Wybierz obiekt do sprawdzenia.</p>

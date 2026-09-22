@@ -369,14 +369,16 @@ export function importReviewView(
     }));
 
   const approvedCount = objects.filter((entry) => entry.status === "APPROVED").length;
+  const rejectedCount = objects.filter((entry) => entry.status === "REJECTED").length;
   return {
     active: true,
     id: session.id,
     fileName: session.fileName,
     createdAt: session.createdAt,
     selectedObjectId: session.selectedObjectId,
-    pendingCount: objects.length - approvedCount,
+    pendingCount: objects.length - approvedCount - rejectedCount,
     approvedCount,
+    rejectedCount,
     objects,
     fields: fieldViews(session, object),
     evidence: evidenceViews(session, object),
@@ -902,6 +904,38 @@ export function markImportObjectApproved(
   session.updatedAt = now;
   session.selectedObjectId =
     session.objectOrder.find(
-      (id) => session.statusByObjectId[id] !== "APPROVED",
+      (id) => (session.statusByObjectId[id] ?? "PENDING") === "PENDING",
     ) ?? previewObjectId;
+}
+
+
+export function markImportObjectRejected(
+  session: ImportReviewSession,
+  previewObjectId: string,
+  now: string,
+): void {
+  const object = session.previewState.objects.find(
+    (entry) => entry.id === previewObjectId,
+  );
+  if (!object) throw new Error("Imported object not found.");
+  if (session.statusByObjectId[previewObjectId] === "APPROVED") {
+    throw new Error("Obiekt jest już w View. Odrzuć jego zmiany z View, jeśli chcesz je wycofać.");
+  }
+  session.statusByObjectId[previewObjectId] = "REJECTED";
+  session.updatedAt = now;
+  session.selectedObjectId =
+    session.objectOrder.find(
+      (id) => session.statusByObjectId[id] === "PENDING",
+    ) ?? previewObjectId;
+}
+
+export function restoreRejectedImportObject(
+  session: ImportReviewSession,
+  previewObjectId: string,
+  now: string,
+): void {
+  if (session.statusByObjectId[previewObjectId] !== "REJECTED") return;
+  session.statusByObjectId[previewObjectId] = "PENDING";
+  session.updatedAt = now;
+  session.selectedObjectId = previewObjectId;
 }

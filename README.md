@@ -1,3 +1,20 @@
+
+## View → Commit → SQLite workflow
+
+The sidepanel has three separate workflow surfaces:
+
+- **View** — the working set. Build it from the existing search syntax (including regex, wildcards and geography filters) or add/remove individual objects with `+` / `−`. Edits and approved imports live here first.
+- **Commit** — an explicit object-level staging area. Only objects added from View are written by `Commit to SQLite`. Objects can be removed from Commit without losing their View changes, or discarded individually back to the SQLite/base version.
+- **Import** — a review queue for portable JSON. Imported objects can be rejected, restored, or applied to View. Approval never sends an object directly to Commit.
+
+The data flow is:
+
+```text
+Import -> View -> Commit -> SQLite
+```
+
+Partial commits are supported. After committing selected objects, their View copies are rebased to the new SQLite revision while unrelated View edits stay pending. A partial commit is rejected if it would create a dangling object reference (for example, committing a new recruitment while its new project remains only in View).
+
 # Burbot Firefox Extension
 
 Firefox 140+ WebExtension using React for extension pages and TypeScript for browser runtime code.

@@ -13,10 +13,12 @@ import {
 } from "../shared/export/aiViewExport.js";
 import {
   OBJECT_VIEW_STORAGE_KEY,
+  addObjectToView,
   createObjectView,
   normalizeObjectView,
   objectInView,
   objectsInView,
+  removeObjectFromView,
 } from "../shared/search/objectView.js";
 import { createPickerClient } from "./pickerRpc";
 import {
@@ -275,6 +277,72 @@ import {
     scheduleWorkspaceUiPersist();
     render();
     notice("Widok wyczyszczony. Pokazuję wszystkie obiekty.");
+  }
+
+  async function addToObjectView(id) {
+    const next = addObjectToView(objectView, id, db.objects);
+    await persistObjectView(next);
+    render();
+    notice("Dodano obiekt do View.");
+  }
+
+  async function removeFromObjectView(id) {
+    if (!objectView) {
+      throw new Error("Najpierw ustaw aktywny View.");
+    }
+    const next = removeObjectFromView(objectView, id, db.objects);
+    await persistObjectView(next);
+    if (objectId === id && !objectInView(objectView, id)) {
+      objectId = objectView?.objectIds?.[0] || "";
+      active = null;
+      preview = null;
+      resetCapture();
+    }
+    render();
+    notice("Usunięto obiekt z View.");
+  }
+
+  async function stageCurrentObject() {
+    if (!objectId) throw new Error("Wybierz obiekt.");
+    const result = await browser.runtime.sendMessage({
+      type: "BURBOT_COMMIT",
+      op: "STAGE_OBJECT",
+      objectId,
+    });
+    if (!result?.ok) throw new Error(result?.error || "Nie udało się dodać do commita.");
+    window.dispatchEvent(new Event("burbot:commit-changed"));
+    await syncObjectWorkflowControls();
+    notice("Obiekt dodany do Commit.");
+  }
+
+  async function syncObjectWorkflowControls() {
+    const stage = $("stage-object");
+    const remove = $("remove-object-from-view");
+    if (!stage || !remove) return;
+
+    remove.hidden = !objectView || !objectInView(objectView, objectId);
+    if (!objectId) {
+      stage.disabled = true;
+      stage.textContent = "Dodaj do Commit";
+      return;
+    }
+
+    const response = await browser.runtime.sendMessage({
+      type: "BURBOT_COMMIT",
+      op: "GET",
+    });
+    if (!response?.ok) {
+      stage.disabled = true;
+      return;
+    }
+    const entry = response.value?.objects?.find((object) => object.id === objectId);
+    const changed = entry && entry.status !== "UNCHANGED";
+    stage.disabled = busy || !changed || Boolean(entry?.staged);
+    stage.textContent = entry?.staged
+      ? "✓ W Commit"
+      : changed
+        ? "Dodaj do Commit"
+        : "Brak zmian";
   }
   function downloadJsonFile(filename, value) {
     const url = URL.createObjectURL(
@@ -618,6 +686,7 @@ import {
       geographyByObject.get(object.id) || {};
 
     const scopedObjects = objectsInView(db.objects, normalizedObjectView());
+    const searchableObjects = db.objects;
 
     const picker = node("div", "object-picker");
     const toolbar = node("div", "object-picker-toolbar");
@@ -707,6 +776,7 @@ import {
     };
 
     function objectButton(object) {
+      const row = node("div", "object-option-row");
       const button = node("button", "object-option");
       button.type = "button";
       button.dataset.objectId = object.id;
@@ -729,9 +799,41 @@ import {
       if (object.id === objectId)
         button.append(node("span", "object-option-current", "✓"));
 
-      button.onclick = () => chooseObject(object.id);
+      button.onclick = () => {
+        if (objectView && !objectInView(objectView, object.id)) {
+          void addToObjectView(object.id)
+            .then(() => chooseObject(object.id))
+            .catch((error) => notice(error.message, true));
+          return;
+        }
+        chooseObject(object.id);
+      };
       button.onkeydown = (event) => chooseFromKeyboard(button, event);
-      return button;
+
+      const inView = objectInView(objectView, object.id);
+      const toggle = node(
+        "button",
+        "object-option-view-toggle",
+        objectView ? (inView ? "−" : "+") : "+",
+      );
+      toggle.type = "button";
+      toggle.title = objectView
+        ? inView
+          ? "Usuń z View"
+          : "Dodaj do View"
+        : "Utwórz View z tym obiektem";
+      toggle.setAttribute("aria-label", toggle.title);
+      toggle.onclick = (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        const work = objectView && inView
+          ? removeFromObjectView(object.id)
+          : addToObjectView(object.id);
+        void work.catch((error) => notice(error.message, true));
+      };
+
+      row.append(button, toggle);
+      return row;
     }
 
     function appendGroup(title, objects) {
@@ -782,7 +884,7 @@ import {
         );
       };
 
-      currentMatches = scopedObjects.filter(matches);
+      currentMatches = searchableObjects.filter(matches);
       const localObjects = [...currentMatches.filter((o) => local(o))].reverse();
       const saved = currentMatches.filter((o) => !local(o));
 
@@ -791,13 +893,11 @@ import {
       viewInfo.textContent = objectView
         ? "Aktywny widok: " + scopedObjects.length + " obiektów"
         : "Wyniki: " + currentMatches.length;
-      setViewButton.textContent = objectView
-        ? hasRestriction
-          ? "Zawęź widok · " + currentMatches.length
-          : "Widok aktywny · " + scopedObjects.length
-        : hasRestriction
-          ? "Ustaw widok · " + currentMatches.length
-          : "Wyszukaj obiekty, aby ustawić widok";
+      setViewButton.textContent = hasRestriction
+        ? "Ustaw View · " + currentMatches.length
+        : objectView
+          ? "View aktywny · " + scopedObjects.length
+          : "Wyszukaj obiekty, aby ustawić View";
       setViewButton.disabled =
         Boolean(compiled.error) || !currentMatches.length || !hasRestriction;
       clearViewButton.hidden = !objectView;
@@ -1774,9 +1874,10 @@ import {
   function render() {
     renderObjectViewIndicator();
     if (!chosen()) {
+      const view = normalizedObjectView();
       objectId =
-        objectsInView(db.objects, normalizedObjectView()).at(0)?.id ||
-        db.objects.at(-1)?.id ||
+        objectsInView(db.objects, view).at(0)?.id ||
+        (!view ? db.objects.at(-1)?.id : "") ||
         "";
       active = null;
       resetCapture();
@@ -1834,6 +1935,7 @@ import {
     $("results").hidden = !preview;
     renderEditor();
     controls();
+    void syncObjectWorkflowControls();
     restoreViewportAnchor();
   }
   function action(handler) {
@@ -1870,6 +1972,11 @@ import {
   $("clear-object-view").onclick = () => {
     void clearObjectView().catch((error) => notice(error.message, true));
   };
+  $("stage-object").onclick = action(stageCurrentObject);
+  $("remove-object-from-view").onclick = action(async () => {
+    if (!objectId) return;
+    await removeFromObjectView(objectId);
+  });
   $("pick").onclick = action(async () => {
     evidencePicking = false;
     await rpc(picking ? "STOP" : "PICK");
@@ -2032,6 +2139,9 @@ import {
       );
       render();
     }
+  });
+  window.addEventListener("burbot:commit-changed", () => {
+    void syncObjectWorkflowControls();
   });
   window.addEventListener("pagehide", () => {
     void persistWorkspaceUi();

@@ -856,3 +856,33 @@ test("portable import cannot set system-managed last_checked_at", () => {
     /managed automatically/,
   );
 });
+
+
+test("import review objects can be rejected and restored without entering View", () => {
+  const uuid = ids();
+  const now = "2026-09-22T11:00:00.000Z";
+  const session = reviewModule.createImportReviewSession(
+    documentFixture(),
+    "rejectable-import.burbot-import.json",
+    uuid,
+    now,
+  );
+  const project = session.previewState.objects[0];
+
+  reviewModule.markImportObjectRejected(session, project.id, now);
+  let view = reviewModule.importReviewView(session);
+  assert.equal(session.statusByObjectId[project.id], "REJECTED");
+  assert.equal(view.rejectedCount, 1);
+  assert.equal(view.pendingCount, 1);
+  assert.equal(view.approvedCount, 0);
+
+  reviewModule.restoreRejectedImportObject(
+    session,
+    project.id,
+    "2026-09-22T11:01:00.000Z",
+  );
+  view = reviewModule.importReviewView(session);
+  assert.equal(session.statusByObjectId[project.id], "PENDING");
+  assert.equal(view.rejectedCount, 0);
+  assert.equal(view.pendingCount, 2);
+});

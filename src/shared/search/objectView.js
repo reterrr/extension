@@ -31,8 +31,6 @@ export function normalizeObjectView(value, objects = []) {
     seen.add(id);
     objectIds.push(id);
   }
-  if (!objectIds.length) return null;
-
   return {
     version: 1,
     objectIds,
@@ -52,4 +50,34 @@ export function objectsInView(objects, view) {
   if (!view) return [...(objects ?? [])];
   const byId = new Map((objects ?? []).map((object) => [String(object.id), object]));
   return view.objectIds.map((id) => byId.get(String(id))).filter(Boolean);
+}
+
+
+export function addObjectToView(view, objectId, objects = [], now = new Date().toISOString()) {
+  const id = String(objectId ?? "").trim();
+  if (!id) throw new Error("Object id is required.");
+  const existing = new Set((objects ?? []).map((object) => String(object.id)));
+  if (!existing.has(id)) throw new Error("Object does not exist.");
+  const current = normalizeObjectView(view, objects) ?? {
+    version: 1,
+    objectIds: [],
+    query: "",
+    type: "all",
+    createdAt: String(now),
+  };
+  return {
+    ...current,
+    objectIds: [...new Set([...current.objectIds, id])],
+    createdAt: current.createdAt || String(now),
+  };
+}
+
+export function removeObjectFromView(view, objectId, objects = []) {
+  const current = normalizeObjectView(view, objects);
+  if (!current) return null;
+  const id = String(objectId ?? "");
+  return {
+    ...current,
+    objectIds: current.objectIds.filter((entry) => entry !== id),
+  };
 }
