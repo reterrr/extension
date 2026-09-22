@@ -53,3 +53,53 @@ export function objectsInView(objects, view) {
   const byId = new Map((objects ?? []).map((object) => [String(object.id), object]));
   return view.objectIds.map((id) => byId.get(String(id))).filter(Boolean);
 }
+
+
+export function addObjectToView(
+  view,
+  objectId,
+  objects = [],
+  now = new Date().toISOString(),
+) {
+  const id = String(objectId ?? "").trim();
+  if (!id) throw new Error("Wybierz obiekt.");
+  const existing = new Set((objects ?? []).map((object) => String(object?.id ?? "")));
+  if (!existing.has(id)) throw new Error("Obiekt nie istnieje w workspace.");
+
+  const normalized = normalizeObjectView(view, objects);
+  if (!normalized) {
+    // No explicit view means "all objects", so the object is already visible.
+    return null;
+  }
+  if (normalized.objectIds.includes(id)) return normalized;
+  return {
+    ...normalized,
+    objectIds: [...normalized.objectIds, id],
+    createdAt: String(now),
+  };
+}
+
+export function removeObjectFromView(
+  view,
+  objectId,
+  objects = [],
+  now = new Date().toISOString(),
+) {
+  const id = String(objectId ?? "").trim();
+  if (!id) throw new Error("Wybierz obiekt.");
+
+  const normalized = normalizeObjectView(view, objects);
+  const sourceIds = normalized
+    ? normalized.objectIds
+    : (objects ?? []).map((object) => String(object?.id ?? "")).filter(Boolean);
+  const objectIds = sourceIds.filter((entry) => entry !== id);
+  if (!objectIds.length) return null;
+
+  return {
+    version: 1,
+    objectIds,
+    query: normalized?.query ?? "",
+    type: normalized?.type ?? "all",
+    createdAt: String(now),
+  };
+}
