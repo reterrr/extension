@@ -196,6 +196,39 @@ style.textContent = `
     border-left: 3px solid #7ca58b;
     padding-left: 8px;
   }
+
+  .import-review-unset-fields {
+    margin-top: 2px;
+    border: 1px solid #e7ece8;
+    border-radius: 7px;
+    background: #fafbfa;
+  }
+  .import-review-unset-fields > summary {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 7px 8px;
+    color: #7a867e;
+    font-size: 9px;
+    cursor: pointer;
+  }
+  .import-review-unset-fields > summary span {
+    color: #9aa39d;
+  }
+  .import-review-unset-fields > div {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    padding: 0 8px 8px;
+  }
+  .import-review-unset-fields > div span {
+    padding: 3px 6px;
+    border-radius: 999px;
+    background: #eef1ef;
+    color: #7f8a83;
+    font-size: 8px;
+  }
+
   .import-review-field-head {
     display: flex;
     align-items: center;
