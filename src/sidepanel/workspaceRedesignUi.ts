@@ -18,6 +18,7 @@ let observedActiveLabel: HTMLElement | null = null;
 const fieldSectionOpen = new Map<string, boolean>();
 
 const BUSINESS_PANEL_IDS = [
+  "operator-contacts-panel",
   "file-sources-panel",
   "geography-panel",
   "funding-panel",
@@ -154,7 +155,7 @@ function enhanceFieldGroups(): void {
     const remembered = fieldSectionOpen.get(title);
     // An explicit user choice wins over automatic opening for the selected
     // field. This keeps a manually collapsed section collapsed across rerenders.
-    details.open = remembered ?? (selected || index === 0);
+    details.open = remembered ?? selected;
     fieldSectionOpen.set(title, details.open);
 
     const summary = document.createElement("summary");
