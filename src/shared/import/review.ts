@@ -7,6 +7,7 @@ import type {
   ImportReviewFileView,
   ImportReviewFinancingFieldView,
   ImportReviewFinancingView,
+  ImportReviewObjectStatus,
   ImportReviewSession,
   ImportReviewView,
 } from "../types/importReview";
@@ -368,15 +369,21 @@ export function importReviewView(
       ).length,
     }));
 
-  const approvedCount = objects.filter((entry) => entry.status === "APPROVED").length;
+  const pendingCount = objects.filter((entry) => entry.status === "PENDING").length;
+  const inViewCount = objects.filter((entry) => entry.status === "IN_VIEW").length;
+  const stagedCount = objects.filter((entry) => entry.status === "STAGED").length;
+  const rejectedCount = objects.filter((entry) => entry.status === "REJECTED").length;
   return {
     active: true,
     id: session.id,
     fileName: session.fileName,
     createdAt: session.createdAt,
     selectedObjectId: session.selectedObjectId,
-    pendingCount: objects.length - approvedCount,
-    approvedCount,
+    pendingCount,
+    inViewCount,
+    stagedCount,
+    rejectedCount,
+    approvedCount: stagedCount,
     objects,
     fields: fieldViews(session, object),
     evidence: evidenceViews(session, object),
@@ -391,8 +398,12 @@ function requirePendingObject(
 ): LegacyStoredObject {
   const object = session.previewState.objects.find((entry) => entry.id === objectId);
   if (!object) throw new Error("Imported object not found.");
-  if (session.statusByObjectId[objectId] === "APPROVED") {
-    throw new Error("Zatwierdzonego obiektu nie można już edytować w Import Review.");
+  const status = session.statusByObjectId[objectId] ?? "PENDING";
+  if (status === "STAGED") {
+    throw new Error("Obiekt jest już w commicie i nie można go edytować w imporcie.");
+  }
+  if (status === "REJECTED") {
+    throw new Error("Odrzucony obiekt trzeba najpierw przywrócić do review.");
   }
   return object;
 }
@@ -740,8 +751,12 @@ export function buildImportApprovalPlan(
 ): ImportApprovalPlan {
   const object = session.previewState.objects.find((entry) => entry.id === objectId);
   if (!object?.importKey) throw new Error("Imported object not found.");
-  if (session.statusByObjectId[objectId] === "APPROVED") {
-    throw new Error("This imported object is already approved.");
+  const status = session.statusByObjectId[objectId] ?? "PENDING";
+  if (status === "STAGED") {
+    throw new Error("This imported object is already staged.");
+  }
+  if (status === "REJECTED") {
+    throw new Error("Restore the rejected imported object before staging it.");
   }
 
   const existingTarget = findExistingImportObjectMatch(object, existingState);
@@ -874,6 +889,60 @@ export function buildImportApprovalPlan(
   };
 }
 
+function setImportObjectStatus(
+  session: ImportReviewSession,
+  previewObjectId: string,
+  status: ImportReviewObjectStatus,
+  now: string,
+): LegacyStoredObject {
+  const object = session.previewState.objects.find(
+    (entry) => entry.id === previewObjectId,
+  );
+  if (!object?.importKey) throw new Error("Imported object not found.");
+  session.statusByObjectId[previewObjectId] = status;
+  session.updatedAt = now;
+  return object;
+}
+
+export function markImportObjectInView(
+  session: ImportReviewSession,
+  previewObjectId: string,
+  now: string,
+): void {
+  setImportObjectStatus(session, previewObjectId, "IN_VIEW", now);
+  session.selectedObjectId =
+    session.objectOrder.find(
+      (id) => (session.statusByObjectId[id] ?? "PENDING") === "PENDING",
+    ) ?? previewObjectId;
+}
+
+export function markImportObjectRejected(
+  session: ImportReviewSession,
+  previewObjectId: string,
+  now: string,
+): void {
+  const object = setImportObjectStatus(
+    session,
+    previewObjectId,
+    "REJECTED",
+    now,
+  );
+  delete session.approvedObjectIdByImportKey[object.importKey!];
+  session.selectedObjectId =
+    session.objectOrder.find(
+      (id) => (session.statusByObjectId[id] ?? "PENDING") === "PENDING",
+    ) ?? previewObjectId;
+}
+
+export function markImportObjectPending(
+  session: ImportReviewSession,
+  previewObjectId: string,
+  now: string,
+): void {
+  const object = setImportObjectStatus(session, previewObjectId, "PENDING", now);
+  delete session.approvedObjectIdByImportKey[object.importKey!];
+}
+
 export function markImportObjectLinked(
   session: ImportReviewSession,
   importKey: string,
@@ -884,24 +953,54 @@ export function markImportObjectLinked(
     (entry) => entry.importKey === importKey,
   );
   if (!object) return;
-  session.statusByObjectId[object.id] = "APPROVED";
+  session.statusByObjectId[object.id] = "STAGED";
   session.approvedObjectIdByImportKey[importKey] = targetObjectId;
   session.updatedAt = now;
 }
 
+export function markImportObjectStaged(
+  session: ImportReviewSession,
+  previewObjectId: string,
+  stagedObjectId: string,
+  now: string,
+): void {
+  const object = setImportObjectStatus(session, previewObjectId, "STAGED", now);
+  session.approvedObjectIdByImportKey[object.importKey!] = stagedObjectId;
+  session.selectedObjectId =
+    session.objectOrder.find(
+      (id) => (session.statusByObjectId[id] ?? "PENDING") === "PENDING",
+    ) ?? previewObjectId;
+}
+
+/** @deprecated Use markImportObjectStaged. */
 export function markImportObjectApproved(
   session: ImportReviewSession,
   previewObjectId: string,
   stagedObjectId: string,
   now: string,
 ): void {
-  const object = session.previewState.objects.find((entry) => entry.id === previewObjectId);
-  if (!object?.importKey) throw new Error("Imported object not found.");
-  session.statusByObjectId[previewObjectId] = "APPROVED";
-  session.approvedObjectIdByImportKey[object.importKey] = stagedObjectId;
-  session.updatedAt = now;
-  session.selectedObjectId =
-    session.objectOrder.find(
-      (id) => session.statusByObjectId[id] !== "APPROVED",
-    ) ?? previewObjectId;
+  markImportObjectStaged(session, previewObjectId, stagedObjectId, now);
+}
+
+export function returnStagedImportObjectToView(
+  session: ImportReviewSession,
+  stagedObjectId: string,
+  now: string,
+): boolean {
+  for (const object of session.previewState.objects) {
+    if (!object.importKey) continue;
+    if (
+      session.approvedObjectIdByImportKey[object.importKey] !== stagedObjectId
+    ) {
+      continue;
+    }
+    if ((session.statusByObjectId[object.id] ?? "PENDING") !== "STAGED") {
+      continue;
+    }
+    session.statusByObjectId[object.id] = "IN_VIEW";
+    delete session.approvedObjectIdByImportKey[object.importKey];
+    session.updatedAt = now;
+    return true;
+  }
+  return false;
 }
