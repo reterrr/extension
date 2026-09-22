@@ -120,7 +120,7 @@ export function ViewManagerPanel() {
     };
     const commitChanged = () => void refreshState();
     const storageChanged = (
-      changes: Record<string, browser.storage.StorageChange>,
+      changes: Record<string, { newValue?: unknown; oldValue?: unknown }>,
       area: string,
     ) => {
       if (area === "session" && changes[OBJECT_VIEW_STORAGE_KEY]) {
