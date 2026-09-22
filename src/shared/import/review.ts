@@ -953,7 +953,8 @@ export function markImportObjectLinked(
     (entry) => entry.importKey === importKey,
   );
   if (!object) return;
-  session.statusByObjectId[object.id] = "STAGED";
+  // Linking a reference to an existing DB object is not an approval of the
+  // imported object's own changes. Keep its review status untouched.
   session.approvedObjectIdByImportKey[importKey] = targetObjectId;
   session.updatedAt = now;
 }
