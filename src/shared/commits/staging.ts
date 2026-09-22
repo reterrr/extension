@@ -20,7 +20,7 @@ function rowsFor(
   key: (typeof OBJECT_SCOPED_KEYS)[number],
   objectId: string,
 ): Array<Record<string, unknown>> {
-  const rows = state[key];
+  const rows = (state as unknown as Record<string, unknown>)[key];
   if (!Array.isArray(rows)) return [];
   return rows
     .filter(
@@ -39,7 +39,8 @@ function replaceScopedRows(
   objectId: string,
 ): void {
   for (const key of OBJECT_SCOPED_KEYS) {
-    const existing = Array.isArray(target[key]) ? target[key] : [];
+    const rawExisting = (target as unknown as Record<string, unknown>)[key];
+    const existing = Array.isArray(rawExisting) ? rawExisting : [];
     const preserved = existing.filter(
       (row) =>
         !(
@@ -49,7 +50,7 @@ function replaceScopedRows(
           String((row as Record<string, unknown>).objectId) === objectId
         ),
     );
-    (target as Record<string, unknown>)[key] = [
+    (target as unknown as Record<string, unknown>)[key] = [
       ...preserved,
       ...rowsFor(source, key, objectId),
     ];
@@ -135,7 +136,8 @@ export function changedObjectIds(draft: DraftCommit): string[] {
   for (const key of OBJECT_SCOPED_KEYS) {
     const relatedIds = new Set<string>();
     for (const state of [draft.baseState, draft.workingState]) {
-      for (const row of state[key] ?? []) {
+      const rows = (state as unknown as Record<string, unknown>)[key];
+      for (const row of Array.isArray(rows) ? rows : []) {
         if (
           typeof row === "object" &&
           row !== null &&
