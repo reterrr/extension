@@ -799,7 +799,15 @@ import {
       if (object.id === objectId)
         button.append(node("span", "object-option-current", "✓"));
 
-      button.onclick = () => chooseObject(object.id);
+      button.onclick = () => {
+        if (objectView && !objectInView(objectView, object.id)) {
+          void addToObjectView(object.id)
+            .then(() => chooseObject(object.id))
+            .catch((error) => notice(error.message, true));
+          return;
+        }
+        chooseObject(object.id);
+      };
       button.onkeydown = (event) => chooseFromKeyboard(button, event);
 
       const inView = objectInView(objectView, object.id);
