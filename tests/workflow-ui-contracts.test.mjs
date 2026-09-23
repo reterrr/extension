@@ -59,3 +59,25 @@ test("first workspace write can create the hidden working draft automatically", 
     /if \(message\.type !== "BURBOT_DATA"\)[\s\S]*?const draft = await ensureDraft\(\);/,
   );
 });
+
+
+test("View storage listener normalizes against the latest workspace state", () => {
+  const manager = source("src/sidepanel/ViewManagerPanel.tsx");
+
+  assert.match(
+    manager,
+    /const stateRef = useRef<LegacyStorageState>\(EMPTY_STATE\)/,
+  );
+  assert.match(
+    manager,
+    /async function refreshView\(nextState = stateRef\.current\)/,
+  );
+  assert.match(
+    manager,
+    /changes\[OBJECT_VIEW_STORAGE_KEY\][\s\S]*?refreshView\(stateRef\.current\)/,
+  );
+  assert.match(
+    manager,
+    /function applyState\(nextState: LegacyStorageState\)[\s\S]*?stateRef\.current = nextState[\s\S]*?setState\(nextState\)/,
+  );
+});
