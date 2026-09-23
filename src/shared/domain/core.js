@@ -617,19 +617,29 @@
         );
         if (definition.readonly || definition.system)
           throw Error("This field is managed automatically.");
-        const value = coerceField(message.value, definition, state);
-        values[message.field] = value;
+        const clearing =
+          definition.allowEmpty === true && !clean(message.value);
+        const value = clearing
+          ? undefined
+          : coerceField(message.value, definition, state);
+        if (clearing) delete values[message.field];
+        else values[message.field] = value;
+
         const rule = state.rules.find((r) =>
           matches(r, object.id, message.field, message.target),
         );
-        if (rule)
+        if (rule && !clearing)
           rule.transform = {
             sample: rule.lastSampleValue ?? rule.sampleValue,
             value: message.value,
           };
-        else if (!message.target || message.target.kind === "object")
+        else if (!rule && !clearing && (!message.target || message.target.kind === "object"))
           (object.manualFields ||= {})[message.field] = true;
+        else if (clearing && (!message.target || message.target.kind === "object"))
+          delete object.manualFields?.[message.field];
+
         if (
+          !clearing &&
           (!message.target || message.target.kind === "object") &&
           message.field === globalThis.BurbotSchema[object.type].primary
         )
