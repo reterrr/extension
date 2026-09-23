@@ -99,14 +99,11 @@ function isLocal(object: LegacyStoredObject, pageUrl: string): boolean {
   );
 }
 
-/** Mirrors workspace.js switcher ordering to resolve its private objectId. */
 function chosenObject(): LegacyStoredObject | undefined {
   const activeId =
-    document.getElementById("object-options")?.dataset.activeObjectId ?? "";
-  return (
-    state.objects.find((object) => object.id === activeId) ??
-    state.objects.at(-1)
-  );
+    document.getElementById("workspace")?.dataset.activeObjectId ?? "";
+  if (!activeId) return undefined;
+  return state.objects.find((object) => object.id === activeId);
 }
 
 function geographyLabel(value: string): string {
@@ -436,11 +433,9 @@ export async function initGeographyUi(): Promise<void> {
   await refreshActivePage();
 
   const observer = new MutationObserver(queueRender);
-  observer.observe($("object-options"), {
-    childList: true,
-    subtree: true,
+  observer.observe($("workspace"), {
     attributes: true,
-    attributeFilter: ["aria-current"],
+    attributeFilter: ["data-active-object-id"],
   });
   observer.observe($("connection"), {
     childList: true,
@@ -468,6 +463,7 @@ export async function initGeographyUi(): Promise<void> {
       void refreshActivePage().then(queueRender).catch(() => undefined);
   });
 
+  window.addEventListener("burbot:active-object-changed", queueRender);
   window.addEventListener("pagehide", persistGeographyUi);
   render();
 }
