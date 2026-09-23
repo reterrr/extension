@@ -1762,13 +1762,24 @@ import {
     $("export").disabled = busy;
     if (!active) return;
     try {
-      const value = C.coerceField(draft, activeInfo().definition, db);
-      $("converted").textContent = candidate
-        ? "Save as " + C.formatValue(value, activeInfo().definition, db)
-        : activeRule()
-          ? "Adjustment keeps the existing extraction rule."
-          : "Manual value. Pick from the page to save an extraction rule.";
-      $("save").disabled = busy || (candidate && !port);
+      const definition = activeInfo().definition;
+      const clearingOptionalValue =
+        definition.allowEmpty === true &&
+        String(draft ?? "").trim() === "";
+
+      if (clearingOptionalValue) {
+        $("converted").textContent =
+          definition.emptyLabel || "Wartość zostanie wyczyszczona.";
+        $("save").disabled = busy;
+      } else {
+        const value = C.coerceField(draft, definition, db);
+        $("converted").textContent = candidate
+          ? "Save as " + C.formatValue(value, definition, db)
+          : activeRule()
+            ? "Adjustment keeps the existing extraction rule."
+            : "Manual value. Pick from the page to save an extraction rule.";
+        $("save").disabled = busy || (candidate && !port);
+      }
     } catch (error) {
       $("converted").textContent = error.message;
       $("save").disabled = true;
