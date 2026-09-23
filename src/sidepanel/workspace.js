@@ -1770,7 +1770,7 @@ import {
       if (clearingOptionalValue) {
         $("converted").textContent =
           definition.emptyLabel || "Wartość zostanie wyczyszczona.";
-        $("save").disabled = busy || (candidate && !port);
+        $("save").disabled = busy;
       } else {
         const value = C.coerceField(draft, definition, db);
         $("converted").textContent = candidate
