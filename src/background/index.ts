@@ -129,6 +129,27 @@ async function workspaceState(): Promise<LegacyStorageState> {
   return loadState();
 }
 
+async function ensureDraft(): Promise<DraftCommit> {
+  const existing = await readActiveDraft();
+  if (existing) return existing;
+
+  const baseState = await loadState();
+  const now = new Date().toISOString();
+  const draft: DraftCommit = {
+    id: crypto.randomUUID(),
+    createdAt: now,
+    updatedAt: now,
+    baseRevision: baseState.revision,
+    baseState: cloneState(baseState),
+    workingState: cloneState(baseState),
+    stagedObjectIds: [],
+  };
+  await writeActiveDraft(draft);
+  await publishUiState(draft.workingState);
+  await notifyCommitChanged();
+  return draft;
+}
+
 async function requireDraft(): Promise<DraftCommit> {
   const draft = await readActiveDraft();
   if (!draft) {
@@ -416,23 +437,9 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
 
       if (message.op === "NEW") {
         if (await readActiveDraft()) {
-          throw new Error("A commit is already in progress.");
+          throw new Error("A working View is already active.");
         }
-        const baseState = await loadState();
-        const now = new Date().toISOString();
-        const draft: DraftCommit = {
-          id: crypto.randomUUID(),
-          createdAt: now,
-          updatedAt: now,
-          baseRevision: baseState.revision,
-          baseState: cloneState(baseState),
-          workingState: cloneState(baseState),
-          stagedObjectIds: [],
-        };
-        await writeActiveDraft(draft);
-        await publishUiState(draft.workingState);
-        await notifyCommitChanged();
-        return commitSessionView(draft);
+        return commitSessionView(await ensureDraft());
       }
 
       if (message.op === "STAGE_OBJECT") {
@@ -534,7 +541,7 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
         if (!isCreateObjectType(objectType) || typeof message.windowId !== "number") {
           throw new Error("Choose a valid object type.");
         }
-        const draft = await requireDraft();
+        const draft = await ensureDraft();
         const tabs = await browser.tabs.query({
           active: true,
           windowId: message.windowId,
@@ -599,7 +606,7 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
       );
     }
 
-    const draft = await requireDraft();
+    const draft = await ensureDraft();
     const state = draft.workingState;
     const now = new Date().toISOString();
     let next: LegacyStorageState;
