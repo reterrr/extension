@@ -567,8 +567,8 @@ export function ViewManagerPanel() {
             <strong>{query.trim() ? "Wyniki filtra" : "Obiekty"}</strong>
             <small>
               {query.trim()
-                ? matches.length + " wyników · kliknij + / −"
-                : "Kliknij +, aby dodać ręcznie do View"}
+                ? matches.length + " wyników · + dodaje i otwiera · − usuwa z View"
+                : "Kliknij +, aby dodać do View i od razu otworzyć obiekt"}
             </small>
           </div>
 
@@ -601,7 +601,11 @@ export function ViewManagerPanel() {
                         (inView ? " z View" : " do View")
                       }
                       onClick={() =>
-                        run(() => (inView ? remove(object.id) : add(object.id)))
+                        run(() =>
+                          inView
+                            ? remove(object.id)
+                            : openObject(object.id),
+                        )
                       }
                     >
                       {inView ? "−" : "+"}

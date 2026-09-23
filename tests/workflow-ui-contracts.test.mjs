@@ -135,3 +135,17 @@ test("object action popover is anchored inside the header", () => {
     /\.header-actions \{[\s\S]*?right: 7px;/,
   );
 });
+
+
+test("manual plus in View adds and activates the object", () => {
+  const manager = source("src/sidepanel/ViewManagerPanel.tsx");
+
+  assert.match(
+    manager,
+    /inView\s*\?\s*remove\(object\.id\)\s*:\s*openObject\(object\.id\)/,
+  );
+  assert.match(
+    manager,
+    /Kliknij \+, aby dodać do View i od razu otworzyć obiekt/,
+  );
+});
