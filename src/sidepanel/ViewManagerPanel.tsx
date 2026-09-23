@@ -5,6 +5,10 @@ import {
   createObjectSearchDocument,
 } from "../shared/search/objectSearch.js";
 import {
+  aiViewExportFilename,
+  createAiViewExport,
+} from "../shared/export/aiViewExport.js";
+import {
   readImportReview,
   writeImportReview,
 } from "../shared/import/reviewStore";
@@ -54,6 +58,7 @@ function globals() {
     BurbotCore?: { displayName?: (object: LegacyStoredObject) => string };
     BurbotSchema?: Record<string, { label?: string }>;
     BurbotGeography?: { catalog?: unknown[] };
+    BurbotDocuments?: { catalog?: unknown[] };
   };
 }
 
@@ -78,6 +83,21 @@ function statusLabel(entry: CommitSessionObject | undefined): string {
   if (entry.status === "NEW") return "NEW";
   if (entry.status === "DELETED") return "DELETED";
   return "MODIFIED";
+}
+
+function downloadJsonFile(filename: string, value: unknown) {
+  const url = URL.createObjectURL(
+    new Blob([JSON.stringify(value, null, 2)], {
+      type: "application/json",
+    }),
+  );
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 async function send<T>(
@@ -289,6 +309,24 @@ export function ViewManagerPanel() {
     await persist(null);
   }
 
+  async function exportView() {
+    if (!view?.objectIds.length) {
+      throw new Error("Najpierw ustaw Active View.");
+    }
+
+    const exportedAt = new Date().toISOString();
+    const payload = createAiViewExport({
+      state,
+      view,
+      schema: globals().BurbotSchema ?? {},
+      geographyCatalog: (globals().BurbotGeography?.catalog ?? []) as never[],
+      documentCatalog: (globals().BurbotDocuments?.catalog ?? []) as never[],
+      exportedAt,
+    });
+
+    downloadJsonFile(aiViewExportFilename(exportedAt), payload);
+  }
+
   async function stageObject(objectId: string) {
     setBusyObjectId(objectId);
     try {
@@ -397,9 +435,18 @@ export function ViewManagerPanel() {
         </div>
         <div className="view-manager-header-actions">
           {view && (
-            <button type="button" className="text-button" onClick={() => run(clear)}>
-              Wyczyść View
-            </button>
+            <>
+              <button
+                type="button"
+                className="text-button"
+                onClick={() => run(exportView)}
+              >
+                Eksport View
+              </button>
+              <button type="button" className="text-button" onClick={() => run(clear)}>
+                Wyczyść View
+              </button>
+            </>
           )}
         </div>
       </header>

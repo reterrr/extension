@@ -48,7 +48,7 @@ main {
 
 .object-header {
   margin: 10px 0 8px;
-  padding: 14px;
+  padding: 14px 48px 14px 14px;
   border: 1px solid var(--border);
   border-radius: 12px;
   background: var(--surface);
@@ -1263,8 +1263,18 @@ main {
 }
 .object-header {
   margin: 7px 0 6px;
-  padding: 9px 10px;
+  padding: 9px 44px 9px 10px;
   border-radius: 9px;
+}
+.header-actions {
+  top: 7px;
+  right: 7px;
+}
+#more .popover {
+  right: 0;
+  left: auto;
+  width: 178px;
+  max-width: calc(100vw - 28px);
 }
 .object-header h1 {
   margin: 3px 0 5px;
