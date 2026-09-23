@@ -1792,7 +1792,7 @@ import {
 
     renderObjectViewIndicator();
     const object = chosen();
-    $("empty").hidden = !!object;
+    $("empty").hidden = !!object || !!view;
     $("workspace").hidden = !object;
     descriptors = [];
     if (object) {
