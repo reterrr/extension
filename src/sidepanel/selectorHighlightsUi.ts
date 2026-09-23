@@ -81,11 +81,9 @@ function isLocal(object: LegacyStoredObject, pageUrl: string): boolean {
 
 function chosenObject(): LegacyStoredObject | undefined {
   const activeId =
-    document.getElementById("object-options")?.dataset.activeObjectId ?? "";
-  return (
-    state.objects.find((object) => object.id === activeId) ??
-    state.objects.at(-1)
-  );
+    document.getElementById("workspace")?.dataset.activeObjectId ?? "";
+  if (!activeId) return undefined;
+  return state.objects.find((object) => object.id === activeId);
 }
 
 function selectorRules(object: LegacyStoredObject | undefined): LegacyStoredRule[] {
@@ -267,8 +265,9 @@ export async function initSelectorHighlightsUi(): Promise<void> {
   }
   document.addEventListener("click", (event) => {
     const target = event.target;
-    if (target instanceof Element && target.closest(".field-row, #object-options button")) queueSync();
+    if (target instanceof Element && target.closest(".field-row")) queueSync();
   }, true);
+  window.addEventListener("burbot:active-object-changed", queueSync);
   window.addEventListener("burbot:selector-highlights-refresh", queueSync);
   window.addEventListener("burbot:workspace-state-changed", (event) => {
     const next = (event as CustomEvent<{ state?: LegacyStorageState }>).detail?.state;

@@ -177,3 +177,36 @@ test("View adoption refreshes the working draft before normalizing a newly creat
     /changes\[OBJECT_VIEW_STORAGE_KEY\][\s\S]*?const rawView = changes\[OBJECT_VIEW_STORAGE_KEY\]\.newValue[\s\S]*?data\("GET"\)[\s\S]*?normalizeObjectView\(rawView, db\.objects\)/,
   );
 });
+
+
+test("sidepanel feature modules use the canonical active object contract", () => {
+  const workspace = source("src/sidepanel/workspace.js");
+  const geography = source("src/sidepanel/geographyUi.ts");
+  const files = source("src/sidepanel/fileSourcesUi.ts");
+  const selectors = source("src/sidepanel/selectorHighlightsUi.ts");
+  const reconnect = source("src/sidepanel/objectReconnectUi.ts");
+
+  assert.match(
+    workspace,
+    /workspace\.dataset\.activeObjectId = next[\s\S]*?burbot:active-object-changed/,
+  );
+
+  for (const moduleSource of [geography, files, selectors]) {
+    assert.equal(moduleSource.includes("object-options"), false);
+    assert.match(
+      moduleSource,
+      /document\.getElementById\("workspace"\)\?\.dataset\.activeObjectId/,
+    );
+  }
+
+  assert.match(
+    geography,
+    /observer\.observe\(\$\("workspace"\),[\s\S]*?data-active-object-id/,
+  );
+  assert.match(
+    files,
+    /observer\.observe\(\$\("workspace"\),[\s\S]*?data-active-object-id/,
+  );
+  assert.match(selectors, /burbot:active-object-changed/);
+  assert.match(reconnect, /burbot:active-object-changed/);
+});

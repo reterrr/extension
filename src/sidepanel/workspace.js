@@ -1788,6 +1788,18 @@ import {
       ? "Save rule & next"
       : "Save value & next";
   }
+  function publishActiveObject(nextObjectId) {
+    const workspace = $("workspace");
+    const next = String(nextObjectId || "");
+    if (workspace.dataset.activeObjectId === next) return;
+    workspace.dataset.activeObjectId = next;
+    window.dispatchEvent(
+      new CustomEvent("burbot:active-object-changed", {
+        detail: { objectId: next },
+      }),
+    );
+  }
+
   function render() {
     const view = normalizedObjectView();
 
@@ -1811,6 +1823,7 @@ import {
 
     renderObjectViewIndicator();
     const object = chosen();
+    publishActiveObject(object?.id || "");
     // Empty/no-View state is owned by the Active View panel above.
     $("empty").hidden = true;
     $("workspace").hidden = !object;

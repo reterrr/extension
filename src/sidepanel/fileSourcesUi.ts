@@ -102,14 +102,11 @@ function isLocal(object: LegacyStoredObject, pageUrl: string): boolean {
   );
 }
 
-/** Mirrors workspace.js switcher ordering to resolve its private objectId. */
 function chosenObject(): LegacyStoredObject | undefined {
   const activeId =
-    document.getElementById("object-options")?.dataset.activeObjectId ?? "";
-  return (
-    state.objects.find((object) => object.id === activeId) ??
-    state.objects.at(-1)
-  );
+    document.getElementById("workspace")?.dataset.activeObjectId ?? "";
+  if (!activeId) return undefined;
+  return state.objects.find((object) => object.id === activeId);
 }
 
 function host(url: string): string {
@@ -459,11 +456,9 @@ export async function initFileSourcesUi(): Promise<void> {
   await refreshActivePage();
 
   const observer = new MutationObserver(render);
-  observer.observe($("object-options"), {
-    childList: true,
-    subtree: true,
+  observer.observe($("workspace"), {
     attributes: true,
-    attributeFilter: ["aria-current"],
+    attributeFilter: ["data-active-object-id"],
   });
   observer.observe($("object-title"), { childList: true, subtree: true });
   observer.observe($("connection"), {
@@ -471,6 +466,8 @@ export async function initFileSourcesUi(): Promise<void> {
     subtree: true,
     characterData: true,
   });
+
+  window.addEventListener("burbot:active-object-changed", render);
 
   browser.storage.onChanged.addListener((changes, area) => {
     if (area !== "local") return;
