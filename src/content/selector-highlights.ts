@@ -323,19 +323,29 @@ browser.runtime.onMessage.addListener(onMessage);
 window.addEventListener("scroll", schedulePosition, true);
 window.addEventListener("resize", schedulePosition);
 
+function isOwnHighlightNode(node: Node): boolean {
+  return (
+    node instanceof Element &&
+    (node.matches("[data-burbot-selector-highlight]") ||
+      Boolean(node.closest("[data-burbot-selector-highlight]")))
+  );
+}
+
+function isOwnHighlightMutation(mutation: MutationRecord): boolean {
+  const target =
+    mutation.target instanceof Element
+      ? mutation.target
+      : mutation.target.parentElement;
+  if (target?.closest("[data-burbot-selector-highlight]")) return true;
+
+  if (mutation.type !== "childList") return false;
+  const changed = [...mutation.addedNodes, ...mutation.removedNodes];
+  return changed.length > 0 && changed.every(isOwnHighlightNode);
+}
+
 const observedRoot = document.body ?? document.documentElement;
 const observer = new MutationObserver((mutations) => {
-  if (
-    mutations.every((mutation) => {
-      const target =
-        mutation.target instanceof Element
-          ? mutation.target
-          : mutation.target.parentElement;
-      return Boolean(target?.closest("[data-burbot-selector-highlight]"));
-    })
-  ) {
-    return;
-  }
+  if (mutations.every(isOwnHighlightMutation)) return;
   scheduleRebuild();
 });
 observer.observe(observedRoot, {
