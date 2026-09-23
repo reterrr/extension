@@ -401,7 +401,7 @@ export function ImportReviewPanel() {
     const reviewing = Boolean(session && mode === "review");
     document.documentElement.classList.toggle("import-review-mode", reviewing);
 
-    if (!reviewing) {
+    if (!session || mode !== "review") {
       void clearPageReviewHighlights().finally(() => {
         window.dispatchEvent(new Event("burbot:selector-highlights-refresh"));
       });
