@@ -195,13 +195,13 @@ async function syncSelectorHighlightsForAllTabs(
 ): Promise<void> {
   if (!state) return;
   const tabs = await browser.tabs.query({});
+  const eligible = tabs.filter(
+    (tab) => tab.id !== undefined && isHttpPage(tab.url),
+  );
   await Promise.allSettled(
-    tabs
-      .filter(
-        (tab): tab is browser.tabs.Tab & { id: number; url: string } =>
-          tab.id !== undefined && isHttpPage(tab.url),
-      )
-      .map((tab) => sendSelectorHighlights(tab.id, tab.url, state)),
+    eligible.map((tab) =>
+      sendSelectorHighlights(tab.id as number, tab.url as string, state),
+    ),
   );
 }
 
