@@ -2059,14 +2059,20 @@ import {
       render();
     }
     if (area === "session" && changes[OBJECT_VIEW_STORAGE_KEY]) {
-      objectView = normalizeObjectView(
-        changes[OBJECT_VIEW_STORAGE_KEY].newValue,
-        db.objects,
-      );
-      switcherQuery = "";
-      switcherType = "all";
-      switcherScrollTop = 0;
-      render();
+      const rawView = changes[OBJECT_VIEW_STORAGE_KEY].newValue;
+      // Creation persists the new object in the draft before it updates
+      // Active View, but the sidepanel can still observe the session change
+      // before its local db mirror has adopted that draft. Refresh first so
+      // the fresh object id is not filtered out as "missing".
+      void data("GET")
+        .then(() => {
+          objectView = normalizeObjectView(rawView, db.objects);
+          switcherQuery = "";
+          switcherType = "all";
+          switcherScrollTop = 0;
+          render();
+        })
+        .catch((error) => notice(error.message, true));
     }
   });
   window.addEventListener("burbot:commit-changed", () => {
