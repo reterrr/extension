@@ -441,7 +441,7 @@ export function ViewManagerPanel() {
                 className="text-button"
                 onClick={() => run(exportView)}
               >
-                Eksport AI
+                Eksport View
               </button>
               <button type="button" className="text-button" onClick={() => run(clear)}>
                 Wyczyść View
