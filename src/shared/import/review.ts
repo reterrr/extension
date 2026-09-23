@@ -273,6 +273,17 @@ function evidenceViews(
   return result;
 }
 
+export function allImportReviewEvidenceViews(
+  session: ImportReviewSession,
+): ImportReviewEvidenceView[] {
+  return session.objectOrder.flatMap((objectId) =>
+    evidenceViews(
+      session,
+      session.previewState.objects.find((object) => object.id === objectId),
+    ),
+  );
+}
+
 function fileViews(
   session: ImportReviewSession,
   object: LegacyStoredObject | undefined,
