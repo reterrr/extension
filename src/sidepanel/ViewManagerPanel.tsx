@@ -202,7 +202,11 @@ export function ViewManagerPanel() {
       area: string,
     ) => {
       if (area === "session" && changes[OBJECT_VIEW_STORAGE_KEY]) {
-        void refreshView(stateRef.current);
+        // A newly created object may be written to Active View immediately
+        // after the background saves a newer working draft. Always refresh
+        // the authoritative working state first; normalizing against a stale
+        // React snapshot would incorrectly delete that fresh object id.
+        void refreshState();
       }
     };
 
