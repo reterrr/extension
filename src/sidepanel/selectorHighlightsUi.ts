@@ -202,9 +202,28 @@ function colorSidebar(): void {
     setSelectorVariables(details, evidence.selector);
 }
 
-async function renderPageHighlights(tabId: number, highlights: SelectorHighlight[]): Promise<void> {
-  await browser.scripting.executeScript({ target: { tabId }, files: ["selector-highlights.js"] });
-  await browser.tabs.sendMessage(tabId, { type: "BURBOT_SHOW_SELECTOR_HIGHLIGHTS", highlights });
+async function renderPageHighlights(
+  tabId: number,
+  highlights: SelectorHighlight[],
+): Promise<void> {
+  try {
+    await browser.tabs.sendMessage(tabId, {
+      type: "BURBOT_SHOW_SELECTOR_HIGHLIGHTS",
+      highlights,
+    });
+    return;
+  } catch {
+    // Inject lazily if the persistent runtime is not present yet.
+  }
+
+  await browser.scripting.executeScript({
+    target: { tabId },
+    files: ["selector-highlights.js"],
+  });
+  await browser.tabs.sendMessage(tabId, {
+    type: "BURBOT_SHOW_SELECTOR_HIGHLIGHTS",
+    highlights,
+  });
 }
 
 async function syncPage(): Promise<void> {
