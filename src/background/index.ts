@@ -29,6 +29,10 @@ import { importDocumentIntoState } from "../shared/import/format";
 import { isPickerSelectionResponse } from "../shared/messaging/picker";
 import { buildStoredSelectorHighlights } from "../shared/selectorHighlights.js";
 import {
+  OBJECT_VIEW_STORAGE_KEY,
+  addObjectToView,
+} from "../shared/search/objectView.js";
+import {
   assignPdfRuleIntoState,
   type AssignPdfRuleMessage,
 } from "../shared/pdf/assignPdfRule";
@@ -123,6 +127,37 @@ async function broadcast(message: Record<string, unknown>): Promise<void> {
 async function focus(windowId: number, value: FocusPayload): Promise<void> {
   await browser.storage.session.set({ [focusKey(windowId)]: value });
   await broadcast({ type: "BURBOT_FOCUS", windowId, ...value });
+}
+
+async function addObjectToActiveView(
+  objectId: string,
+  state: LegacyStorageState,
+): Promise<void> {
+  const stored = await browser.storage.session.get(OBJECT_VIEW_STORAGE_KEY);
+  const next = addObjectToView(
+    stored[OBJECT_VIEW_STORAGE_KEY],
+    objectId,
+    state.objects,
+  );
+  await browser.storage.session.set({
+    [OBJECT_VIEW_STORAGE_KEY]: next,
+  });
+}
+
+async function focusCreatedObject(
+  windowId: number,
+  tabId: number,
+  objectId: string,
+  state: LegacyStorageState,
+  note: string,
+): Promise<void> {
+  await addObjectToActiveView(objectId, state);
+  await focus(windowId, {
+    objectId,
+    tabId,
+    stamp: crypto.randomUUID(),
+    note,
+  });
 }
 
 async function notifyCommitChanged(): Promise<void> {
@@ -505,7 +540,7 @@ browser.contextMenus.onClicked.addListener((info, tab) => {
   const captured = captureInitialSelection(info, tab);
 
   void enqueue(async () => {
-    const draft = await requireDraft();
+    const draft = await ensureDraft();
     const candidate = await captured;
     const next = await createObjectInDraft(
       draft,
@@ -515,14 +550,14 @@ browser.contextMenus.onClicked.addListener((info, tab) => {
       candidate,
     );
     const object = next.objects[next.objects.length - 1];
-    await focus(windowId, {
-      objectId: object.id,
+    await focusCreatedObject(
+      windowId,
       tabId,
-      stamp: crypto.randomUUID(),
-      note:
-        object.creationNote ??
-        "Obiekt został dodany do View. Uzupełnij dane, a potem dodaj go do Commit.",
-    });
+      object.id,
+      next,
+      object.creationNote ??
+        "Obiekt został dodany do View i ustawiony jako aktywny. Uzupełnij dane, a potem dodaj go do Commit.",
+    );
     await opening;
   }).catch((error: unknown) => {
     void focus(windowId, {
@@ -694,12 +729,13 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
           selection.candidate,
         );
         const object = next.objects[next.objects.length - 1];
-        await focus(message.windowId, {
-          objectId: object.id,
+        await focusCreatedObject(
+          message.windowId,
           tabId,
-          stamp: crypto.randomUUID(),
-          note: "Nowy obiekt został dodany do View. Dodaj go do Commit, gdy będzie gotowy.",
-        });
+          object.id,
+          next,
+          "Nowy obiekt został dodany do View i ustawiony jako aktywny. Dodaj go do Commit, gdy będzie gotowy.",
+        );
         return commitSessionView(await readActiveDraft());
       }
 

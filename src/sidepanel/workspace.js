@@ -519,7 +519,7 @@ import {
     if (focusStamp !== message.stamp) return;
     if (db.objects.some((o) => o.id === message.objectId)) {
       const view = normalizedObjectView();
-      if (view && !objectInView(view, message.objectId)) {
+      if (!view || !objectInView(view, message.objectId)) {
         await addToObjectView(message.objectId);
       }
       chooseObject(message.objectId, true);
