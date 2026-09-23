@@ -5,6 +5,7 @@ import {
   writeActiveDraft,
 } from "../shared/commits/draftStore";
 import {
+  allImportReviewEvidenceViews,
   buildImportApprovalPlan,
   findExistingImportObjectMatch,
   importReviewView,
@@ -57,19 +58,20 @@ function comparableUrl(value: string): string {
   }
 }
 
-function evidenceColorKey(view: ImportReviewView, field: string): string {
-  return `${view.selectedObjectId}:${field}`;
+function evidenceColorKey(entry: { id: string; field: string }): string {
+  const objectAndField = entry.id.split(":").slice(0, -1).join(":");
+  return objectAndField || entry.field;
 }
 
 async function sendReviewHighlights(
-  view: ImportReviewView,
+  session: ImportReviewSession,
   focusId?: string,
 ): Promise<void> {
   const tab = await activeTab();
   if (!tab?.id || !tab.url || !/^https?:/.test(tab.url)) return;
 
   const activeUrl = comparableUrl(tab.url);
-  const highlights = view.evidence
+  const highlights = allImportReviewEvidenceViews(session)
     .filter(
       (entry) => entry.sourceUrl && comparableUrl(entry.sourceUrl) === activeUrl,
     )
@@ -78,7 +80,7 @@ async function sendReviewHighlights(
       exact: entry.exact,
       prefix: entry.prefix,
       suffix: entry.suffix,
-      colorKey: evidenceColorKey(view, entry.field),
+      colorKey: evidenceColorKey(entry),
     }));
 
   try {
@@ -182,7 +184,7 @@ async function focusFieldSource(
     await waitForTabReady(tab.id, evidence.sourceUrl);
   }
 
-  await sendReviewHighlights(view, evidence.id);
+  await sendReviewHighlights(session, evidence.id);
 }
 
 function groupLabel(type: string): string {
@@ -405,8 +407,8 @@ export function ImportReviewPanel() {
       return () => document.documentElement.classList.remove("import-review-mode");
     }
 
-    void sendReviewHighlights(view);
-    const sync = () => void sendReviewHighlights(view);
+    void sendReviewHighlights(session);
+    const sync = () => void sendReviewHighlights(session);
     const updated = (
       _tabId: number,
       change: { url?: string; status?: string },
