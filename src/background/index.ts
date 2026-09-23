@@ -1,7 +1,12 @@
 import "../shared/domain/schema.js";
 import "../shared/domain/geographyRuntime";
 import "../shared/domain/core.js";
-import { commitState, loadState, publishUiState } from "../shared/api/storage";
+import {
+  STORAGE_KEY,
+  commitState,
+  loadState,
+  publishUiState,
+} from "../shared/api/storage";
 import {
   clearActiveDraft,
   readActiveDraft,
@@ -22,6 +27,7 @@ import { createCapturedExtractionInput } from "../shared/extraction/rules";
 import { discardStaleImportedEvidence } from "../shared/import/evidence";
 import { importDocumentIntoState } from "../shared/import/format";
 import { isPickerSelectionResponse } from "../shared/messaging/picker";
+import { buildStoredSelectorHighlights } from "../shared/selectorHighlights.js";
 import {
   assignPdfRuleIntoState,
   type AssignPdfRuleMessage,
@@ -121,6 +127,92 @@ async function focus(windowId: number, value: FocusPayload): Promise<void> {
 
 async function notifyCommitChanged(): Promise<void> {
   await broadcast({ type: "BURBOT_COMMIT_CHANGED" });
+}
+
+let selectorHighlightState: LegacyStorageState | null = null;
+let selectorHighlightSyncQueued = false;
+
+function isHttpPage(url: string | undefined): url is string {
+  if (!url) return false;
+  try {
+    return ["http:", "https:"].includes(new URL(url).protocol);
+  } catch {
+    return false;
+  }
+}
+
+async function sendSelectorHighlights(
+  tabId: number,
+  pageUrl: string,
+  state: LegacyStorageState,
+): Promise<void> {
+  const highlights = buildStoredSelectorHighlights(state, pageUrl);
+
+  try {
+    await browser.tabs.sendMessage(tabId, {
+      type: "BURBOT_SHOW_SELECTOR_HIGHLIGHTS",
+      highlights,
+    });
+    return;
+  } catch {
+    // The runtime is injected lazily on ordinary webpages.
+  }
+
+  try {
+    await browser.scripting.executeScript({
+      target: { tabId },
+      files: ["selector-highlights.js"],
+    });
+    await browser.tabs.sendMessage(tabId, {
+      type: "BURBOT_SHOW_SELECTOR_HIGHLIGHTS",
+      highlights,
+    });
+  } catch {
+    // Navigation/restricted tabs can disappear between query and injection.
+  }
+}
+
+async function syncSelectorHighlightsForTab(
+  tabId: number,
+  pageUrl?: string,
+  state = selectorHighlightState,
+): Promise<void> {
+  if (!state) return;
+  let url = pageUrl;
+  if (!url) {
+    try {
+      url = (await browser.tabs.get(tabId)).url;
+    } catch {
+      return;
+    }
+  }
+  if (!isHttpPage(url)) return;
+  await sendSelectorHighlights(tabId, url, state);
+}
+
+async function syncSelectorHighlightsForAllTabs(
+  state = selectorHighlightState,
+): Promise<void> {
+  if (!state) return;
+  const tabs = await browser.tabs.query({});
+  await Promise.allSettled(
+    tabs
+      .filter(
+        (tab): tab is browser.tabs.Tab & { id: number; url: string } =>
+          tab.id !== undefined && isHttpPage(tab.url),
+      )
+      .map((tab) => sendSelectorHighlights(tab.id, tab.url, state)),
+  );
+}
+
+function queueSelectorHighlightSync(state?: LegacyStorageState): void {
+  if (state) selectorHighlightState = state;
+  if (selectorHighlightSyncQueued) return;
+  selectorHighlightSyncQueued = true;
+  queueMicrotask(() => {
+    selectorHighlightSyncQueued = false;
+    void syncSelectorHighlightsForAllTabs().catch(() => undefined);
+  });
 }
 
 async function workspaceState(): Promise<LegacyStorageState> {
@@ -257,6 +349,35 @@ async function registerMenus(): Promise<void> {
 
 browser.runtime.onInstalled.addListener(() => void registerMenus().catch(console.error));
 browser.runtime.onStartup.addListener(() => void registerMenus().catch(console.error));
+
+browser.storage.onChanged.addListener((changes, area) => {
+  if (area !== "local") return;
+  const next = changes[STORAGE_KEY]?.newValue as LegacyStorageState | undefined;
+  if (!next || !Array.isArray(next.objects) || !Array.isArray(next.rules)) return;
+  queueSelectorHighlightSync(next);
+});
+
+browser.tabs.onUpdated.addListener((tabId, change, tab) => {
+  if (change.status !== "complete" && !change.url) return;
+  void syncSelectorHighlightsForTab(
+    tabId,
+    change.url ?? tab.url,
+  ).catch(() => undefined);
+});
+
+browser.tabs.onActivated.addListener(({ tabId }) => {
+  void syncSelectorHighlightsForTab(tabId).catch(() => undefined);
+});
+
+void browser.storage.local
+  .get(STORAGE_KEY)
+  .then((stored) => {
+    const next = stored[STORAGE_KEY] as LegacyStorageState | undefined;
+    if (next && Array.isArray(next.objects) && Array.isArray(next.rules)) {
+      queueSelectorHighlightSync(next);
+    }
+  })
+  .catch(() => undefined);
 
 async function captureInitialSelection(
   info: SelectionContextInfo,
