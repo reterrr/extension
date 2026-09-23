@@ -111,3 +111,90 @@ test("page comparison ignores hash and trailing slash", () => {
     true,
   );
 });
+
+
+test("approved portable-import evidence is highlighted even without a DOM selector", () => {
+  const sourceText =
+    "Projekt Generator Kompetencji 3.0. Harmonogram: Nabór 3/2026 dla przedsiębiorców.";
+  const exact = "Nabór 3/2026";
+  const start = sourceText.indexOf(exact);
+
+  const state = {
+    objects: [
+      {
+        id: "recruitment-1",
+        type: "recruitment",
+        evidence: {
+          external_number: [
+            {
+              sourceId: "source-1",
+              charStart: start,
+              charEnd: start + exact.length,
+              rawValue: exact,
+            },
+          ],
+        },
+      },
+    ],
+    rules: [],
+    fieldEvidence: [],
+    importSources: [
+      {
+        id: "source-1",
+        importKey: "page",
+        type: "HTML",
+        url: "https://example.test/project",
+        snapshot: { text: sourceText },
+        importedAt: "2026-09-23T18:00:00.000Z",
+      },
+    ],
+  };
+
+  const highlights = buildStoredSelectorHighlights(
+    state,
+    "https://example.test/project#details",
+  );
+
+  assert.equal(highlights.length, 1);
+  assert.equal(highlights[0].selector, "body");
+  assert.equal(highlights[0].quote.exact, exact);
+  assert.match(highlights[0].id, /^import-evidence:/);
+});
+
+test("portable-import PDF evidence is not projected onto a webpage", () => {
+  const state = {
+    objects: [
+      {
+        id: "project-1",
+        type: "project",
+        evidence: {
+          name: [
+            {
+              sourceId: "pdf-1",
+              charStart: 0,
+              charEnd: 7,
+              rawValue: "Projekt",
+            },
+          ],
+        },
+      },
+    ],
+    rules: [],
+    fieldEvidence: [],
+    importSources: [
+      {
+        id: "pdf-1",
+        importKey: "pdf",
+        type: "PDF",
+        url: "https://example.test/regulamin.pdf",
+        snapshot: { text: "Projekt" },
+        importedAt: "2026-09-23T18:00:00.000Z",
+      },
+    ],
+  };
+
+  assert.equal(
+    buildStoredSelectorHighlights(state, "https://example.test/regulamin.pdf").length,
+    0,
+  );
+});

@@ -142,25 +142,96 @@ function occurrences(text: string, exact: string): number[] {
   return result;
 }
 
+function commonSuffixLength(left: string, right: string, limit = 96): number {
+  const max = Math.min(left.length, right.length, limit);
+  let length = 0;
+  while (
+    length < max &&
+    left[left.length - 1 - length] === right[right.length - 1 - length]
+  ) {
+    length += 1;
+  }
+  return length;
+}
+
+function commonPrefixLength(left: string, right: string, limit = 96): number {
+  const max = Math.min(left.length, right.length, limit);
+  let length = 0;
+  while (length < max && left[length] === right[length]) length += 1;
+  return length;
+}
+
+function usefulTokens(value: string): string[] {
+  return value
+    .toLocaleLowerCase("pl")
+    .split(/[^\p{L}\p{N}/.-]+/u)
+    .filter((token) => token.length >= 3 || /\d/.test(token))
+    .slice(-10);
+}
+
+function tokenOverlapScore(windowText: string, context: string): number {
+  const haystack = windowText.toLocaleLowerCase("pl");
+  return usefulTokens(context).reduce(
+    (score, token, index) =>
+      score + (haystack.includes(token) ? Math.min(24, token.length * 2 + index) : 0),
+    0,
+  );
+}
+
+function semanticScore(element: Element | null): number {
+  if (!element) return 0;
+  let score = 0;
+  const tag = element.tagName.toLowerCase();
+  if (/^h[1-3]$/.test(tag) || element.closest("h1,h2,h3")) score += 45;
+  if (
+    element.closest(
+      "main,article,[role='main'],.entry-content,.post-content,.page-content,.content-area",
+    )
+  ) {
+    score += 25;
+  }
+  if (element.closest("p,li,td,th,dt,dd")) score += 8;
+  if (
+    element.closest(
+      "nav,header,footer,aside,[role='navigation'],.menu,.sidebar,.breadcrumb,.breadcrumbs",
+    )
+  ) {
+    score -= 45;
+  }
+  return score;
+}
+
 function quoteRange(root: Element, quote: SelectionQuote): Range | null {
   const index = canonicalText(root);
   const positions = occurrences(index.text, quote.exact);
-  if (!positions.length) return null;
+  if (!positions.length || quote.exact.length === 0) return null;
 
-  const contextual = positions.filter((start) => {
-    const end = start + quote.exact.length;
-    const before = index.text.slice(Math.max(0, start - quote.prefix.length), start);
-    const after = index.text.slice(end, end + quote.suffix.length);
-    return before.endsWith(quote.prefix) && after.startsWith(quote.suffix);
-  });
+  let selected = positions.length === 1 ? positions[0] : null;
+  if (selected === null) {
+    let bestScore = Number.NEGATIVE_INFINITY;
+    for (const start of positions) {
+      const end = start + quote.exact.length;
+      const before = index.text.slice(Math.max(0, start - 180), start);
+      const after = index.text.slice(end, Math.min(index.text.length, end + 180));
+      const exactPrefix = Boolean(quote.prefix) && before.endsWith(quote.prefix);
+      const exactSuffix = Boolean(quote.suffix) && after.startsWith(quote.suffix);
 
-  const selected =
-    contextual.length === 1
-      ? contextual[0]
-      : positions.length === 1
-        ? positions[0]
-        : null;
-  if (selected === null || quote.exact.length === 0) return null;
+      let score = 0;
+      if (exactPrefix) score += 4000;
+      if (exactSuffix) score += 4000;
+      score += commonSuffixLength(before, quote.prefix) * 7;
+      score += commonPrefixLength(after, quote.suffix) * 7;
+      score += tokenOverlapScore(before, quote.prefix) * 3;
+      score += tokenOverlapScore(after, quote.suffix) * 3;
+      score += semanticScore(index.starts[start]?.node.parentElement ?? null);
+
+      if (score > bestScore) {
+        bestScore = score;
+        selected = start;
+      }
+    }
+  }
+  if (selected === null) return null;
 
   const startBoundary = index.starts[selected];
   const endBoundary = index.ends[selected + quote.exact.length - 1];
