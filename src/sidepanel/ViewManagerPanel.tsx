@@ -354,15 +354,8 @@ export function ViewManagerPanel() {
     }
   }
 
-  async function ensureWorkingView() {
-    if (commit.active) return;
-    const next = await send<CommitSessionView>("BURBOT_COMMIT", "NEW");
-    setCommit(next);
-  }
-
   async function openObject(objectId: string) {
     if (!view?.objectIds.includes(objectId)) await add(objectId);
-    await ensureWorkingView();
     const currentWindow = await browser.windows.getCurrent();
     if (currentWindow.id === undefined) return;
     await send("BURBOT_COMMIT", "FOCUS", {
@@ -397,15 +390,6 @@ export function ViewManagerPanel() {
           </small>
         </div>
         <div className="view-manager-header-actions">
-          {!commit.active && (
-            <button
-              type="button"
-              className="view-start"
-              onClick={() => run(ensureWorkingView)}
-            >
-              Rozpocznij pracę
-            </button>
-          )}
           {view && (
             <button type="button" className="text-button" onClick={() => run(clear)}>
               Wyczyść View

@@ -67,10 +67,6 @@ export function App() {
             <span id="object-kind" className="eyebrow" />
             <h1 id="object-title" />
             <div className="header-actions">
-              <details id="switcher">
-                <summary>Zmień obiekt <span aria-hidden="true">⌄</span></summary>
-                <div id="object-options" className="popover" />
-              </details>
               <details id="more">
                 <summary aria-label="Akcje obiektu">•••</summary>
                 <div className="popover menu">
@@ -79,25 +75,6 @@ export function App() {
                   <button id="delete" className="danger">Usuń obiekt</button>
                 </div>
               </details>
-            </div>
-            <div id="active-object-view" className="active-object-view" hidden>
-              <span className="active-object-view-badge">VIEW</span>
-              <span id="active-object-view-count" className="active-object-view-count" />
-              <span id="active-object-view-query" className="active-object-view-query" />
-              <button id="export-object-view" type="button" className="text-button">
-                Eksport AI
-              </button>
-              <button id="clear-object-view" type="button" className="text-button">
-                Wyczyść
-              </button>
-            </div>
-            <div className="object-workflow-actions">
-              <button id="stage-object" type="button" className="primary">
-                Dodaj do Commit
-              </button>
-              <button id="remove-object-from-view" type="button" className="text-button">
-                Usuń z View
-              </button>
             </div>
             <div className="progress-label">
               <span id="progress" /><span id="rule-count" />

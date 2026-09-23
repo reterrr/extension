@@ -1,0 +1,61 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import test from "node:test";
+import { resolve } from "node:path";
+
+const ROOT = resolve(import.meta.dirname, "..");
+
+function source(path) {
+  return readFileSync(resolve(ROOT, path), "utf8");
+}
+
+test("workspace DOM has no legacy second View manager", () => {
+  const app = source("src/sidepanel/App.tsx");
+
+  for (const marker of [
+    'id="switcher"',
+    'id="active-object-view"',
+    'id="stage-object"',
+    'id="remove-object-from-view"',
+    'id="export-object-view"',
+    'id="clear-object-view"',
+  ]) {
+    assert.equal(
+      app.includes(marker),
+      false,
+      `legacy View control must not be mounted: ${marker}`,
+    );
+  }
+});
+
+test("workspace runtime does not bind removed legacy View controls", () => {
+  const workspace = source("src/sidepanel/workspace.js");
+
+  for (const marker of [
+    'renderSwitcher();',
+    '$("export-object-view").onclick',
+    '$("clear-object-view").onclick',
+    '$("stage-object").onclick',
+    '$("remove-object-from-view").onclick',
+    '$("switcher").open',
+  ]) {
+    assert.equal(
+      workspace.includes(marker),
+      false,
+      `workspace must not depend on removed View control: ${marker}`,
+    );
+  }
+});
+
+test("first workspace write can create the hidden working draft automatically", () => {
+  const background = source("src/background/index.ts");
+
+  assert.match(
+    background,
+    /async function ensureDraft\(\): Promise<DraftCommit>/,
+  );
+  assert.match(
+    background,
+    /if \(message\.type !== "BURBOT_DATA"\)[\s\S]*?const draft = await ensureDraft\(\);/,
+  );
+});
