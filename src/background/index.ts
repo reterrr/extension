@@ -258,6 +258,7 @@ async function saveDraftState(
   draft.updatedAt = new Date().toISOString();
   await writeActiveDraft(draft);
   await publishUiState(state);
+  queueSelectorHighlightSync(state);
   await notifyCommitChanged();
   return state;
 }
@@ -599,6 +600,7 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
         draft.updatedAt = new Date().toISOString();
         await writeActiveDraft(draft);
         await publishUiState(draft.workingState);
+        queueSelectorHighlightSync(draft.workingState);
         await notifyCommitChanged();
         return commitSessionView(draft);
       }
@@ -623,12 +625,14 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
         if (hasViewChanges(draft)) {
           await writeActiveDraft(draft);
           await publishUiState(draft.workingState);
+          queueSelectorHighlightSync(draft.workingState);
           await notifyCommitChanged();
           return { session: commitSessionView(draft), state: committed };
         }
 
         await clearActiveDraft();
         await publishUiState(committed);
+        queueSelectorHighlightSync(committed);
         await notifyCommitChanged();
         return { session: commitSessionView(null), state: committed };
       }
@@ -638,6 +642,7 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
         await clearActiveDraft();
         const committed = await loadState();
         await publishUiState(committed);
+        queueSelectorHighlightSync(committed);
         await notifyCommitChanged();
         return { session: commitSessionView(null), state: committed };
       }
