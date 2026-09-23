@@ -386,14 +386,14 @@ export function ViewManagerPanel() {
           <strong>
             {view
               ? `${activeObjects.length} ${activeObjects.length === 1 ? "obiekt" : "obiektów"}`
-              : "Brak ograniczenia · cała baza"}
+              : "View nieustawiony"}
           </strong>
           <small>
             {view?.query
               ? `Filtr: ${view.query}`
               : view
                 ? "Ręcznie wybrany zestaw"
-                : "Ustaw regex/filtr albo dodawaj obiekty ręcznie przyciskiem +"}
+                : "Najpierw wybierz obiekty: ustaw filtr/regex albo dodaj je ręcznie przyciskiem +"}
           </small>
         </div>
         <div className="view-manager-header-actions">
@@ -492,12 +492,12 @@ export function ViewManagerPanel() {
       )}
       <details
         className="view-manager-catalog"
-        open={Boolean(view && activeObjects.length === 0)}
+        open={Boolean(!view || activeObjects.length === 0)}
       >
         <summary>
           <span>
             <strong>Zarządzaj View</strong>
-            <small>Filtr / regex albo ręczne + / −</small>
+            <small>Tu definiujesz jedyny aktywny zestaw roboczy</small>
           </span>
           <span className="view-manager-catalog-count">
             {query.trim() && !compiled.error ? matches.length : state.objects.length}
