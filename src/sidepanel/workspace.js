@@ -520,6 +520,10 @@ import {
     await data("GET");
     if (focusStamp !== message.stamp) return;
     if (db.objects.some((o) => o.id === message.objectId)) {
+      const view = normalizedObjectView();
+      if (view && !objectInView(view, message.objectId)) {
+        await addToObjectView(message.objectId);
+      }
       chooseObject(message.objectId, true);
       scheduleWorkspaceUiPersist();
       notice(message.note || "Choose a field to capture.");
@@ -1765,16 +1769,24 @@ import {
       : "Save value & next";
   }
   function render() {
-    renderObjectViewIndicator();
-    if (!chosen()) {
-      const view = normalizedObjectView();
-      objectId =
-        objectsInView(db.objects, view).at(0)?.id ||
-        (!view ? db.objects.at(-1)?.id : "") ||
-        "";
+    const view = normalizedObjectView();
+
+    if (
+      view &&
+      (!objectId || !chosen() || !objectInView(view, objectId))
+    ) {
+      objectId = objectsInView(db.objects, view).at(0)?.id || "";
       active = null;
+      preview = null;
+      resetCapture();
+    } else if (!chosen()) {
+      objectId = db.objects.at(-1)?.id || "";
+      active = null;
+      preview = null;
       resetCapture();
     }
+
+    renderObjectViewIndicator();
     const object = chosen();
     $("empty").hidden = !!object;
     $("workspace").hidden = !object;
