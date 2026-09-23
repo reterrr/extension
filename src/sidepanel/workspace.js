@@ -1775,16 +1775,19 @@ import {
   function render() {
     const view = normalizedObjectView();
 
-    if (
-      view &&
-      (!objectId || !chosen() || !objectInView(view, objectId))
-    ) {
-      objectId = objectsInView(db.objects, view).at(0)?.id || "";
+    if (!view) {
+      // View is the only workspace boundary. Without it, do not keep showing
+      // an arbitrary object from the full database.
+      objectId = "";
       active = null;
       preview = null;
       resetCapture();
-    } else if (!chosen()) {
-      objectId = db.objects.at(-1)?.id || "";
+    } else if (
+      !objectId ||
+      !chosen() ||
+      !objectInView(view, objectId)
+    ) {
+      objectId = objectsInView(db.objects, view).at(0)?.id || "";
       active = null;
       preview = null;
       resetCapture();
@@ -1792,7 +1795,8 @@ import {
 
     renderObjectViewIndicator();
     const object = chosen();
-    $("empty").hidden = !!object || !!view;
+    // Empty/no-View state is owned by the Active View panel above.
+    $("empty").hidden = true;
     $("workspace").hidden = !object;
     descriptors = [];
     if (object) {
