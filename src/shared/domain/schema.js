@@ -160,7 +160,8 @@
         ANULOWANY: "Anulowany",
       },
       {
-        default: "OGLOSZONY",
+        allowEmpty: true,
+        emptyLabel: "Nie wiem / nie ustawiono",
         aliases: {
           PLANNED: "PLANOWANY",
           ANNOUNCED: "OGLOSZONY",
