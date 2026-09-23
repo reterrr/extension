@@ -499,7 +499,6 @@ import {
     preview = null;
     viewEpoch++;
     resetCapture();
-    $("switcher").open = false;
     scheduleWorkspaceUiPersist();
     render();
     if (next) {
@@ -1803,7 +1802,6 @@ import {
       $("object-kind").textContent =
         BurbotSchema[object.type]?.label || object.type;
       $("object-title").textContent = C.displayName(object);
-      renderSwitcher();
       const fields = normalFields(object),
         businessFields = fields.filter(([, definition]) => !definition.system),
         count = businessFields.filter(([key]) => C.hasValue(object.values[key])).length;
@@ -1875,21 +1873,6 @@ import {
   $("connect").onclick = () => {
     void connect();
   };
-  $("export-object-view").onclick = () => {
-    try {
-      exportObjectViewForAi();
-    } catch (error) {
-      notice(error.message, true);
-    }
-  };
-  $("clear-object-view").onclick = () => {
-    void clearObjectView().catch((error) => notice(error.message, true));
-  };
-  $("stage-object").onclick = action(stageCurrentObject);
-  $("remove-object-from-view").onclick = action(async () => {
-    if (!objectId) return;
-    await removeFromObjectView(objectId);
-  });
   $("pick").onclick = action(async () => {
     evidencePicking = false;
     await rpc(picking ? "STOP" : "PICK");
