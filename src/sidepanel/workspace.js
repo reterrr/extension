@@ -673,6 +673,10 @@ import {
 
     const view = normalizedObjectView();
     const scopedObjects = objectsInView(db.objects, view);
+    const geographyByObject = buildGeographySearchIndex(
+      db.geographies || [],
+      BurbotGeography?.catalog || [],
+    );
     const objectKind = (object) =>
       object.type === "nabor" ? "recruitment" : object.type;
 
@@ -792,7 +796,7 @@ import {
             object,
             C.displayName(object),
             typeLabel,
-            {},
+            geographyByObject.get(object.id) || {},
           ),
         );
       });
