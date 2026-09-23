@@ -234,15 +234,12 @@ async function syncPage(): Promise<void> {
   try { protocol = new URL(activePageUrl).protocol; } catch {}
   if (!tab || tab.id === undefined || !["http:", "https:"].includes(protocol)) return;
 
-  const object = chosenObject();
   const highlights: SelectorHighlight[] = buildStoredSelectorHighlights(
     state,
     activePageUrl,
   );
   if (
     pendingPreview &&
-    object &&
-    pendingPreview.objectId === object.id &&
     samePage(pendingPreview.pageUrl, activePageUrl)
   ) {
     highlights.push(pendingPreview.highlight);
