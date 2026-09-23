@@ -166,6 +166,7 @@ async function openSource(url: string): Promise<void> {
 }
 
 async function focusFieldSource(
+  session: ImportReviewSession,
   view: ImportReviewView,
   field: string,
 ): Promise<void> {
@@ -437,7 +438,8 @@ export function ImportReviewPanel() {
   async function showFieldSource(field: string) {
     setError("");
     try {
-      await focusFieldSource(view, field);
+      if (!session) throw new Error("Brak aktywnego importu.");
+      await focusFieldSource(session, view, field);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
     }
