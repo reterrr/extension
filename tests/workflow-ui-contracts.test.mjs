@@ -108,3 +108,30 @@ test("newly created objects are added to Active View and focused", () => {
     /if \(!view \|\| !objectInView\(view, message\.objectId\)\)[\s\S]*?addToObjectView\(message\.objectId\)[\s\S]*?chooseObject\(message\.objectId, true\)/,
   );
 });
+
+
+test("Active View exposes its export action", () => {
+  const manager = source("src/sidepanel/ViewManagerPanel.tsx");
+
+  assert.match(manager, /createAiViewExport/);
+  assert.match(manager, /aiViewExportFilename/);
+  assert.match(manager, />\s*Eksport View\s*</);
+});
+
+test("object action popover is anchored inside the header", () => {
+  const styles = source("src/sidepanel/styles.css");
+  const redesign = source("src/sidepanel/workspaceRedesignStyles.ts");
+
+  assert.match(
+    styles,
+    /\.header-actions \{[\s\S]*?position: absolute;[\s\S]*?right: 0;/,
+  );
+  assert.match(
+    styles,
+    /#more \.popover \{[\s\S]*?right: 0;[\s\S]*?left: auto;/,
+  );
+  assert.match(
+    redesign,
+    /\.header-actions \{[\s\S]*?right: 7px;/,
+  );
+});
