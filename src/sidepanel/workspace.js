@@ -2046,6 +2046,9 @@ import {
         changes[OBJECT_VIEW_STORAGE_KEY].newValue,
         db.objects,
       );
+      switcherQuery = "";
+      switcherType = "all";
+      switcherScrollTop = 0;
       render();
     }
   });
@@ -2068,9 +2071,11 @@ import {
       db.objects,
     );
 
-    switcherQuery = uiState.workspace.switcher.query;
-    switcherType = uiState.workspace.switcher.type;
-    switcherScrollTop = uiState.workspace.switcher.scrollTop;
+    // The object switcher is only a navigator now. Do not restore the old
+    // View-management query that used to live inside this popover.
+    switcherQuery = "";
+    switcherType = "all";
+    switcherScrollTop = 0;
     focusStamp = uiState.workspace.focusStamp;
     expanded.clear();
     for (const key of uiState.workspace.expanded) expanded.add(key);
