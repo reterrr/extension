@@ -290,3 +290,56 @@ test("import rejects evidence whose range does not match raw_value", () => {
     /Evidence mismatch/,
   );
 });
+
+
+test("new recruitment starts without an assumed status and status can be cleared", () => {
+  let id = 0;
+  const uuid = () => "id-" + ++id;
+  const now = "2026-09-23T16:00:00.000Z";
+
+  let state = BurbotCore.mutate(
+    BurbotCore.empty(),
+    {
+      op: "CREATE_FROM_SELECTION",
+      objectType: "recruitment",
+      initialValue: "Nabór testowy",
+      sourceUrl: "https://example.test/recruitment",
+      expectedRevision: 0,
+    },
+    uuid,
+    now,
+  );
+
+  const recruitment = state.objects[0];
+  assert.equal("status" in recruitment.values, false);
+
+  state = BurbotCore.mutate(
+    state,
+    {
+      op: "EDIT",
+      objectId: recruitment.id,
+      field: "status",
+      target: { kind: "object" },
+      value: "AKTYWNY",
+      expectedRevision: state.revision,
+    },
+    uuid,
+    now,
+  );
+  assert.equal(state.objects[0].values.status, "AKTYWNY");
+
+  state = BurbotCore.mutate(
+    state,
+    {
+      op: "EDIT",
+      objectId: recruitment.id,
+      field: "status",
+      target: { kind: "object" },
+      value: "",
+      expectedRevision: state.revision,
+    },
+    uuid,
+    now,
+  );
+  assert.equal("status" in state.objects[0].values, false);
+});
