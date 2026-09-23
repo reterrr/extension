@@ -1949,7 +1949,13 @@ import {
     if (next?.target?.kind === "document") $("documents-panel").open = true;
     resetCapture();
     scheduleWorkspaceUiPersist();
-    notice(capture ? "Extraction rule saved." : "Value saved.");
+    notice(
+      clearingOptionalValue
+        ? "Wartość wyczyszczona."
+        : capture
+          ? "Extraction rule saved."
+          : "Value saved.",
+    );
   });
   $("preview").onclick = action(async () => {
     const id = objectId,
