@@ -235,15 +235,26 @@ function syncOverlayRects(entry: HighlightEntry): void {
 globalThis.__burbotSelectorHighlighterRuntime?.dispose();
 
 let frame: number | null = null;
+let rebuildTimer: ReturnType<typeof setTimeout> | undefined;
 let entries: HighlightEntry[] = [];
+let currentHighlights: SelectorHighlight[] = [];
 
-function clear(): void {
+function clearEntries(): void {
   if (frame !== null) cancelAnimationFrame(frame);
   frame = null;
   for (const entry of entries) {
     for (const overlay of entry.overlays) overlay.remove();
   }
   entries = [];
+}
+
+function clear(): void {
+  if (rebuildTimer !== undefined) {
+    clearTimeout(rebuildTimer);
+    rebuildTimer = undefined;
+  }
+  currentHighlights = [];
+  clearEntries();
 }
 
 function position(): void {
@@ -256,11 +267,11 @@ function schedulePosition(): void {
   frame = requestAnimationFrame(position);
 }
 
-function show(highlights: SelectorHighlight[]): void {
-  clear();
+function rebuild(): void {
+  clearEntries();
   const pageRoot = document.body ?? document.documentElement;
 
-  for (const highlight of highlights) {
+  for (const highlight of currentHighlights) {
     const element = resolveElement(highlight);
     let target: Element | Range | null = null;
 
@@ -289,6 +300,19 @@ function show(highlights: SelectorHighlight[]): void {
   }
 }
 
+function show(highlights: SelectorHighlight[]): void {
+  currentHighlights = highlights;
+  rebuild();
+}
+
+function scheduleRebuild(): void {
+  if (rebuildTimer !== undefined) clearTimeout(rebuildTimer);
+  rebuildTimer = setTimeout(() => {
+    rebuildTimer = undefined;
+    rebuild();
+  }, 120);
+}
+
 const onMessage = (message: unknown): undefined | Promise<{ ok: true }> => {
   if (!isHighlightMessage(message)) return undefined;
   show(message.highlights);
@@ -299,12 +323,36 @@ browser.runtime.onMessage.addListener(onMessage);
 window.addEventListener("scroll", schedulePosition, true);
 window.addEventListener("resize", schedulePosition);
 
+const observedRoot = document.body ?? document.documentElement;
+const observer = new MutationObserver((mutations) => {
+  if (
+    mutations.every((mutation) => {
+      const target =
+        mutation.target instanceof Element
+          ? mutation.target
+          : mutation.target.parentElement;
+      return Boolean(target?.closest("[data-burbot-selector-highlight]"));
+    })
+  ) {
+    return;
+  }
+  scheduleRebuild();
+});
+observer.observe(observedRoot, {
+  childList: true,
+  subtree: true,
+  characterData: true,
+  attributes: true,
+  attributeFilter: ["id", "class", "href", "src", "datetime", "title", "alt", "content"],
+});
+
 globalThis.__burbotSelectorHighlighterRuntime = {
   dispose() {
     clear();
     browser.runtime.onMessage.removeListener(onMessage);
     window.removeEventListener("scroll", schedulePosition, true);
     window.removeEventListener("resize", schedulePosition);
+    observer.disconnect();
   },
 };
 
