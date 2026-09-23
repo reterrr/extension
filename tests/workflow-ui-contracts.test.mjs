@@ -74,7 +74,7 @@ test("View storage listener normalizes against the latest workspace state", () =
   );
   assert.match(
     manager,
-    /changes\[OBJECT_VIEW_STORAGE_KEY\][\s\S]*?refreshView\(stateRef\.current\)/,
+    /changes\[OBJECT_VIEW_STORAGE_KEY\][\s\S]*?refreshState\(\)/,
   );
   assert.match(
     manager,
@@ -165,5 +165,15 @@ test("optional enum clear remains saveable in the editor", () => {
   assert.match(
     workspace,
     /clearingOptionalValue[\s\S]*?capture && !clearingOptionalValue \? "ASSIGN" : "EDIT"/,
+  );
+});
+
+
+test("View adoption refreshes the working draft before normalizing a newly created object", () => {
+  const workspace = source("src/sidepanel/workspace.js");
+
+  assert.match(
+    workspace,
+    /changes\[OBJECT_VIEW_STORAGE_KEY\][\s\S]*?const rawView = changes\[OBJECT_VIEW_STORAGE_KEY\]\.newValue[\s\S]*?data\("GET"\)[\s\S]*?normalizeObjectView\(rawView, db\.objects\)/,
   );
 });
