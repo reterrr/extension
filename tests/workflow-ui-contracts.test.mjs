@@ -81,3 +81,30 @@ test("View storage listener normalizes against the latest workspace state", () =
     /function applyState\(nextState: LegacyStorageState\)[\s\S]*?stateRef\.current = nextState[\s\S]*?setState\(nextState\)/,
   );
 });
+
+
+test("newly created objects are added to Active View and focused", () => {
+  const background = source("src/background/index.ts");
+  const workspace = source("src/sidepanel/workspace.js");
+
+  assert.match(
+    background,
+    /async function addObjectToActiveView\([\s\S]*?addObjectToView\(/,
+  );
+  assert.match(
+    background,
+    /async function focusCreatedObject\([\s\S]*?addObjectToActiveView\(objectId, state\)[\s\S]*?await focus\(/,
+  );
+  assert.match(
+    background,
+    /browser\.contextMenus\.onClicked\.addListener[\s\S]*?const draft = await ensureDraft\(\)[\s\S]*?focusCreatedObject\(/,
+  );
+  assert.match(
+    background,
+    /message\.op === "CREATE_OBJECT"[\s\S]*?focusCreatedObject\(/,
+  );
+  assert.match(
+    workspace,
+    /if \(!view \|\| !objectInView\(view, message\.objectId\)\)[\s\S]*?addToObjectView\(message\.objectId\)[\s\S]*?chooseObject\(message\.objectId, true\)/,
+  );
+});
