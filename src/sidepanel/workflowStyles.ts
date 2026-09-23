@@ -638,6 +638,88 @@ html[data-workflow-mode="view"] .commit-panel {
   }
 }
 
+
+/* Single canonical View manager. The editor no longer owns View membership. */
+html[data-workflow-mode="view"] #active-object-view,
+html[data-workflow-mode="view"] .object-workflow-actions {
+  display: none !important;
+}
+
+.view-manager-catalog {
+  margin-top: 7px;
+  overflow: hidden;
+  border-top: 1px solid #edf1ee;
+}
+.view-manager-catalog > summary {
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 2px 3px;
+  list-style: none;
+  color: #44554b;
+  cursor: pointer;
+}
+.view-manager-catalog > summary::-webkit-details-marker {
+  display: none;
+}
+.view-manager-catalog > summary::before {
+  content: "▸";
+  flex: none;
+  color: #8a968e;
+  font-size: 9px;
+}
+.view-manager-catalog[open] > summary::before {
+  content: "▾";
+}
+.view-manager-catalog > summary > span:first-of-type {
+  min-width: 0;
+  flex: 1;
+}
+.view-manager-catalog > summary strong {
+  display: block;
+  font-size: 9px;
+}
+.view-manager-catalog > summary small {
+  display: block;
+  margin-top: 1px;
+  color: #849087;
+  font-size: 7px;
+}
+.view-manager-catalog-count {
+  min-width: 22px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: #edf2ee;
+  color: #66746b;
+  text-align: center;
+  font-size: 8px;
+  font-weight: 750;
+}
+.view-manager-catalog-body {
+  padding-top: 2px;
+}
+.view-manager-catalog:not([open]) .view-manager-catalog-body {
+  display: none;
+}
+.view-manager .view-search-results {
+  max-height: 190px;
+}
+
+.object-picker-view-only .object-picker-toolbar {
+  padding-bottom: 6px;
+}
+.object-picker-view-only .object-picker-search-feedback {
+  min-height: 0;
+}
+.object-picker-view-only .object-picker-results {
+  max-height: min(56vh, 420px);
+}
+.object-picker-view-only .object-option {
+  width: 100%;
+}
+
 `;
   document.head.append(style);
 }
