@@ -386,7 +386,7 @@ function syncBusinessTables(state, groupByObject) {
       nullableText(values.source_number),
       nullableInt(values.sequence_number),
       nullableInt(values.year),
-      nullableText(values.status) ?? "OGLOSZONY",
+      nullableText(values.status) ?? "",
       nullableBoolean(values.continuous),
       nullableNumber(values.refund_percent_min),
       nullableNumber(values.refund_percent_max),

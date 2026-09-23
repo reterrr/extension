@@ -145,7 +145,14 @@ function renderValueControl(): void {
 
   if (definition.type === "enum") {
     input = document.createElement("select");
-    input.append(new Option("Choose…", ""));
+    input.append(
+      new Option(
+        definition.allowEmpty
+          ? definition.emptyLabel || "Nie ustawiono"
+          : "Choose…",
+        "",
+      ),
+    );
     for (const [value, label] of Object.entries(definition.options ?? {})) {
       input.append(new Option(label, value));
     }

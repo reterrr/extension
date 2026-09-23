@@ -1657,7 +1657,14 @@ import {
       renderReferenceObjectPicker(root, definition);
     } else if (definition.type === "enum") {
       input = node("select");
-      input.append(new Option("Choose…", ""));
+      input.append(
+        new Option(
+          definition.allowEmpty
+            ? definition.emptyLabel || "Nie ustawiono"
+            : "Choose…",
+          "",
+        ),
+      );
       const options = Object.entries(definition.options);
       for (const [value, label] of options)
         input.append(new Option(label, value));
@@ -1918,7 +1925,14 @@ import {
         throw Error("The page changed. Capture the value again.");
       payload.candidate = createCapturedExtractionInput(capture, option);
     }
-    await data(capture ? "ASSIGN" : "EDIT", payload);
+    const clearingOptionalValue =
+      selected &&
+      activeInfo()?.definition?.allowEmpty === true &&
+      String(value ?? "").trim() === "";
+    await data(
+      capture && !clearingOptionalValue ? "ASSIGN" : "EDIT",
+      payload,
+    );
     if (epoch !== viewEpoch) return;
     // Continue within the object or the chosen configuration item, not an
     // unrelated document whose requirements have never been configured.
@@ -1935,7 +1949,13 @@ import {
     if (next?.target?.kind === "document") $("documents-panel").open = true;
     resetCapture();
     scheduleWorkspaceUiPersist();
-    notice(capture ? "Extraction rule saved." : "Value saved.");
+    notice(
+      clearingOptionalValue
+        ? "Wartość wyczyszczona."
+        : capture
+          ? "Extraction rule saved."
+          : "Value saved.",
+    );
   });
   $("preview").onclick = action(async () => {
     const id = objectId,
