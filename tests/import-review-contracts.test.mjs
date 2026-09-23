@@ -929,3 +929,26 @@ test("approved import can be revoked after its View changes are discarded", () =
   assert.equal(view.rejectedCount, 1);
   assert.equal(view.approvedCount, 0);
 });
+
+
+test("import review can expose evidence from all imported objects at once", () => {
+  const uuid = ids();
+  const session = reviewModule.createImportReviewSession(
+    documentFixture(),
+    "generator.burbot-import.json",
+    uuid,
+    "2026-09-23T18:00:00.000Z",
+  );
+
+  const evidence = reviewModule.allImportReviewEvidenceViews(session);
+  assert.equal(evidence.length, 2);
+  assert.deepEqual(
+    new Set(evidence.map((entry) => entry.rawValue)),
+    new Set(["Generator Kompetencji 3.0", "Nabór 3/2026"]),
+  );
+  assert.ok(
+    evidence.every(
+      (entry) => entry.sourceUrl === "https://example.test/project",
+    ),
+  );
+});
