@@ -265,7 +265,6 @@ import {
       preview = null;
       resetCapture();
     }
-    $("switcher").open = false;
     scheduleWorkspaceUiPersist();
     render();
     notice("Widok roboczy ustawiony: " + objectView.objectIds.length + " obiektów.");
