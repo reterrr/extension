@@ -46,19 +46,13 @@ export async function initObjectReconnectUi(): Promise<void> {
     return undefined;
   });
 
+  window.addEventListener("burbot:active-object-changed", scheduleReconnect);
+
   document.addEventListener(
     "click",
     (event) => {
       const target = event.target;
       if (!(target instanceof Element)) return;
-
-      // `Change object` is handled entirely inside workspace.js and therefore
-      // does not emit BURBOT_FOCUS.
-      const objectOption = target.closest("#object-options button");
-      if (objectOption instanceof HTMLButtonElement && !objectOption.disabled) {
-        scheduleReconnect();
-        return;
-      }
 
       // If an existing object was restored/focused while the workspace was
       // disconnected, selecting any field should make capture usable instead
