@@ -228,6 +228,10 @@ export function ViewManagerPanel() {
     [commit.objects],
   );
 
+  useEffect(() => {
+    if (!query && view?.query) setQuery(view.query);
+  }, [view?.createdAt]);
+
   const catalogObjects = useMemo(() => {
     const source = query.trim() && !compiled.error ? matches : state.objects;
     return [...source]
@@ -486,81 +490,101 @@ export function ViewManagerPanel() {
           )}
         </div>
       )}
-      <div className="view-search">
-        <input
-          type="search"
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder='Regex / filtr, np. woj:małopolskie /Nowy Sącz/i type:nabory'
-          aria-label="Filtr View"
-        />
-        <button
-          type="button"
-          disabled={!query.trim() || Boolean(compiled.error) || !matches.length}
-          onClick={() => run(setFromSearch)}
-        >
-          Ustaw View{matches.length ? ` · ${matches.length}` : ""}
-        </button>
-      </div>
+      <details
+        className="view-manager-catalog"
+        open={Boolean(view && activeObjects.length === 0)}
+      >
+        <summary>
+          <span>
+            <strong>Zarządzaj View</strong>
+            <small>Filtr / regex albo ręczne + / −</small>
+          </span>
+          <span className="view-manager-catalog-count">
+            {query.trim() && !compiled.error ? matches.length : state.objects.length}
+          </span>
+        </summary>
 
-      {compiled.error && <p className="view-manager-error">{compiled.error}</p>}
+        <div className="view-manager-catalog-body">
+          <div className="view-search">
+            <input
+              type="search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder='Regex / filtr, np. woj:małopolskie /Nowy Sącz/i type:nabory'
+              aria-label="Filtr View"
+            />
+            <button
+              type="button"
+              disabled={!query.trim() || Boolean(compiled.error) || !matches.length}
+              onClick={() => run(setFromSearch)}
+            >
+              Ustaw View{matches.length ? ` · ${matches.length}` : ""}
+            </button>
+          </div>
 
-      <div className="view-catalog-head">
-        <strong>{query.trim() ? "Wyniki filtra" : "Obiekty"}</strong>
-        <small>
-          {query.trim()
-            ? matches.length + " wyników · kliknij + / −"
-            : "Kliknij +, aby dodać ręcznie do View"}
-        </small>
-      </div>
-
-      {!compiled.error && (
-        <div className="view-search-results">
-          {catalogObjects.map((object) => {
-            const inView = Boolean(view?.objectIds.includes(object.id));
-            const entry = commitById.get(object.id);
-            return (
-              <div key={object.id} className="view-search-result">
-                <button
-                  type="button"
-                  className="view-search-open"
-                  onClick={() => run(() => openObject(object.id))}
-                >
-                  <strong>{displayName(object)}</strong>
-                  <small>
-                    {typeLabel(object)}
-                    {entry && entry.status !== "UNCHANGED"
-                      ? " · " + statusLabel(entry)
-                      : ""}
-                  </small>
-                </button>
-                <button
-                  type="button"
-                  className="view-search-toggle"
-                  aria-label={
-                    (inView ? "Usuń " : "Dodaj ") +
-                    displayName(object) +
-                    (inView ? " z View" : " do View")
-                  }
-                  onClick={() =>
-                    run(() => (inView ? remove(object.id) : add(object.id)))
-                  }
-                >
-                  {inView ? "−" : "+"}
-                </button>
-              </div>
-            );
-          })}
-          {!catalogObjects.length && (
-            <p className="view-manager-empty">Brak pasujących obiektów.</p>
+          {compiled.error && (
+            <p className="view-manager-error">{compiled.error}</p>
           )}
-          {(query.trim() ? matches.length : state.objects.length) > 80 && (
-            <small className="view-manager-more">
-              Pokazano pierwsze 80. Zawęź filtr, aby znaleźć konkretny obiekt.
+
+          <div className="view-catalog-head">
+            <strong>{query.trim() ? "Wyniki filtra" : "Obiekty"}</strong>
+            <small>
+              {query.trim()
+                ? matches.length + " wyników · kliknij + / −"
+                : "Kliknij +, aby dodać ręcznie do View"}
             </small>
+          </div>
+
+          {!compiled.error && (
+            <div className="view-search-results">
+              {catalogObjects.map((object) => {
+                const inView = Boolean(view?.objectIds.includes(object.id));
+                const entry = commitById.get(object.id);
+                return (
+                  <div key={object.id} className="view-search-result">
+                    <button
+                      type="button"
+                      className="view-search-open"
+                      onClick={() => run(() => openObject(object.id))}
+                    >
+                      <strong>{displayName(object)}</strong>
+                      <small>
+                        {typeLabel(object)}
+                        {entry && entry.status !== "UNCHANGED"
+                          ? " · " + statusLabel(entry)
+                          : ""}
+                      </small>
+                    </button>
+                    <button
+                      type="button"
+                      className="view-search-toggle"
+                      aria-label={
+                        (inView ? "Usuń " : "Dodaj ") +
+                        displayName(object) +
+                        (inView ? " z View" : " do View")
+                      }
+                      onClick={() =>
+                        run(() => (inView ? remove(object.id) : add(object.id)))
+                      }
+                    >
+                      {inView ? "−" : "+"}
+                    </button>
+                  </div>
+                );
+              })}
+              {!catalogObjects.length && (
+                <p className="view-manager-empty">Brak pasujących obiektów.</p>
+              )}
+              {(query.trim() ? matches.length : state.objects.length) > 80 && (
+                <small className="view-manager-more">
+                  Pokazano pierwsze 80. Zawęź filtr, aby znaleźć konkretny obiekt.
+                </small>
+              )}
+            </div>
           )}
         </div>
-      )}
+      </details>
+
       {error && <p className="view-manager-error">{error}</p>}
     </section>
   );

@@ -520,6 +520,10 @@ import {
     await data("GET");
     if (focusStamp !== message.stamp) return;
     if (db.objects.some((o) => o.id === message.objectId)) {
+      const view = normalizedObjectView();
+      if (view && !objectInView(view, message.objectId)) {
+        await addToObjectView(message.objectId);
+      }
       chooseObject(message.objectId, true);
       scheduleWorkspaceUiPersist();
       notice(message.note || "Choose a field to capture.");
@@ -667,88 +671,33 @@ import {
     root.dataset.activeObjectId = objectId;
     root.replaceChildren();
 
-    const local = (object) =>
-      pageUrl &&
-      (object.sourceUrl === pageUrl ||
-        db.rules.some(
-          (r) => r.objectId === object.id && r.pageUrl === pageUrl,
-        ));
-
-    const objectKind = (object) =>
-      object.type === "nabor" ? "recruitment" : object.type;
-
+    const view = normalizedObjectView();
+    const scopedObjects = objectsInView(db.objects, view);
     const geographyByObject = buildGeographySearchIndex(
       db.geographies || [],
       BurbotGeography?.catalog || [],
     );
+    const objectKind = (object) =>
+      object.type === "nabor" ? "recruitment" : object.type;
 
-    const geographySearch = (object) =>
-      geographyByObject.get(object.id) || {};
-
-    const scopedObjects = objectsInView(db.objects, normalizedObjectView());
-    const searchableObjects = db.objects;
-
-    const picker = node("div", "object-picker");
+    const picker = node("div", "object-picker object-picker-view-only");
     const toolbar = node("div", "object-picker-toolbar");
     const search = document.createElement("input");
     search.type = "search";
     search.className = "object-picker-search";
-    search.placeholder = "Szukaj projektu, operatora lub naboru…";
+    search.placeholder = view
+      ? "Szukaj w aktywnym View…"
+      : "Szukaj w bazie…";
     search.autocomplete = "off";
-    search.setAttribute("aria-label", "Szukaj obiektu");
+    search.setAttribute("aria-label", "Szukaj obiektu do otwarcia");
     search.value = switcherQuery;
 
-    const filters = node("div", "object-picker-filters");
-    const filterOptions = [
-      ["all", "Wszystkie"],
-      ["project", "Projekty"],
-      ["operator", "Operatorzy"],
-      ["recruitment", "Nabory"],
-    ];
-    for (const [value, label] of filterOptions) {
-      const button = node("button", "object-picker-filter", label);
-      button.type = "button";
-      button.dataset.type = value;
-      button.setAttribute("aria-pressed", String(switcherType === value));
-      button.onclick = () => {
-        switcherType = value;
-        scheduleWorkspaceUiPersist();
-        renderResults();
-        search.focus();
-      };
-      filters.append(button);
-    }
+    const feedback = node("div", "object-picker-search-feedback");
+    toolbar.append(search, feedback);
 
-    const searchFeedback = node("div", "object-picker-search-feedback");
-    const syntaxHint = node(
-      "small",
-      "object-picker-search-hint",
-      'Obsługuje: * wildcard · /regex/i · type:projekty · geo:śląskie · powiat:rzeszowski',
-    );
-    searchFeedback.append(syntaxHint);
-
-    const viewActions = node("div", "object-picker-view-actions");
-    const viewInfo = node("span", "object-picker-view-info");
-    const setViewButton = node("button", "object-picker-set-view");
-    setViewButton.type = "button";
-    const clearViewButton = node(
-      "button",
-      "object-picker-clear-view",
-      "Wyczyść widok",
-    );
-    clearViewButton.type = "button";
-    clearViewButton.hidden = !objectView;
-    clearViewButton.onclick = () => {
-      void clearObjectView().catch((error) => notice(error.message, true));
-    };
-    viewActions.append(viewInfo, setViewButton, clearViewButton);
-
-    toolbar.append(search, filters, searchFeedback, viewActions);
     const results = node("div", "object-picker-results");
     picker.append(toolbar, results);
     root.append(picker);
-
-    let currentMatches = [];
 
     const visibleButtons = () =>
       Array.from(results.querySelectorAll("button.object-option"));
@@ -776,7 +725,6 @@ import {
     };
 
     function objectButton(object) {
-      const row = node("div", "object-option-row");
       const button = node("button", "object-option");
       button.type = "button";
       button.dataset.objectId = object.id;
@@ -787,8 +735,7 @@ import {
       copy.append(node("strong", "object-option-name", C.displayName(object)));
 
       const typeLabel = BurbotSchema[object.type]?.label || object.type;
-      const meta = [];
-      meta.push(typeLabel);
+      const meta = [typeLabel];
       if (object.values?.number) meta.push(String(object.values.number));
       else if (object.values?.external_number)
         meta.push(String(object.values.external_number));
@@ -799,41 +746,9 @@ import {
       if (object.id === objectId)
         button.append(node("span", "object-option-current", "✓"));
 
-      button.onclick = () => {
-        if (objectView && !objectInView(objectView, object.id)) {
-          void addToObjectView(object.id)
-            .then(() => chooseObject(object.id))
-            .catch((error) => notice(error.message, true));
-          return;
-        }
-        chooseObject(object.id);
-      };
+      button.onclick = () => chooseObject(object.id);
       button.onkeydown = (event) => chooseFromKeyboard(button, event);
-
-      const inView = objectInView(objectView, object.id);
-      const toggle = node(
-        "button",
-        "object-option-view-toggle",
-        objectView ? (inView ? "−" : "+") : "+",
-      );
-      toggle.type = "button";
-      toggle.title = objectView
-        ? inView
-          ? "Usuń z View"
-          : "Dodaj do View"
-        : "Utwórz View z tym obiektem";
-      toggle.setAttribute("aria-label", toggle.title);
-      toggle.onclick = (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        const work = objectView && inView
-          ? removeFromObjectView(object.id)
-          : addToObjectView(object.id);
-        void work.catch((error) => notice(error.message, true));
-      };
-
-      row.append(button, toggle);
-      return row;
+      return button;
     }
 
     function appendGroup(title, objects) {
@@ -851,89 +766,75 @@ import {
 
     function renderResults() {
       results.replaceChildren();
-      for (const button of filters.querySelectorAll(".object-picker-filter")) {
-        button.setAttribute(
-          "aria-pressed",
-          String(button.dataset.type === switcherType),
-        );
-      }
+      feedback.replaceChildren();
 
       const compiled = compileObjectSearch(switcherQuery);
       search.classList.toggle("is-invalid", Boolean(compiled.error));
       search.setAttribute("aria-invalid", String(Boolean(compiled.error)));
-      searchFeedback.replaceChildren();
+
       if (compiled.error) {
-        searchFeedback.append(
+        feedback.append(
           node("small", "object-picker-search-error", compiled.error),
         );
-      } else {
-        searchFeedback.append(syntaxHint);
+        return;
       }
 
-      const matches = (object) => {
-        if (switcherType !== "all" && objectKind(object) !== switcherType)
-          return false;
+      feedback.append(
+        node(
+          "small",
+          "object-picker-search-hint",
+          view
+            ? "Przełącznik pokazuje wyłącznie obiekty należące do aktywnego View."
+            : "Brak aktywnego View — przełącznik pokazuje całą bazę.",
+        ),
+      );
+
+      const matches = scopedObjects.filter((object) => {
         const typeLabel = BurbotSchema[object.type]?.label || object.type;
         return compiled.matches(
           createObjectSearchDocument(
             object,
             C.displayName(object),
             typeLabel,
-            geographySearch(object),
+            geographyByObject.get(object.id) || {},
           ),
         );
-      };
+      });
 
-      currentMatches = searchableObjects.filter(matches);
-      const localObjects = [...currentMatches.filter((o) => local(o))].reverse();
-      const saved = currentMatches.filter((o) => !local(o));
-
-      const hasRestriction =
-        Boolean(switcherQuery.trim()) || switcherType !== "all";
-      viewInfo.textContent = objectView
-        ? "Aktywny widok: " + scopedObjects.length + " obiektów"
-        : "Wyniki: " + currentMatches.length;
-      setViewButton.textContent = hasRestriction
-        ? "Ustaw View · " + currentMatches.length
-        : objectView
-          ? "View aktywny · " + scopedObjects.length
-          : "Wyszukaj obiekty, aby ustawić View";
-      setViewButton.disabled =
-        Boolean(compiled.error) || !currentMatches.length || !hasRestriction;
-      clearViewButton.hidden = !objectView;
-
-      appendGroup("Na tej stronie", localObjects);
       appendGroup(
         "Projekty",
-        [...saved.filter((o) => objectKind(o) === "project")].reverse(),
+        matches.filter((o) => objectKind(o) === "project"),
       );
       appendGroup(
         "Operatorzy",
-        [...saved.filter((o) => objectKind(o) === "operator")].reverse(),
+        matches.filter((o) => objectKind(o) === "operator"),
       );
       appendGroup(
         "Nabory",
-        [...saved.filter((o) => objectKind(o) === "recruitment")].reverse(),
+        matches.filter((o) => objectKind(o) === "recruitment"),
       );
 
       if (!results.childElementCount) {
         const empty = node("div", "object-picker-empty");
         empty.append(
-          node("strong", "", "Brak pasujących obiektów"),
-          node("small", "", "Zmień wyszukiwanie albo filtr typu."),
+          node(
+            "strong",
+            "",
+            view && !view.objectIds.length
+              ? "Aktywny View jest pusty"
+              : "Brak pasujących obiektów",
+          ),
+          node(
+            "small",
+            "",
+            view
+              ? "Dodaj obiekty w panelu Active View powyżej."
+              : "Zmień wyszukiwanie.",
+          ),
         );
         results.append(empty);
       }
     }
-
-    setViewButton.onclick = () => {
-      if (setViewButton.disabled) return;
-      void setObjectView(
-        currentMatches,
-        switcherQuery,
-        switcherType,
-      ).catch((error) => notice(error.message, true));
-    };
 
     search.oninput = () => {
       switcherQuery = search.value;
@@ -1872,18 +1773,26 @@ import {
       : "Save value & next";
   }
   function render() {
-    renderObjectViewIndicator();
-    if (!chosen()) {
-      const view = normalizedObjectView();
-      objectId =
-        objectsInView(db.objects, view).at(0)?.id ||
-        (!view ? db.objects.at(-1)?.id : "") ||
-        "";
+    const view = normalizedObjectView();
+
+    if (
+      view &&
+      (!objectId || !chosen() || !objectInView(view, objectId))
+    ) {
+      objectId = objectsInView(db.objects, view).at(0)?.id || "";
       active = null;
+      preview = null;
+      resetCapture();
+    } else if (!chosen()) {
+      objectId = db.objects.at(-1)?.id || "";
+      active = null;
+      preview = null;
       resetCapture();
     }
+
+    renderObjectViewIndicator();
     const object = chosen();
-    $("empty").hidden = !!object;
+    $("empty").hidden = !!object || !!view;
     $("workspace").hidden = !object;
     descriptors = [];
     if (object) {
@@ -2137,6 +2046,9 @@ import {
         changes[OBJECT_VIEW_STORAGE_KEY].newValue,
         db.objects,
       );
+      switcherQuery = "";
+      switcherType = "all";
+      switcherScrollTop = 0;
       render();
     }
   });
@@ -2159,9 +2071,11 @@ import {
       db.objects,
     );
 
-    switcherQuery = uiState.workspace.switcher.query;
-    switcherType = uiState.workspace.switcher.type;
-    switcherScrollTop = uiState.workspace.switcher.scrollTop;
+    // The object switcher is only a navigator now. Do not restore the old
+    // View-management query that used to live inside this popover.
+    switcherQuery = "";
+    switcherType = "all";
+    switcherScrollTop = 0;
     focusStamp = uiState.workspace.focusStamp;
     expanded.clear();
     for (const key of uiState.workspace.expanded) expanded.add(key);

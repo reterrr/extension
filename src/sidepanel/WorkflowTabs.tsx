@@ -1,7 +1,11 @@
 import { useEffect, useState } from "react";
 import { readImportReview } from "../shared/import/reviewStore";
-import { OBJECT_VIEW_STORAGE_KEY } from "../shared/search/objectView.js";
+import {
+  OBJECT_VIEW_STORAGE_KEY,
+  normalizeObjectView,
+} from "../shared/search/objectView.js";
 import type { CommitSessionView } from "../shared/types/commit";
+import type { LegacyStorageState } from "../shared/types/legacy-storage";
 
 type WorkflowMode = "view" | "commit" | "import";
 const KEY = "burbot:workflow-mode";
@@ -29,11 +33,17 @@ async function commitCount(): Promise<number> {
 }
 
 async function viewCount(): Promise<number> {
-  const stored = await browser.storage.session.get(OBJECT_VIEW_STORAGE_KEY);
-  const value = stored[OBJECT_VIEW_STORAGE_KEY] as
-    | { objectIds?: unknown }
-    | undefined;
-  return Array.isArray(value?.objectIds) ? value.objectIds.length : 0;
+  const [stored, stateResponse] = await Promise.all([
+    browser.storage.session.get(OBJECT_VIEW_STORAGE_KEY),
+    browser.runtime.sendMessage({
+      type: "BURBOT_DATA",
+      op: "GET",
+    }) as Promise<CommitResponse<LegacyStorageState>>,
+  ]);
+  const value = stored[OBJECT_VIEW_STORAGE_KEY];
+  if (!value || !stateResponse?.ok || !stateResponse.value) return 0;
+  const normalized = normalizeObjectView(value, stateResponse.value.objects);
+  return normalized?.objectIds.length ?? 0;
 }
 
 export function WorkflowTabs() {
