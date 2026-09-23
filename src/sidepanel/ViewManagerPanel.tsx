@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   buildGeographySearchIndex,
   compileObjectSearch,
@@ -96,11 +96,17 @@ async function send<T>(
 
 export function ViewManagerPanel() {
   const [state, setState] = useState<LegacyStorageState>(EMPTY_STATE);
+  const stateRef = useRef<LegacyStorageState>(EMPTY_STATE);
   const [commit, setCommit] = useState<CommitSessionView>(EMPTY_COMMIT);
   const [view, setView] = useState<ObjectView | null>(null);
   const [query, setQuery] = useState("");
   const [error, setError] = useState("");
   const [busyObjectId, setBusyObjectId] = useState("");
+
+  function applyState(nextState: LegacyStorageState) {
+    stateRef.current = nextState;
+    setState(nextState);
+  }
 
   async function refreshState() {
     try {
@@ -108,7 +114,7 @@ export function ViewManagerPanel() {
         send<LegacyStorageState>("BURBOT_DATA", "GET"),
         send<CommitSessionView>("BURBOT_COMMIT", "GET"),
       ]);
-      setState(nextState);
+      applyState(nextState);
       setCommit(nextCommit);
       await refreshView(nextState);
     } catch (cause) {
@@ -116,7 +122,7 @@ export function ViewManagerPanel() {
     }
   }
 
-  async function refreshView(nextState = state) {
+  async function refreshView(nextState = stateRef.current) {
     const stored = await browser.storage.session.get(OBJECT_VIEW_STORAGE_KEY);
     const raw = stored[OBJECT_VIEW_STORAGE_KEY];
     const normalized = normalizeObjectView(
@@ -153,7 +159,7 @@ export function ViewManagerPanel() {
         send<LegacyStorageState>("BURBOT_DATA", "GET"),
         send<CommitSessionView>("BURBOT_COMMIT", "GET"),
       ]);
-      setState(next);
+      applyState(next);
       setCommit(nextCommit);
       await refreshView(next);
     })().catch((cause) =>
@@ -164,7 +170,7 @@ export function ViewManagerPanel() {
       const next = (event as CustomEvent<{ state?: LegacyStorageState }>).detail
         ?.state;
       if (next) {
-        setState(next);
+        applyState(next);
         void refreshView(next);
       } else {
         void refreshState();
@@ -176,7 +182,7 @@ export function ViewManagerPanel() {
       area: string,
     ) => {
       if (area === "session" && changes[OBJECT_VIEW_STORAGE_KEY]) {
-        void refreshView();
+        void refreshView(stateRef.current);
       }
     };
 
