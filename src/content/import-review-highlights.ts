@@ -252,10 +252,6 @@ function scrollToFocused(): void {
 
 function show(highlights: ReviewHighlight[], focusId?: string): void {
   clear();
-  document
-    .querySelectorAll<HTMLElement>("[data-burbot-selector-highlight]")
-    .forEach((element) => element.remove());
-
   const root = document.body ?? document.documentElement;
   const index = canonicalText(root);
   ranges = highlights.flatMap((highlight) => {

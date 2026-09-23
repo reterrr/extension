@@ -1,4 +1,8 @@
 import { selectorColor } from "../shared/selectorPalette";
+import {
+  buildStoredSelectorHighlights,
+  sameSelectorPage,
+} from "../shared/selectorHighlights.js";
 import type { SelectorHighlight } from "../shared/messaging/picker";
 import type {
   LegacyStorageState,
@@ -58,7 +62,7 @@ function comparablePageUrl(value: string): string {
 }
 
 function samePage(left: string, right: string): boolean {
-  return comparablePageUrl(left) === comparablePageUrl(right);
+  return sameSelectorPage(left, right);
 }
 
 function isLocal(object: LegacyStoredObject, pageUrl: string): boolean {
@@ -198,9 +202,28 @@ function colorSidebar(): void {
     setSelectorVariables(details, evidence.selector);
 }
 
-async function renderPageHighlights(tabId: number, highlights: SelectorHighlight[]): Promise<void> {
-  await browser.scripting.executeScript({ target: { tabId }, files: ["selector-highlights.js"] });
-  await browser.tabs.sendMessage(tabId, { type: "BURBOT_SHOW_SELECTOR_HIGHLIGHTS", highlights });
+async function renderPageHighlights(
+  tabId: number,
+  highlights: SelectorHighlight[],
+): Promise<void> {
+  try {
+    await browser.tabs.sendMessage(tabId, {
+      type: "BURBOT_SHOW_SELECTOR_HIGHLIGHTS",
+      highlights,
+    });
+    return;
+  } catch {
+    // Inject lazily if the persistent runtime is not present yet.
+  }
+
+  await browser.scripting.executeScript({
+    target: { tabId },
+    files: ["selector-highlights.js"],
+  });
+  await browser.tabs.sendMessage(tabId, {
+    type: "BURBOT_SHOW_SELECTOR_HIGHLIGHTS",
+    highlights,
+  });
 }
 
 async function syncPage(): Promise<void> {
@@ -211,61 +234,12 @@ async function syncPage(): Promise<void> {
   try { protocol = new URL(activePageUrl).protocol; } catch {}
   if (!tab || tab.id === undefined || !["http:", "https:"].includes(protocol)) return;
 
-  if (document.documentElement.classList.contains("import-review-mode")) {
-    try { await renderPageHighlights(tab.id, []); } catch {}
-    return;
-  }
-
-  const object = chosenObject();
-  const highlights: SelectorHighlight[] = [];
-  const seen = new Set<string>();
-  for (const rule of selectorRules(object)) {
-    if (typeof rule.selector !== "string") continue;
-    if (
-      pendingPreview &&
-      object &&
-      pendingPreview.objectId === object.id &&
-      pendingPreview.field === rule.field &&
-      pendingPreview.targetKey === ruleTargetKey(rule)
-    ) {
-      continue;
-    }
-    const quote = rule.extraction.type === "selection" ? rule.extraction.quote : undefined;
-    const key = [rule.selector, quote?.exact ?? "", quote?.prefix ?? "", quote?.suffix ?? ""].join("\u0000");
-    if (seen.has(key)) continue;
-    seen.add(key);
-    const fallbacks = ruleFallbacks(rule);
-    highlights.push({ id: String(rule.id), selector: rule.selector, ...(fallbacks.length ? { selectorFallbacks: fallbacks } : {}), ...(quote ? { quote } : {}) });
-  }
-
-  for (const entry of selectorEvidence(object)) {
-    if (typeof entry.selector !== "string") continue;
-    const quote =
-      entry.extraction.type === "selection"
-        ? entry.extraction.quote
-        : undefined;
-    const key = [
-      entry.selector,
-      quote?.exact ?? "",
-      quote?.prefix ?? "",
-      quote?.suffix ?? "",
-    ].join("\u0000");
-    if (seen.has(key)) continue;
-    seen.add(key);
-    highlights.push({
-      id: "evidence:" + String(entry.id),
-      selector: entry.selector,
-      ...(entry.selectorFallbacks?.length
-        ? { selectorFallbacks: entry.selectorFallbacks }
-        : {}),
-      ...(quote ? { quote } : {}),
-    });
-  }
-
+  const highlights: SelectorHighlight[] = buildStoredSelectorHighlights(
+    state,
+    activePageUrl,
+  );
   if (
     pendingPreview &&
-    object &&
-    pendingPreview.objectId === object.id &&
     samePage(pendingPreview.pageUrl, activePageUrl)
   ) {
     highlights.push(pendingPreview.highlight);
