@@ -641,7 +641,8 @@ html[data-workflow-mode="view"] .commit-panel {
 
 /* Single canonical View manager. The editor no longer owns View membership. */
 html[data-workflow-mode="view"] #active-object-view,
-html[data-workflow-mode="view"] .object-workflow-actions {
+html[data-workflow-mode="view"] .object-workflow-actions,
+html[data-workflow-mode="view"] #switcher {
   display: none !important;
 }
 
@@ -718,6 +719,30 @@ html[data-workflow-mode="view"] .object-workflow-actions {
 }
 .object-picker-view-only .object-option {
   width: 100%;
+}
+
+
+/* Active View is also the object navigator; no second dropdown is needed. */
+.view-members {
+  border: 1px solid #e4e9e5;
+  border-radius: 7px;
+  background: #fbfcfb;
+}
+.view-member + .view-member {
+  border-top: 1px solid #edf1ee;
+}
+.view-member-open {
+  padding: 6px 7px;
+  text-align: left;
+}
+.view-member-open:hover {
+  background: #f2f7f3;
+}
+.view-member-open strong {
+  font-size: 9.5px;
+}
+.view-member-open small {
+  font-size: 7.5px;
 }
 
 `;
