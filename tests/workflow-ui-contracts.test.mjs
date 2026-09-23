@@ -149,3 +149,21 @@ test("manual plus in View adds and activates the object", () => {
     /Kliknij \+, aby dodać do View i od razu otworzyć obiekt/,
   );
 });
+
+
+test("optional enum clear remains saveable in the editor", () => {
+  const workspace = source("src/sidepanel/workspace.js");
+
+  assert.match(
+    workspace,
+    /definition\.allowEmpty === true[\s\S]*?String\(draft \?\? ""\)\.trim\(\) === ""/,
+  );
+  assert.match(
+    workspace,
+    /clearingOptionalValue[\s\S]*?\$\("save"\)\.disabled = busy;/,
+  );
+  assert.match(
+    workspace,
+    /clearingOptionalValue[\s\S]*?capture && !clearingOptionalValue \? "ASSIGN" : "EDIT"/,
+  );
+});
