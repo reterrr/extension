@@ -1650,6 +1650,12 @@ test("Import Review preserves dynamic file classification and file evidence", ()
     uuid,
     "2026-09-24T12:10:00.000Z",
   );
+  const reviewView = reviewModule.importReviewView(session);
+  assert.equal(reviewView.files[0].name, "regulamin_naboru.pdf");
+  assert.equal(reviewView.files[0].purpose, "Regulamin");
+  assert.equal(reviewView.files[0].hasFields, false);
+  assert.equal(reviewView.files[0].clientRequirement, "Informacyjny");
+
   const plan = reviewModule.buildImportApprovalPlan(
     session,
     session.objectOrder[0],
