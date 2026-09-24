@@ -4,6 +4,7 @@ import "../shared/domain/core.js";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
+import { SidepanelErrorBoundary } from "./SidepanelErrorBoundary";
 import "./importReviewWorkspaceGrouping";
 import "./importReviewWorkspaceParityStyles";
 
@@ -12,6 +13,8 @@ if (!root) throw new Error("Missing sidepanel root element.");
 
 createRoot(root).render(
   <StrictMode>
-    <App />
+    <SidepanelErrorBoundary>
+      <App />
+    </SidepanelErrorBoundary>
   </StrictMode>,
 );
