@@ -1168,3 +1168,170 @@ test("import approval plan preserves nested portable configuration", () => {
   assert.equal(portable.financing[0].company_size, "B2C");
   assert.equal(portable.documents[0].document_type_key, "psf_application_form");
 });
+
+
+test("existing object approval merges imported geography contacts and documents", () => {
+  const uuid = ids();
+  const original = formatModule.importDocumentIntoState(
+    BurbotCore.empty(),
+    {
+      version: 1,
+      offset_unit: "unicode_codepoint",
+      sources: [],
+      objects: [
+        {
+          key: "operator-existing",
+          type: "operator",
+          data: { name: "Operator Existing", role: "OPERATOR" },
+        },
+        {
+          key: "project-existing",
+          type: "project",
+          data: {
+            name: "Projekt Existing",
+            operator_id: { $ref: "operator-existing" },
+          },
+        },
+      ],
+    },
+    0,
+    uuid,
+    "2026-09-24T08:00:00.000Z",
+  );
+
+  const operator = original.objects.find(
+    (object) => object.importKey === "operator-existing",
+  );
+  const project = original.objects.find(
+    (object) => object.importKey === "project-existing",
+  );
+  assert.ok(operator);
+  assert.ok(project);
+
+  const operatorSession = reviewModule.createImportReviewSession(
+    {
+      version: 1,
+      offset_unit: "unicode_codepoint",
+      sources: [],
+      objects: [
+        {
+          key: "operator-existing",
+          type: "operator",
+          data: { name: "Operator Existing", role: "OPERATOR" },
+          contacts: [
+            {
+              key: "contact-email",
+              kind: "EMAIL",
+              value: "kontakt@example.test",
+            },
+          ],
+        },
+      ],
+    },
+    "operator-update.json",
+    uuid,
+    "2026-09-24T09:00:00.000Z",
+  );
+  const operatorPlan = reviewModule.buildImportApprovalPlan(
+    operatorSession,
+    operatorSession.objectOrder[0],
+    original,
+  );
+  const operatorStaged = stageModule.stageImportReviewObject(
+    original,
+    operatorPlan,
+    uuid,
+    "2026-09-24T09:01:00.000Z",
+  );
+
+  assert.equal(operatorStaged.updatedExisting, true);
+  assert.equal(
+    operatorStaged.state.operatorContacts.find(
+      (row) => row.objectId === operator.id && row.importKey === "contact-email",
+    )?.value,
+    "kontakt@example.test",
+  );
+
+  const projectSession = reviewModule.createImportReviewSession(
+    {
+      version: 1,
+      offset_unit: "unicode_codepoint",
+      sources: [],
+      objects: [
+        {
+          key: "operator-existing",
+          type: "operator",
+          data: { name: "Operator Existing" },
+        },
+        {
+          key: "project-existing",
+          type: "project",
+          data: {
+            name: "Projekt Existing",
+            operator_id: { $ref: "operator-existing" },
+          },
+          geography: [
+            {
+              key: "geo-existing",
+              type: "WOJEWODZTWO",
+              role: "OBEJMUJE",
+              value: "mazowieckie",
+            },
+          ],
+          documents: [
+            {
+              key: "doc-existing",
+              document_type_key: "psf_application_form",
+              data: {
+                requirement: "REQUIRED",
+                auto_fill: true,
+                notes: "Aktualizacja.",
+              },
+            },
+          ],
+        },
+      ],
+    },
+    "project-update.json",
+    uuid,
+    "2026-09-24T09:02:00.000Z",
+  );
+
+  // The referenced operator already exists under the same stable import key.
+  const projectPreview = projectSession.previewState.objects.find(
+    (object) => object.importKey === "project-existing",
+  );
+  assert.ok(projectPreview);
+  const projectPlan = reviewModule.buildImportApprovalPlan(
+    projectSession,
+    projectPreview.id,
+    operatorStaged.state,
+  );
+  const projectStaged = stageModule.stageImportReviewObject(
+    operatorStaged.state,
+    projectPlan,
+    uuid,
+    "2026-09-24T09:03:00.000Z",
+  );
+
+  assert.equal(projectStaged.updatedExisting, true);
+  assert.equal(
+    projectStaged.state.geographies.find(
+      (row) => row.objectId === project.id && row.importKey === "geo-existing",
+    )?.value,
+    "mazowieckie",
+  );
+  assert.deepEqual(
+    {
+      requirement: projectStaged.state.documentRequirements.find(
+        (row) =>
+          row.objectId === project.id && row.importKey === "doc-existing",
+      )?.requirement,
+      auto_fill: projectStaged.state.documentRequirements.find(
+        (row) =>
+          row.objectId === project.id && row.importKey === "doc-existing",
+      )?.auto_fill,
+    },
+    { requirement: "REQUIRED", auto_fill: true },
+  );
+});
