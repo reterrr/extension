@@ -96,6 +96,18 @@ export function importedEvidenceLocatorKey(
   ].join(":");
 }
 
+export function importedTargetEvidenceLocatorKey(entry) {
+  return [
+    String(entry?.objectId ?? ""),
+    String(entry?.target?.kind ?? ""),
+    String(entry?.targetImportKey ?? entry?.target?.id ?? ""),
+    String(entry?.field ?? ""),
+    String(entry?.sourceId ?? ""),
+    String(entry?.charStart ?? ""),
+    String(entry?.charEnd ?? ""),
+  ].join(":");
+}
+
 export function importedEvidenceLocatorKeys(state) {
   const keys = new Set();
   for (const object of state?.objects ?? []) {
@@ -111,6 +123,9 @@ export function importedEvidenceLocatorKeys(state) {
         );
       });
     }
+  }
+  for (const entry of state?.importTargetEvidence ?? []) {
+    keys.add(importedTargetEvidenceLocatorKey(entry));
   }
   return keys;
 }
@@ -162,6 +177,34 @@ export function buildImportedEvidenceAnchorRequests(
         });
       });
     }
+  }
+
+  for (const entry of state.importTargetEvidence ?? []) {
+    const source = sourcesById.get(String(entry.sourceId));
+    if (
+      !source?.url ||
+      source.type !== "HTML" ||
+      !sameSelectorPage(source.url, pageUrl)
+    ) {
+      continue;
+    }
+
+    const quote = importedEvidenceQuote(source, entry);
+    if (!quote) continue;
+
+    const key = importedTargetEvidenceLocatorKey(entry);
+    const cached = locatorCache?.[key];
+    requests.push({
+      key,
+      objectId: String(entry.objectId),
+      field: String(entry.field),
+      sourceUrl: source.url,
+      quote,
+      ...(cached &&
+      sameSelectorPage(cached.pageUrl ?? source.url, source.url)
+        ? { cached }
+        : {}),
+    });
   }
 
   return requests;
@@ -290,6 +333,49 @@ export function buildStoredSelectorHighlights(
         });
       });
     }
+  }
+
+  for (const entry of state.importTargetEvidence ?? []) {
+    const source = sourcesById.get(String(entry.sourceId));
+    if (
+      !source?.url ||
+      source.type !== "HTML" ||
+      !sameSelectorPage(source.url, pageUrl)
+    ) {
+      continue;
+    }
+
+    const quote = importedEvidenceQuote(source, entry);
+    if (!quote) continue;
+
+    const locatorKey = importedTargetEvidenceLocatorKey(entry);
+    const cached = locatorCache?.[locatorKey];
+    const cachedUsable =
+      cached &&
+      typeof cached.selector === "string" &&
+      cached.selector &&
+      sameSelectorPage(cached.pageUrl ?? source.url, source.url);
+
+    const selector = cachedUsable ? cached.selector : "body";
+    const resolvedQuote =
+      cachedUsable && cached.quote ? cached.quote : quote;
+    const fallbacks =
+      cachedUsable && Array.isArray(cached.selectorFallbacks)
+        ? cached.selectorFallbacks.filter(
+            (fallback) => typeof fallback === "string" && fallback,
+          )
+        : [];
+
+    const key = highlightKey(selector, resolvedQuote);
+    if (seen.has(key)) continue;
+    seen.add(key);
+
+    highlights.push({
+      id: "import-target-evidence:" + locatorKey,
+      selector,
+      ...(fallbacks.length ? { selectorFallbacks: fallbacks } : {}),
+      quote: resolvedQuote,
+    });
   }
 
   return highlights;
