@@ -103,14 +103,14 @@ export function App() {
             <details id="file-sources-panel" className="workspace-section-card">
               <summary className="workspace-section-summary">
                 <span className="workspace-section-title">
-                  <strong>Źródła plikowe</strong>
-                  <small>PDF-y i dokumenty przypięte do obiektu</small>
+                  <strong>Pliki</strong>
+                  <small>Nazwa z pliku · oznaczenia ustawiasz po dodaniu</small>
                 </span>
                 <span id="file-source-count" className="workspace-section-status">Brak plików</span>
               </summary>
               <div className="workspace-section-body">
                 <p className="muted">
-                  Przypnij oryginalny link do pliku. Dla PDF Burbot zapisuje selektory tekstowe względem strony i kontekstu zaznaczenia.
+                  Dodaj oryginalny plik PDF ze strony. Burbot bierze nazwę z pliku, a Ty oznaczasz jego rodzaj, cel, wymagalność, podpis i sposób dostarczenia.
                 </p>
                 <div id="file-source-list" className="file-source-list" />
                 <div className="file-source-toolbar">
@@ -171,21 +171,6 @@ export function App() {
               </summary>
               <div className="workspace-section-body">
                 <div id="funding" />
-              </div>
-            </details>
-          </section>
-
-          <section id="documents-section" className="business-section" hidden>
-            <details id="documents-panel" className="workspace-section-card">
-              <summary className="section-summary workspace-section-summary">
-                <span className="workspace-section-title">
-                  <strong>Dokumenty</strong>
-                  <small>Wymagane, opcjonalne i wewnętrzne</small>
-                </span>
-                <span id="document-count">Nie skonfigurowano</span>
-              </summary>
-              <div className="workspace-section-body">
-                <div id="documents" />
               </div>
             </details>
           </section>
