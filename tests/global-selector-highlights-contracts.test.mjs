@@ -276,3 +276,41 @@ test("import evidence locator cache has a dedicated technical storage key", () =
     "burbot:import-evidence-locators:v1",
   );
 });
+
+
+test("background materializes imported evidence through the dedicated locator runtime", () => {
+  const root = resolve(import.meta.dirname, "..");
+  const background = readFileSync(
+    resolve(root, "src/background/index.ts"),
+    "utf8",
+  );
+  const buildScript = readFileSync(
+    resolve(root, "scripts/build.mjs"),
+    "utf8",
+  );
+  const locatorRuntime = readFileSync(
+    resolve(root, "src/content/evidence-locator.ts"),
+    "utf8",
+  );
+
+  assert.match(
+    background,
+    /buildImportedEvidenceAnchorRequests\([\s\S]*?evidence-locator\.js/,
+  );
+  assert.match(
+    background,
+    /IMPORT_EVIDENCE_LOCATOR_STORAGE_KEY/,
+  );
+  assert.match(
+    buildScript,
+    /"evidence-locator": "src\/content\/evidence-locator\.ts"/,
+  );
+  assert.match(
+    locatorRuntime,
+    /buildDurableSelectors\(container\)/,
+  );
+  assert.match(
+    locatorRuntime,
+    /The expensive page text index is built once for the whole batch/,
+  );
+});
