@@ -314,3 +314,59 @@ test("background materializes imported evidence through the dedicated locator ru
     /The expensive page text index is built once for the whole batch/,
   );
 });
+
+
+test("nested imported evidence participates in locator materialization and highlighting", () => {
+  const state = {
+    objects: [{ id: "project-1", type: "project", values: { name: "Demo" } }],
+    rules: [],
+    fieldEvidence: [],
+    importSources: [
+      {
+        id: "source-1",
+        importKey: "page",
+        type: "HTML",
+        url: "https://example.test/project",
+        snapshot: { text: "Obszar: mazowieckie." },
+      },
+    ],
+    importTargetEvidence: [
+      {
+        id: "target-evidence-1",
+        objectId: "project-1",
+        field: "value",
+        target: { kind: "geography", id: "geo-row-1" },
+        targetImportKey: "geo-maz",
+        sourceId: "source-1",
+        charStart: 8,
+        charEnd: 19,
+        rawValue: "mazowieckie",
+      },
+    ],
+  };
+
+  const requests = buildImportedEvidenceAnchorRequests(
+    state,
+    "https://example.test/project",
+    {},
+  );
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].quote.exact, "mazowieckie");
+
+  const cache = {
+    [requests[0].key]: {
+      pageUrl: "https://example.test/project",
+      selector: "#region",
+      quote: { exact: "mazowieckie", prefix: "", suffix: "" },
+      resolvedAt: "2026-09-24T10:00:00.000Z",
+    },
+  };
+  const highlights = buildStoredSelectorHighlights(
+    state,
+    "https://example.test/project",
+    cache,
+  );
+  assert.equal(highlights.length, 1);
+  assert.equal(highlights[0].selector, "#region");
+  assert.match(highlights[0].id, /^import-target-evidence:/);
+});
