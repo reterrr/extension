@@ -114,24 +114,6 @@ function exportFunding(state, objectId) {
     .map((row) => compactRecord(row, ["id", "objectId"]));
 }
 
-function exportDocuments(state, objectId, documentCatalog) {
-  const names = new Map(
-    (documentCatalog ?? []).map((entry) => [entry.key, entry]),
-  );
-
-  return (state.documentRequirements ?? [])
-    .filter((row) => String(row.objectId) === String(objectId))
-    .map((row) => {
-      const catalog = names.get(row.document_type_key);
-      return compactRecord({
-        document_type_key: row.document_type_key,
-        name: catalog?.name ?? null,
-        internal: catalog?.internal ? true : undefined,
-        ...compactRecord(row, ["id", "objectId", "document_type_key"]),
-      });
-    });
-}
-
 function urlsFromValue(value) {
   if (typeof value !== "string") return [];
   return value
@@ -182,7 +164,6 @@ function exportObject(
   objectsById,
   schema,
   geographyCatalog,
-  documentCatalog,
 ) {
   const catalogByKey = new Map(
     (geographyCatalog ?? []).map((entry) => [
@@ -234,7 +215,6 @@ function exportProjectRecruitments(
   objectsById,
   schema,
   geographyCatalog,
-  documentCatalog,
 ) {
   return relatedRecruitments(state, project.id).map((recruitment) =>
     exportObject(
@@ -243,7 +223,6 @@ function exportProjectRecruitments(
       objectsById,
       schema,
       geographyCatalog,
-      documentCatalog,
     ),
   );
 }
@@ -256,7 +235,7 @@ function exportProjectRecruitments(
  * reference fields to {id, name, type} using the whole workspace.
  *
  * Projects additionally include every related recruitment with its complete
- * business payload (values, geography, financing, documents, files and links),
+ * business payload (values, geography, financing, classified files and links),
  * even when those recruitment objects are not direct members of the View.
  */
 export function createAiViewExport({
@@ -264,7 +243,6 @@ export function createAiViewExport({
   view,
   schema,
   geographyCatalog = [],
-  documentCatalog = [],
   exportedAt = new Date().toISOString(),
 }) {
   if (!view?.objectIds?.length) {
@@ -286,7 +264,6 @@ export function createAiViewExport({
         objectsById,
         schema,
         geographyCatalog,
-        documentCatalog,
       );
 
       if (object.type === "project") {
@@ -296,7 +273,6 @@ export function createAiViewExport({
           objectsById,
           schema,
           geographyCatalog,
-          documentCatalog,
         );
         if (recruitments.length) {
           exported.recruitments = recruitments;
