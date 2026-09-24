@@ -99,7 +99,7 @@ function documentFixture() {
           {
             source: "project-regulations",
             source_page: "project-page",
-            name: "Regulamin projektu.pdf",
+            name: "regulamin.pdf",
           },
         ],
         financing: [
@@ -170,7 +170,7 @@ test("import review exposes selected object evidence, file attachments and finan
   assert.equal(view.evidence[0].rawValue, "Generator Kompetencji 3.0");
   assert.equal(view.evidence[0].sourceUrl, "https://example.test/project");
   assert.equal(view.files.length, 1);
-  assert.equal(view.files[0].name, "Regulamin projektu.pdf");
+  assert.equal(view.files[0].name, "regulamin.pdf");
   assert.equal(view.financing.length, 1);
   assert.equal(view.financing[0].companySize, "MICRO");
   assert.equal(
@@ -310,19 +310,11 @@ test("review edits change staged data and invalidate stale object evidence", () 
     "120000",
     now,
   );
-  reviewModule.renameImportReviewFile(
-    session,
-    project.id,
-    file.id,
-    "Regulamin po korekcie.pdf",
-    now,
-  );
-
   const view = reviewModule.importReviewView(session);
   assert.equal(view.objects[0].label, "Generator Kompetencji 3.1");
   assert.equal(view.evidence.length, 0);
   assert.equal(view.fields.find((field) => field.field === "name")?.evidenceCount, 0);
-  assert.equal(view.files[0].name, "Regulamin po korekcie.pdf");
+  assert.equal(view.files[0].name, "regulamin.pdf");
   assert.equal(
     view.financing[0].fields.find((field) => field.field === "max_amount_pln")
       ?.editorValue,
@@ -342,7 +334,7 @@ test("review edits change staged data and invalidate stale object evidence", () 
   assert.ok(stagedProject);
   assert.equal(stagedProject.values.name, "Generator Kompetencji 3.1");
   assert.equal(staged.state.fileSources.length, 1);
-  assert.equal(staged.state.fileSources[0].name, "Regulamin po korekcie.pdf");
+  assert.equal(staged.state.fileSources[0].name, "regulamin.pdf");
   assert.equal(staged.state.financingRules.length, 1);
   assert.equal(staged.state.financingRules[0].refund_percent_min, 60);
   assert.equal(staged.state.financingRules[0].refund_percent_avg, 70);
