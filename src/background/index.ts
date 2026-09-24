@@ -509,18 +509,19 @@ function mutateFileSource(
       "client_requirement",
       "signature_requirement",
       "delivery_method",
-    ];
+    ] as const;
+    const mutableSource = source as unknown as Record<string, unknown>;
     for (const field of textFields) {
       const raw = message.metadata[field];
       if (raw === undefined || raw === null || String(raw).trim() === "") {
-        delete source[field];
+        delete mutableSource[field];
         continue;
       }
       const value = String(raw).replace(/\s+/g, " ").trim();
       if (value.length > 5000) {
         throw new Error(`File metadata field ${field} is too long.`);
       }
-      source[field] = value;
+      mutableSource[field] = value;
     }
 
     const hasFields = message.metadata.has_fields;
