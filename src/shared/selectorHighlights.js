@@ -96,6 +96,25 @@ export function importedEvidenceLocatorKey(
   ].join(":");
 }
 
+export function importedEvidenceLocatorKeys(state) {
+  const keys = new Set();
+  for (const object of state?.objects ?? []) {
+    for (const [field, entries] of Object.entries(object.evidence ?? {})) {
+      entries.forEach((evidence, index) => {
+        keys.add(
+          importedEvidenceLocatorKey(
+            object.id,
+            field,
+            index,
+            evidence,
+          ),
+        );
+      });
+    }
+  }
+  return keys;
+}
+
 export function buildImportedEvidenceAnchorRequests(
   state,
   pageUrl,
