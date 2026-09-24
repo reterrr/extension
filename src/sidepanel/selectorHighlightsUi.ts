@@ -1,5 +1,6 @@
 import { selectorColor } from "../shared/selectorPalette";
 import {
+  IMPORT_EVIDENCE_LOCATOR_STORAGE_KEY,
   buildStoredSelectorHighlights,
   sameSelectorPage,
 } from "../shared/selectorHighlights.js";
@@ -232,9 +233,22 @@ async function syncPage(): Promise<void> {
   try { protocol = new URL(activePageUrl).protocol; } catch {}
   if (!tab || tab.id === undefined || !["http:", "https:"].includes(protocol)) return;
 
+  const locatorStored = await browser.storage.local.get(
+    IMPORT_EVIDENCE_LOCATOR_STORAGE_KEY,
+  );
+  const locatorValue =
+    locatorStored[IMPORT_EVIDENCE_LOCATOR_STORAGE_KEY];
+  const locatorCache =
+    locatorValue &&
+    typeof locatorValue === "object" &&
+    !Array.isArray(locatorValue)
+      ? locatorValue
+      : {};
+
   const highlights: SelectorHighlight[] = buildStoredSelectorHighlights(
     state,
     activePageUrl,
+    locatorCache,
   );
   if (
     pendingPreview &&
@@ -282,10 +296,13 @@ export async function initSelectorHighlightsUi(): Promise<void> {
   });
   browser.storage.onChanged.addListener((changes, area) => {
     if (area !== "local") return;
+
     const next = changes[STORAGE_KEY]?.newValue as LegacyStorageState | undefined;
-    if (!next) return;
-    state = next;
-    queueSync();
+    if (next) state = next;
+
+    if (next || changes[IMPORT_EVIDENCE_LOCATOR_STORAGE_KEY]) {
+      queueSync();
+    }
   });
   browser.tabs.onActivated.addListener(queueSync);
   browser.tabs.onUpdated.addListener((_tabId, change) => { if (change.url || change.status === "complete") queueSync(); });
