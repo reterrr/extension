@@ -20,6 +20,57 @@ let pickerClient: PickerClient | null = null;
 let filePicking = false;
 let fileModeStarting = false;
 let fileModeGeneration = 0;
+const expandedFileSources = new Set<string>();
+
+type FileTextMetadataKey =
+  | "document_kind"
+  | "purpose"
+  | "intended_use"
+  | "client_requirement"
+  | "signature_requirement"
+  | "delivery_method";
+
+const FILE_TEXT_METADATA_FIELDS: Array<{
+  key: FileTextMetadataKey;
+  label: string;
+  multiline?: boolean;
+  placeholder?: string;
+}> = [
+  {
+    key: "document_kind",
+    label: "Rodzaj",
+    placeholder: "np. Oryginał operatora",
+  },
+  {
+    key: "purpose",
+    label: "Cel",
+    placeholder: "np. Formularz do uzupełnienia",
+  },
+  {
+    key: "intended_use",
+    label: "Przeznaczenie",
+    multiline: true,
+    placeholder: "Do czego służy ten dokument?",
+  },
+  {
+    key: "client_requirement",
+    label: "Wymagalność dla klienta",
+    multiline: true,
+    placeholder: "np. Obowiązkowy na etapie naboru / informacyjny / warunkowy",
+  },
+  {
+    key: "signature_requirement",
+    label: "Podpis",
+    multiline: true,
+    placeholder: "np. Wymagany podpisany plik",
+  },
+  {
+    key: "delivery_method",
+    label: "Sposób dostarczenia",
+    multiline: true,
+    placeholder: "np. Opracowany wzór / generator",
+  },
+];
 
 function $<T extends HTMLElement = HTMLElement>(id: string): T {
   const element = document.getElementById(id);
@@ -156,7 +207,11 @@ async function attachFile(
     file,
   });
   disconnectPicker();
-  notice(`Dodano źródło PDF: ${file.name}`);
+  const added = (state.fileSources ?? []).find(
+    (source) => source.objectId === object.id && source.url === file.url,
+  );
+  if (added) expandedFileSources.add(added.id);
+  notice(`Dodano plik: ${file.name}. Uzupełnij jego oznaczenia.`);
   render();
   keepControlInPlace(button, beforeTop);
 }
@@ -338,16 +393,139 @@ async function openPdfReader(
   notice("Burbot PDF Reader: zaznacz wartość w dokumencie dla aktywnego pola.");
 }
 
-function renderSource(source: LegacyStoredFileSource): HTMLElement {
-  const row = document.createElement("div");
-  row.className = "file-source-row";
+function metadataProgress(source: LegacyStoredFileSource): {
+  filled: number;
+  total: number;
+  complete: boolean;
+} {
+  const textFilled = FILE_TEXT_METADATA_FIELDS.filter(
+    ({ key }) => typeof source[key] === "string" && source[key]!.trim().length > 0,
+  ).length;
+  const filled = textFilled + (typeof source.has_fields === "boolean" ? 1 : 0);
+  const total = FILE_TEXT_METADATA_FIELDS.length + 1;
+  return { filled, total, complete: filled === total };
+}
 
+function metadataText(
+  source: LegacyStoredFileSource,
+  key: FileTextMetadataKey,
+): string {
+  const value = source[key];
+  return typeof value === "string" ? value : "";
+}
+
+function renderSource(source: LegacyStoredFileSource): HTMLElement {
+  const row = document.createElement("details");
+  row.className = "file-source-row";
+  row.open = expandedFileSources.has(source.id);
+
+  const progress = metadataProgress(source);
+  row.dataset.classified = String(progress.complete);
+  row.addEventListener("toggle", () => {
+    if (row.open) expandedFileSources.add(source.id);
+    else expandedFileSources.delete(source.id);
+  });
+
+  const summary = document.createElement("summary");
+  summary.className = "file-source-summary";
+
+  const summaryCopy = document.createElement("span");
+  summaryCopy.className = "file-source-summary-copy";
   const title = document.createElement("strong");
   title.textContent = source.name;
   const meta = document.createElement("small");
   meta.textContent = `${source.fileType} · ${host(source.url)}`;
+  summaryCopy.append(title, meta);
+
+  const status = document.createElement("span");
+  status.className = progress.complete
+    ? "file-source-classification-status complete"
+    : "file-source-classification-status pending";
+  status.textContent = progress.complete
+    ? "Oznaczony"
+    : `${progress.filled}/${progress.total} · Do oznaczenia`;
+  summary.append(summaryCopy, status);
+
+  const body = document.createElement("div");
+  body.className = "file-source-body";
+
   const url = document.createElement("small");
+  url.className = "file-source-url";
   url.textContent = source.url;
+  body.append(url);
+
+  const classification = document.createElement("div");
+  classification.className = "file-source-classification";
+
+  const controls = new Map<FileTextMetadataKey, HTMLInputElement | HTMLTextAreaElement>();
+  for (const definition of FILE_TEXT_METADATA_FIELDS) {
+    const label = document.createElement("label");
+    label.className = "file-source-field";
+    const caption = document.createElement("span");
+    caption.textContent = definition.label;
+
+    const input = definition.multiline
+      ? document.createElement("textarea")
+      : document.createElement("input");
+    if (input instanceof HTMLInputElement) input.type = "text";
+    if (input instanceof HTMLTextAreaElement) input.rows = 2;
+    input.value = metadataText(source, definition.key);
+    input.placeholder = definition.placeholder ?? "";
+    input.autocomplete = "off";
+    controls.set(definition.key, input);
+    label.append(caption, input);
+    classification.append(label);
+  }
+
+  const hasFieldsLabel = document.createElement("label");
+  hasFieldsLabel.className = "file-source-field";
+  const hasFieldsCaption = document.createElement("span");
+  hasFieldsCaption.textContent = "Zawiera pola?";
+  const hasFields = document.createElement("select");
+  hasFields.append(
+    new Option("Nie ustawiono", ""),
+    new Option("Tak", "true"),
+    new Option("Nie", "false"),
+  );
+  hasFields.value =
+    typeof source.has_fields === "boolean" ? String(source.has_fields) : "";
+  hasFieldsLabel.append(hasFieldsCaption, hasFields);
+  classification.insertBefore(hasFieldsLabel, classification.children[2] ?? null);
+
+  const save = document.createElement("button");
+  save.type = "button";
+  save.className = "primary file-source-save";
+  save.textContent = "Zapisz oznaczenia";
+  save.onclick = () => {
+    const object = chosenObject();
+    if (!object || object.id !== source.objectId) {
+      notice("Wybierz obiekt, do którego należy ten plik.", true);
+      return;
+    }
+
+    expandedFileSources.add(source.id);
+    const metadata: Record<string, unknown> = {};
+    for (const [key, input] of controls) metadata[key] = input.value;
+    metadata.has_fields =
+      hasFields.value === ""
+        ? undefined
+        : hasFields.value === "true";
+
+    void data("UPDATE_FILE_SOURCE", {
+      objectId: object.id,
+      sourceId: source.id,
+      metadata,
+    })
+      .then(() => {
+        notice(`Zapisano oznaczenia pliku: ${source.name}`);
+        render();
+      })
+      .catch((error: unknown) =>
+        notice(error instanceof Error ? error.message : String(error), true),
+      );
+  };
+  classification.append(save);
+  body.append(classification);
 
   const actions = document.createElement("div");
   actions.className = "file-source-actions";
@@ -363,8 +541,6 @@ function renderSource(source: LegacyStoredFileSource): HTMLElement {
       return;
     }
 
-    // This handler is the single source of truth for launching the PDF reader.
-    // Do not proxy/intercept it from another sidepanel module.
     void openPdfReader(object, source).catch((error: unknown) =>
       notice(error instanceof Error ? error.message : String(error), true),
     );
@@ -374,12 +550,12 @@ function renderSource(source: LegacyStoredFileSource): HTMLElement {
   open.href = source.url;
   open.target = "_blank";
   open.rel = "noopener noreferrer";
-  open.textContent = "Open source ↗";
+  open.textContent = "Otwórz źródło ↗";
 
   const remove = document.createElement("button");
   remove.type = "button";
   remove.className = "icon-button danger";
-  remove.setAttribute("aria-label", `Usuń źródło ${source.name}`);
+  remove.setAttribute("aria-label", `Usuń plik ${source.name}`);
   remove.textContent = "×";
   remove.onclick = () => {
     const object = chosenObject();
@@ -391,7 +567,8 @@ function renderSource(source: LegacyStoredFileSource): HTMLElement {
       sourceId: source.id,
     })
       .then(() => {
-        notice("Usunięto źródło plikowe.");
+        expandedFileSources.delete(source.id);
+        notice("Usunięto plik.");
         render();
         keepControlInPlace(button, beforeTop);
       })
@@ -401,7 +578,8 @@ function renderSource(source: LegacyStoredFileSource): HTMLElement {
   };
 
   actions.append(read, open, remove);
-  row.append(title, meta, url, actions);
+  body.append(actions);
+  row.append(summary, body);
   return row;
 }
 
