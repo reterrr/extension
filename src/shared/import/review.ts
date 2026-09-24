@@ -826,6 +826,39 @@ export function buildImportApprovalPlan(
     };
   });
 
+  const portableGeography = (session.previewState.geographies ?? [])
+    .filter((row) => row.objectId === object.id)
+    .map((row) => ({
+      key: String(row.importKey ?? row.id),
+      type: String(row.type),
+      role: String(row.role),
+      value: String(row.value),
+    }));
+
+  const portableContacts = (session.previewState.operatorContacts ?? [])
+    .filter((row) => row.objectId === object.id)
+    .map((row) => ({
+      key: String(row.importKey ?? row.id),
+      kind: String(row.kind),
+      value: String(row.value),
+    }));
+
+  const portableDocuments = (session.previewState.documentRequirements ?? [])
+    .filter((row) => row.objectId === object.id)
+    .map((row) => {
+      const data: Record<string, unknown> = {};
+      for (const field of Object.keys(BurbotDocuments.fields ?? {})) {
+        if (Object.prototype.hasOwnProperty.call(row, field)) {
+          data[field] = row[field];
+        }
+      }
+      return {
+        key: String(row.importKey ?? row.document_type_key),
+        document_type_key: String(row.document_type_key),
+        data,
+      };
+    });
+
   const selectedFinancing = (session.previewState.financingRules ?? []).filter(
     (row) => row.objectId === object.id,
   );
@@ -878,8 +911,15 @@ export function buildImportApprovalPlan(
             ? { evidence: portableEvidence(object, sourceById) }
             : {}),
           ...(portableFiles.length ? { files: portableFiles } : {}),
+          ...(portableGeography.length
+            ? { geography: portableGeography }
+            : {}),
+          ...(portableContacts.length ? { contacts: portableContacts } : {}),
           ...(portableFinancing.length
             ? { financing: portableFinancing }
+            : {}),
+          ...(portableDocuments.length
+            ? { documents: portableDocuments }
             : {}),
         },
       ],
