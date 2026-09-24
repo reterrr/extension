@@ -15,7 +15,22 @@ type ReviewMessage = {
 };
 
 type Boundary = { node: Text; offset: number };
-type IndexedText = { text: string; starts: Boundary[]; ends: Boundary[] };
+type IndexedSegment =
+  | {
+      kind: "text";
+      start: number;
+      end: number;
+      node: Text;
+      nodeStart: number;
+    }
+  | {
+      kind: "space";
+      start: number;
+      end: number;
+      startBoundary: Boundary;
+      endBoundary: Boundary;
+    };
+type IndexedText = { text: string; segments: IndexedSegment[] };
 type ResolvedRange = {
   range: Range;
   id: string;
@@ -33,39 +48,100 @@ function clean(value: string): string {
 
 function canonicalText(root: Element): IndexedText {
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-  const starts: Boundary[] = [];
-  const ends: Boundary[] = [];
+  const segments: IndexedSegment[] = [];
   let text = "";
-  let emitted = false;
   let whitespaceStart: Boundary | null = null;
   let whitespaceEnd: Boundary | null = null;
 
-  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-    if (!(node instanceof Text)) continue;
+  const flushWhitespace = () => {
+    if (!whitespaceStart || !whitespaceEnd || !text.length) {
+      whitespaceStart = null;
+      whitespaceEnd = null;
+      return;
+    }
+    const start = text.length;
+    text += " ";
+    segments.push({
+      kind: "space",
+      start,
+      end: start + 1,
+      startBoundary: whitespaceStart,
+      endBoundary: whitespaceEnd,
+    });
+    whitespaceStart = null;
+    whitespaceEnd = null;
+  };
+
+  for (let current = walker.nextNode(); current; current = walker.nextNode()) {
+    if (!(current instanceof Text)) continue;
+    const node = current;
     if (node.parentElement?.closest("script,style,noscript,template")) continue;
+
+    let runStart = -1;
+    const flushRun = (runEnd: number) => {
+      if (runStart < 0 || runEnd <= runStart) return;
+      flushWhitespace();
+      const chunk = node.data.slice(runStart, runEnd);
+      const start = text.length;
+      text += chunk;
+      segments.push({
+        kind: "text",
+        start,
+        end: start + chunk.length,
+        node,
+        nodeStart: runStart,
+      });
+      runStart = -1;
+    };
+
     for (let offset = 0; offset < node.data.length; offset += 1) {
       const character = node.data[offset];
       if (/\s/.test(character)) {
-        if (emitted) {
+        flushRun(offset);
+        if (text.length) {
           whitespaceStart ??= { node, offset };
           whitespaceEnd = { node, offset: offset + 1 };
         }
         continue;
       }
-      if (whitespaceStart && whitespaceEnd && emitted) {
-        text += " ";
-        starts.push(whitespaceStart);
-        ends.push(whitespaceEnd);
-      }
-      whitespaceStart = null;
-      whitespaceEnd = null;
-      text += character;
-      starts.push({ node, offset });
-      ends.push({ node, offset: offset + 1 });
-      emitted = true;
+      if (runStart < 0) runStart = offset;
+    }
+    flushRun(node.data.length);
+  }
+
+  return { text, segments };
+}
+
+function segmentAt(index: IndexedText, position: number): IndexedSegment | undefined {
+  let low = 0;
+  let high = index.segments.length - 1;
+  while (low <= high) {
+    const middle = (low + high) >> 1;
+    const segment = index.segments[middle];
+    if (position < segment.start) {
+      high = middle - 1;
+    } else if (position >= segment.end) {
+      low = middle + 1;
+    } else {
+      return segment;
     }
   }
-  return { text, starts, ends };
+  return undefined;
+}
+
+function boundaryAt(
+  segment: IndexedSegment,
+  position: number,
+  side: "start" | "end",
+): Boundary {
+  if (segment.kind === "space") {
+    return side === "start" ? segment.startBoundary : segment.endBoundary;
+  }
+  const relative = position - segment.start;
+  return {
+    node: segment.node,
+    offset: segment.nodeStart + relative + (side === "end" ? 1 : 0),
+  };
 }
 
 function occurrences(text: string, exact: string): number[] {
@@ -83,10 +159,13 @@ function occurrences(text: string, exact: string): number[] {
 
 function rangeAt(index: IndexedText, start: number, exactLength: number): Range | null {
   if (exactLength <= 0) return null;
-  const startBoundary = index.starts[start];
-  const endBoundary = index.ends[start + exactLength - 1];
-  if (!startBoundary || !endBoundary) return null;
+  const endPosition = start + exactLength - 1;
+  const startSegment = segmentAt(index, start);
+  const endSegment = segmentAt(index, endPosition);
+  if (!startSegment || !endSegment) return null;
 
+  const startBoundary = boundaryAt(startSegment, start, "start");
+  const endBoundary = boundaryAt(endSegment, endPosition, "end");
   const range = document.createRange();
   range.setStart(startBoundary.node, startBoundary.offset);
   range.setEnd(endBoundary.node, endBoundary.offset);
@@ -182,7 +261,14 @@ function resolveBestRange(index: IndexedText, highlight: ReviewHighlight): Range
     score += commonPrefixLength(after, suffix) * 7;
     score += tokenOverlapScore(before, prefix) * 3;
     score += tokenOverlapScore(after, suffix) * 3;
-    score += semanticScore(index.starts[start]?.node.parentElement ?? null);
+    const segment = segmentAt(index, start);
+    const semanticNode =
+      segment?.kind === "text"
+        ? segment.node
+        : segment?.kind === "space"
+          ? segment.startBoundary.node
+          : null;
+    score += semanticScore(semanticNode?.parentElement ?? null);
 
     if (score > bestScore) {
       bestScore = score;

@@ -71,7 +71,15 @@ async function sendReviewHighlights(
   if (!tab?.id || !tab.url || !/^https?:/.test(tab.url)) return;
 
   const activeUrl = comparableUrl(tab.url);
-  const highlights = allImportReviewEvidenceViews(session)
+  const sourceIds = new Set(
+    (session.previewState.importSources ?? [])
+      .filter(
+        (source) =>
+          Boolean(source.url) && comparableUrl(String(source.url)) === activeUrl,
+      )
+      .map((source) => source.id),
+  );
+  const highlights = allImportReviewEvidenceViews(session, sourceIds)
     .filter(
       (entry) => entry.sourceUrl && comparableUrl(entry.sourceUrl) === activeUrl,
     )
