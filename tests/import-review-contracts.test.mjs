@@ -10,6 +10,7 @@ const root = resolve(fileURLToPath(new URL("..", import.meta.url)));
 let outputDir;
 let reviewModule;
 let stageModule;
+let formatModule;
 
 before(async () => {
   outputDir = await mkdtemp(join(tmpdir(), "burbot-import-review-"));
@@ -17,7 +18,9 @@ before(async () => {
     absWorkingDir: root,
     entryPoints: {
       schema: "src/shared/domain/schema.js",
+      geography: "src/shared/domain/geographyRuntime.ts",
       core: "src/shared/domain/core.js",
+      format: "src/shared/import/format.ts",
       review: "src/shared/import/review.ts",
       stage: "src/shared/import/stageReview.ts",
     },
@@ -30,7 +33,9 @@ before(async () => {
   });
 
   await import(pathToFileURL(join(outputDir, "schema.js")).href);
+  await import(pathToFileURL(join(outputDir, "geography.js")).href);
   await import(pathToFileURL(join(outputDir, "core.js")).href);
+  formatModule = await import(pathToFileURL(join(outputDir, "format.js")).href);
   reviewModule = await import(pathToFileURL(join(outputDir, "review.js")).href);
   stageModule = await import(pathToFileURL(join(outputDir, "stage.js")).href);
 });
@@ -950,5 +955,383 @@ test("import review can expose evidence from all imported objects at once", () =
     evidence.every(
       (entry) => entry.sourceUrl === "https://example.test/project",
     ),
+  );
+});
+
+
+test("portable import v1 supports geography, contacts, documents and B2C financing", () => {
+  const uuid = ids();
+  const document = {
+    version: 1,
+    offset_unit: "unicode_codepoint",
+    sources: [
+      {
+        key: "page",
+        type: "HTML",
+        url: "https://example.test/full",
+        snapshot: { text: "Pełny przykład" },
+      },
+      {
+        key: "pdf",
+        type: "PDF",
+        url: "https://example.test/regulamin.pdf",
+        snapshot: { text: "Regulamin" },
+      },
+    ],
+    objects: [
+      {
+        key: "operator-1",
+        type: "operator",
+        data: {
+          name: "Operator Demo",
+          role: "OPERATOR",
+        },
+        contacts: [
+          { key: "email-biuro", kind: "EMAIL", value: "biuro@example.test" },
+          { key: "telefon-biuro", kind: "PHONE", value: "+48 123 456 789" },
+        ],
+      },
+      {
+        key: "project-1",
+        type: "project",
+        data: {
+          name: "Projekt Demo",
+          operator_id: { $ref: "operator-1" },
+          type: "B2C",
+        },
+        geography: [
+          {
+            key: "geo-maz",
+            type: "WOJEWODZTWO",
+            role: "OBEJMUJE",
+            value: "mazowieckie",
+          },
+          {
+            key: "geo-warszawa",
+            type: "PODREGION",
+            role: "WYKLUCZA",
+            value: "miasto Warszawa",
+          },
+        ],
+        files: [
+          {
+            source: "pdf",
+            source_page: "page",
+            name: "Regulamin.pdf",
+          },
+        ],
+        financing: [
+          {
+            key: "b2c-main",
+            company_size: "B2C",
+            data: {
+              refund_percent_standard: 80,
+              max_per_person_pln: 10000,
+              own_contribution_form: "CASH",
+            },
+          },
+        ],
+        documents: [
+          {
+            key: "doc-application",
+            document_type_key: "psf_application_form",
+            data: {
+              requirement: "REQUIRED",
+              auto_fill: true,
+              notes: "Wymagany formularz.",
+            },
+          },
+        ],
+      },
+    ],
+  };
+
+  const state = formatModule.importDocumentIntoState(
+    BurbotCore.empty(),
+    document,
+    0,
+    uuid,
+    "2026-09-24T09:00:00.000Z",
+  );
+
+  const operator = state.objects.find((object) => object.importKey === "operator-1");
+  const project = state.objects.find((object) => object.importKey === "project-1");
+  assert.ok(operator);
+  assert.ok(project);
+
+  assert.deepEqual(
+    state.operatorContacts.map((row) => ({
+      importKey: row.importKey,
+      kind: row.kind,
+      value: row.value,
+    })),
+    [
+      { importKey: "email-biuro", kind: "EMAIL", value: "biuro@example.test" },
+      { importKey: "telefon-biuro", kind: "PHONE", value: "+48 123 456 789" },
+    ],
+  );
+
+  assert.deepEqual(
+    state.geographies.map((row) => ({
+      importKey: row.importKey,
+      type: row.type,
+      role: row.role,
+      value: row.value,
+    })),
+    [
+      {
+        importKey: "geo-maz",
+        type: "WOJEWODZTWO",
+        role: "OBEJMUJE",
+        value: "mazowieckie",
+      },
+      {
+        importKey: "geo-warszawa",
+        type: "PODREGION",
+        role: "WYKLUCZA",
+        value: "miasto Warszawa",
+      },
+    ],
+  );
+
+  assert.equal(state.fileSources.length, 1);
+  assert.equal(state.financingRules[0].company_size, "B2C");
+  assert.equal(state.financingRules[0].max_per_person_pln, 10000);
+  assert.deepEqual(
+    {
+      importKey: state.documentRequirements[0].importKey,
+      document_type_key: state.documentRequirements[0].document_type_key,
+      requirement: state.documentRequirements[0].requirement,
+      auto_fill: state.documentRequirements[0].auto_fill,
+      notes: state.documentRequirements[0].notes,
+    },
+    {
+      importKey: "doc-application",
+      document_type_key: "psf_application_form",
+      requirement: "REQUIRED",
+      auto_fill: true,
+      notes: "Wymagany formularz.",
+    },
+  );
+});
+
+test("import approval plan preserves nested portable configuration", () => {
+  const uuid = ids();
+  const document = {
+    version: 1,
+    offset_unit: "unicode_codepoint",
+    sources: [],
+    objects: [
+      {
+        key: "project-full",
+        type: "project",
+        data: { name: "Projekt pełny" },
+        geography: [
+          {
+            key: "geo-1",
+            type: "WOJEWODZTWO",
+            role: "OBEJMUJE",
+            value: "mazowieckie",
+          },
+        ],
+        financing: [
+          {
+            key: "fin-b2c",
+            company_size: "B2C",
+            data: { refund_percent_standard: 80 },
+          },
+        ],
+        documents: [
+          {
+            key: "doc-1",
+            document_type_key: "psf_application_form",
+            data: { requirement: "REQUIRED", auto_fill: false },
+          },
+        ],
+      },
+    ],
+  };
+
+  const session = reviewModule.createImportReviewSession(
+    document,
+    "full.json",
+    uuid,
+    "2026-09-24T09:00:00.000Z",
+  );
+  const plan = reviewModule.buildImportApprovalPlan(
+    session,
+    session.objectOrder[0],
+  );
+  const portable = plan.document.objects.at(-1);
+
+  assert.equal(portable.geography[0].key, "geo-1");
+  assert.equal(portable.financing[0].company_size, "B2C");
+  assert.equal(portable.documents[0].document_type_key, "psf_application_form");
+});
+
+
+test("existing object approval merges imported geography contacts and documents", () => {
+  const uuid = ids();
+  const original = formatModule.importDocumentIntoState(
+    BurbotCore.empty(),
+    {
+      version: 1,
+      offset_unit: "unicode_codepoint",
+      sources: [],
+      objects: [
+        {
+          key: "operator-existing",
+          type: "operator",
+          data: { name: "Operator Existing", role: "OPERATOR" },
+        },
+        {
+          key: "project-existing",
+          type: "project",
+          data: {
+            name: "Projekt Existing",
+            operator_id: { $ref: "operator-existing" },
+          },
+        },
+      ],
+    },
+    0,
+    uuid,
+    "2026-09-24T08:00:00.000Z",
+  );
+
+  const operator = original.objects.find(
+    (object) => object.importKey === "operator-existing",
+  );
+  const project = original.objects.find(
+    (object) => object.importKey === "project-existing",
+  );
+  assert.ok(operator);
+  assert.ok(project);
+
+  const operatorSession = reviewModule.createImportReviewSession(
+    {
+      version: 1,
+      offset_unit: "unicode_codepoint",
+      sources: [],
+      objects: [
+        {
+          key: "operator-existing",
+          type: "operator",
+          data: { name: "Operator Existing", role: "OPERATOR" },
+          contacts: [
+            {
+              key: "contact-email",
+              kind: "EMAIL",
+              value: "kontakt@example.test",
+            },
+          ],
+        },
+      ],
+    },
+    "operator-update.json",
+    uuid,
+    "2026-09-24T09:00:00.000Z",
+  );
+  const operatorPlan = reviewModule.buildImportApprovalPlan(
+    operatorSession,
+    operatorSession.objectOrder[0],
+    original,
+  );
+  const operatorStaged = stageModule.stageImportReviewObject(
+    original,
+    operatorPlan,
+    uuid,
+    "2026-09-24T09:01:00.000Z",
+  );
+
+  assert.equal(operatorStaged.updatedExisting, true);
+  assert.equal(
+    operatorStaged.state.operatorContacts.find(
+      (row) => row.objectId === operator.id && row.importKey === "contact-email",
+    )?.value,
+    "kontakt@example.test",
+  );
+
+  const projectSession = reviewModule.createImportReviewSession(
+    {
+      version: 1,
+      offset_unit: "unicode_codepoint",
+      sources: [],
+      objects: [
+        {
+          key: "operator-existing",
+          type: "operator",
+          data: { name: "Operator Existing" },
+        },
+        {
+          key: "project-existing",
+          type: "project",
+          data: {
+            name: "Projekt Existing",
+            operator_id: { $ref: "operator-existing" },
+          },
+          geography: [
+            {
+              key: "geo-existing",
+              type: "WOJEWODZTWO",
+              role: "OBEJMUJE",
+              value: "mazowieckie",
+            },
+          ],
+          documents: [
+            {
+              key: "doc-existing",
+              document_type_key: "psf_application_form",
+              data: {
+                requirement: "REQUIRED",
+                auto_fill: true,
+                notes: "Aktualizacja.",
+              },
+            },
+          ],
+        },
+      ],
+    },
+    "project-update.json",
+    uuid,
+    "2026-09-24T09:02:00.000Z",
+  );
+
+  // The referenced operator already exists under the same stable import key.
+  const projectPreview = projectSession.previewState.objects.find(
+    (object) => object.importKey === "project-existing",
+  );
+  assert.ok(projectPreview);
+  const projectPlan = reviewModule.buildImportApprovalPlan(
+    projectSession,
+    projectPreview.id,
+    operatorStaged.state,
+  );
+  const projectStaged = stageModule.stageImportReviewObject(
+    operatorStaged.state,
+    projectPlan,
+    uuid,
+    "2026-09-24T09:03:00.000Z",
+  );
+
+  assert.equal(projectStaged.updatedExisting, true);
+  assert.equal(
+    projectStaged.state.geographies.find(
+      (row) => row.objectId === project.id && row.importKey === "geo-existing",
+    )?.value,
+    "mazowieckie",
+  );
+  assert.deepEqual(
+    {
+      requirement: projectStaged.state.documentRequirements.find(
+        (row) =>
+          row.objectId === project.id && row.importKey === "doc-existing",
+      )?.requirement,
+      auto_fill: projectStaged.state.documentRequirements.find(
+        (row) =>
+          row.objectId === project.id && row.importKey === "doc-existing",
+      )?.auto_fill,
+    },
+    { requirement: "REQUIRED", auto_fill: true },
   );
 });

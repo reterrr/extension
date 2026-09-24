@@ -67,6 +67,7 @@ export interface LegacyStoredObject {
 export interface LegacyStoredOperatorContact {
   id: string;
   objectId: string;
+  importKey?: string;
   kind: "EMAIL" | "PHONE";
   variant_no: number;
   value: string;
@@ -76,6 +77,7 @@ export interface LegacyStoredOperatorContact {
 export interface LegacyStoredGeography {
   id: string;
   objectId: string;
+  importKey?: string;
   type: string;
   role: string;
   value: string;

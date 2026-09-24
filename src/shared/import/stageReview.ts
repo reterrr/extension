@@ -304,6 +304,102 @@ function stageExistingObjectUpdate(
     }
   }
 
+  const importedGeography = (importedState.geographies ?? []).filter(
+    (row) => row.objectId === importedObject.id,
+  );
+  for (const importedRow of importedGeography) {
+    let row = (state.geographies ?? []).find(
+      (candidate) =>
+        candidate.objectId === target.id &&
+        importedRow.importKey &&
+        candidate.importKey === importedRow.importKey,
+    );
+    row ??= (state.geographies ?? []).find(
+      (candidate) =>
+        candidate.objectId === target.id &&
+        candidate.type === importedRow.type &&
+        candidate.role === importedRow.role &&
+        candidate.value === importedRow.value,
+    );
+    if (row) {
+      row.importKey = importedRow.importKey;
+      row.type = importedRow.type;
+      row.role = importedRow.role;
+      row.value = importedRow.value;
+    } else {
+      (state.geographies ||= []).push({
+        ...importedRow,
+        id: uuid(),
+        objectId: target.id,
+      });
+    }
+  }
+
+  const importedContacts = (importedState.operatorContacts ?? []).filter(
+    (row) => row.objectId === importedObject.id,
+  );
+  for (const importedRow of importedContacts) {
+    let row = (state.operatorContacts ?? []).find(
+      (candidate) =>
+        candidate.objectId === target.id &&
+        importedRow.importKey &&
+        candidate.importKey === importedRow.importKey,
+    );
+    row ??= (state.operatorContacts ?? []).find(
+      (candidate) =>
+        candidate.objectId === target.id &&
+        candidate.kind === importedRow.kind &&
+        Number(candidate.variant_no) === Number(importedRow.variant_no),
+    );
+    if (row) {
+      row.importKey = importedRow.importKey;
+      row.kind = importedRow.kind;
+      row.variant_no = importedRow.variant_no;
+      row.value = importedRow.value;
+    } else {
+      (state.operatorContacts ||= []).push({
+        ...importedRow,
+        id: uuid(),
+        objectId: target.id,
+      });
+    }
+  }
+
+  const importedDocuments = (importedState.documentRequirements ?? []).filter(
+    (row) => row.objectId === importedObject.id,
+  );
+  for (const importedRow of importedDocuments) {
+    let row = (state.documentRequirements ?? []).find(
+      (candidate) =>
+        candidate.objectId === target.id &&
+        importedRow.importKey &&
+        candidate.importKey === importedRow.importKey,
+    );
+    row ??= (state.documentRequirements ?? []).find(
+      (candidate) =>
+        candidate.objectId === target.id &&
+        candidate.document_type_key === importedRow.document_type_key,
+    );
+    if (!row) {
+      row = {
+        id: uuid(),
+        objectId: target.id,
+        importKey: importedRow.importKey,
+        document_type_key: importedRow.document_type_key,
+      };
+      (state.documentRequirements ||= []).push(row);
+    } else {
+      row.importKey = importedRow.importKey;
+      row.document_type_key = importedRow.document_type_key;
+    }
+
+    for (const field of Object.keys(BurbotDocuments.fields ?? {})) {
+      if (Object.prototype.hasOwnProperty.call(importedRow, field)) {
+        row[field] = importedRow[field];
+      }
+    }
+  }
+
   replaceReviewedRules(
     state,
     target.id,

@@ -13,7 +13,17 @@ const IMPORTABLE_OBJECT_TYPES = new Set<LegacyObjectType>([
   "operator",
 ]);
 const IMPORT_SOURCE_TYPES = new Set<ImportSourceType>(["HTML", "PDF", "XLSX"]);
-const FUNDING_SIZES = new Set(["MICRO", "SMALL", "MEDIUM", "LARGE"]);
+const FUNDING_SIZES = new Set(["MICRO", "SMALL", "MEDIUM", "LARGE", "B2C"]);
+const GEOGRAPHY_TYPES = new Set([
+  "POLSKA",
+  "WOJEWODZTWO",
+  "PODREGION",
+  "POWIAT",
+  "GMINA",
+  "MIASTO_NA_PRAWACH_POWIATU",
+]);
+const GEOGRAPHY_ROLES = new Set(["OBEJMUJE", "WYKLUCZA"]);
+const OPERATOR_CONTACT_KINDS = new Set(["EMAIL", "PHONE"]);
 
 interface ImportReference {
   $ref: string;
@@ -53,13 +63,35 @@ interface ImportFinancingVariant {
   data: Record<string, unknown>;
 }
 
+interface ImportGeography {
+  key: string;
+  type: string;
+  role: string;
+  value: string;
+}
+
+interface ImportOperatorContact {
+  key: string;
+  kind: string;
+  value: string;
+}
+
+interface ImportDocumentRequirement {
+  key: string;
+  document_type_key: string;
+  data: Record<string, unknown>;
+}
+
 interface ImportObject {
   key: string;
   type: LegacyObjectType;
   data: Record<string, unknown>;
   evidence?: Record<string, ImportEvidence[]>;
   files?: ImportFileAttachment[];
+  geography?: ImportGeography[];
+  contacts?: ImportOperatorContact[];
   financing?: ImportFinancingVariant[];
+  documents?: ImportDocumentRequirement[];
 }
 
 interface BurbotImportV1 {
@@ -202,6 +234,86 @@ function parseDocument(input: unknown): BurbotImportV1 {
       });
     }
 
+
+    let geography: ImportGeography[] | undefined;
+    if (raw.geography !== undefined) {
+      if (!Array.isArray(raw.geography)) {
+        throw new Error(`${path}.geography must be an array.`);
+      }
+      geography = raw.geography.map((entry, geographyIndex) => {
+        const geographyPath = `${path}.geography[${geographyIndex}]`;
+        if (!isRecord(entry)) throw new Error(`${geographyPath} must be an object.`);
+        const type = requiredString(entry.type, `${geographyPath}.type`);
+        const role = requiredString(entry.role, `${geographyPath}.role`);
+        if (!GEOGRAPHY_TYPES.has(type)) {
+          throw new Error(`${geographyPath}.type is not a supported geography type.`);
+        }
+        if (!GEOGRAPHY_ROLES.has(role)) {
+          throw new Error(`${geographyPath}.role must be OBEJMUJE or WYKLUCZA.`);
+        }
+        return {
+          key: requiredString(entry.key, `${geographyPath}.key`),
+          type,
+          role,
+          value: requiredString(entry.value, `${geographyPath}.value`),
+        };
+      });
+      uniqueByKey(geography, `${path} geography`);
+    }
+
+    let contacts: ImportOperatorContact[] | undefined;
+    if (raw.contacts !== undefined) {
+      if (!Array.isArray(raw.contacts)) {
+        throw new Error(`${path}.contacts must be an array.`);
+      }
+      contacts = raw.contacts.map((entry, contactIndex) => {
+        const contactPath = `${path}.contacts[${contactIndex}]`;
+        if (!isRecord(entry)) throw new Error(`${contactPath} must be an object.`);
+        const kind = requiredString(entry.kind, `${contactPath}.kind`);
+        if (!OPERATOR_CONTACT_KINDS.has(kind)) {
+          throw new Error(`${contactPath}.kind must be EMAIL or PHONE.`);
+        }
+        return {
+          key: requiredString(entry.key, `${contactPath}.key`),
+          kind,
+          value: requiredString(entry.value, `${contactPath}.value`),
+        };
+      });
+      uniqueByKey(contacts, `${path} contacts`);
+    }
+
+    let documents: ImportDocumentRequirement[] | undefined;
+    if (raw.documents !== undefined) {
+      if (!Array.isArray(raw.documents)) {
+        throw new Error(`${path}.documents must be an array.`);
+      }
+      documents = raw.documents.map((entry, documentIndex) => {
+        const documentPath = `${path}.documents[${documentIndex}]`;
+        if (!isRecord(entry)) throw new Error(`${documentPath} must be an object.`);
+        if (!isRecord(entry.data)) {
+          throw new Error(`${documentPath}.data must be an object.`);
+        }
+        return {
+          key: requiredString(entry.key, `${documentPath}.key`),
+          document_type_key: requiredString(
+            entry.document_type_key,
+            `${documentPath}.document_type_key`,
+          ),
+          data: entry.data,
+        };
+      });
+      uniqueByKey(documents, `${path} documents`);
+      const documentTypes = new Set<string>();
+      for (const document of documents) {
+        if (documentTypes.has(document.document_type_key)) {
+          throw new Error(
+            `Duplicate ${path} document_type_key: ${document.document_type_key}`,
+          );
+        }
+        documentTypes.add(document.document_type_key);
+      }
+    }
+
     let financing: ImportFinancingVariant[] | undefined;
     if (raw.financing !== undefined) {
       if (!Array.isArray(raw.financing)) {
@@ -215,7 +327,7 @@ function parseDocument(input: unknown): BurbotImportV1 {
           `${financePath}.company_size`,
         );
         if (!FUNDING_SIZES.has(companySize)) {
-          throw new Error(`${financePath}.company_size must be MICRO, SMALL, MEDIUM or LARGE.`);
+          throw new Error(`${financePath}.company_size must be MICRO, SMALL, MEDIUM, LARGE or B2C.`);
         }
         if (!isRecord(entry.data)) throw new Error(`${financePath}.data must be an object.`);
         return {
@@ -227,7 +339,17 @@ function parseDocument(input: unknown): BurbotImportV1 {
       uniqueByKey(financing, `${path} financing`);
     }
 
-    return { key, type, data: raw.data, evidence, files, financing };
+    return {
+      key,
+      type,
+      data: raw.data,
+      evidence,
+      files,
+      geography,
+      contacts,
+      financing,
+      documents,
+    };
   });
 
   uniqueByKey(sources, "source");
@@ -434,6 +556,88 @@ export function importDocumentIntoState(
           sourceImportKey: source.importKey,
           ...(pageSource ? { sourcePageImportKey: pageSource.importKey } : {}),
         });
+      }
+    }
+
+
+    if (item.geography?.length) {
+      if (!schema.geography) {
+        throw new Error(`Object type ${item.type} does not support geography.`);
+      }
+      for (const [geographyIndex, geography] of item.geography.entries()) {
+        const entry = globalThis.BurbotGeography?.catalog?.find(
+          (candidate: { type: string; value: string }) =>
+            candidate.type === geography.type && candidate.value === geography.value,
+        );
+        if (!entry) {
+          throw new Error(
+            `Unknown geography value ${geography.value} for type ${geography.type} in ${item.key}.geography[${geographyIndex}].`,
+          );
+        }
+        (state.geographies ||= []).push({
+          id: uuid(),
+          objectId: object.id,
+          importKey: geography.key,
+          type: geography.type,
+          role: geography.role,
+          value: geography.value,
+        });
+      }
+    }
+
+    if (item.contacts?.length) {
+      if (item.type !== "operator" || !schema.contacts) {
+        throw new Error(`Object type ${item.type} does not support operator contacts.`);
+      }
+      const variantsByKind = new Map<string, number>();
+      for (const contact of item.contacts) {
+        const variant = (variantsByKind.get(contact.kind) ?? 0) + 1;
+        variantsByKind.set(contact.kind, variant);
+        const definition = globalThis.BurbotOperatorContacts?.fields?.[contact.kind]?.value;
+        if (!definition) {
+          throw new Error(`Unknown operator contact kind ${contact.kind}.`);
+        }
+        (state.operatorContacts ||= []).push({
+          id: uuid(),
+          objectId: object.id,
+          importKey: contact.key,
+          kind: contact.kind,
+          variant_no: variant,
+          value: BurbotCore.coerceField(contact.value, definition, state),
+        });
+      }
+    }
+
+    if (item.documents?.length) {
+      if (!schema.configuration) {
+        throw new Error(`Object type ${item.type} does not support document requirements.`);
+      }
+      for (const document of item.documents) {
+        if (
+          !globalThis.BurbotDocuments?.catalog?.some(
+            (entry: { key: string }) => entry.key === document.document_type_key,
+          )
+        ) {
+          throw new Error(
+            `Unknown document type ${document.document_type_key} in ${item.key}.`,
+          );
+        }
+        const row: Record<string, unknown> = {
+          id: uuid(),
+          objectId: object.id,
+          importKey: document.key,
+          document_type_key: document.document_type_key,
+        };
+        for (const [field, rawValue] of Object.entries(document.data)) {
+          const definition = globalThis.BurbotDocuments?.fields?.[field];
+          if (!definition) {
+            throw new Error(
+              `Unknown document field ${field} in ${item.key}.${document.key}.`,
+            );
+          }
+          row[field] = BurbotCore.coerceField(rawValue, definition, state);
+        }
+        (state.documentRequirements ||= []).push(row);
       }
     }
 
