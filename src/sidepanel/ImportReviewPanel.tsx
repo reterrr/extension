@@ -836,8 +836,8 @@ export function ImportReviewPanel() {
                           (entry) => entry.field === field.field,
                         );
                         const hasSource = evidence.some((entry) => entry.sourceUrl);
-                        const color = field.evidenceCount
-                          ? selectorColor(evidenceColorKey(view, field.field))
+                        const color = evidence[0]
+                          ? selectorColor(evidenceColorKey(evidence[0]))
                           : null;
                         return (
                           <div
