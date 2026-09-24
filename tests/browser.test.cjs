@@ -172,32 +172,10 @@ test(
       /80%.*100.*000.*PLN/s,
     );
 
-    await f.click("#documents-panel > summary");
-    await f.click("#documents .document:first-of-type > summary");
-    await f.click(
-      '[data-target="document:msp_application_form"][data-field="requirement"]',
-    );
-    await f.setValue("REQUIRED");
-    await f.click("#save");
-    await until(
-      () =>
-        f.ui(
-          `document.querySelector('#active-label').textContent==='Auto-fill'`,
-        ),
-      "document auto-fill field",
-    );
-    await f.setValue(true);
-    await f.click("#save");
-    await until(
-      async () =>
-        (await f.state()).documentRequirements?.some(
-          (d) => d.document_type_key === "msp_application_form" && d.auto_fill,
-        ),
-      "document configuration",
-    );
-    assert.match(
-      await f.ui(`document.querySelector('#document-count').textContent`),
-      /1 required/,
+    assert.equal(
+      await f.ui(`!!document.querySelector('#documents-panel')`),
+      false,
+      "predefined document catalog must not be mounted",
     );
 
     await f.page.evaluate(() => {
@@ -228,7 +206,7 @@ test(
       `(()=>{const box=win.document.getElementById('sidebar-box');box.style.width='360px';box.style.minWidth='360px';box.style.maxWidth='360px';return true;})()`,
     );
     await f.ui(
-      `(()=>{document.querySelector('#documents-panel').open=false;window.scrollTo(0,0);return true;})()`,
+      `(()=>{window.scrollTo(0,0);return true;})()`,
     );
     assert.equal(
       await f.ui(`document.documentElement.scrollWidth<=innerWidth`),
