@@ -74,38 +74,39 @@ function canonicalText(root: Element): IndexedText {
 
   for (let current = walker.nextNode(); current; current = walker.nextNode()) {
     if (!(current instanceof Text)) continue;
-    if (current.parentElement?.closest("script,style,noscript,template")) continue;
+    const node = current;
+    if (node.parentElement?.closest("script,style,noscript,template")) continue;
 
     let runStart = -1;
     const flushRun = (runEnd: number) => {
       if (runStart < 0 || runEnd <= runStart) return;
       flushWhitespace();
-      const chunk = current.data.slice(runStart, runEnd);
+      const chunk = node.data.slice(runStart, runEnd);
       const start = text.length;
       text += chunk;
       segments.push({
         kind: "text",
         start,
         end: start + chunk.length,
-        node: current,
+        node,
         nodeStart: runStart,
       });
       runStart = -1;
     };
 
-    for (let offset = 0; offset < current.data.length; offset += 1) {
-      const character = current.data[offset];
+    for (let offset = 0; offset < node.data.length; offset += 1) {
+      const character = node.data[offset];
       if (/\s/.test(character)) {
         flushRun(offset);
         if (text.length) {
-          whitespaceStart ??= { node: current, offset };
-          whitespaceEnd = { node: current, offset: offset + 1 };
+          whitespaceStart ??= { node, offset };
+          whitespaceEnd = { node, offset: offset + 1 };
         }
         continue;
       }
       if (runStart < 0) runStart = offset;
     }
-    flushRun(current.data.length);
+    flushRun(node.data.length);
   }
 
   return { text, segments };
