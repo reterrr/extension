@@ -340,11 +340,26 @@ function translateObjectProgress(): void {
 function enhanceStaticStatuses(): void {
   translateObjectProgress();
 
-  const fileRows = document.querySelectorAll("#file-source-list .file-source-row").length;
+  const fileRows = document.querySelectorAll("#file-source-list .file-source-row");
+  const fileCount = fileRows.length;
+  const pendingFiles = Array.from(fileRows).filter(
+    (row) => (row as HTMLElement).dataset.classified !== "true",
+  ).length;
   const fileStatus = $("file-source-count");
   if (fileStatus) {
-    setText(fileStatus, fileRows ? itemLabel(fileRows, "plik", "pliki") : "Brak plików");
-    fileStatus.dataset.state = fileRows ? "complete" : "muted";
+    setText(
+      fileStatus,
+      !fileCount
+        ? "Brak plików"
+        : pendingFiles
+          ? `${itemLabel(fileCount, "plik", "pliki")} · ${pendingFiles} do oznaczenia`
+          : `${itemLabel(fileCount, "plik", "pliki")} · oznaczone`,
+    );
+    fileStatus.dataset.state = !fileCount
+      ? "muted"
+      : pendingFiles
+        ? "missing"
+        : "complete";
   }
 
   const geographyRows = document.querySelectorAll("#geography-list .geography-row").length;
