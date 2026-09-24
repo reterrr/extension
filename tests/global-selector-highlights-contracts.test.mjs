@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  IMPORT_EVIDENCE_LOCATOR_STORAGE_KEY,
+  buildImportedEvidenceAnchorRequests,
   buildStoredSelectorHighlights,
   sameSelectorPage,
 } from "../src/shared/selectorHighlights.js";
@@ -196,5 +198,81 @@ test("portable-import PDF evidence is not projected onto a webpage", () => {
   assert.equal(
     buildStoredSelectorHighlights(state, "https://example.test/regulamin.pdf").length,
     0,
+  );
+});
+
+
+test("import evidence uses a cached durable selector after one DOM materialization", () => {
+  const sourceText = "Projekt Demo. Nabór 4/2026 dla przedsiębiorców.";
+  const exact = "Nabór 4/2026";
+  const start = sourceText.indexOf(exact);
+  const state = {
+    objects: [
+      {
+        id: "recruitment-4",
+        type: "recruitment",
+        evidence: {
+          external_number: [
+            {
+              sourceId: "source-html",
+              charStart: start,
+              charEnd: start + exact.length,
+              rawValue: exact,
+            },
+          ],
+        },
+      },
+    ],
+    rules: [],
+    fieldEvidence: [],
+    importSources: [
+      {
+        id: "source-html",
+        type: "HTML",
+        url: "https://example.test/project",
+        snapshot: { text: sourceText },
+      },
+    ],
+  };
+
+  const requests = buildImportedEvidenceAnchorRequests(
+    state,
+    "https://example.test/project",
+    {},
+  );
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].quote.exact, exact);
+
+  const locator = {
+    pageUrl: "https://example.test/project",
+    selector: "#recruitment-number",
+    selectorFallbacks: ["main .recruitment-number"],
+    quote: {
+      exact,
+      prefix: "",
+      suffix: "",
+    },
+    resolvedAt: "2026-09-24T08:00:00.000Z",
+  };
+  const cache = { [requests[0].key]: locator };
+  const highlights = buildStoredSelectorHighlights(
+    state,
+    "https://example.test/project",
+    cache,
+  );
+
+  assert.equal(highlights.length, 1);
+  assert.equal(highlights[0].selector, "#recruitment-number");
+  assert.deepEqual(
+    highlights[0].selectorFallbacks,
+    ["main .recruitment-number"],
+  );
+  assert.equal(highlights[0].quote.exact, exact);
+});
+
+test("import evidence locator cache has a dedicated technical storage key", () => {
+  assert.equal(
+    IMPORT_EVIDENCE_LOCATOR_STORAGE_KEY,
+    "burbot:import-evidence-locators:v1",
   );
 });
