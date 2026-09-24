@@ -1,3 +1,6 @@
+export const IMPORT_EVIDENCE_LOCATOR_STORAGE_KEY =
+  "burbot:import-evidence-locators:v1";
+
 function comparablePageUrl(value) {
   try {
     const url = new URL(String(value ?? ""));
@@ -77,6 +80,74 @@ function importedEvidenceQuote(source, evidence) {
   };
 }
 
+export function importedEvidenceLocatorKey(
+  objectId,
+  field,
+  index,
+  evidence,
+) {
+  return [
+    String(objectId),
+    String(field),
+    String(index),
+    String(evidence?.sourceId ?? ""),
+    String(evidence?.charStart ?? ""),
+    String(evidence?.charEnd ?? ""),
+  ].join(":");
+}
+
+export function buildImportedEvidenceAnchorRequests(
+  state,
+  pageUrl,
+  locatorCache = {},
+) {
+  if (!state || !pageUrl) return [];
+
+  const sourcesById = new Map(
+    (state.importSources ?? []).map((source) => [String(source.id), source]),
+  );
+  const requests = [];
+
+  for (const object of state.objects ?? []) {
+    for (const [field, entries] of Object.entries(object.evidence ?? {})) {
+      entries.forEach((evidence, index) => {
+        const source = sourcesById.get(String(evidence.sourceId));
+        if (
+          !source?.url ||
+          source.type !== "HTML" ||
+          !sameSelectorPage(source.url, pageUrl)
+        ) {
+          return;
+        }
+
+        const quote = importedEvidenceQuote(source, evidence);
+        if (!quote) return;
+
+        const key = importedEvidenceLocatorKey(
+          object.id,
+          field,
+          index,
+          evidence,
+        );
+        const cached = locatorCache?.[key];
+        requests.push({
+          key,
+          objectId: String(object.id),
+          field: String(field),
+          sourceUrl: source.url,
+          quote,
+          ...(cached &&
+          sameSelectorPage(cached.pageUrl ?? source.url, source.url)
+            ? { cached }
+            : {}),
+        });
+      });
+    }
+  }
+
+  return requests;
+}
+
 
 /**
  * Return every saved selector/evidence item that belongs to the current page,
@@ -85,7 +156,11 @@ function importedEvidenceQuote(source, evidence) {
  * Duplicate visual targets are collapsed because stacking identical overlays
  * carries no extra information and is needlessly expensive.
  */
-export function buildStoredSelectorHighlights(state, pageUrl) {
+export function buildStoredSelectorHighlights(
+  state,
+  pageUrl,
+  locatorCache = {},
+) {
   if (!state || !pageUrl) return [];
 
   const highlights = [];
@@ -161,24 +236,38 @@ export function buildStoredSelectorHighlights(state, pageUrl) {
         const quote = importedEvidenceQuote(source, evidence);
         if (!quote) return;
 
-        // Imported portable evidence has no DOM selector. Use the page body as
-        // a quote-search container; the content runtime resolves the exact text
-        // range using exact/prefix/suffix.
-        const selector = "body";
-        const key = highlightKey(selector, quote);
+        const locatorKey = importedEvidenceLocatorKey(
+          object.id,
+          field,
+          index,
+          evidence,
+        );
+        const cached = locatorCache?.[locatorKey];
+        const cachedUsable =
+          cached &&
+          typeof cached.selector === "string" &&
+          cached.selector &&
+          sameSelectorPage(cached.pageUrl ?? source.url, source.url);
+
+        const selector = cachedUsable ? cached.selector : "body";
+        const resolvedQuote =
+          cachedUsable && cached.quote ? cached.quote : quote;
+        const fallbacks =
+          cachedUsable && Array.isArray(cached.selectorFallbacks)
+            ? cached.selectorFallbacks.filter(
+                (entry) => typeof entry === "string" && entry,
+              )
+            : [];
+
+        const key = highlightKey(selector, resolvedQuote);
         if (seen.has(key)) return;
         seen.add(key);
 
         highlights.push({
-          id:
-            "import-evidence:" +
-            String(object.id) +
-            ":" +
-            String(field) +
-            ":" +
-            String(index),
+          id: "import-evidence:" + locatorKey,
           selector,
-          quote,
+          ...(fallbacks.length ? { selectorFallbacks: fallbacks } : {}),
+          quote: resolvedQuote,
         });
       });
     }
