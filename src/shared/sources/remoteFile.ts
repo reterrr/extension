@@ -22,7 +22,7 @@ function decodedFileName(url: URL): string {
 export function createRemotePdfSourceCandidate(
   rawUrl: string,
   sourcePageUrl: string,
-  nameHint?: string | null,
+  _nameHint?: string | null,
 ): RemoteFileSourceCandidate {
   const sourcePage = httpUrl(sourcePageUrl);
   const url = httpUrl(rawUrl, sourcePage.href);
@@ -31,12 +31,13 @@ export function createRemotePdfSourceCandidate(
     throw new Error("Choose a PDF link ending in .pdf.");
   }
 
-  const cleanHint = nameHint?.replace(/\s+/g, " ").trim();
   return {
     fileType: "PDF",
     url: url.href,
     sourcePageUrl: sourcePage.href,
-    name: (cleanHint || decodedFileName(url)).slice(0, 500),
+    // File display names are canonical and come from the actual URL filename,
+    // never from link text or a predefined document catalog.
+    name: decodedFileName(url).slice(0, 500),
   };
 }
 
