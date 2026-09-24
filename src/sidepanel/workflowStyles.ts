@@ -190,7 +190,7 @@ html[data-workflow-mode="view"] .commit-panel-idle {
 /* Commit is a focused staged-diff surface. */
 html[data-workflow-mode="commit"] .import-review-panel,
 html[data-workflow-mode="commit"] .connection-bar,
-html[data-workflow-mode="commit"] main,
+html[data-workflow-mode="commit"] #workspace-main,
 html[data-workflow-mode="commit"] #notice,
 html[data-workflow-mode="commit"] #capture-hint,
 html[data-workflow-mode="commit"] #capture-area {
@@ -204,7 +204,7 @@ html[data-workflow-mode="commit"] .commit-panel {
 /* Import owns the review queue. */
 html[data-workflow-mode="import"] .commit-panel,
 html[data-workflow-mode="import"] .connection-bar,
-html[data-workflow-mode="import"] main,
+html[data-workflow-mode="import"] #workspace-main,
 html[data-workflow-mode="import"] #notice,
 html[data-workflow-mode="import"] #capture-hint,
 html[data-workflow-mode="import"] #capture-area {
