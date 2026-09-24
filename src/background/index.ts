@@ -511,26 +511,50 @@ function mutateFileSource(
       "delivery_method",
     ] as const;
     const mutableSource = source as unknown as Record<string, unknown>;
+    const changedFields = new Set<string>();
     for (const field of textFields) {
       const raw = message.metadata[field];
-      if (raw === undefined || raw === null || String(raw).trim() === "") {
-        delete mutableSource[field];
-        continue;
-      }
-      const value = String(raw).replace(/\s+/g, " ").trim();
-      if (value.length > 5000) {
+      const next =
+        raw === undefined || raw === null || String(raw).trim() === ""
+          ? undefined
+          : String(raw).replace(/\s+/g, " ").trim();
+      if (next !== undefined && next.length > 5000) {
         throw new Error(`File metadata field ${field} is too long.`);
       }
-      mutableSource[field] = value;
+
+      const previous =
+        typeof mutableSource[field] === "string"
+          ? String(mutableSource[field])
+          : undefined;
+      if (previous !== next) changedFields.add(field);
+
+      if (next === undefined) delete mutableSource[field];
+      else mutableSource[field] = next;
     }
 
     const hasFields = message.metadata.has_fields;
+    let nextHasFields: boolean | undefined;
     if (hasFields === undefined || hasFields === null || hasFields === "") {
-      delete source.has_fields;
+      nextHasFields = undefined;
     } else if (typeof hasFields === "boolean") {
-      source.has_fields = hasFields;
+      nextHasFields = hasFields;
     } else {
       throw new Error("has_fields must be true, false or unset.");
+    }
+    if (source.has_fields !== nextHasFields) changedFields.add("has_fields");
+    if (nextHasFields === undefined) delete source.has_fields;
+    else source.has_fields = nextHasFields;
+
+    if (changedFields.size) {
+      state.importTargetEvidence = (state.importTargetEvidence ?? []).filter(
+        (entry) =>
+          !(
+            entry.objectId === object.id &&
+            entry.target?.kind === "file_source" &&
+            String(entry.target.id) === source.id &&
+            changedFields.has(entry.field)
+          ),
+      );
     }
   } else if (message.op === "REMOVE_FILE_SOURCE") {
     if (typeof message.sourceId !== "string") throw new Error("Source id is required.");
