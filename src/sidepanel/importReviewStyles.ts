@@ -376,7 +376,7 @@ style.textContent = `
   .import-review-approve { width: 100%; }
   .import-review-mode .commit-panel,
   .import-review-mode .connection-bar,
-  .import-review-mode main,
+  .import-review-mode #workspace-main,
   .import-review-mode #notice,
   .import-review-mode #capture-hint,
   .import-review-mode #capture-area {

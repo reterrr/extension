@@ -52,7 +52,7 @@ export function App() {
           <button id="connect" className="text-button">Połącz</button>
         </div>
       </div>
-      <main>
+      <main id="workspace-main">
         <section id="empty" className="empty-state">
           <span className="eyebrow">ZACZNIJ NA STRONIE</span>
           <h1>Zaznacz. Zapisz.<br />Uporządkuj dane.</h1>
