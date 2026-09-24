@@ -261,12 +261,16 @@ async function materializeImportedEvidenceForTab(
       pageUrl,
       cache,
     );
-    if (!requests.length) return cache;
+    if (!requests.length) {
+      if (changed) await writeEvidenceLocatorCache(cache);
+      return cache;
+    }
 
     let resolved: ResolvedEvidenceLocator[] = [];
     try {
       resolved = await requestEvidenceLocators(tabId, requests);
     } catch {
+      if (changed) await writeEvidenceLocatorCache(cache);
       return cache;
     }
 
