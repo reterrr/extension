@@ -221,6 +221,7 @@ function stageExistingObjectUpdate(
   target.updatedAt = now;
 
   const fundingIdByImportKey = new Map<string, string>();
+  const importedTargetIdMap = new Map<string, string>();
   const importedFunding = (importedState.financingRules ?? []).filter(
     (row) => row.objectId === importedObject.id,
   );
@@ -279,6 +280,10 @@ function stageExistingObjectUpdate(
       }
     }
     fundingIdByImportKey.set(importKey, String(row.id));
+    importedTargetIdMap.set(
+      `funding:${String(importedRow.id)}`,
+      String(row.id),
+    );
   }
 
   const importedFiles = (importedState.fileSources ?? []).filter(
@@ -327,12 +332,17 @@ function stageExistingObjectUpdate(
       row.role = importedRow.role;
       row.value = importedRow.value;
     } else {
-      (state.geographies ||= []).push({
+      row = {
         ...importedRow,
         id: uuid(),
         objectId: target.id,
-      });
+      };
+      (state.geographies ||= []).push(row);
     }
+    importedTargetIdMap.set(
+      `geography:${String(importedRow.id)}`,
+      String(row.id),
+    );
   }
 
   const importedContacts = (importedState.operatorContacts ?? []).filter(
@@ -357,12 +367,17 @@ function stageExistingObjectUpdate(
       row.variant_no = importedRow.variant_no;
       row.value = importedRow.value;
     } else {
-      (state.operatorContacts ||= []).push({
+      row = {
         ...importedRow,
         id: uuid(),
         objectId: target.id,
-      });
+      };
+      (state.operatorContacts ||= []).push(row);
     }
+    importedTargetIdMap.set(
+      `operator_contact:${String(importedRow.id)}`,
+      String(row.id),
+    );
   }
 
   const importedDocuments = (importedState.documentRequirements ?? []).filter(
@@ -398,6 +413,39 @@ function stageExistingObjectUpdate(
         row[field] = importedRow[field];
       }
     }
+    importedTargetIdMap.set(
+      `document:${String(importedRow.document_type_key)}`,
+      String(row.document_type_key),
+    );
+  }
+
+  const importedNestedEvidence = (importedState.importTargetEvidence ?? []).filter(
+    (entry) => entry.objectId === importedObject.id,
+  );
+  for (const evidence of importedNestedEvidence) {
+    const mappedTargetId = importedTargetIdMap.get(
+      `${evidence.target.kind}:${String(evidence.target.id)}`,
+    );
+    if (!mappedTargetId) continue;
+
+    state.importTargetEvidence = (state.importTargetEvidence ?? []).filter(
+      (entry) =>
+        !(
+          entry.objectId === target.id &&
+          entry.field === evidence.field &&
+          entry.target.kind === evidence.target.kind &&
+          String(entry.target.id) === mappedTargetId
+        ),
+    );
+    (state.importTargetEvidence ||= []).push({
+      ...evidence,
+      id: uuid(),
+      objectId: target.id,
+      target: {
+        kind: evidence.target.kind,
+        id: mappedTargetId,
+      },
+    });
   }
 
   replaceReviewedRules(

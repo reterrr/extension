@@ -605,6 +605,10 @@
           state.fieldEvidence = state.fieldEvidence.filter(
             (row) => row.objectId !== object.id,
           );
+        if (state.importTargetEvidence)
+          state.importTargetEvidence = state.importTargetEvidence.filter(
+            (row) => row.objectId !== object.id,
+          );
       } else if (message.op === "ASSIGN") {
         assign(state, object, message, uuid, now);
       } else if (message.op === "EDIT") {
@@ -737,6 +741,14 @@
               rule.target.id === message.geographyId
             ),
         );
+        state.importTargetEvidence = (state.importTargetEvidence || []).filter(
+          (row) =>
+            !(
+              row.objectId === object.id &&
+              row.target?.kind === "geography" &&
+              row.target.id === message.geographyId
+            ),
+        );
         object.updatedAt = now;
       } else if (message.op === "ADD_OPERATOR_CONTACT") {
         if (
@@ -789,6 +801,14 @@
               rule.target.id === message.contactId
             ),
         );
+        state.importTargetEvidence = (state.importTargetEvidence || []).filter(
+          (row) =>
+            !(
+              row.objectId === object.id &&
+              row.target?.kind === "operator_contact" &&
+              row.target.id === message.contactId
+            ),
+        );
         object.updatedAt = now;
       } else if (message.op === "ADD_FUNDING") {
         if (
@@ -838,6 +858,14 @@
               r.objectId === object.id &&
               r.target?.kind === "funding" &&
               r.target.id === message.variantId
+            ),
+        );
+        state.importTargetEvidence = (state.importTargetEvidence || []).filter(
+          (row) =>
+            !(
+              row.objectId === object.id &&
+              row.target?.kind === "funding" &&
+              row.target.id === message.variantId
             ),
         );
         object.updatedAt = now;

@@ -36,6 +36,14 @@ export interface ImportedEvidence {
   normalizedValue?: unknown;
 }
 
+export interface ImportedTargetEvidence extends ImportedEvidence {
+  id: string;
+  objectId: string;
+  field: string;
+  target: { kind: string; id: string };
+  targetImportKey?: string;
+}
+
 export interface LegacyStoredFieldEvidence {
   id: string;
   objectId: string;
@@ -123,6 +131,7 @@ export interface LegacyStorageState {
   operatorContacts?: LegacyStoredOperatorContact[];
   fileSources?: LegacyStoredFileSource[];
   importSources?: ImportedSource[];
+  importTargetEvidence?: ImportedTargetEvidence[];
   financingRules?: Array<Record<string, unknown>>;
   documentRequirements?: Array<Record<string, unknown>>;
   fieldEvidence?: LegacyStoredFieldEvidence[];

@@ -1335,3 +1335,172 @@ test("existing object approval merges imported geography contacts and documents"
     { requirement: "REQUIRED", auto_fill: true },
   );
 });
+
+
+test("nested portable evidence keeps char offsets and target identity", () => {
+  const uuid = ids();
+  const sourceText =
+    "Obszar: mazowieckie. Kontakt: kontakt@example.test. Refundacja: 80%. Dokument: Wymagany formularz.";
+  const evidence = (raw, normalizedValue) => ({
+    source: "page",
+    ...range(sourceText, raw),
+    ...(normalizedValue !== undefined
+      ? { normalized_value: normalizedValue }
+      : {}),
+  });
+
+  const state = formatModule.importDocumentIntoState(
+    BurbotCore.empty(),
+    {
+      version: 1,
+      offset_unit: "unicode_codepoint",
+      sources: [
+        {
+          key: "page",
+          type: "HTML",
+          url: "https://example.test/full",
+          snapshot: { text: sourceText },
+        },
+      ],
+      objects: [
+        {
+          key: "operator-nested",
+          type: "operator",
+          data: { name: "Operator Nested", role: "OPERATOR" },
+          contacts: [
+            {
+              key: "contact-email",
+              kind: "EMAIL",
+              value: "kontakt@example.test",
+              evidence: {
+                value: [evidence("kontakt@example.test")],
+              },
+            },
+          ],
+        },
+        {
+          key: "project-nested",
+          type: "project",
+          data: {
+            name: "Projekt Nested",
+            operator_id: { $ref: "operator-nested" },
+          },
+          geography: [
+            {
+              key: "geo-maz",
+              type: "WOJEWODZTWO",
+              role: "OBEJMUJE",
+              value: "mazowieckie",
+              evidence: {
+                value: [evidence("mazowieckie")],
+              },
+            },
+          ],
+          financing: [
+            {
+              key: "fin-b2c",
+              company_size: "B2C",
+              data: { refund_percent_standard: 80 },
+              evidence: {
+                refund_percent_standard: [evidence("80%", 80)],
+              },
+            },
+          ],
+          documents: [
+            {
+              key: "doc-form",
+              document_type_key: "psf_application_form",
+              data: {
+                requirement: "REQUIRED",
+                notes: "Wymagany formularz",
+              },
+              evidence: {
+                notes: [evidence("Wymagany formularz")],
+              },
+            },
+          ],
+        },
+      ],
+    },
+    0,
+    uuid,
+    "2026-09-24T10:00:00.000Z",
+  );
+
+  assert.equal(state.importTargetEvidence.length, 4);
+  assert.deepEqual(
+    new Set(state.importTargetEvidence.map((entry) => entry.target.kind)),
+    new Set(["operator_contact", "geography", "funding", "document"]),
+  );
+  assert.ok(
+    state.importTargetEvidence.every(
+      (entry) =>
+        entry.charStart >= 0 &&
+        entry.charEnd > entry.charStart &&
+        entry.sourceId,
+    ),
+  );
+});
+
+test("Import Review plan round-trips nested evidence", () => {
+  const uuid = ids();
+  const sourceText = "Obszar projektu: mazowieckie.";
+  const document = {
+    version: 1,
+    offset_unit: "unicode_codepoint",
+    sources: [
+      {
+        key: "page",
+        type: "HTML",
+        url: "https://example.test/project",
+        snapshot: { text: sourceText },
+      },
+    ],
+    objects: [
+      {
+        key: "project-evidence",
+        type: "project",
+        data: { name: "Projekt Evidence" },
+        geography: [
+          {
+            key: "geo-1",
+            type: "WOJEWODZTWO",
+            role: "OBEJMUJE",
+            value: "mazowieckie",
+            evidence: {
+              value: [
+                {
+                  source: "page",
+                  ...range(sourceText, "mazowieckie"),
+                },
+              ],
+            },
+          },
+        ],
+      },
+    ],
+  };
+
+  const session = reviewModule.createImportReviewSession(
+    document,
+    "nested-evidence.json",
+    uuid,
+    "2026-09-24T10:10:00.000Z",
+  );
+  const plan = reviewModule.buildImportApprovalPlan(
+    session,
+    session.objectOrder[0],
+  );
+  const portable = plan.document.objects.at(-1);
+
+  assert.equal(
+    portable.geography[0].evidence.value[0].raw_value,
+    "mazowieckie",
+  );
+  assert.equal(plan.document.sources[0].key, "page");
+  assert.ok(
+    reviewModule
+      .allImportReviewEvidenceViews(session)
+      .some((entry) => entry.rawValue === "mazowieckie"),
+  );
+});

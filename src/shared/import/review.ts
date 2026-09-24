@@ -273,15 +273,59 @@ function evidenceViews(
   return result;
 }
 
+function nestedEvidenceViews(
+  session: ImportReviewSession,
+  objectId: string,
+): ImportReviewEvidenceView[] {
+  const sources = new Map(
+    (session.previewState.importSources ?? []).map((source) => [source.id, source]),
+  );
+  const result: ImportReviewEvidenceView[] = [];
+
+  for (const entry of session.previewState.importTargetEvidence ?? []) {
+    if (entry.objectId !== objectId) continue;
+    const source = sources.get(entry.sourceId);
+    if (!source) continue;
+    const quote = quoteContext(source.snapshot.text, entry);
+    if (!quote.exact) continue;
+
+    const targetLabel =
+      entry.target.kind === "geography"
+        ? "Geografia"
+        : entry.target.kind === "operator_contact"
+          ? "Kontakt operatora"
+          : entry.target.kind === "funding"
+            ? "Finansowanie"
+            : entry.target.kind === "document"
+              ? "Dokument"
+              : entry.target.kind;
+
+    result.push({
+      id: `${entry.objectId}:${entry.target.kind}:${entry.targetImportKey ?? entry.target.id}:${entry.field}:${entry.id}`,
+      field: `__nested__:${entry.target.kind}:${entry.field}`,
+      fieldLabel: `${targetLabel} · ${entry.field}`,
+      rawValue: entry.rawValue,
+      ...(source.url ? { sourceUrl: source.url } : {}),
+      sourceType: source.type,
+      ...quote,
+    });
+  }
+
+  return result;
+}
+
 export function allImportReviewEvidenceViews(
   session: ImportReviewSession,
 ): ImportReviewEvidenceView[] {
-  return session.objectOrder.flatMap((objectId) =>
-    evidenceViews(
-      session,
-      session.previewState.objects.find((object) => object.id === objectId),
-    ),
-  );
+  return session.objectOrder.flatMap((objectId) => {
+    const object = session.previewState.objects.find(
+      (entry) => entry.id === objectId,
+    );
+    return [
+      ...evidenceViews(session, object),
+      ...nestedEvidenceViews(session, objectId),
+    ];
+  });
 }
 
 function fileViews(
@@ -470,6 +514,17 @@ export function editImportReviewFinancingField(
   const definition = BurbotFunding.fields[field];
   if (!definition) throw new Error(`Unknown financing field ${field}.`);
   row[field] = BurbotCore.coerceField(input, definition, session.previewState);
+  session.previewState.importTargetEvidence = (
+    session.previewState.importTargetEvidence ?? []
+  ).filter(
+    (entry) =>
+      !(
+        entry.objectId === object.id &&
+        entry.field === field &&
+        entry.target.kind === "funding" &&
+        String(entry.target.id) === String(row.id)
+      ),
+  );
   includeImportedFinancingField(
     session,
     object.id,
@@ -572,6 +627,36 @@ function portableEvidence(
     });
   }
   return evidence;
+}
+
+function portableTargetEvidence(
+  state: LegacyStorageState,
+  objectId: string,
+  target: { kind: string; id: string },
+  sourceById: Map<string, ImportedSource>,
+) {
+  const evidence: Record<string, Array<Record<string, unknown>>> = {};
+  for (const entry of state.importTargetEvidence ?? []) {
+    if (
+      entry.objectId !== objectId ||
+      entry.target.kind !== target.kind ||
+      String(entry.target.id) !== String(target.id)
+    ) {
+      continue;
+    }
+    const source = sourceById.get(entry.sourceId);
+    if (!source) throw new Error(`Missing import source ${entry.sourceId}.`);
+    (evidence[entry.field] ||= []).push({
+      source: source.importKey,
+      char_start: entry.charStart,
+      char_end: entry.charEnd,
+      raw_value: entry.rawValue,
+      ...(Object.prototype.hasOwnProperty.call(entry, "normalizedValue")
+        ? { normalized_value: entry.normalizedValue }
+        : {}),
+    });
+  }
+  return Object.keys(evidence).length ? evidence : undefined;
 }
 
 function explicitObjectFields(
@@ -791,6 +876,9 @@ export function buildImportApprovalPlan(
       .flat()
       .map((entry) => entry.sourceId),
   );
+  for (const entry of session.previewState.importTargetEvidence ?? []) {
+    if (entry.objectId === object.id) usedSourceIds.add(entry.sourceId);
+  }
 
   const selectedFiles = (session.previewState.fileSources ?? []).filter(
     (file) => file.objectId === object.id,
@@ -833,6 +921,21 @@ export function buildImportApprovalPlan(
       type: String(row.type),
       role: String(row.role),
       value: String(row.value),
+      ...(portableTargetEvidence(
+        session.previewState,
+        object.id,
+        { kind: "geography", id: String(row.id) },
+        sourceById,
+      )
+        ? {
+            evidence: portableTargetEvidence(
+              session.previewState,
+              object.id,
+              { kind: "geography", id: String(row.id) },
+              sourceById,
+            ),
+          }
+        : {}),
     }));
 
   const portableContacts = (session.previewState.operatorContacts ?? [])
@@ -841,6 +944,21 @@ export function buildImportApprovalPlan(
       key: String(row.importKey ?? row.id),
       kind: String(row.kind),
       value: String(row.value),
+      ...(portableTargetEvidence(
+        session.previewState,
+        object.id,
+        { kind: "operator_contact", id: String(row.id) },
+        sourceById,
+      )
+        ? {
+            evidence: portableTargetEvidence(
+              session.previewState,
+              object.id,
+              { kind: "operator_contact", id: String(row.id) },
+              sourceById,
+            ),
+          }
+        : {}),
     }));
 
   const portableDocuments = (session.previewState.documentRequirements ?? [])
@@ -852,10 +970,17 @@ export function buildImportApprovalPlan(
           data[field] = row[field];
         }
       }
+      const evidence = portableTargetEvidence(
+        session.previewState,
+        object.id,
+        { kind: "document", id: String(row.document_type_key) },
+        sourceById,
+      );
       return {
         key: String(row.importKey ?? row.document_type_key),
         document_type_key: String(row.document_type_key),
         data,
+        ...(evidence ? { evidence } : {}),
       };
     });
 
@@ -877,10 +1002,17 @@ export function buildImportApprovalPlan(
     for (const field of selectedFields) {
       if (Object.prototype.hasOwnProperty.call(row, field)) data[field] = row[field];
     }
+    const evidence = portableTargetEvidence(
+      session.previewState,
+      object.id,
+      { kind: "funding", id: String(row.id) },
+      sourceById,
+    );
     return {
       key,
       company_size: String(row.company_size),
       data,
+      ...(evidence ? { evidence } : {}),
     };
   });
 
