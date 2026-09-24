@@ -58,7 +58,6 @@ function globals() {
     BurbotCore?: { displayName?: (object: LegacyStoredObject) => string };
     BurbotSchema?: Record<string, { label?: string }>;
     BurbotGeography?: { catalog?: unknown[] };
-    BurbotDocuments?: { catalog?: unknown[] };
   };
 }
 
@@ -324,7 +323,6 @@ export function ViewManagerPanel() {
       view,
       schema: globals().BurbotSchema ?? {},
       geographyCatalog: (globals().BurbotGeography?.catalog ?? []) as never[],
-      documentCatalog: (globals().BurbotDocuments?.catalog ?? []) as never[],
       exportedAt,
     });
 
