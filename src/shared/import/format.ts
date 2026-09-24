@@ -327,7 +327,7 @@ function parseDocument(input: unknown): BurbotImportV1 {
           `${financePath}.company_size`,
         );
         if (!FUNDING_SIZES.has(companySize)) {
-          throw new Error(`${financePath}.company_size must be MICRO, SMALL, MEDIUM or LARGE.`);
+          throw new Error(`${financePath}.company_size must be MICRO, SMALL, MEDIUM, LARGE or B2C.`);
         }
         if (!isRecord(entry.data)) throw new Error(`${financePath}.data must be an object.`);
         return {
