@@ -1902,7 +1902,10 @@ import {
     // whole sidepanel into an empty white surface.
     try {
       const object = chosen();
-      publishActiveObject(object?.id || "");
+      // Disable auxiliary object renderers while the core editor is in the
+      // failure state. They listen to this contract and otherwise could repeat
+      // the same object-specific failure independently.
+      publishActiveObject("");
       $("empty").hidden = true;
       $("workspace").hidden = !object;
 
