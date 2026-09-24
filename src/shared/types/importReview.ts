@@ -49,6 +49,13 @@ export interface ImportReviewFileView {
   name: string;
   url: string;
   sourcePageUrl: string;
+  documentKind?: string;
+  purpose?: string;
+  hasFields?: boolean;
+  intendedUse?: string;
+  clientRequirement?: string;
+  signatureRequirement?: string;
+  deliveryMethod?: string;
 }
 
 export interface ImportReviewFinancingFieldView {
