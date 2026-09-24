@@ -556,10 +556,6 @@ import {
       expanded.add("operator_contact:" + descriptor.target.id);
       $("operator-contacts-panel").open = true;
     }
-    if (descriptor.target?.kind === "document") {
-      expanded.add("document:" + descriptor.target.id);
-      $("documents-panel").open = true;
-    }
     render();
   }
   function acceptCapture(value) {
@@ -1215,84 +1211,6 @@ import {
       root.append(group);
     }
   }
-  function renderDocuments(object) {
-    const root = $("documents");
-    root.replaceChildren();
-    const records = (db.documentRequirements || []).filter(
-      (r) => r.objectId === object.id,
-    );
-    const count = (requirement) =>
-      records.filter((r) => r.requirement === requirement).length;
-    $("document-count").textContent = records.length
-      ? count("REQUIRED") + " required · " + count("OPTIONAL") + " optional"
-      : "Not configured · View documents";
-    const groups = new Map([
-      ["Required", []],
-      ["Optional", []],
-      ["Internal", []],
-      ["Not configured", []],
-    ]);
-    for (const document of BurbotDocuments.catalog) {
-      const record =
-        records.find((r) => r.document_type_key === document.key) || {};
-      const group = document.internal
-        ? "Internal"
-        : record.requirement === "REQUIRED"
-          ? "Required"
-          : record.requirement === "OPTIONAL"
-            ? "Optional"
-            : "Not configured";
-      groups.get(group).push({ document, record });
-    }
-    for (const [name, entries] of groups) {
-      if (!entries.length) continue;
-      const group = node("div", "document-group");
-      group.append(node("h3", "", name));
-      for (const { document, record } of entries) {
-        const details = node("details", "document");
-        trackExpansion(details, "document:" + document.key);
-        const summary = node("summary"),
-          copy = node("span");
-        copy.append(node("span", "document-title", document.name));
-        const badges = node("span", "document-badges");
-        if (record.requirement)
-          badges.append(
-            node(
-              "span",
-              "badge",
-              record.requirement === "REQUIRED" ? "Required" : "Optional",
-            ),
-          );
-        if (record.auto_fill) badges.append(node("span", "badge", "Auto-fill"));
-        if (document.internal) badges.append(node("span", "badge", "Internal"));
-        if (!record.requirement)
-          badges.append(node("span", "muted", "Not configured"));
-        copy.append(badges);
-        summary.append(
-          node(
-            "span",
-            "document-mark",
-            record.requirement === "REQUIRED" ? "✓" : "○",
-          ),
-          copy,
-        );
-        details.append(summary);
-        for (const [field, definition] of Object.entries(
-          BurbotDocuments.fields,
-        ))
-          fieldRow(
-            details,
-            field,
-            definition,
-            record,
-            { kind: "document", id: document.key },
-            document.name,
-          );
-        group.append(details);
-      }
-      root.append(group);
-    }
-  }
   function renderReferenceObjectPicker(root, definition) {
     const referencedType = definition.references;
     const candidates = db.objects.filter((object) => object.type === referencedType);
@@ -1878,11 +1796,7 @@ import {
 
       const configured = !!BurbotSchema[object.type]?.configuration;
       $("funding-section").hidden = !configured;
-      $("documents-section").hidden = !configured;
-      if (configured) {
-        renderFunding(object);
-        renderDocuments(object);
-      }
+      if (configured) renderFunding(object);
       if (active && !descriptors.some((d) => keyOf(d) === keyOf(active))) {
         active = null;
         resetCapture();
@@ -1925,7 +1839,6 @@ import {
         "file-sources-section",
         "geography-section",
         "funding-section",
-        "documents-section",
       ]) {
         const section = $(id);
         if (section) section.hidden = true;
@@ -2044,7 +1957,6 @@ import {
     });
     active = next || null;
     if (next?.target) expanded.add(next.target.kind + ":" + next.target.id);
-    if (next?.target?.kind === "document") $("documents-panel").open = true;
     resetCapture();
     scheduleWorkspaceUiPersist();
     notice(
