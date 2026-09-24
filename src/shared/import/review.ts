@@ -273,15 +273,59 @@ function evidenceViews(
   return result;
 }
 
+function nestedEvidenceViews(
+  session: ImportReviewSession,
+  objectId: string,
+): ImportReviewEvidenceView[] {
+  const sources = new Map(
+    (session.previewState.importSources ?? []).map((source) => [source.id, source]),
+  );
+  const result: ImportReviewEvidenceView[] = [];
+
+  for (const entry of session.previewState.importTargetEvidence ?? []) {
+    if (entry.objectId !== objectId) continue;
+    const source = sources.get(entry.sourceId);
+    if (!source) continue;
+    const quote = quoteContext(source.snapshot.text, entry);
+    if (!quote.exact) continue;
+
+    const targetLabel =
+      entry.target.kind === "geography"
+        ? "Geografia"
+        : entry.target.kind === "operator_contact"
+          ? "Kontakt operatora"
+          : entry.target.kind === "funding"
+            ? "Finansowanie"
+            : entry.target.kind === "document"
+              ? "Dokument"
+              : entry.target.kind;
+
+    result.push({
+      id: `${entry.objectId}:${entry.target.kind}:${entry.targetImportKey ?? entry.target.id}:${entry.field}:${entry.id}`,
+      field: `__nested__:${entry.target.kind}:${entry.field}`,
+      fieldLabel: `${targetLabel} · ${entry.field}`,
+      rawValue: entry.rawValue,
+      ...(source.url ? { sourceUrl: source.url } : {}),
+      sourceType: source.type,
+      ...quote,
+    });
+  }
+
+  return result;
+}
+
 export function allImportReviewEvidenceViews(
   session: ImportReviewSession,
 ): ImportReviewEvidenceView[] {
-  return session.objectOrder.flatMap((objectId) =>
-    evidenceViews(
-      session,
-      session.previewState.objects.find((object) => object.id === objectId),
-    ),
-  );
+  return session.objectOrder.flatMap((objectId) => {
+    const object = session.previewState.objects.find(
+      (entry) => entry.id === objectId,
+    );
+    return [
+      ...evidenceViews(session, object),
+      ...nestedEvidenceViews(session, objectId),
+    ];
+  });
 }
 
 function fileViews(
