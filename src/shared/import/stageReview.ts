@@ -290,23 +290,44 @@ function stageExistingObjectUpdate(
     (file) => file.objectId === importedObject.id,
   );
   for (const importedFile of importedFiles) {
-    const existingFile = (state.fileSources ?? []).find(
+    let targetFile = (state.fileSources ?? []).find(
       (file) => file.objectId === target.id && file.url === importedFile.url,
     );
-    if (existingFile) {
-      existingFile.name = importedFile.name;
-      existingFile.sourcePageUrl = importedFile.sourcePageUrl;
-      existingFile.sourceImportKey = importedFile.sourceImportKey;
-      existingFile.sourcePageImportKey = importedFile.sourcePageImportKey;
-      existingFile.addedAt = now;
+    if (targetFile) {
+      targetFile.name = importedFile.name;
+      targetFile.sourcePageUrl = importedFile.sourcePageUrl;
+      targetFile.sourceImportKey = importedFile.sourceImportKey;
+      targetFile.sourcePageImportKey = importedFile.sourcePageImportKey;
+      targetFile.addedAt = now;
+
+      for (const field of [
+        "document_kind",
+        "purpose",
+        "has_fields",
+        "intended_use",
+        "client_requirement",
+        "signature_requirement",
+        "delivery_method",
+      ] as const) {
+        if (Object.prototype.hasOwnProperty.call(importedFile, field)) {
+          (targetFile as unknown as Record<string, unknown>)[field] =
+            importedFile[field];
+        }
+      }
     } else {
-      (state.fileSources ||= []).push({
+      targetFile = {
         ...importedFile,
         id: uuid(),
         objectId: target.id,
         addedAt: now,
-      });
+      };
+      (state.fileSources ||= []).push(targetFile);
     }
+
+    importedTargetIdMap.set(
+      `file_source:${String(importedFile.id)}`,
+      String(targetFile.id),
+    );
   }
 
   const importedGeography = (importedState.geographies ?? []).filter(
