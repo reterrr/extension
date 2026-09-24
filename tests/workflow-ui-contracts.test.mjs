@@ -105,7 +105,7 @@ test("newly created objects are added to Active View and focused", () => {
   );
   assert.match(
     workspace,
-    /if \(!view \|\| !objectInView\(view, message\.objectId\)\)[\s\S]*?addToObjectView\(message\.objectId\)[\s\S]*?chooseObject\(message\.objectId, true\)/,
+    /if \(!view \|\| !objectInView\(view, message\.objectId\)\)[\s\S]*?addToObjectView\(message\.objectId\)[\s\S]*?const focusComesFromPage = Number\.isInteger\(message\.tabId\)[\s\S]*?chooseObject\(message\.objectId, focusComesFromPage\)/,
   );
 });
 
@@ -209,4 +209,55 @@ test("sidepanel feature modules use the canonical active object contract", () =>
   );
   assert.match(selectors, /burbot:active-object-changed/);
   assert.match(reconnect, /burbot:active-object-changed/);
+});
+
+
+test("opening an existing Active View object is navigation-only", () => {
+  const workspace = source("src/sidepanel/workspace.js");
+  const manager = source("src/sidepanel/ViewManagerPanel.tsx");
+
+  assert.match(
+    manager,
+    /op: "FOCUS",[\s\S]*?windowId: currentWindow\.id,[\s\S]*?objectId,[\s\S]*?\}/,
+  );
+  assert.match(
+    workspace,
+    /const focusComesFromPage = Number\.isInteger\(message\.tabId\)[\s\S]*?chooseObject\(message\.objectId, focusComesFromPage\)/,
+  );
+  assert.match(
+    workspace,
+    /focusComesFromPage &&[\s\S]*?\(!port \|\| tabId !== message\.tabId\)[\s\S]*?await connect\(\)/,
+  );
+  assert.equal(
+    workspace.includes("chooseObject(message.objectId, true);"),
+    false,
+    "Active View navigation must not auto-select a missing field",
+  );
+});
+
+test("workspace render failures are contained instead of blanking the panel", () => {
+  const workspace = source("src/sidepanel/workspace.js");
+
+  assert.match(workspace, /function renderWorkspace\(\)/);
+  assert.match(
+    workspace,
+    /function render\(\)[\s\S]*?try \{[\s\S]*?renderWorkspace\(\)[\s\S]*?catch \(error\)[\s\S]*?renderFailure\(error\)/,
+  );
+  assert.match(
+    workspace,
+    /function renderFailure\(error\)[\s\S]*?Nie udało się wyświetlić szczegółów tego obiektu/,
+  );
+});
+
+test("React sidepanel has a visible crash recovery boundary", () => {
+  const main = source("src/sidepanel/main.tsx");
+  const boundary = source("src/sidepanel/SidepanelErrorBoundary.tsx");
+
+  assert.match(
+    main,
+    /<SidepanelErrorBoundary>[\s\S]*?<App \/>[\s\S]*?<\/SidepanelErrorBoundary>/,
+  );
+  assert.match(boundary, /getDerivedStateFromError/);
+  assert.match(boundary, /Odśwież Burbot/);
+  assert.match(boundary, /Dane nie zostały usunięte/);
 });

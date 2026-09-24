@@ -522,10 +522,25 @@ import {
       if (!view || !objectInView(view, message.objectId)) {
         await addToObjectView(message.objectId);
       }
-      chooseObject(message.objectId, true);
+      // Focusing an existing object from Active View is navigation only.
+      // Do not immediately select a missing field or reconnect the picker:
+      // both operations rebuild large editor subtrees and are only needed
+      // when focus originates from a webpage creation/capture flow.
+      const focusComesFromPage = Number.isInteger(message.tabId);
+      chooseObject(message.objectId, focusComesFromPage);
       scheduleWorkspaceUiPersist();
-      notice(message.note || "Choose a field to capture.");
-      if (!port || tabId !== message.tabId) await connect();
+      notice(
+        message.note ||
+          (focusComesFromPage
+            ? "Choose a field to capture."
+            : "Obiekt otwarty. Wybierz pole, jeśli chcesz je edytować."),
+      );
+      if (
+        focusComesFromPage &&
+        (!port || tabId !== message.tabId)
+      ) {
+        await connect();
+      }
     }
   }
   function selectField(descriptor) {
@@ -1800,7 +1815,7 @@ import {
     );
   }
 
-  function render() {
+  function renderWorkspace() {
     const view = normalizedObjectView();
 
     if (!view) {
@@ -1879,6 +1894,65 @@ import {
     void syncObjectWorkflowControls();
     restoreViewportAnchor();
   }
+  function renderFailure(error) {
+    console.error("Burbot workspace render failed", error);
+
+    // Keep the sidepanel usable even if one imported object contains a value
+    // that a specialized editor cannot render. Never let one object turn the
+    // whole sidepanel into an empty white surface.
+    try {
+      const object = chosen();
+      // Disable auxiliary object renderers while the core editor is in the
+      // failure state. They listen to this contract and otherwise could repeat
+      // the same object-specific failure independently.
+      publishActiveObject("");
+      $("empty").hidden = true;
+      $("workspace").hidden = !object;
+
+      if (object) {
+        $("object-kind").textContent =
+          BurbotSchema[object.type]?.label || object.type || "Obiekt";
+        $("object-title").textContent = C.displayName(object);
+        $("progress").textContent = "Nie udało się wyrenderować szczegółów";
+        $("rule-count").textContent = "";
+        $("progress-bar").max = 1;
+        $("progress-bar").value = 0;
+      }
+
+      $("fields").replaceChildren();
+      for (const id of [
+        "operator-contacts-section",
+        "file-sources-section",
+        "geography-section",
+        "funding-section",
+        "documents-section",
+      ]) {
+        const section = $(id);
+        if (section) section.hidden = true;
+      }
+      $("results").hidden = true;
+      $("capture-area").hidden = true;
+      $("capture-hint").hidden = true;
+
+      const message =
+        error instanceof Error ? error.message : String(error);
+      notice(
+        "Nie udało się wyświetlić szczegółów tego obiektu: " + message,
+        true,
+      );
+    } catch (fallbackError) {
+      console.error("Burbot workspace fallback render failed", fallbackError);
+    }
+  }
+
+  function render() {
+    try {
+      renderWorkspace();
+    } catch (error) {
+      renderFailure(error);
+    }
+  }
+
   function action(handler) {
     return async (event) => {
       event?.preventDefault();
