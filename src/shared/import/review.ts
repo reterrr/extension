@@ -109,8 +109,13 @@ function includeImportedFinancingField(
   byVariant[financingImportKey] = fields;
 }
 
-function quoteContext(text: string, evidence: ImportedEvidence) {
-  const codepoints = Array.from(text);
+type SourceCodepointCache = Map<string, string[]>;
+
+function quoteContext(
+  text: string,
+  evidence: ImportedEvidence,
+  codepoints: string[] = Array.from(text),
+) {
   return {
     exact: BurbotCore.clean(evidence.rawValue),
     prefix: BurbotCore.clean(
@@ -120,6 +125,18 @@ function quoteContext(text: string, evidence: ImportedEvidence) {
       codepoints.slice(evidence.charEnd, Math.min(codepoints.length, evidence.charEnd + 80)).join(""),
     ),
   };
+}
+
+function sourceCodepoints(
+  source: ImportedSource,
+  cache: SourceCodepointCache,
+): string[] {
+  let codepoints = cache.get(source.id);
+  if (!codepoints) {
+    codepoints = Array.from(source.snapshot.text);
+    cache.set(source.id, codepoints);
+  }
+  return codepoints;
 }
 
 export function createImportReviewSession(
@@ -245,6 +262,8 @@ function fieldViews(
 function evidenceViews(
   session: ImportReviewSession,
   object: LegacyStoredObject | undefined,
+  sourceIds?: ReadonlySet<string>,
+  codepointsBySource: SourceCodepointCache = new Map(),
 ): ImportReviewEvidenceView[] {
   if (!object?.evidence) return [];
   const fields = BurbotSchema[object.type]?.fields ?? {};
@@ -256,8 +275,12 @@ function evidenceViews(
   for (const [field, entries] of Object.entries(object.evidence)) {
     entries.forEach((evidence, index) => {
       const source = sources.get(evidence.sourceId);
-      if (!source) return;
-      const quote = quoteContext(source.snapshot.text, evidence);
+      if (!source || (sourceIds && !sourceIds.has(source.id))) return;
+      const quote = quoteContext(
+        source.snapshot.text,
+        evidence,
+        sourceCodepoints(source, codepointsBySource),
+      );
       if (!quote.exact) return;
       result.push({
         id: `${object.id}:${field}:${index}`,
@@ -276,6 +299,8 @@ function evidenceViews(
 function nestedEvidenceViews(
   session: ImportReviewSession,
   objectId: string,
+  sourceIds?: ReadonlySet<string>,
+  codepointsBySource: SourceCodepointCache = new Map(),
 ): ImportReviewEvidenceView[] {
   const sources = new Map(
     (session.previewState.importSources ?? []).map((source) => [source.id, source]),
@@ -285,8 +310,12 @@ function nestedEvidenceViews(
   for (const entry of session.previewState.importTargetEvidence ?? []) {
     if (entry.objectId !== objectId) continue;
     const source = sources.get(entry.sourceId);
-    if (!source) continue;
-    const quote = quoteContext(source.snapshot.text, entry);
+    if (!source || (sourceIds && !sourceIds.has(source.id))) continue;
+    const quote = quoteContext(
+      source.snapshot.text,
+      entry,
+      sourceCodepoints(source, codepointsBySource),
+    );
     if (!quote.exact) continue;
 
     const targetLabel =
@@ -318,14 +347,16 @@ function nestedEvidenceViews(
 
 export function allImportReviewEvidenceViews(
   session: ImportReviewSession,
+  sourceIds?: ReadonlySet<string>,
 ): ImportReviewEvidenceView[] {
+  const codepointsBySource: SourceCodepointCache = new Map();
   return session.objectOrder.flatMap((objectId) => {
     const object = session.previewState.objects.find(
       (entry) => entry.id === objectId,
     );
     return [
-      ...evidenceViews(session, object),
-      ...nestedEvidenceViews(session, objectId),
+      ...evidenceViews(session, object, sourceIds, codepointsBySource),
+      ...nestedEvidenceViews(session, objectId, sourceIds, codepointsBySource),
     ];
   });
 }
