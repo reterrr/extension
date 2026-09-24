@@ -514,6 +514,17 @@ export function editImportReviewFinancingField(
   const definition = BurbotFunding.fields[field];
   if (!definition) throw new Error(`Unknown financing field ${field}.`);
   row[field] = BurbotCore.coerceField(input, definition, session.previewState);
+  session.previewState.importTargetEvidence = (
+    session.previewState.importTargetEvidence ?? []
+  ).filter(
+    (entry) =>
+      !(
+        entry.objectId === object.id &&
+        entry.field === field &&
+        entry.target.kind === "funding" &&
+        String(entry.target.id) === String(row.id)
+      ),
+  );
   includeImportedFinancingField(
     session,
     object.id,
