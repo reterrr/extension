@@ -482,6 +482,10 @@
     fields: fundingFields,
   });
 
+  // Legacy compatibility only. The current workspace does not expose a
+  // predefined document-type catalog: real files are attached dynamically and
+  // classified on the file record itself. Keep this runtime only so old
+  // committed states/imports and extraction targets can still be read.
   globalThis.BurbotDocuments = Object.freeze({
     fields: {
       requirement: choice("Requirement", {

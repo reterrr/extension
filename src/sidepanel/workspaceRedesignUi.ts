@@ -22,7 +22,6 @@ const BUSINESS_PANEL_IDS = [
   "file-sources-panel",
   "geography-panel",
   "funding-panel",
-  "documents-panel",
 ] as const;
 
 function persistWorkspaceChrome(
@@ -323,47 +322,6 @@ function enhanceFunding(): void {
   }
 }
 
-function enhanceDocuments(): void {
-  const root = $("documents");
-  if (!root) return;
-
-  annotateFieldRows(root);
-
-  let total = 0;
-  let unconfigured = 0;
-  const translations: Record<string, string> = {
-    Required: "Wymagane",
-    Optional: "Opcjonalne",
-    Internal: "Wewnętrzne",
-    "Not configured": "Nie skonfigurowane",
-  };
-
-  for (const group of root.querySelectorAll<HTMLElement>(".document-group")) {
-    const heading = group.querySelector<HTMLElement>(":scope > h3");
-    const original = heading?.dataset.originalLabel || heading?.textContent?.trim() || "";
-    if (heading && !heading.dataset.originalLabel) heading.dataset.originalLabel = original;
-    const documents = group.querySelectorAll(".document").length;
-    total += documents;
-    if (original === "Not configured") unconfigured += documents;
-    if (heading && translations[original]) setText(heading, translations[original]);
-  }
-
-  const configured = Math.max(0, total - unconfigured);
-  const status = $("document-count");
-  if (status) {
-    setText(status, total ? `${configured}/${total} skonfigurowane` : "Brak dokumentów");
-    status.dataset.state = !total ? "muted" : configured === total ? "complete" : "missing";
-  }
-
-  const panel = $("documents-panel") as HTMLDetailsElement | null;
-  if (
-    panel &&
-    root.querySelector(".field-row.selected") &&
-    typeof restoredPanels["documents-panel"] !== "boolean"
-  ) {
-    setOpen(panel, true);
-  }
-}
 
 function translateObjectProgress(): void {
   const progress = $("progress");
@@ -382,11 +340,26 @@ function translateObjectProgress(): void {
 function enhanceStaticStatuses(): void {
   translateObjectProgress();
 
-  const fileRows = document.querySelectorAll("#file-source-list .file-source-row").length;
+  const fileRows = document.querySelectorAll("#file-source-list .file-source-row");
+  const fileCount = fileRows.length;
+  const pendingFiles = Array.from(fileRows).filter(
+    (row) => (row as HTMLElement).dataset.classified !== "true",
+  ).length;
   const fileStatus = $("file-source-count");
   if (fileStatus) {
-    setText(fileStatus, fileRows ? itemLabel(fileRows, "plik", "pliki") : "Brak plików");
-    fileStatus.dataset.state = fileRows ? "complete" : "muted";
+    setText(
+      fileStatus,
+      !fileCount
+        ? "Brak plików"
+        : pendingFiles
+          ? `${itemLabel(fileCount, "plik", "pliki")} · ${pendingFiles} do oznaczenia`
+          : `${itemLabel(fileCount, "plik", "pliki")} · oznaczone`,
+    );
+    fileStatus.dataset.state = !fileCount
+      ? "muted"
+      : pendingFiles
+        ? "missing"
+        : "complete";
   }
 
   const geographyRows = document.querySelectorAll("#geography-list .geography-row").length;
@@ -452,7 +425,6 @@ function enhanceAll(): void {
     restoreBusinessPanels(restoredPanels);
     enhanceFieldGroups();
     enhanceFunding();
-    enhanceDocuments();
     enhanceStaticStatuses();
     enhanceCaptureDock();
   } finally {

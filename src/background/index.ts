@@ -60,6 +60,7 @@ const ALLOWED_WRITES = new Set<string>([
   "ADD_GEOGRAPHY",
   "REMOVE_GEOGRAPHY",
   "ADD_FILE_SOURCE",
+  "UPDATE_FILE_SOURCE",
   "REMOVE_FILE_SOURCE",
   "ADD_OPERATOR_CONTACT",
   "REMOVE_OPERATOR_CONTACT",
@@ -487,6 +488,74 @@ function mutateFileSource(
       sourcePageUrl: file.sourcePageUrl,
       addedAt: now,
     });
+  } else if (message.op === "UPDATE_FILE_SOURCE") {
+    if (typeof message.sourceId !== "string") {
+      throw new Error("Source id is required.");
+    }
+    const source = (state.fileSources ?? []).find(
+      (entry) =>
+        entry.id === message.sourceId &&
+        entry.objectId === object.id,
+    );
+    if (!source) throw new Error("File source not found.");
+    if (!isRecord(message.metadata)) {
+      throw new Error("Invalid file metadata.");
+    }
+
+    const textFields = [
+      "document_kind",
+      "purpose",
+      "intended_use",
+      "client_requirement",
+      "signature_requirement",
+      "delivery_method",
+    ] as const;
+    const mutableSource = source as unknown as Record<string, unknown>;
+    const changedFields = new Set<string>();
+    for (const field of textFields) {
+      const raw = message.metadata[field];
+      const next =
+        raw === undefined || raw === null || String(raw).trim() === ""
+          ? undefined
+          : String(raw).replace(/\s+/g, " ").trim();
+      if (next !== undefined && next.length > 5000) {
+        throw new Error(`File metadata field ${field} is too long.`);
+      }
+
+      const previous =
+        typeof mutableSource[field] === "string"
+          ? String(mutableSource[field])
+          : undefined;
+      if (previous !== next) changedFields.add(field);
+
+      if (next === undefined) delete mutableSource[field];
+      else mutableSource[field] = next;
+    }
+
+    const hasFields = message.metadata.has_fields;
+    let nextHasFields: boolean | undefined;
+    if (hasFields === undefined || hasFields === null || hasFields === "") {
+      nextHasFields = undefined;
+    } else if (typeof hasFields === "boolean") {
+      nextHasFields = hasFields;
+    } else {
+      throw new Error("has_fields must be true, false or unset.");
+    }
+    if (source.has_fields !== nextHasFields) changedFields.add("has_fields");
+    if (nextHasFields === undefined) delete source.has_fields;
+    else source.has_fields = nextHasFields;
+
+    if (changedFields.size) {
+      state.importTargetEvidence = (state.importTargetEvidence ?? []).filter(
+        (entry) =>
+          !(
+            entry.objectId === object.id &&
+            entry.target?.kind === "file_source" &&
+            String(entry.target.id) === source.id &&
+            changedFields.has(entry.field)
+          ),
+      );
+    }
   } else if (message.op === "REMOVE_FILE_SOURCE") {
     if (typeof message.sourceId !== "string") throw new Error("Source id is required.");
     const sourceId = message.sourceId;
@@ -502,6 +571,14 @@ function mutateFileSource(
           rule.objectId === object.id &&
           rule.extraction.type === "pdfText" &&
           rule.extraction.sourceId === sourceId
+        ),
+    );
+    state.importTargetEvidence = (state.importTargetEvidence ?? []).filter(
+      (entry) =>
+        !(
+          entry.objectId === object.id &&
+          entry.target?.kind === "file_source" &&
+          String(entry.target.id) === sourceId
         ),
     );
   } else {
@@ -931,6 +1008,7 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
       );
     } else if (
       message.op === "ADD_FILE_SOURCE" ||
+      message.op === "UPDATE_FILE_SOURCE" ||
       message.op === "REMOVE_FILE_SOURCE"
     ) {
       next = mutateFileSource(state, message, now);

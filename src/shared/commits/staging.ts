@@ -9,6 +9,7 @@ const OBJECT_SCOPED_KEYS = [
   "financingRules",
   "documentRequirements",
   "fieldEvidence",
+  "importTargetEvidence",
 ] as const;
 
 function cloneState(state: LegacyStorageState): LegacyStorageState {
@@ -94,6 +95,11 @@ export function applyStagedObjects(draft: DraftCommit): LegacyStorageState {
     for (const entries of Object.values(object.evidence ?? {})) {
       for (const evidence of entries) usedSourceIds.add(String(evidence.sourceId));
     }
+  }
+
+  for (const evidence of draft.workingState.importTargetEvidence ?? []) {
+    if (!stagedIds.has(evidence.objectId)) continue;
+    usedSourceIds.add(String(evidence.sourceId));
   }
 
   for (const file of draft.workingState.fileSources ?? []) {

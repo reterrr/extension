@@ -261,3 +261,38 @@ test("React sidepanel has a visible crash recovery boundary", () => {
   assert.match(boundary, /Odśwież Burbot/);
   assert.match(boundary, /Dane nie zostały usunięte/);
 });
+
+
+test("files replace the predefined document catalog in the workspace", () => {
+  const app = source("src/sidepanel/App.tsx");
+  const workspace = source("src/sidepanel/workspace.js");
+  const files = source("src/sidepanel/fileSourcesUi.ts");
+  const background = source("src/background/index.ts");
+
+  assert.equal(app.includes('id="documents-panel"'), false);
+  assert.equal(app.includes('id="documents-section"'), false);
+  assert.equal(workspace.includes("renderDocuments(object)"), false);
+
+  for (const label of [
+    "Rodzaj",
+    "Cel",
+    "Zawiera pola?",
+    "Przeznaczenie",
+    "Wymagalność dla klienta",
+    "Podpis",
+    "Sposób dostarczenia",
+  ]) {
+    assert.ok(files.includes(label), `missing file classification label: ${label}`);
+  }
+
+  assert.match(files, /UPDATE_FILE_SOURCE/);
+  assert.match(background, /message\.op === "UPDATE_FILE_SOURCE"/);
+  assert.match(files, /Do oznaczenia/);
+});
+
+test("file display name comes from the actual PDF filename", () => {
+  const remote = source("src/shared/sources/remoteFile.ts");
+
+  assert.match(remote, /name: decodedFileName\(url\)\.slice\(0, 500\)/);
+  assert.equal(remote.includes("cleanHint || decodedFileName"), false);
+});

@@ -42,6 +42,7 @@ function state(objects) {
     financingRules: [],
     documentRequirements: [],
     fieldEvidence: [],
+    importTargetEvidence: [],
   };
 }
 
@@ -274,4 +275,62 @@ test("rebase after partial commit clears committed changes but preserves unstage
   assert.equal(draft.workingState.objects[0].values.number, "NEW-A");
   assert.equal(draft.workingState.objects[1].values.number, "NEW-B");
   assert.deepEqual(staging.changedObjectIds(draft), ["project-b"]);
+});
+
+
+test("staged file classification keeps nested evidence and its source", () => {
+  const base = state([projectA, projectB]);
+  const working = structuredClone(base);
+
+  working.fileSources.push({
+    id: "file-a",
+    objectId: "project-a",
+    fileType: "PDF",
+    url: "https://example.test/PUR.pdf",
+    name: "PUR.pdf",
+    sourcePageUrl: "https://example.test/project",
+    document_kind: "Oryginał operatora",
+    purpose: "Formularz do uzupełnienia",
+    has_fields: true,
+    addedAt: "2026-09-24T12:00:00.000Z",
+  });
+  working.importTargetEvidence.push({
+    id: "target-evidence-a",
+    objectId: "project-a",
+    field: "purpose",
+    target: { kind: "file_source", id: "file-a" },
+    targetImportKey: "pdf-pur",
+    sourceId: "source-page-a",
+    charStart: 0,
+    charEnd: 24,
+    rawValue: "Formularz do uzupełnienia",
+  });
+  working.importSources.push({
+    id: "source-page-a",
+    importKey: "page-a",
+    type: "HTML",
+    url: "https://example.test/project",
+    snapshot: { text: "Formularz do uzupełnienia" },
+    importedAt: "2026-09-24T12:00:00.000Z",
+  });
+
+  const draft = {
+    id: "draft-files",
+    createdAt: "2026-09-24T12:00:00.000Z",
+    updatedAt: "2026-09-24T12:00:00.000Z",
+    baseRevision: 7,
+    baseState: base,
+    workingState: working,
+    stagedObjectIds: ["project-a"],
+  };
+
+  const committed = staging.applyStagedObjects(draft);
+  assert.equal(committed.fileSources.length, 1);
+  assert.equal(committed.fileSources[0].purpose, "Formularz do uzupełnienia");
+  assert.equal(committed.importTargetEvidence.length, 1);
+  assert.equal(committed.importTargetEvidence[0].target.kind, "file_source");
+  assert.deepEqual(
+    committed.importSources.map((source) => source.id),
+    ["source-page-a"],
+  );
 });

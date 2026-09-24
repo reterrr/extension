@@ -296,9 +296,11 @@ function nestedEvidenceViews(
           ? "Kontakt operatora"
           : entry.target.kind === "funding"
             ? "Finansowanie"
-            : entry.target.kind === "document"
-              ? "Dokument"
-              : entry.target.kind;
+            : entry.target.kind === "file_source"
+              ? "Plik"
+              : entry.target.kind === "document"
+                ? "Dokument legacy"
+                : entry.target.kind;
 
     result.push({
       id: `${entry.objectId}:${entry.target.kind}:${entry.targetImportKey ?? entry.target.id}:${entry.field}:${entry.id}`,
@@ -340,6 +342,21 @@ function fileViews(
       name: source.name,
       url: source.url,
       sourcePageUrl: source.sourcePageUrl,
+      ...(source.document_kind ? { documentKind: source.document_kind } : {}),
+      ...(source.purpose ? { purpose: source.purpose } : {}),
+      ...(typeof source.has_fields === "boolean"
+        ? { hasFields: source.has_fields }
+        : {}),
+      ...(source.intended_use ? { intendedUse: source.intended_use } : {}),
+      ...(source.client_requirement
+        ? { clientRequirement: source.client_requirement }
+        : {}),
+      ...(source.signature_requirement
+        ? { signatureRequirement: source.signature_requirement }
+        : {}),
+      ...(source.delivery_method
+        ? { deliveryMethod: source.delivery_method }
+        : {}),
     }));
 }
 
@@ -551,24 +568,6 @@ export function removeImportReviewFinancing(
   if (session.previewState.financingRules.length === before) {
     throw new Error("Wariant finansowania nie istnieje.");
   }
-  touch(session, object, now);
-}
-
-export function renameImportReviewFile(
-  session: ImportReviewSession,
-  objectId: string,
-  fileId: string,
-  name: string,
-  now: string,
-): void {
-  const object = requirePendingObject(session, objectId);
-  const file = (session.previewState.fileSources ?? []).find(
-    (entry) => entry.objectId === object.id && entry.id === fileId,
-  );
-  if (!file) throw new Error("Plik nie istnieje.");
-  const cleaned = name.trim();
-  if (!cleaned) throw new Error("Nazwa pliku nie może być pusta.");
-  file.name = cleaned;
   touch(session, object, now);
 }
 
@@ -891,10 +890,35 @@ export function buildImportApprovalPlan(
         (entry) => entry.importKey === file.sourcePageImportKey,
       ) ?? importedSources.find((entry) => entry.url === file.sourcePageUrl);
     if (pageSource) usedSourceIds.add(pageSource.id);
+
+    const metadata = Object.fromEntries(
+      [
+        "document_kind",
+        "purpose",
+        "has_fields",
+        "intended_use",
+        "client_requirement",
+        "signature_requirement",
+        "delivery_method",
+      ]
+        .filter((field) => Object.prototype.hasOwnProperty.call(file, field))
+        .map((field) => [
+          field,
+          (file as unknown as Record<string, unknown>)[field],
+        ]),
+    );
+    const evidence = portableTargetEvidence(
+      session.previewState,
+      object.id,
+      { kind: "file_source", id: String(file.id) },
+      sourceById,
+    );
+
     return {
       source: source.importKey,
       ...(pageSource ? { source_page: pageSource.importKey } : {}),
-      name: file.name,
+      ...(Object.keys(metadata).length ? { metadata } : {}),
+      ...(evidence ? { evidence } : {}),
     };
   });
 

@@ -281,6 +281,29 @@ style.textContent = `
     font-size: 9px;
     overflow-wrap: anywhere;
   }
+  .import-review-file-metadata {
+    display: grid;
+    gap: 5px;
+    padding: 7px 0;
+    border-top: 1px solid #e7ece8;
+    border-bottom: 1px solid #e7ece8;
+  }
+  .import-review-file-metadata > span {
+    display: grid;
+    gap: 1px;
+  }
+  .import-review-file-metadata small {
+    color: #829087;
+    font-size: 8px;
+    font-weight: 650;
+  }
+  .import-review-file-metadata strong {
+    color: #31443a;
+    font-size: 10px;
+    font-weight: 600;
+    line-height: 1.3;
+    overflow-wrap: anywhere;
+  }
   .import-review-card-actions {
     display: flex;
     justify-content: space-between;

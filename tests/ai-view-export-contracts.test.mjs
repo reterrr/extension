@@ -176,6 +176,13 @@ function state() {
         name: "Regulamin.pdf",
         url: "https://example.test/regulamin.pdf",
         sourcePageUrl: "https://example.test/project",
+        document_kind: "Oryginał operatora",
+        purpose: "Regulamin",
+        has_fields: false,
+        intended_use: "Główne zasady projektu",
+        client_requirement: "Informacyjny",
+        signature_requirement: "Nie jest wymagany",
+        delivery_method: "Z oryginału operatora",
         addedAt: "2026-09-20T10:05:00.000Z",
       },
       {
@@ -185,6 +192,11 @@ function state() {
         name: "Dokumentacja naboru.pdf",
         url: "https://example.test/recruitment/1/docs.pdf",
         sourcePageUrl: "https://example.test/recruitment/1",
+        purpose: "Formularz do uzupełnienia",
+        has_fields: true,
+        client_requirement: "Obowiązkowy",
+        signature_requirement: "Wymagany podpisany plik",
+        delivery_method: "Opracowany wzór / generator",
         addedAt: "2026-09-20T11:05:00.000Z",
       },
     ],
@@ -259,13 +271,14 @@ test("AI View export includes readable related business data", () => {
   assert.equal(project.financing[0].company_size, "SMALL");
   assert.equal(project.financing[0].refund_percent_avg, 75);
   assert.equal(project.financing[0].id, undefined);
-  assert.equal(
-    project.documents[0].name,
-    "Formularz zgłoszeniowy MSP (Zał. 1)",
-  );
-  assert.equal(project.documents[0].requirement, "REQUIRED");
+  assert.equal(project.documents, undefined);
   assert.equal(project.files[0].name, "Regulamin.pdf");
   assert.equal(project.files[0].url, "https://example.test/regulamin.pdf");
+  assert.equal(project.files[0].document_kind, "Oryginał operatora");
+  assert.equal(project.files[0].purpose, "Regulamin");
+  assert.equal(project.files[0].has_fields, false);
+  assert.equal(project.files[0].client_requirement, "Informacyjny");
+  assert.equal(project.files[0].delivery_method, "Z oryginału operatora");
 });
 
 test("project export includes every related recruitment with full business data", () => {
@@ -304,9 +317,13 @@ test("project export includes every related recruitment with full business data"
   assert.equal(recruitment.geography[0].label, "Katowice");
   assert.equal(recruitment.financing[0].refund_percent_avg, 85);
   assert.equal(recruitment.financing[0].max_amount_pln, 12000);
-  assert.equal(recruitment.documents[0].requirement, "OPTIONAL");
-  assert.equal(recruitment.documents[0].notes, "Dokument dla naboru");
+  assert.equal(recruitment.documents, undefined);
   assert.equal(recruitment.files[0].name, "Dokumentacja naboru.pdf");
+  assert.equal(
+    recruitment.files[0].purpose,
+    "Formularz do uzupełnienia",
+  );
+  assert.equal(recruitment.files[0].has_fields, true);
 
   assert.equal(
     project.recruitments.some((row) => row.id === "recruitment-other"),

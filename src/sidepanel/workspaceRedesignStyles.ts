@@ -519,8 +519,7 @@ progress {
   border: 0;
 }
 
-.workspace-section-card,
-#documents-panel {
+.workspace-section-card {
   display: block;
   margin: 8px 0;
   overflow: clip;
@@ -530,8 +529,7 @@ progress {
   box-shadow: var(--shadow-soft);
 }
 
-.workspace-section-summary,
-#documents-panel > .section-summary {
+.workspace-section-summary {
   min-height: 58px;
   display: flex;
   align-items: center;
@@ -542,13 +540,11 @@ progress {
   background: var(--surface);
 }
 
-.workspace-section-summary::-webkit-details-marker,
-#documents-panel > .section-summary::-webkit-details-marker {
+.workspace-section-summary::-webkit-details-marker {
   display: none;
 }
 
-.workspace-section-summary::before,
-#documents-panel > .section-summary::before {
+.workspace-section-summary::before {
   content: "›";
   flex: none;
   color: #8a978f;
@@ -558,27 +554,23 @@ progress {
   transition: transform .14s ease;
 }
 
-.workspace-section-card[open] > .workspace-section-summary::before,
-#documents-panel[open] > .section-summary::before {
+.workspace-section-card[open] > .workspace-section-summary::before {
   transform: rotate(90deg);
 }
 
-.workspace-section-title,
-#documents-panel > .section-summary > span:first-child {
+.workspace-section-title {
   min-width: 0;
   flex: 1;
 }
 
-.workspace-section-title strong,
-#documents-panel > .section-summary strong {
+.workspace-section-title strong {
   display: block;
   font-size: 13px;
   font-weight: 700;
   color: var(--text);
 }
 
-.workspace-section-title small,
-#documents-panel > .section-summary small {
+.workspace-section-title small {
   display: block;
   margin-top: 2px;
   font-size: 10px;
@@ -586,8 +578,7 @@ progress {
   color: var(--text-soft);
 }
 
-.workspace-section-status,
-#document-count {
+.workspace-section-status {
   flex: none;
   max-width: 42%;
   text-align: right;
@@ -597,13 +588,11 @@ progress {
   color: var(--text-soft);
 }
 
-.workspace-section-status[data-state="complete"],
-#document-count[data-state="complete"] {
+.workspace-section-status[data-state="complete"] {
   color: var(--success);
 }
 
-.workspace-section-status[data-state="missing"],
-#document-count[data-state="missing"] {
+.workspace-section-status[data-state="missing"] {
   color: var(--warning);
 }
 
@@ -881,8 +870,7 @@ progress {
 
 #file-sources-section .workspace-section-body,
 #geography-section .workspace-section-body,
-#funding-section .workspace-section-body,
-#documents-section .workspace-section-body {
+#funding-section .workspace-section-body {
   padding: 10px 12px 12px;
 }
 
@@ -1089,8 +1077,7 @@ progress {
   }
 }
 
-.variant .field-row,
-.document .field-row {
+.variant .field-row {
   width: calc(100% - 8px);
   margin-left: 4px;
   margin-right: 4px;
@@ -1098,38 +1085,6 @@ progress {
 
 .variant > .text-button {
   margin: 2px 7px 8px;
-}
-
-.document-group {
-  margin-top: 10px;
-}
-
-.document-group > h3 {
-  padding: 0 4px 4px;
-  color: var(--text-soft);
-}
-
-.document {
-  overflow: hidden;
-  border-top: 1px solid #edf0ed;
-}
-
-.document:first-of-type {
-  border-top: 0;
-}
-
-.document summary {
-  padding: 9px 7px;
-}
-
-.document[open] > summary {
-  margin-bottom: 4px;
-  border-bottom: 1px solid #dfe6df;
-  background: #f7f9f7;
-}
-
-.document[open] {
-  padding-bottom: 4px;
 }
 
 .review-section {
@@ -1236,13 +1191,11 @@ progress {
 }
 
 @media (max-width: 340px) {
-  .workspace-section-summary,
-  #documents-panel > .section-summary {
+  .workspace-section-summary {
     align-items: flex-start;
   }
 
-  .workspace-section-status,
-  #document-count {
+  .workspace-section-status {
     max-width: 46%;
   }
 
@@ -1298,22 +1251,18 @@ main {
   margin: 5px 0;
   border-radius: 9px;
 }
-.workspace-section-summary,
-#documents-panel > .section-summary {
+.workspace-section-summary {
   min-height: 40px;
   padding: 6px 8px;
 }
-.workspace-section-title strong,
-#documents-panel > .section-summary strong {
+.workspace-section-title strong {
   font-size: 11px;
 }
-.workspace-section-title small,
-#documents-panel > .section-summary small {
+.workspace-section-title small {
   margin-top: 1px;
   font-size: 9px;
 }
-.workspace-section-status,
-#document-count {
+.workspace-section-status {
   font-size: 9px;
 }
 .field-group-card .workspace-section-body {
@@ -1341,8 +1290,7 @@ main {
 #file-sources-section .workspace-section-body,
 #operator-contacts-section .workspace-section-body,
 #geography-section .workspace-section-body,
-#funding-section .workspace-section-body,
-#documents-section .workspace-section-body {
+#funding-section .workspace-section-body {
   padding: 7px 8px 9px;
 }
 .review-section {

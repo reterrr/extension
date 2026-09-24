@@ -51,10 +51,23 @@ interface ImportEvidence {
   normalized_value?: unknown;
 }
 
+interface ImportFileMetadata {
+  document_kind?: string;
+  purpose?: string;
+  has_fields?: boolean;
+  intended_use?: string;
+  client_requirement?: string;
+  signature_requirement?: string;
+  delivery_method?: string;
+}
+
 interface ImportFileAttachment {
   source: string;
   source_page?: string;
+  /** Legacy-only. Canonical name is derived from the source URL filename. */
   name?: string;
+  metadata?: ImportFileMetadata;
+  evidence?: Record<string, ImportEvidence[]>;
 }
 
 interface ImportFinancingVariant {
@@ -128,6 +141,49 @@ function uniqueByKey<T extends { key: string }>(items: T[], label: string): void
     seen.add(item.key);
   }
 }
+
+function parseFileMetadata(
+  value: unknown,
+  path: string,
+): ImportFileMetadata | undefined {
+  if (value === undefined) return undefined;
+  if (!isRecord(value)) throw new Error(`${path} must be an object.`);
+
+  const result: ImportFileMetadata = {};
+  const textFields = [
+    "document_kind",
+    "purpose",
+    "intended_use",
+    "client_requirement",
+    "signature_requirement",
+    "delivery_method",
+  ] as const;
+
+  for (const field of textFields) {
+    if (value[field] === undefined) continue;
+    result[field] = requiredString(value[field], `${path}.${field}`);
+  }
+
+  if (value.has_fields !== undefined) {
+    if (typeof value.has_fields !== "boolean") {
+      throw new Error(`${path}.has_fields must be true or false.`);
+    }
+    result.has_fields = value.has_fields;
+  }
+
+  return result;
+}
+
+const FILE_METADATA_EVIDENCE_FIELDS = Object.freeze({
+  document_kind: true,
+  purpose: true,
+  has_fields: true,
+  intended_use: true,
+  client_requirement: true,
+  signature_requirement: true,
+  delivery_method: true,
+});
+
 
 function parseEvidenceMap(
   value: unknown,
@@ -234,6 +290,8 @@ function parseDocument(input: unknown): BurbotImportV1 {
           source: requiredString(entry.source, `${filePath}.source`),
           source_page: optionalString(entry.source_page, `${filePath}.source_page`),
           name: optionalString(entry.name, `${filePath}.name`),
+          metadata: parseFileMetadata(entry.metadata, `${filePath}.metadata`),
+          evidence: parseEvidenceMap(entry.evidence, `${filePath}.evidence`),
         };
       });
     }
@@ -609,17 +667,40 @@ export function importDocumentIntoState(
             `objects.${item.key}.files[${fileIndex}].source_page must reference a source with a URL.`,
           );
         }
-        (state.fileSources ||= []).push({
+        const row = {
           id: uuid(),
           objectId: object.id,
-          fileType: "PDF",
+          fileType: "PDF" as const,
           url: source.url,
-          name: file.name ?? fileNameFromUrl(source.url),
+          // Canonical file name always comes from the actual PDF filename.
+          name: fileNameFromUrl(source.url),
           sourcePageUrl: pageSource?.url ?? object.sourceUrl ?? source.url,
           addedAt: now,
           sourceImportKey: source.importKey,
           ...(pageSource ? { sourcePageImportKey: pageSource.importKey } : {}),
-        });
+          ...(file.metadata ?? {}),
+        };
+        (state.fileSources ||= []).push(row);
+
+        validateTargetEvidenceFields(
+          file.evidence,
+          FILE_METADATA_EVIDENCE_FIELDS,
+          file.metadata ?? {},
+          `${item.key}.files[${fileIndex}]`,
+        );
+        for (const [field, entries] of Object.entries(file.evidence ?? {})) {
+          storeTargetEvidence(
+            state,
+            object.id,
+            { kind: "file_source", id: row.id },
+            source.importKey,
+            item.key,
+            field,
+            entries,
+            sourceByKey,
+            uuid,
+          );
+        }
       }
     }
 

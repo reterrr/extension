@@ -45,7 +45,7 @@ test("remote PDF source keeps the canonical HTTP URL", () => {
   });
 });
 
-test("relative PDF link resolves against the source webpage", () => {
+test("file name always comes from the actual PDF filename, not link text", () => {
   const file = remoteFile.createRemotePdfSourceCandidate(
     "../docs/regulamin.pdf",
     "https://projekt.test/nabory/3/",
@@ -53,7 +53,7 @@ test("relative PDF link resolves against the source webpage", () => {
   );
 
   assert.equal(file.url, "https://projekt.test/nabory/docs/regulamin.pdf");
-  assert.equal(file.name, "Regulamin naboru");
+  assert.equal(file.name, "regulamin.pdf");
   assert.equal(file.sourcePageUrl, "https://projekt.test/nabory/3/");
 });
 

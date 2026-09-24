@@ -99,7 +99,7 @@ function documentFixture() {
           {
             source: "project-regulations",
             source_page: "project-page",
-            name: "Regulamin projektu.pdf",
+            name: "regulamin.pdf",
           },
         ],
         financing: [
@@ -170,7 +170,7 @@ test("import review exposes selected object evidence, file attachments and finan
   assert.equal(view.evidence[0].rawValue, "Generator Kompetencji 3.0");
   assert.equal(view.evidence[0].sourceUrl, "https://example.test/project");
   assert.equal(view.files.length, 1);
-  assert.equal(view.files[0].name, "Regulamin projektu.pdf");
+  assert.equal(view.files[0].name, "regulamin.pdf");
   assert.equal(view.financing.length, 1);
   assert.equal(view.financing[0].companySize, "MICRO");
   assert.equal(
@@ -310,19 +310,11 @@ test("review edits change staged data and invalidate stale object evidence", () 
     "120000",
     now,
   );
-  reviewModule.renameImportReviewFile(
-    session,
-    project.id,
-    file.id,
-    "Regulamin po korekcie.pdf",
-    now,
-  );
-
   const view = reviewModule.importReviewView(session);
   assert.equal(view.objects[0].label, "Generator Kompetencji 3.1");
   assert.equal(view.evidence.length, 0);
   assert.equal(view.fields.find((field) => field.field === "name")?.evidenceCount, 0);
-  assert.equal(view.files[0].name, "Regulamin po korekcie.pdf");
+  assert.equal(view.files[0].name, "regulamin.pdf");
   assert.equal(
     view.financing[0].fields.find((field) => field.field === "max_amount_pln")
       ?.editorValue,
@@ -342,7 +334,7 @@ test("review edits change staged data and invalidate stale object evidence", () 
   assert.ok(stagedProject);
   assert.equal(stagedProject.values.name, "Generator Kompetencji 3.1");
   assert.equal(staged.state.fileSources.length, 1);
-  assert.equal(staged.state.fileSources[0].name, "Regulamin po korekcie.pdf");
+  assert.equal(staged.state.fileSources[0].name, "regulamin.pdf");
   assert.equal(staged.state.financingRules.length, 1);
   assert.equal(staged.state.financingRules[0].refund_percent_min, 60);
   assert.equal(staged.state.financingRules[0].refund_percent_avg, 70);
@@ -1502,5 +1494,180 @@ test("Import Review plan round-trips nested evidence", () => {
     reviewModule
       .allImportReviewEvidenceViews(session)
       .some((entry) => entry.rawValue === "mazowieckie"),
+  );
+});
+
+
+test("portable files are dynamic records with filename-derived names and free-form classification", () => {
+  const uuid = ids();
+  const sourceText =
+    "Rodzaj: Oryginał operatora. Cel: Formularz do uzupełnienia. Zawiera pola: Tak. Wymagalność: Obowiązkowy.";
+  const evidence = (raw, normalizedValue) => ({
+    source: "page",
+    ...range(sourceText, raw),
+    ...(normalizedValue !== undefined
+      ? { normalized_value: normalizedValue }
+      : {}),
+  });
+
+  const state = formatModule.importDocumentIntoState(
+    BurbotCore.empty(),
+    {
+      version: 1,
+      offset_unit: "unicode_codepoint",
+      sources: [
+        {
+          key: "page",
+          type: "HTML",
+          url: "https://example.test/project",
+          snapshot: { text: sourceText },
+        },
+        {
+          key: "pdf",
+          type: "PDF",
+          url: "https://example.test/files/02_PUR_cz_2.pdf",
+          snapshot: { text: "Plan Usług Rozwojowych cz. 2" },
+        },
+      ],
+      objects: [
+        {
+          key: "project-files",
+          type: "project",
+          data: { name: "Projekt z plikiem" },
+          files: [
+            {
+              source: "pdf",
+              source_page: "page",
+              name: "Ta nazwa jest legacy i ma być zignorowana.pdf",
+              metadata: {
+                document_kind: "Oryginał operatora",
+                purpose: "Formularz do uzupełnienia",
+                has_fields: true,
+                intended_use: "Drugi etap aplikowania.",
+                client_requirement: "Obowiązkowy po wstępnym zakwalifikowaniu",
+                signature_requirement: "Wymagany podpisany plik",
+                delivery_method: "Opracowany wzór / generator",
+              },
+              evidence: {
+                document_kind: [evidence("Oryginał operatora")],
+                purpose: [evidence("Formularz do uzupełnienia")],
+                has_fields: [evidence("Tak", true)],
+                client_requirement: [evidence("Obowiązkowy")],
+              },
+            },
+          ],
+        },
+      ],
+    },
+    0,
+    uuid,
+    "2026-09-24T12:00:00.000Z",
+  );
+
+  const file = state.fileSources[0];
+  assert.equal(file.name, "02_PUR_cz_2.pdf");
+  assert.equal(file.document_kind, "Oryginał operatora");
+  assert.equal(file.purpose, "Formularz do uzupełnienia");
+  assert.equal(file.has_fields, true);
+  assert.equal(
+    file.client_requirement,
+    "Obowiązkowy po wstępnym zakwalifikowaniu",
+  );
+  assert.equal(file.signature_requirement, "Wymagany podpisany plik");
+  assert.equal(file.delivery_method, "Opracowany wzór / generator");
+
+  const fileEvidence = state.importTargetEvidence.filter(
+    (entry) =>
+      entry.objectId === file.objectId &&
+      entry.target.kind === "file_source" &&
+      entry.target.id === file.id,
+  );
+  assert.equal(fileEvidence.length, 4);
+  assert.ok(
+    fileEvidence.some(
+      (entry) =>
+        entry.field === "has_fields" &&
+        entry.normalizedValue === true,
+    ),
+  );
+});
+
+test("Import Review preserves dynamic file classification and file evidence", () => {
+  const uuid = ids();
+  const sourceText = "Cel dokumentu: Regulamin.";
+  const document = {
+    version: 1,
+    offset_unit: "unicode_codepoint",
+    sources: [
+      {
+        key: "page",
+        type: "HTML",
+        url: "https://example.test/project",
+        snapshot: { text: sourceText },
+      },
+      {
+        key: "pdf",
+        type: "PDF",
+        url: "https://example.test/files/regulamin_naboru.pdf",
+        snapshot: { text: "Regulamin" },
+      },
+    ],
+    objects: [
+      {
+        key: "project-file-review",
+        type: "project",
+        data: { name: "Projekt File Review" },
+        files: [
+          {
+            source: "pdf",
+            source_page: "page",
+            metadata: {
+              document_kind: "Oryginał operatora",
+              purpose: "Regulamin",
+              has_fields: false,
+              intended_use: "Główne zasady naboru",
+              client_requirement: "Informacyjny",
+              signature_requirement: "Nie jest wymagany",
+              delivery_method: "Z oryginału operatora",
+            },
+            evidence: {
+              purpose: [
+                {
+                  source: "page",
+                  ...range(sourceText, "Regulamin"),
+                },
+              ],
+            },
+          },
+        ],
+      },
+    ],
+  };
+
+  const session = reviewModule.createImportReviewSession(
+    document,
+    "dynamic-file.json",
+    uuid,
+    "2026-09-24T12:10:00.000Z",
+  );
+  const reviewView = reviewModule.importReviewView(session);
+  assert.equal(reviewView.files[0].name, "regulamin_naboru.pdf");
+  assert.equal(reviewView.files[0].purpose, "Regulamin");
+  assert.equal(reviewView.files[0].hasFields, false);
+  assert.equal(reviewView.files[0].clientRequirement, "Informacyjny");
+
+  const plan = reviewModule.buildImportApprovalPlan(
+    session,
+    session.objectOrder[0],
+  );
+  const portable = plan.document.objects.at(-1);
+
+  assert.equal(portable.files.length, 1);
+  assert.equal(portable.files[0].name, undefined);
+  assert.equal(portable.files[0].metadata.purpose, "Regulamin");
+  assert.equal(portable.files[0].metadata.has_fields, false);
+  assert.equal(
+    portable.files[0].evidence.purpose[0].raw_value,
+    "Regulamin",
   );
 });

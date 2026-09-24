@@ -160,6 +160,7 @@ const RELATED_COLLECTIONS: Array<{
   { key: "fileSources", label: "Pliki" },
   { key: "rules", label: "Reguły ekstrakcji" },
   { key: "fieldEvidence", label: "Evidence" },
+  { key: "importTargetEvidence", label: "Evidence oznaczeń" },
 ];
 
 function relatedChanges(
