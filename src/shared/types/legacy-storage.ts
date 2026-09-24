@@ -100,9 +100,20 @@ export interface LegacyStoredFileSource {
   objectId: string;
   fileType: SourceFileType;
   url: string;
+  /** Always derived from the remote file URL / actual filename. */
   name: string;
   sourcePageUrl: string;
   addedAt: string;
+
+  /** Free-form classification attached to this concrete file. */
+  document_kind?: string;
+  purpose?: string;
+  has_fields?: boolean;
+  intended_use?: string;
+  client_requirement?: string;
+  signature_requirement?: string;
+  delivery_method?: string;
+
   /** Present during portable-import review so approval can rebuild `files[].source`. */
   sourceImportKey?: string;
   /** Optional portable-import source key for the page where the file link was found. */
