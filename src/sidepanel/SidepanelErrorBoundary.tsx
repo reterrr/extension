@@ -18,6 +18,12 @@ export class SidepanelErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: ErrorInfo): void {
+    // Workflow CSS intentionally hides the normal workspace in Import/Commit
+    // modes. A fatal render error replaces the whole App with this boundary,
+    // so clear mode markers to guarantee that the recovery UI itself can never
+    // be hidden by stale workflow state.
+    document.documentElement.classList.remove("import-review-mode");
+    delete document.documentElement.dataset.workflowMode;
     console.error("Burbot sidepanel crashed", error, info);
   }
 
