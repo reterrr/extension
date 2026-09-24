@@ -79,6 +79,13 @@ function exportFiles(state, objectId) {
         file_type: source.fileType,
         url: source.url,
         source_page_url: source.sourcePageUrl,
+        document_kind: source.document_kind,
+        purpose: source.purpose,
+        has_fields: source.has_fields,
+        intended_use: source.intended_use,
+        client_requirement: source.client_requirement,
+        signature_requirement: source.signature_requirement,
+        delivery_method: source.delivery_method,
         added_at: source.addedAt,
       }),
     );
@@ -204,13 +211,6 @@ function exportObject(
 
   const financing = exportFunding(state, object.id);
   if (financing.length) result.financing = financing;
-
-  const documents = exportDocuments(
-    state,
-    object.id,
-    documentCatalog,
-  );
-  if (documents.length) result.documents = documents;
 
   if (files.length) result.files = files;
 
