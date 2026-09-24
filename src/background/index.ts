@@ -27,7 +27,12 @@ import { createCapturedExtractionInput } from "../shared/extraction/rules";
 import { discardStaleImportedEvidence } from "../shared/import/evidence";
 import { importDocumentIntoState } from "../shared/import/format";
 import { isPickerSelectionResponse } from "../shared/messaging/picker";
-import { buildStoredSelectorHighlights } from "../shared/selectorHighlights.js";
+import {
+  IMPORT_EVIDENCE_LOCATOR_STORAGE_KEY,
+  buildImportedEvidenceAnchorRequests,
+  buildStoredSelectorHighlights,
+  importedEvidenceLocatorKeys,
+} from "../shared/selectorHighlights.js";
 import {
   OBJECT_VIEW_STORAGE_KEY,
   addObjectToView,
@@ -167,6 +172,141 @@ async function notifyCommitChanged(): Promise<void> {
 let selectorHighlightState: LegacyStorageState | null = null;
 let selectorHighlightSyncQueued = false;
 
+type EvidenceLocatorRecord = {
+  pageUrl: string;
+  selector: string;
+  selectorFallbacks?: string[];
+  quote?: { exact: string; prefix: string; suffix: string };
+  resolvedAt: string;
+};
+
+type EvidenceLocatorCache = Record<string, EvidenceLocatorRecord>;
+type ResolvedEvidenceLocator = EvidenceLocatorRecord & { key: string };
+
+let evidenceLocatorCache: EvidenceLocatorCache | null = null;
+const evidenceLocatorSyncByTab = new Map<number, Promise<EvidenceLocatorCache>>();
+
+async function readEvidenceLocatorCache(): Promise<EvidenceLocatorCache> {
+  if (evidenceLocatorCache) return evidenceLocatorCache;
+  const stored = await browser.storage.local.get(
+    IMPORT_EVIDENCE_LOCATOR_STORAGE_KEY,
+  );
+  const value = stored[IMPORT_EVIDENCE_LOCATOR_STORAGE_KEY];
+  evidenceLocatorCache =
+    value && typeof value === "object" && !Array.isArray(value)
+      ? (value as EvidenceLocatorCache)
+      : {};
+  return evidenceLocatorCache;
+}
+
+async function writeEvidenceLocatorCache(
+  cache: EvidenceLocatorCache,
+): Promise<void> {
+  evidenceLocatorCache = cache;
+  await browser.storage.local.set({
+    [IMPORT_EVIDENCE_LOCATOR_STORAGE_KEY]: cache,
+  });
+}
+
+async function requestEvidenceLocators(
+  tabId: number,
+  items: unknown[],
+): Promise<ResolvedEvidenceLocator[]> {
+  const send = async () =>
+    (await browser.tabs.sendMessage(tabId, {
+      type: "BURBOT_MATERIALIZE_IMPORT_EVIDENCE",
+      items,
+    })) as {
+      ok?: boolean;
+      locators?: ResolvedEvidenceLocator[];
+    };
+
+  let response;
+  try {
+    response = await send();
+  } catch {
+    await browser.scripting.executeScript({
+      target: { tabId },
+      files: ["evidence-locator.js"],
+    });
+    response = await send();
+  }
+
+  return response?.ok && Array.isArray(response.locators)
+    ? response.locators
+    : [];
+}
+
+async function materializeImportedEvidenceForTab(
+  tabId: number,
+  pageUrl: string,
+  state: LegacyStorageState,
+): Promise<EvidenceLocatorCache> {
+  const running = evidenceLocatorSyncByTab.get(tabId);
+  if (running) return running;
+
+  const task = (async () => {
+    const cache = { ...(await readEvidenceLocatorCache()) };
+    const liveKeys = importedEvidenceLocatorKeys(state);
+    let changed = false;
+    for (const key of Object.keys(cache)) {
+      if (!liveKeys.has(key)) {
+        delete cache[key];
+        changed = true;
+      }
+    }
+
+    const requests = buildImportedEvidenceAnchorRequests(
+      state,
+      pageUrl,
+      cache,
+    );
+    if (!requests.length) {
+      if (changed) await writeEvidenceLocatorCache(cache);
+      return cache;
+    }
+
+    let resolved: ResolvedEvidenceLocator[] = [];
+    try {
+      resolved = await requestEvidenceLocators(tabId, requests);
+    } catch {
+      if (changed) await writeEvidenceLocatorCache(cache);
+      return cache;
+    }
+
+    const resolvedByKey = new Map(
+      resolved.map((locator) => [String(locator.key), locator]),
+    );
+
+    for (const request of requests) {
+      const key = String(request.key);
+      const locator = resolvedByKey.get(key);
+      if (locator) {
+        const { key: _key, ...stored } = locator;
+        const previous = cache[key];
+        if (JSON.stringify(previous) !== JSON.stringify(stored)) {
+          cache[key] = stored;
+          changed = true;
+        }
+      } else if (cache[key]) {
+        // A cached locator that no longer resolves should not force a broken
+        // selector. Remove it so quote evidence can act as the fallback until
+        // the page can be materialized again.
+        delete cache[key];
+        changed = true;
+      }
+    }
+
+    if (changed) await writeEvidenceLocatorCache(cache);
+    return cache;
+  })().finally(() => {
+    evidenceLocatorSyncByTab.delete(tabId);
+  });
+
+  evidenceLocatorSyncByTab.set(tabId, task);
+  return task;
+}
+
 function isHttpPage(url: string | undefined): url is string {
   if (!url) return false;
   try {
@@ -181,7 +321,16 @@ async function sendSelectorHighlights(
   pageUrl: string,
   state: LegacyStorageState,
 ): Promise<void> {
-  const highlights = buildStoredSelectorHighlights(state, pageUrl);
+  const locatorCache = await materializeImportedEvidenceForTab(
+    tabId,
+    pageUrl,
+    state,
+  );
+  const highlights = buildStoredSelectorHighlights(
+    state,
+    pageUrl,
+    locatorCache,
+  );
 
   try {
     await browser.tabs.sendMessage(tabId, {
