@@ -16,7 +16,100 @@ if (!document.querySelector("style[data-burbot-file-sources]")) {
   border: 1px solid var(--line);
   border-radius: 7px;
   background: #fff;
+  padding: 0;
+  overflow: hidden;
+}
+.file-source-summary {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
   padding: 8px 9px;
+  cursor: pointer;
+  list-style: none;
+}
+.file-source-summary::-webkit-details-marker {
+  display: none;
+}
+.file-source-summary::before {
+  content: "›";
+  flex: none;
+  margin-top: 1px;
+  color: var(--muted);
+  font-size: 16px;
+  line-height: 1;
+  transform: rotate(0deg);
+  transition: transform .12s ease;
+}
+.file-source-row[open] > .file-source-summary::before {
+  transform: rotate(90deg);
+}
+.file-source-summary-copy {
+  min-width: 0;
+  flex: 1;
+}
+.file-source-classification-status {
+  flex: none;
+  padding: 3px 6px;
+  border-radius: 999px;
+  font-size: 9px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.file-source-classification-status.complete {
+  background: #eaf4ee;
+  color: #2f7659;
+}
+.file-source-classification-status.pending {
+  background: #fff4df;
+  color: #9a5d00;
+}
+.file-source-body {
+  padding: 0 9px 9px;
+  border-top: 1px solid var(--line);
+}
+.file-source-url {
+  padding-top: 7px;
+}
+.file-source-classification {
+  display: grid;
+  gap: 7px;
+  margin-top: 8px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #f8faf8;
+}
+.file-source-field {
+  display: grid;
+  gap: 3px;
+}
+.file-source-field > span {
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: .02em;
+}
+.file-source-field input,
+.file-source-field textarea,
+.file-source-field select {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 32px;
+  padding: 6px 7px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  color: inherit;
+  font: inherit;
+}
+.file-source-field textarea {
+  min-height: 54px;
+  resize: vertical;
+}
+.file-source-save {
+  justify-self: start;
+  margin-top: 2px;
 }
 .file-source-row strong,
 .file-source-row small {
