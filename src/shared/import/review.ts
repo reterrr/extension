@@ -891,10 +891,35 @@ export function buildImportApprovalPlan(
         (entry) => entry.importKey === file.sourcePageImportKey,
       ) ?? importedSources.find((entry) => entry.url === file.sourcePageUrl);
     if (pageSource) usedSourceIds.add(pageSource.id);
+
+    const metadata = Object.fromEntries(
+      [
+        "document_kind",
+        "purpose",
+        "has_fields",
+        "intended_use",
+        "client_requirement",
+        "signature_requirement",
+        "delivery_method",
+      ]
+        .filter((field) => Object.prototype.hasOwnProperty.call(file, field))
+        .map((field) => [
+          field,
+          (file as unknown as Record<string, unknown>)[field],
+        ]),
+    );
+    const evidence = portableTargetEvidence(
+      session.previewState,
+      object.id,
+      { kind: "file_source", id: String(file.id) },
+      sourceById,
+    );
+
     return {
       source: source.importKey,
       ...(pageSource ? { source_page: pageSource.importKey } : {}),
-      name: file.name,
+      ...(Object.keys(metadata).length ? { metadata } : {}),
+      ...(evidence ? { evidence } : {}),
     };
   });
 
