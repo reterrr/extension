@@ -31,6 +31,7 @@ import {
   IMPORT_EVIDENCE_LOCATOR_STORAGE_KEY,
   buildImportedEvidenceAnchorRequests,
   buildStoredSelectorHighlights,
+  importedEvidenceLocatorKeys,
 } from "../shared/selectorHighlights.js";
 import {
   OBJECT_VIEW_STORAGE_KEY,
@@ -246,6 +247,15 @@ async function materializeImportedEvidenceForTab(
 
   const task = (async () => {
     const cache = { ...(await readEvidenceLocatorCache()) };
+    const liveKeys = importedEvidenceLocatorKeys(state);
+    let changed = false;
+    for (const key of Object.keys(cache)) {
+      if (!liveKeys.has(key)) {
+        delete cache[key];
+        changed = true;
+      }
+    }
+
     const requests = buildImportedEvidenceAnchorRequests(
       state,
       pageUrl,
@@ -263,7 +273,6 @@ async function materializeImportedEvidenceForTab(
     const resolvedByKey = new Map(
       resolved.map((locator) => [String(locator.key), locator]),
     );
-    let changed = false;
 
     for (const request of requests) {
       const key = String(request.key);
