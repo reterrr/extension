@@ -367,7 +367,6 @@ import {
       view,
       schema: BurbotSchema,
       geographyCatalog: BurbotGeography?.catalog || [],
-      documentCatalog: BurbotDocuments?.catalog || [],
       exportedAt,
     });
     downloadJsonFile(aiViewExportFilename(exportedAt), payload);
