@@ -571,24 +571,6 @@ export function removeImportReviewFinancing(
   touch(session, object, now);
 }
 
-export function renameImportReviewFile(
-  session: ImportReviewSession,
-  objectId: string,
-  fileId: string,
-  name: string,
-  now: string,
-): void {
-  const object = requirePendingObject(session, objectId);
-  const file = (session.previewState.fileSources ?? []).find(
-    (entry) => entry.objectId === object.id && entry.id === fileId,
-  );
-  if (!file) throw new Error("Plik nie istnieje.");
-  const cleaned = name.trim();
-  if (!cleaned) throw new Error("Nazwa pliku nie może być pusta.");
-  file.name = cleaned;
-  touch(session, object, now);
-}
-
 export function removeImportReviewFile(
   session: ImportReviewSession,
   objectId: string,
