@@ -61,6 +61,7 @@ interface ImportFinancingVariant {
   key: string;
   company_size: string;
   data: Record<string, unknown>;
+  evidence?: Record<string, ImportEvidence[]>;
 }
 
 interface ImportGeography {
@@ -68,18 +69,21 @@ interface ImportGeography {
   type: string;
   role: string;
   value: string;
+  evidence?: Record<string, ImportEvidence[]>;
 }
 
 interface ImportOperatorContact {
   key: string;
   kind: string;
   value: string;
+  evidence?: Record<string, ImportEvidence[]>;
 }
 
 interface ImportDocumentRequirement {
   key: string;
   document_type_key: string;
   data: Record<string, unknown>;
+  evidence?: Record<string, ImportEvidence[]>;
 }
 
 interface ImportObject {
@@ -256,6 +260,10 @@ function parseDocument(input: unknown): BurbotImportV1 {
           type,
           role,
           value: requiredString(entry.value, `${geographyPath}.value`),
+          evidence: parseEvidenceMap(
+            entry.evidence,
+            `${geographyPath}.evidence`,
+          ),
         };
       });
       uniqueByKey(geography, `${path} geography`);
@@ -277,6 +285,10 @@ function parseDocument(input: unknown): BurbotImportV1 {
           key: requiredString(entry.key, `${contactPath}.key`),
           kind,
           value: requiredString(entry.value, `${contactPath}.value`),
+          evidence: parseEvidenceMap(
+            entry.evidence,
+            `${contactPath}.evidence`,
+          ),
         };
       });
       uniqueByKey(contacts, `${path} contacts`);
@@ -300,6 +312,10 @@ function parseDocument(input: unknown): BurbotImportV1 {
             `${documentPath}.document_type_key`,
           ),
           data: entry.data,
+          evidence: parseEvidenceMap(
+            entry.evidence,
+            `${documentPath}.evidence`,
+          ),
         };
       });
       uniqueByKey(documents, `${path} documents`);
@@ -334,6 +350,10 @@ function parseDocument(input: unknown): BurbotImportV1 {
           key: requiredString(entry.key, `${financePath}.key`),
           company_size: companySize,
           data: entry.data,
+          evidence: parseEvidenceMap(
+            entry.evidence,
+            `${financePath}.evidence`,
+          ),
         };
       });
       uniqueByKey(financing, `${path} financing`);
@@ -406,6 +426,50 @@ function storeEvidence(
     });
   }
   return storedEntries;
+}
+
+
+function storeTargetEvidence(
+  state: LegacyStorageState,
+  objectId: string,
+  target: { kind: string; id: string },
+  targetImportKey: string,
+  itemKey: string,
+  field: string,
+  entries: ImportEvidence[],
+  sourceByKey: Map<string, ImportedSource>,
+  uuid: () => string,
+): void {
+  const stored = storeEvidence(itemKey, field, entries, sourceByKey);
+  for (const evidence of stored) {
+    (state.importTargetEvidence ||= []).push({
+      id: uuid(),
+      objectId,
+      field,
+      target,
+      targetImportKey,
+      ...evidence,
+    });
+  }
+}
+
+function validateTargetEvidenceFields(
+  evidence: Record<string, ImportEvidence[]> | undefined,
+  allowedFields: Record<string, unknown>,
+  presentValues: Record<string, unknown>,
+  path: string,
+): void {
+  if (!evidence) return;
+  for (const field of Object.keys(evidence)) {
+    if (!Object.prototype.hasOwnProperty.call(allowedFields, field)) {
+      throw new Error(`Unknown evidence field ${path}.${field}.`);
+    }
+    if (!Object.prototype.hasOwnProperty.call(presentValues, field)) {
+      throw new Error(
+        `Evidence for ${path}.${field} requires a value in the same imported row.`,
+      );
+    }
+  }
 }
 
 export function importDocumentIntoState(
@@ -574,14 +638,35 @@ export function importDocumentIntoState(
             `Unknown geography value ${geography.value} for type ${geography.type} in ${item.key}.geography[${geographyIndex}].`,
           );
         }
-        (state.geographies ||= []).push({
+        const row = {
           id: uuid(),
           objectId: object.id,
           importKey: geography.key,
           type: geography.type,
           role: geography.role,
           value: geography.value,
-        });
+        };
+        (state.geographies ||= []).push(row);
+
+        validateTargetEvidenceFields(
+          geography.evidence,
+          globalThis.BurbotGeography.fields,
+          { value: geography.value },
+          `${item.key}.geography.${geography.key}`,
+        );
+        for (const [field, entries] of Object.entries(geography.evidence ?? {})) {
+          storeTargetEvidence(
+            state,
+            object.id,
+            { kind: "geography", id: row.id },
+            geography.key,
+            item.key,
+            field,
+            entries,
+            sourceByKey,
+            uuid,
+          );
+        }
       }
     }
 
@@ -597,14 +682,35 @@ export function importDocumentIntoState(
         if (!definition) {
           throw new Error(`Unknown operator contact kind ${contact.kind}.`);
         }
-        (state.operatorContacts ||= []).push({
+        const row = {
           id: uuid(),
           objectId: object.id,
           importKey: contact.key,
           kind: contact.kind,
           variant_no: variant,
           value: BurbotCore.coerceField(contact.value, definition, state),
-        });
+        };
+        (state.operatorContacts ||= []).push(row);
+
+        validateTargetEvidenceFields(
+          contact.evidence,
+          globalThis.BurbotOperatorContacts.fields[contact.kind],
+          { value: contact.value },
+          `${item.key}.contacts.${contact.key}`,
+        );
+        for (const [field, entries] of Object.entries(contact.evidence ?? {})) {
+          storeTargetEvidence(
+            state,
+            object.id,
+            { kind: "operator_contact", id: row.id },
+            contact.key,
+            item.key,
+            field,
+            entries,
+            sourceByKey,
+            uuid,
+          );
+        }
       }
     }
 
@@ -638,6 +744,26 @@ export function importDocumentIntoState(
           row[field] = BurbotCore.coerceField(rawValue, definition, state);
         }
         (state.documentRequirements ||= []).push(row);
+
+        validateTargetEvidenceFields(
+          document.evidence,
+          globalThis.BurbotDocuments.fields,
+          document.data,
+          `${item.key}.documents.${document.key}`,
+        );
+        for (const [field, entries] of Object.entries(document.evidence ?? {})) {
+          storeTargetEvidence(
+            state,
+            object.id,
+            { kind: "document", id: String(document.document_type_key) },
+            document.key,
+            item.key,
+            field,
+            entries,
+            sourceByKey,
+            uuid,
+          );
+        }
       }
     }
 
@@ -667,6 +793,26 @@ export function importDocumentIntoState(
           row[field] = BurbotCore.coerceField(rawValue, definition, state);
         }
         (state.financingRules ||= []).push(row);
+
+        validateTargetEvidenceFields(
+          variant.evidence,
+          BurbotFunding.fields,
+          variant.data,
+          `${item.key}.financing.${variant.key}`,
+        );
+        for (const [field, entries] of Object.entries(variant.evidence ?? {})) {
+          storeTargetEvidence(
+            state,
+            object.id,
+            { kind: "funding", id: String(row.id) },
+            variant.key,
+            item.key,
+            field,
+            entries,
+            sourceByKey,
+            uuid,
+          );
+        }
       }
     }
   }
