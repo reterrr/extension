@@ -60,6 +60,7 @@ const ALLOWED_WRITES = new Set<string>([
   "ADD_GEOGRAPHY",
   "REMOVE_GEOGRAPHY",
   "ADD_FILE_SOURCE",
+  "UPDATE_FILE_SOURCE",
   "REMOVE_FILE_SOURCE",
   "ADD_OPERATOR_CONTACT",
   "REMOVE_OPERATOR_CONTACT",
@@ -487,6 +488,49 @@ function mutateFileSource(
       sourcePageUrl: file.sourcePageUrl,
       addedAt: now,
     });
+  } else if (message.op === "UPDATE_FILE_SOURCE") {
+    if (typeof message.sourceId !== "string") {
+      throw new Error("Source id is required.");
+    }
+    const source = (state.fileSources ?? []).find(
+      (entry) =>
+        entry.id === message.sourceId &&
+        entry.objectId === object.id,
+    );
+    if (!source) throw new Error("File source not found.");
+    if (!isRecord(message.metadata)) {
+      throw new Error("Invalid file metadata.");
+    }
+
+    const textFields = [
+      "document_kind",
+      "purpose",
+      "intended_use",
+      "client_requirement",
+      "signature_requirement",
+      "delivery_method",
+    ];
+    for (const field of textFields) {
+      const raw = message.metadata[field];
+      if (raw === undefined || raw === null || String(raw).trim() === "") {
+        delete source[field];
+        continue;
+      }
+      const value = String(raw).replace(/\s+/g, " ").trim();
+      if (value.length > 5000) {
+        throw new Error(`File metadata field ${field} is too long.`);
+      }
+      source[field] = value;
+    }
+
+    const hasFields = message.metadata.has_fields;
+    if (hasFields === undefined || hasFields === null || hasFields === "") {
+      delete source.has_fields;
+    } else if (typeof hasFields === "boolean") {
+      source.has_fields = hasFields;
+    } else {
+      throw new Error("has_fields must be true, false or unset.");
+    }
   } else if (message.op === "REMOVE_FILE_SOURCE") {
     if (typeof message.sourceId !== "string") throw new Error("Source id is required.");
     const sourceId = message.sourceId;
@@ -502,6 +546,14 @@ function mutateFileSource(
           rule.objectId === object.id &&
           rule.extraction.type === "pdfText" &&
           rule.extraction.sourceId === sourceId
+        ),
+    );
+    state.importTargetEvidence = (state.importTargetEvidence ?? []).filter(
+      (entry) =>
+        !(
+          entry.objectId === object.id &&
+          entry.target?.kind === "file_source" &&
+          String(entry.target.id) === sourceId
         ),
     );
   } else {
@@ -931,6 +983,7 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
       );
     } else if (
       message.op === "ADD_FILE_SOURCE" ||
+      message.op === "UPDATE_FILE_SOURCE" ||
       message.op === "REMOVE_FILE_SOURCE"
     ) {
       next = mutateFileSource(state, message, now);
