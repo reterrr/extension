@@ -296,9 +296,11 @@ function nestedEvidenceViews(
           ? "Kontakt operatora"
           : entry.target.kind === "funding"
             ? "Finansowanie"
-            : entry.target.kind === "document"
-              ? "Dokument"
-              : entry.target.kind;
+            : entry.target.kind === "file_source"
+              ? "Plik"
+              : entry.target.kind === "document"
+                ? "Dokument legacy"
+                : entry.target.kind;
 
     result.push({
       id: `${entry.objectId}:${entry.target.kind}:${entry.targetImportKey ?? entry.target.id}:${entry.field}:${entry.id}`,
@@ -340,6 +342,21 @@ function fileViews(
       name: source.name,
       url: source.url,
       sourcePageUrl: source.sourcePageUrl,
+      ...(source.document_kind ? { documentKind: source.document_kind } : {}),
+      ...(source.purpose ? { purpose: source.purpose } : {}),
+      ...(typeof source.has_fields === "boolean"
+        ? { hasFields: source.has_fields }
+        : {}),
+      ...(source.intended_use ? { intendedUse: source.intended_use } : {}),
+      ...(source.client_requirement
+        ? { clientRequirement: source.client_requirement }
+        : {}),
+      ...(source.signature_requirement
+        ? { signatureRequirement: source.signature_requirement }
+        : {}),
+      ...(source.delivery_method
+        ? { deliveryMethod: source.delivery_method }
+        : {}),
     }));
 }
 
