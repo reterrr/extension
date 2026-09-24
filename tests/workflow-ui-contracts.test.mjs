@@ -296,3 +296,23 @@ test("file display name comes from the actual PDF filename", () => {
   assert.match(remote, /name: decodedFileName\(url\)\.slice\(0, 500\)/);
   assert.equal(remote.includes("cleanHint || decodedFileName"), false);
 });
+
+
+test("Import Review colors are derived from concrete evidence entries", () => {
+  const review = source("src/sidepanel/ImportReviewPanel.tsx");
+  const palette = source("src/shared/selectorPalette.ts");
+
+  assert.equal(
+    review.includes("evidenceColorKey(view, field.field)"),
+    false,
+    "the whole ImportReviewView must never be passed as an evidence color key",
+  );
+  assert.match(
+    review,
+    /const color = evidence\[0\][\s\S]*?selectorColor\(evidenceColorKey\(evidence\[0\]\)\)/,
+  );
+  assert.match(
+    palette,
+    /const text = String\(value \?\? ""\)[\s\S]*?text\.length/,
+  );
+});
