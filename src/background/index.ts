@@ -180,6 +180,7 @@ type EvidenceLocatorRecord = {
 };
 
 type EvidenceLocatorCache = Record<string, EvidenceLocatorRecord>;
+type ResolvedEvidenceLocator = EvidenceLocatorRecord & { key: string };
 
 let evidenceLocatorCache: EvidenceLocatorCache | null = null;
 const evidenceLocatorSyncByTab = new Map<number, Promise<EvidenceLocatorCache>>();
@@ -209,14 +210,14 @@ async function writeEvidenceLocatorCache(
 async function requestEvidenceLocators(
   tabId: number,
   items: unknown[],
-): Promise<EvidenceLocatorRecord[] & Array<{ key: string }>> {
+): Promise<ResolvedEvidenceLocator[]> {
   const send = async () =>
     (await browser.tabs.sendMessage(tabId, {
       type: "BURBOT_MATERIALIZE_IMPORT_EVIDENCE",
       items,
     })) as {
       ok?: boolean;
-      locators?: Array<EvidenceLocatorRecord & { key: string }>;
+      locators?: ResolvedEvidenceLocator[];
     };
 
   let response;
@@ -230,9 +231,9 @@ async function requestEvidenceLocators(
     response = await send();
   }
 
-  return (response?.ok && Array.isArray(response.locators)
+  return response?.ok && Array.isArray(response.locators)
     ? response.locators
-    : []) as EvidenceLocatorRecord[] & Array<{ key: string }>;
+    : [];
 }
 
 async function materializeImportedEvidenceForTab(
@@ -252,7 +253,7 @@ async function materializeImportedEvidenceForTab(
     );
     if (!requests.length) return cache;
 
-    let resolved: Array<EvidenceLocatorRecord & { key: string }> = [];
+    let resolved: ResolvedEvidenceLocator[] = [];
     try {
       resolved = await requestEvidenceLocators(tabId, requests);
     } catch {
