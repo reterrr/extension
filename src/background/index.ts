@@ -802,6 +802,29 @@ browser.action.onClicked.addListener((tab) => {
     .catch(console.error);
 });
 
+browser.commands.onCommand.addListener((command) => {
+  if (command !== "toggle-file-add-mode") return;
+
+  void (async () => {
+    const tabs = await browser.tabs.query({ active: true, currentWindow: true });
+    const tab = tabs[0];
+    if (!tab || tab.windowId === undefined) return;
+
+    // The keyboard command is a user gesture, so Firefox allows opening the
+    // sidebar here. If it is already open this is effectively a no-op.
+    await browser.sidebarAction.open();
+
+    // Give a newly-opened sidepanel one event-loop turn to install its runtime
+    // listener. Existing panels receive this immediately.
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    await broadcast({
+      type: "BURBOT_TOGGLE_FILE_MODE",
+      windowId: tab.windowId,
+      stamp: crypto.randomUUID(),
+    });
+  })().catch(console.error);
+});
+
 browser.runtime.onMessage.addListener((message: unknown, sender) => {
   const extensionRoot = browser.runtime.getURL("");
   if (
