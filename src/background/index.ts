@@ -814,14 +814,20 @@ browser.commands.onCommand.addListener((command) => {
     // sidebar here. If it is already open this is effectively a no-op.
     await browser.sidebarAction.open();
 
-    // Give a newly-opened sidepanel one event-loop turn to install its runtime
-    // listener. Existing panels receive this immediately.
-    await new Promise<void>((resolve) => setTimeout(resolve, 0));
-    await broadcast({
-      type: "BURBOT_TOGGLE_FILE_MODE",
-      windowId: tab.windowId,
-      stamp: crypto.randomUUID(),
-    });
+    // A newly-opened sidepanel initializes asynchronously. Repeat the same
+    // stamped toggle briefly; the panel de-duplicates the stamp, while a panel
+    // that was not listening to the first broadcast can still receive a retry.
+    const stamp = crypto.randomUUID();
+    for (const delay of [0, 120, 400]) {
+      if (delay) {
+        await new Promise<void>((resolve) => setTimeout(resolve, delay));
+      }
+      await broadcast({
+        type: "BURBOT_TOGGLE_FILE_MODE",
+        windowId: tab.windowId,
+        stamp,
+      });
+    }
   })().catch(console.error);
 });
 
