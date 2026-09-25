@@ -96,6 +96,30 @@ test("candidate selection option preserves quote semantics", () => {
   });
 });
 
+test("boundary text selection stays bounded to the exact quote", () => {
+  const source = "Prefix Selected value suffix";
+  assert.equal(
+    BurbotCore.selectedText(source, {
+      exact: "Selected value",
+      prefix: "",
+      suffix: " suffix",
+    }),
+    "Selected value",
+  );
+});
+
+test("boundary text selection rejects ambiguous exact text", () => {
+  assert.throws(
+    () =>
+      BurbotCore.selectedText("Same value and Same value", {
+        exact: "Same value",
+        prefix: "",
+        suffix: "",
+      }),
+    /ambiguous/,
+  );
+});
+
 test("page URL rule has no DOM selector", () => {
   const pageCandidate = rulesModule.createPageUrlCandidate(candidate.pageUrl);
   const rule = rulesModule.createExtractionRule(

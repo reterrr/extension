@@ -146,22 +146,38 @@
 
   function selectedText(text, quote) {
     text = clean(text);
-    const { prefix, suffix } = quote;
-    const starts = prefix
-      ? occurrences(text, prefix).map((i) => i + prefix.length)
-      : [0];
-    const ends = suffix ? occurrences(text, suffix) : [text.length];
-    const pairs = [];
-    for (const start of starts)
-      for (const end of ends) if (end >= start) pairs.push([start, end]);
-    if (pairs.length !== 1)
+    const exact = clean(quote?.exact);
+    const prefix = clean(quote?.prefix);
+    const suffix = clean(quote?.suffix);
+
+    // With context on both sides we intentionally allow the value itself to
+    // change between runs: prefix + suffix delimit the current value.
+    if (prefix && suffix) {
+      const starts = occurrences(text, prefix).map((i) => i + prefix.length);
+      const ends = occurrences(text, suffix);
+      const pairs = [];
+      for (const start of starts)
+        for (const end of ends) if (end >= start) pairs.push([start, end]);
+      if (pairs.length !== 1)
+        throw Error(
+          "Selection context changed or is ambiguous. Select it again.",
+        );
+      const [start, end] = pairs[0];
+      const result = clean(text.slice(start, end));
+      if (!result) throw Error("Selected text is now empty.");
+      return result;
+    }
+
+    // A boundary selection (missing prefix or suffix) must never expand to an
+    // entire compatibility container such as <body>. In that case only the
+    // original exact quote is safe, and only when it is unique.
+    if (!exact) throw Error("Selection quote is empty.");
+    const positions = occurrences(text, exact);
+    if (positions.length !== 1)
       throw Error(
         "Selection context changed or is ambiguous. Select it again.",
       );
-    const [start, end] = pairs[0];
-    const result = clean(text.slice(start, end));
-    if (!result) throw Error("Selected text is now empty.");
-    return result;
+    return exact;
   }
 
   function readElement(element, extraction) {

@@ -172,15 +172,24 @@ function nonUniqueFragments(element: Element): string[] {
 function positionalSegment(element: Element): string {
   let segment = element.localName;
   const classes = stableClasses(element);
-  if (classes.length) return `${segment}.${CSS.escape(classes[0])}`;
+  if (classes.length) segment += `.${CSS.escape(classes[0])}`;
 
   const parent = element.parentElement;
   if (!parent) return segment;
-  const siblings = Array.from(parent.children).filter(
+
+  const sameTag = Array.from(parent.children).filter(
     (candidate) => candidate.localName === element.localName,
   );
-  if (siblings.length > 1) {
-    segment += `:nth-of-type(${siblings.indexOf(element) + 1})`;
+  const sameShape = classes.length
+    ? sameTag.filter((candidate) => candidate.classList.contains(classes[0]))
+    : sameTag;
+
+  // A stable class is useful, but repeated cards/list rows often reuse the
+  // exact same class. Keep the class and add a late structural discriminator.
+  // nth-of-type must be calculated among every sibling with the same tag.
+  if (sameShape.length > 1) {
+    const index = sameTag.indexOf(element);
+    if (index >= 0) segment += `:nth-of-type(${index + 1})`;
   }
   return segment;
 }

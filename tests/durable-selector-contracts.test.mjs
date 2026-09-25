@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
+import { readFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -201,4 +202,28 @@ test("selection quote survives a complete DOM wrapper change", () => {
       raw: "FEPK.07.09-IP.01-0014/23-00",
     },
   ]);
+});
+
+
+test("repeated class-based DOM blocks keep a structural nth-of-type fallback", () => {
+  const durableSelector = readFileSync(
+    resolve(root, "src/content/durable-selector.ts"),
+    "utf8",
+  );
+  assert.match(
+    durableSelector,
+    /const sameShape = classes\.length[\s\S]*?sameTag\.filter[\s\S]*?sameShape\.length > 1[\s\S]*?:nth-of-type/,
+  );
+});
+
+test("selected text has a quote-only fallback when CSS cannot be unique", () => {
+  const picker = readFileSync(resolve(root, "src/content/picker.ts"), "utf8");
+  assert.match(
+    picker,
+    /if \(!range\) throw error;[\s\S]*?primary: "body"[\s\S]*?quoteOnly = true/,
+  );
+  assert.match(
+    picker,
+    /if \(!quoteOnly && full\)[\s\S]*?if \(!quoteOnly\) \{/,
+  );
 });

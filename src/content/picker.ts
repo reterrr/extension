@@ -1,4 +1,8 @@
-import { buildDurableSelectors, selectionContainer } from "./durable-selector";
+import {
+  buildDurableSelectors,
+  selectionContainer,
+  type DurableSelectorSet,
+} from "./durable-selector";
 import { runExtractionRules } from "./extraction-runner";
 import { readSelectionFromDocument } from "./selection-fallback";
 import {
@@ -44,7 +48,21 @@ if (!globalThis.__burbotPickerLoaded) {
       throw new Error("Choose page content outside editable controls.");
     }
 
-    const selectors = buildDurableSelectors(element);
+    let selectors: DurableSelectorSet;
+    let quoteOnly = false;
+    try {
+      selectors = buildDurableSelectors(element);
+    } catch (error) {
+      if (!range) throw error;
+
+      // A text selection already has a durable quote (exact/prefix/suffix).
+      // Do not reject it only because the surrounding DOM is a repeated card
+      // with no unique CSS selector. "body" is only a compatibility container;
+      // extraction/highlighting still resolves the exact quote.
+      selectors = { primary: "body", fallbacks: [] };
+      quoteOnly = true;
+    }
+
     const options: ElementExtractionCandidateOption[] = [];
     const full = C.clean(element.textContent);
 
@@ -79,7 +97,7 @@ if (!globalThis.__burbotPickerLoaded) {
       });
     }
 
-    if (full) {
+    if (!quoteOnly && full) {
       options.push({
         label: "Element text",
         raw: full,
@@ -87,29 +105,31 @@ if (!globalThis.__burbotPickerLoaded) {
       });
     }
 
-    const attributes: SupportedExtractionAttribute[] = [
-      "href",
-      "src",
-      "datetime",
-      "title",
-      "alt",
-      "content",
-    ];
+    if (!quoteOnly) {
+      const attributes: SupportedExtractionAttribute[] = [
+        "href",
+        "src",
+        "datetime",
+        "title",
+        "alt",
+        "content",
+      ];
 
-    for (const attribute of attributes) {
-      try {
-        const extraction: AttributeExtraction = { type: "attribute", attribute };
-        const raw = C.readElement(element, extraction);
+      for (const attribute of attributes) {
+        try {
+          const extraction: AttributeExtraction = { type: "attribute", attribute };
+          const raw = C.readElement(element, extraction);
 
-        if (raw) {
-          options.push({
-            label: `Attribute: ${attribute}`,
-            raw,
-            extraction,
-          });
+          if (raw) {
+            options.push({
+              label: `Attribute: ${attribute}`,
+              raw,
+              extraction,
+            });
+          }
+        } catch {
+          // Missing/unsupported attributes are simply omitted from the UI options.
         }
-      } catch {
-        // Missing/unsupported attributes are simply omitted from the UI options.
       }
     }
 
