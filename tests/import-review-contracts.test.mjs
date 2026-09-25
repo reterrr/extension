@@ -187,6 +187,48 @@ test("repository portable-import example stays importable", async () => {
   assert.ok((session.previewState.importTargetEvidence ?? []).length >= 10);
 });
 
+test("legacy file name becomes display_name when metadata display_name is absent", () => {
+  const session = reviewModule.createImportReviewSession(
+    documentFixture(),
+    "legacy-file-name.burbot-import.json",
+    ids(),
+    "2026-09-25T13:00:00.000Z",
+  );
+
+  const project = session.previewState.objects.find(
+    (object) => object.importKey === "project-1",
+  );
+  assert.ok(project);
+
+  const fileSource = (session.previewState.fileSources ?? []).find(
+    (entry) => entry.objectId === project.id,
+  );
+  assert.ok(fileSource);
+  assert.equal(fileSource.name, "regulamin.pdf");
+  assert.equal(fileSource.display_name, "regulamin.pdf");
+});
+
+test("remote filename becomes display_name when import has no file name at all", () => {
+  const document = documentFixture();
+  delete document.objects[0].files[0].name;
+
+  const session = reviewModule.createImportReviewSession(
+    document,
+    "minimal-file.burbot-import.json",
+    ids(),
+    "2026-09-25T13:01:00.000Z",
+  );
+
+  const project = session.previewState.objects.find(
+    (object) => object.importKey === "project-1",
+  );
+  const fileSource = (session.previewState.fileSources ?? []).find(
+    (entry) => entry.objectId === project.id,
+  );
+
+  assert.equal(fileSource.display_name, "regulamin.pdf");
+});
+
 test("import review exposes selected object evidence, file attachments and financing", () => {
   const uuid = ids();
   const session = reviewModule.createImportReviewSession(
