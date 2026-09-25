@@ -1,0 +1,345 @@
+{
+  "version": 1,
+  "offset_unit": "unicode_codepoint",
+  "sources": [
+    {
+      "key": "project-page",
+      "type": "HTML",
+      "url": "https://example.org/project",
+      "snapshot": {
+        "captured_at": "2026-09-25T12:00:00Z",
+        "parser_version": "burbot-text-v1",
+        "text": "Operator: Example Operator Sp. z o.o.\nNIP: 1234567890\nEmail: biuro@example.org\nTelefon: +48 123 456 789\nProjekt: Generator Kompetencji 3.0\nNumer projektu: FEPK.07.04-IP.01-0001/26\nStatus projektu: AKTYWNY\nNabór: 1/2026\nStatus naboru: AKTYWNY\nTermin: 2026-10-01 - 2026-10-15\nDofinansowanie: 80%\nLimit na uczestnika: 5000 PLN\n"
+      }
+    },
+    {
+      "key": "regulations-pdf",
+      "type": "PDF",
+      "url": "https://example.org/files/regulamin-projektu.pdf",
+      "snapshot": {
+        "text": "Regulamin projektu\nCel: Regulamin\nPola do wypełnienia: Nie\nPrzeznaczenie: Zasady udziału w projekcie\nWymagalność: Informacyjny\nPodpis: Nie jest wymagany\n"
+      }
+    },
+    {
+      "key": "application-docx",
+      "type": "DOCX",
+      "url": "https://example.org/files/formularz-zgloszeniowy.docx",
+      "snapshot": {
+        "text": "Formularz zgłoszeniowy\nCel: Formularz do uzupełnienia\nPola do wypełnienia: Tak, pola lub deklaracje\nPrzeznaczenie: Złożenie zgłoszenia do projektu\nWymagalność: Obowiązkowy\nPodpis: Wymagany podpisany plik\n"
+      }
+    }
+  ],
+  "objects": [
+    {
+      "key": "operator-1",
+      "type": "operator",
+      "data": {
+        "name": "Example Operator Sp. z o.o.",
+        "nip": "1234567890",
+        "website": "https://example.org/"
+      },
+      "evidence": {
+        "name": [
+          {
+            "source": "project-page",
+            "char_start": 10,
+            "char_end": 37,
+            "raw_value": "Example Operator Sp. z o.o."
+          }
+        ],
+        "nip": [
+          {
+            "source": "project-page",
+            "char_start": 43,
+            "char_end": 53,
+            "raw_value": "1234567890"
+          }
+        ]
+      },
+      "contacts": [
+        {
+          "key": "operator-email-1",
+          "kind": "EMAIL",
+          "value": "biuro@example.org",
+          "evidence": {
+            "value": [
+              {
+                "source": "project-page",
+                "char_start": 61,
+                "char_end": 78,
+                "raw_value": "biuro@example.org"
+              }
+            ]
+          }
+        },
+        {
+          "key": "operator-phone-1",
+          "kind": "PHONE",
+          "value": "+48 123 456 789",
+          "evidence": {
+            "value": [
+              {
+                "source": "project-page",
+                "char_start": 88,
+                "char_end": 103,
+                "raw_value": "+48 123 456 789"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "key": "project-1",
+      "type": "project",
+      "data": {
+        "name": "Generator Kompetencji 3.0",
+        "operator_id": {
+          "$ref": "operator-1"
+        },
+        "type": "B2B",
+        "status": "AKTYWNY",
+        "number": "FEPK.07.04-IP.01-0001/26",
+        "documents_url": "https://example.org/project/documents"
+      },
+      "evidence": {
+        "name": [
+          {
+            "source": "project-page",
+            "char_start": 113,
+            "char_end": 138,
+            "raw_value": "Generator Kompetencji 3.0"
+          }
+        ],
+        "number": [
+          {
+            "source": "project-page",
+            "char_start": 155,
+            "char_end": 179,
+            "raw_value": "FEPK.07.04-IP.01-0001/26"
+          }
+        ],
+        "status": [
+          {
+            "source": "project-page",
+            "char_start": 197,
+            "char_end": 204,
+            "raw_value": "AKTYWNY"
+          }
+        ]
+      },
+      "files": [
+        {
+          "source": "regulations-pdf",
+          "source_page": "project-page",
+          "metadata": {
+            "display_name": "Regulamin projektu",
+            "purpose": "Regulamin",
+            "has_fields": false,
+            "intended_use": "Zasady udziału w projekcie",
+            "client_requirement": "Informacyjny",
+            "signature_requirement": "Nie jest wymagany"
+          },
+          "evidence": {
+            "display_name": [
+              {
+                "source": "regulations-pdf",
+                "char_start": 0,
+                "char_end": 18,
+                "raw_value": "Regulamin projektu"
+              }
+            ],
+            "purpose": [
+              {
+                "source": "regulations-pdf",
+                "char_start": 24,
+                "char_end": 33,
+                "raw_value": "Regulamin"
+              }
+            ],
+            "has_fields": [
+              {
+                "source": "regulations-pdf",
+                "char_start": 55,
+                "char_end": 58,
+                "raw_value": "Nie",
+                "normalized_value": false
+              }
+            ],
+            "intended_use": [
+              {
+                "source": "regulations-pdf",
+                "char_start": 74,
+                "char_end": 100,
+                "raw_value": "Zasady udziału w projekcie"
+              }
+            ],
+            "client_requirement": [
+              {
+                "source": "regulations-pdf",
+                "char_start": 114,
+                "char_end": 126,
+                "raw_value": "Informacyjny"
+              }
+            ],
+            "signature_requirement": [
+              {
+                "source": "regulations-pdf",
+                "char_start": 135,
+                "char_end": 152,
+                "raw_value": "Nie jest wymagany"
+              }
+            ]
+          }
+        },
+        {
+          "source": "application-docx",
+          "source_page": "project-page",
+          "metadata": {
+            "display_name": "Formularz zgłoszeniowy",
+            "purpose": "Formularz do uzupełnienia",
+            "has_fields": true,
+            "intended_use": "Złożenie zgłoszenia do projektu",
+            "client_requirement": "Obowiązkowy",
+            "signature_requirement": "Wymagany podpisany plik"
+          },
+          "evidence": {
+            "display_name": [
+              {
+                "source": "application-docx",
+                "char_start": 0,
+                "char_end": 22,
+                "raw_value": "Formularz zgłoszeniowy"
+              }
+            ],
+            "purpose": [
+              {
+                "source": "application-docx",
+                "char_start": 28,
+                "char_end": 53,
+                "raw_value": "Formularz do uzupełnienia"
+              }
+            ],
+            "has_fields": [
+              {
+                "source": "application-docx",
+                "char_start": 75,
+                "char_end": 99,
+                "raw_value": "Tak, pola lub deklaracje",
+                "normalized_value": true
+              }
+            ],
+            "intended_use": [
+              {
+                "source": "application-docx",
+                "char_start": 115,
+                "char_end": 146,
+                "raw_value": "Złożenie zgłoszenia do projektu"
+              }
+            ],
+            "client_requirement": [
+              {
+                "source": "application-docx",
+                "char_start": 160,
+                "char_end": 171,
+                "raw_value": "Obowiązkowy"
+              }
+            ],
+            "signature_requirement": [
+              {
+                "source": "application-docx",
+                "char_start": 180,
+                "char_end": 203,
+                "raw_value": "Wymagany podpisany plik"
+              }
+            ]
+          }
+        }
+      ],
+      "financing": [
+        {
+          "key": "micro-standard",
+          "company_size": "MICRO",
+          "data": {
+            "refund_percent_min": 80,
+            "refund_percent_avg": 80,
+            "refund_percent_max": 80,
+            "max_per_person_pln": 5000,
+            "own_contribution_form": "UNSPECIFIED"
+          },
+          "evidence": {
+            "refund_percent_avg": [
+              {
+                "source": "project-page",
+                "char_start": 290,
+                "char_end": 293,
+                "raw_value": "80%",
+                "normalized_value": 80
+              }
+            ],
+            "max_per_person_pln": [
+              {
+                "source": "project-page",
+                "char_start": 315,
+                "char_end": 319,
+                "raw_value": "5000",
+                "normalized_value": 5000
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "key": "recruitment-1",
+      "type": "recruitment",
+      "data": {
+        "external_number": "1/2026",
+        "project_id": {
+          "$ref": "project-1"
+        },
+        "operator_id": {
+          "$ref": "operator-1"
+        },
+        "status": "AKTYWNY",
+        "dataRozpoczeciaOd": "2026-10-01",
+        "dataZakonczeniaDo": "2026-10-15",
+        "urlOgloszenia": "https://example.org/project/recruitment/1"
+      },
+      "evidence": {
+        "external_number": [
+          {
+            "source": "project-page",
+            "char_start": 212,
+            "char_end": 218,
+            "raw_value": "1/2026"
+          }
+        ],
+        "status": [
+          {
+            "source": "project-page",
+            "char_start": 234,
+            "char_end": 241,
+            "raw_value": "AKTYWNY"
+          }
+        ],
+        "dataRozpoczeciaOd": [
+          {
+            "source": "project-page",
+            "char_start": 250,
+            "char_end": 260,
+            "raw_value": "2026-10-01"
+          }
+        ],
+        "dataZakonczeniaDo": [
+          {
+            "source": "project-page",
+            "char_start": 263,
+            "char_end": 273,
+            "raw_value": "2026-10-15"
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -109,6 +109,11 @@ The extraction discriminator remains `type` (`text`, `attribute`, `selection`, `
 
 The side panel accepts **Burbot Import v1** JSON through **Import JSON**. This is a facts + provenance format, not an extraction-rule format. Imported values never create CSS/XPath selectors or durable extraction rules.
 
+Current reference files:
+
+- `examples/portable-import-v1.example.json` — complete importable example with Operator, Project, Recruitment, contacts, typed file metadata, file evidence and financing;
+- `docs/portable-import-v1.md` — format rules and field semantics.
+
 Character ranges are zero-based, end-exclusive and measured in Unicode code points:
 
 ```text
@@ -141,7 +146,7 @@ Every range is validated against the exact canonical `snapshot.text`. For exampl
       "data": {
         "name": "Generator Kompetencji 3.0",
         "type": "B2B",
-        "status": "ACTIVE"
+        "status": "AKTYWNY"
       },
       "evidence": {
         "name": [

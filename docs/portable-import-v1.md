@@ -2,7 +2,13 @@
 
 Burbot import keeps source snapshots separate from the business objects extracted from them. `sources[].snapshot.text` should be a faithful textual snapshot of the real source. Evidence points into that snapshot with Unicode code-point offsets.
 
-The v1 format is backward compatible. Objects can additionally declare remote PDF attachments and financing variants.
+The v1 format is backward compatible. Objects can declare remote file attachments, contacts, geography and financing variants.
+
+A complete importable example lives at:
+
+`examples/portable-import-v1.example.json`
+
+That example is covered by the import-review tests so its offsets, references, file metadata and evidence stay compatible with the real importer.
 
 ```json
 {
@@ -14,83 +20,38 @@ The v1 format is backward compatible. Objects can additionally declare remote PD
       "type": "HTML",
       "url": "https://example.org/project",
       "snapshot": {
-        "text": "...faithful page text..."
+        "text": "Projekt: Generator Kompetencji 3.0"
       }
     },
     {
       "key": "regulations-pdf",
       "type": "PDF",
-      "url": "https://example.org/files/regulations.pdf",
+      "url": "https://example.org/files/regulamin-projektu.pdf",
       "snapshot": {
-        "text": "...text extracted from the PDF..."
+        "text": "Regulamin projektu"
       }
     }
   ],
   "objects": [
     {
-      "key": "operator-1",
-      "type": "operator",
-      "data": {
-        "name": "Example operator"
-      }
-    },
-    {
       "key": "project-1",
       "type": "project",
       "data": {
-        "name": "Example project",
-        "operator_id": { "$ref": "operator-1" },
+        "name": "Generator Kompetencji 3.0",
+        "type": "B2B",
         "status": "AKTYWNY"
-      },
-      "evidence": {
-        "name": [
-          {
-            "source": "project-page",
-            "char_start": 123,
-            "char_end": 138,
-            "raw_value": "Example project"
-          }
-        ]
       },
       "files": [
         {
           "source": "regulations-pdf",
           "source_page": "project-page",
-          "name": "Regulamin projektu.pdf"
-        }
-      ],
-      "financing": [
-        {
-          "key": "micro-standard",
-          "company_size": "MICRO",
-          "data": {
-            "refund_percent_min": 60,
-            "refund_percent_avg": 70,
-            "refund_percent_max": 80,
-            "max_amount_pln": 100000,
-            "max_per_person_pln": 5000,
-            "own_contribution_form": "CASH",
-            "notes": "Standardowy wariant"
-          }
-        }
-      ]
-    },
-    {
-      "key": "recruitment-1",
-      "type": "recruitment",
-      "data": {
-        "external_number": "1/2026",
-        "project_id": { "$ref": "project-1" },
-        "continuous": true
-      },
-      "financing": [
-        {
-          "key": "small-standard",
-          "company_size": "SMALL",
-          "data": {
-            "refund_percent_min": 70,
-            "refund_percent_avg": 75,
-            "refund_percent_max": 80
+          "metadata": {
+            "display_name": "Regulamin projektu",
+            "purpose": "Regulamin",
+            "has_fields": false,
+            "intended_use": "Zasady udziału w projekcie",
+            "client_requirement": "Informacyjny",
+            "signature_requirement": "Nie jest wymagany"
           }
         }
       ]
@@ -115,9 +76,38 @@ Refund percentages are **not object-level Project/Recruitment fields**. They bel
 
 A file attachment references an existing entry from `sources[]`; the URL is not duplicated.
 
-- `source` — required source key. It must point to a `PDF` source with an HTTP(S) `url`.
-- `source_page` — optional source key for the HTML/PDF page where the file link was found. If supplied, that source must have a URL.
-- `name` — optional display name. When omitted, Burbot derives it from the PDF URL.
+Supported remote file source types are:
+
+`DOC`, `DOCX`, `PDF`, `XLSX`, `PNG`, `JPG`, `JPEG`.
+
+- `source` — required source key. It must point to one of the supported file source types with an HTTP(S) `url`.
+- `source_page` — optional source key for the page where the file link was found. If supplied, that source must have a URL.
+- `name` — legacy-only input. The stored technical filename is always derived from the remote file URL.
+- `metadata` — optional business classification of the concrete file.
+- `evidence` — optional evidence for individual metadata fields, using the same Unicode code-point ranges as object evidence.
+
+Current file metadata fields are:
+
+- `display_name` — editable business name of the document. It does not overwrite the technical filename.
+- `purpose` — one of:
+  - `Formularz do uzupełnienia`
+  - `Regulamin`
+  - `Instrukcja`
+  - `Inny dokument`
+- `has_fields` — boolean. `true` means the file contains fields/declarations to complete; `false` means it does not.
+- `intended_use` — free-text description of what the document is used for.
+- `client_requirement` — one of:
+  - `Obowiązkowy`
+  - `Warunkowy`
+  - `Informacyjny`
+- `signature_requirement` — one of:
+  - `Nie jest wymagany`
+  - `Wymagany podpisany plik`
+  - `Dowód w systemie operatora`
+
+In the UI, unset values are presented as `Wybierz na podstawie treści`, `Nie ustalono`, or `Do ustalenia z instrukcji`; those are placeholders, not stored enum values.
+
+Older v1 imports may still contain `document_kind` and `delivery_method`. They remain accepted for backward compatibility but are not part of the current file editor/export model.
 
 This creates an object-level Burbot file source that remains available after approval.
 
@@ -126,7 +116,7 @@ This creates an object-level Burbot file source that remains available after app
 Each financing entry becomes one Burbot financing variant. Project and Recruitment use the same financing structure.
 
 - `key` — required stable key unique within the object's financing list.
-- `company_size` — one of `MICRO`, `SMALL`, `MEDIUM`, `LARGE`.
+- `company_size` — one of `MICRO`, `SMALL`, `MEDIUM`, `LARGE`, `B2C`.
 - `data` — any supported financing fields:
   - `refund_percent_min` — minimum refund percentage, `0..100`;
   - `refund_percent_avg` — average refund percentage, `0..100`;
