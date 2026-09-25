@@ -1,4 +1,8 @@
-import type { RemoteFileSourceCandidate } from "../types/source";
+import {
+  isSourceFileType,
+  type RemoteFileSourceCandidate,
+  type SourceFileType,
+} from "../types/source";
 
 function httpUrl(raw: string, base?: string): URL {
   const url = base ? new URL(raw, base) : new URL(raw);
@@ -11,7 +15,7 @@ function httpUrl(raw: string, base?: string): URL {
 }
 
 function decodedFileName(url: URL): string {
-  const raw = url.pathname.split("/").filter(Boolean).at(-1) || "document.pdf";
+  const raw = url.pathname.split("/").filter(Boolean).at(-1) || "document";
   try {
     return decodeURIComponent(raw);
   } catch {
@@ -19,33 +23,58 @@ function decodedFileName(url: URL): string {
   }
 }
 
-export function createRemotePdfSourceCandidate(
+export function sourceFileTypeFromUrl(rawUrl: string, base?: string): SourceFileType | null {
+  try {
+    const url = httpUrl(rawUrl, base);
+    const match = /\.([^.\/]+)$/i.exec(url.pathname);
+    const type = match?.[1]?.toUpperCase();
+    return isSourceFileType(type) ? type : null;
+  } catch {
+    return null;
+  }
+}
+
+export function createRemoteFileSourceCandidate(
   rawUrl: string,
   sourcePageUrl: string,
   _nameHint?: string | null,
 ): RemoteFileSourceCandidate {
   const sourcePage = httpUrl(sourcePageUrl);
   const url = httpUrl(rawUrl, sourcePage.href);
+  const fileType = sourceFileTypeFromUrl(url.href);
 
-  if (!/\.pdf$/i.test(url.pathname)) {
-    throw new Error("Choose a PDF link ending in .pdf.");
+  if (!fileType) {
+    throw new Error(
+      "Choose a .doc, .docx, .pdf, .xlsx, .png, .jpg or .jpeg file link.",
+    );
   }
 
   return {
-    fileType: "PDF",
+    fileType,
     url: url.href,
     sourcePageUrl: sourcePage.href,
-    // File display names are canonical and come from the actual URL filename,
-    // never from link text or a predefined document catalog.
+    // Display names are canonical and come from the actual remote URL filename.
     name: decodedFileName(url).slice(0, 500),
   };
 }
 
-export function isRemotePdfUrl(rawUrl: string): boolean {
-  try {
-    const url = httpUrl(rawUrl);
-    return /\.pdf$/i.test(url.pathname);
-  } catch {
-    return false;
+export function isRemoteSupportedFileUrl(rawUrl: string): boolean {
+  return sourceFileTypeFromUrl(rawUrl) !== null;
+}
+
+// Compatibility helpers for the dedicated PDF extraction path.
+export function createRemotePdfSourceCandidate(
+  rawUrl: string,
+  sourcePageUrl: string,
+  nameHint?: string | null,
+): RemoteFileSourceCandidate {
+  const file = createRemoteFileSourceCandidate(rawUrl, sourcePageUrl, nameHint);
+  if (file.fileType !== "PDF") {
+    throw new Error("Choose a PDF link ending in .pdf.");
   }
+  return file;
+}
+
+export function isRemotePdfUrl(rawUrl: string): boolean {
+  return sourceFileTypeFromUrl(rawUrl) === "PDF";
 }
