@@ -440,3 +440,30 @@ test("file metadata uses fixed select vocabularies while keeping name and intend
     /setOptionalEnum\("signature_requirement", isFileSignatureRequirement\)/,
   );
 });
+
+
+test("project and recruitment workspace expose multiple operators and operator-scoped recruitment geography", () => {
+  const app = source("src/sidepanel/App.tsx");
+  const operators = source("src/sidepanel/operatorAssignmentsUi.ts");
+  const geography = source("src/sidepanel/geographyUi.ts");
+  const core = source("src/shared/domain/core.js");
+
+  assert.match(app, /id="operator-assignments-section"/);
+  assert.match(app, /id="operator-assignment-select"/);
+  assert.match(app, /id="geography-operator"/);
+  assert.match(operators, /ADD_OPERATOR_ASSIGNMENT/);
+  assert.match(operators, /REMOVE_OPERATOR_ASSIGNMENT/);
+  assert.match(
+    operators,
+    /object\.type === "project" \|\| object\.type === "recruitment"/,
+  );
+  assert.match(geography, /— geografia:/);
+  assert.match(
+    geography,
+    /object\.type === "recruitment"[\s\S]*?operatorId/,
+  );
+  assert.match(
+    core,
+    /message\.op === "ADD_GEOGRAPHY"[\s\S]*?object\.type === "recruitment"[\s\S]*?message\.operatorId/,
+  );
+});
