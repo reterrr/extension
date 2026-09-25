@@ -327,6 +327,7 @@ async function connectFileModeToActivePage(): Promise<void> {
         if (!event.picking && fileModeEnabled) {
           // A MODE=false from the live picker means the user pressed Esc.
           fileModeEnabled = false;
+          closeCurrentPickerConnection();
           notice("File Add Mode wyłączony.");
         }
         renderMode();
@@ -405,10 +406,36 @@ async function reconnectFileMode(): Promise<void> {
   render();
 }
 
+function shortcutStorageKey(): string | null {
+  return currentWindowId === null
+    ? null
+    : `burbot:file-mode-toggle:${currentWindowId}`;
+}
+
 async function handleShortcutToggle(stamp = ""): Promise<void> {
   if (stamp && stamp === lastShortcutStamp) return;
   if (stamp) lastShortcutStamp = stamp;
   await toggleFileMode();
+  const key = shortcutStorageKey();
+  if (key) await browser.storage.session.remove(key);
+}
+
+async function consumePendingShortcutToggle(): Promise<void> {
+  const key = shortcutStorageKey();
+  if (!key) return;
+  const stored = await browser.storage.session.get(key);
+  const pending = stored[key] as
+    | { stamp?: unknown; createdAt?: unknown }
+    | undefined;
+  if (!pending || typeof pending.stamp !== "string") return;
+
+  const createdAt =
+    typeof pending.createdAt === "number" ? pending.createdAt : Date.now();
+  if (Date.now() - createdAt > 5000) {
+    await browser.storage.session.remove(key);
+    return;
+  }
+  await handleShortcutToggle(pending.stamp);
 }
 
 async function ensurePdfPermission(url: string): Promise<void> {
@@ -718,6 +745,10 @@ export async function initFileSourcesUi(): Promise<void> {
     return undefined;
   });
 
+  await consumePendingShortcutToggle().catch((error: unknown) => {
+    notice(error instanceof Error ? error.message : String(error), true);
+  });
+
   const observer = new MutationObserver(render);
   observer.observe($("workspace"), {
     attributes: true,
@@ -748,7 +779,11 @@ export async function initFileSourcesUi(): Promise<void> {
 
   browser.tabs.onUpdated.addListener((id, change) => {
     if (id !== activePageTabId) return;
-    if (!change.url && change.status !== "loading") return;
+    if (
+      !change.url &&
+      change.status !== "loading" &&
+      change.status !== "complete"
+    ) return;
     void reconnectFileMode().catch((error: unknown) => {
       notice(error instanceof Error ? error.message : String(error), true);
     });
