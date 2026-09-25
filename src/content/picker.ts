@@ -297,7 +297,8 @@ if (!globalThis.__burbotPickerLoaded) {
             location.href,
             link.download || link.textContent,
           );
-          stop();
+          // File Add Mode is persistent: capture the file but keep the picker
+          // session, overlay and event listeners active for the next file.
           send({ event: "FILE_CAPTURE", file });
         } catch (error) {
           fail(error);
