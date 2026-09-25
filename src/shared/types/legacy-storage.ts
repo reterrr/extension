@@ -10,7 +10,7 @@ import type { SourceFileType } from "./source";
  * only to wake existing storage.onChanged listeners.
  */
 export type LegacyObjectType = "project" | "recruitment" | "operator" | "nabor";
-export type ImportSourceType = "HTML" | "PDF" | "XLSX";
+export type ImportSourceType = "HTML" | SourceFileType;
 
 export interface ImportedSourceSnapshot {
   text: string;
