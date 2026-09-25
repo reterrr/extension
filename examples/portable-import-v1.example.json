@@ -90,13 +90,19 @@
       ]
     },
     {
+      "key": "operator-2",
+      "type": "operator",
+      "data": {
+        "name": "Example Partner Operator Sp. z o.o.",
+        "nip": "0987654321",
+        "website": "https://partner.example.org/"
+      }
+    },
+    {
       "key": "project-1",
       "type": "project",
       "data": {
         "name": "Generator Kompetencji 3.0",
-        "operator_id": {
-          "$ref": "operator-1"
-        },
         "type": "B2B",
         "status": "AKTYWNY",
         "number": "FEPK.07.04-IP.01-0001/26",
@@ -288,6 +294,22 @@
             ]
           }
         }
+      ],
+      "operators": [
+        {
+          "key": "project-operator-main",
+          "operator": {
+            "$ref": "operator-1"
+          },
+          "operator_type": "GLOWNY"
+        },
+        {
+          "key": "project-operator-partner",
+          "operator": {
+            "$ref": "operator-2"
+          },
+          "operator_type": "DODATKOWY"
+        }
       ]
     },
     {
@@ -297,9 +319,6 @@
         "external_number": "1/2026",
         "project_id": {
           "$ref": "project-1"
-        },
-        "operator_id": {
-          "$ref": "operator-1"
         },
         "status": "AKTYWNY",
         "dataRozpoczeciaOd": "2026-10-01",
@@ -339,7 +358,43 @@
             "raw_value": "2026-10-15"
           }
         ]
-      }
+      },
+      "operators": [
+        {
+          "key": "recruitment-operator-main",
+          "operator": {
+            "$ref": "operator-1"
+          },
+          "operator_type": "GLOWNY"
+        },
+        {
+          "key": "recruitment-operator-partner",
+          "operator": {
+            "$ref": "operator-2"
+          },
+          "operator_type": "DODATKOWY"
+        }
+      ],
+      "geography": [
+        {
+          "key": "recruitment-op1-lubuskie",
+          "type": "WOJEWODZTWO",
+          "role": "OBEJMUJE",
+          "value": "lubuskie",
+          "operator": {
+            "$ref": "operator-1"
+          }
+        },
+        {
+          "key": "recruitment-op2-lubuskie",
+          "type": "WOJEWODZTWO",
+          "role": "OBEJMUJE",
+          "value": "lubuskie",
+          "operator": {
+            "$ref": "operator-2"
+          }
+        }
+      ]
     }
   ]
 }

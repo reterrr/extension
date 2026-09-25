@@ -86,6 +86,17 @@ export interface LegacyStoredOperatorContact {
   value: string;
 }
 
+export type OperatorAssignmentType = "GLOWNY" | "DODATKOWY";
+
+/** Many-to-many Project/Recruitment -> Operator relation. */
+export interface LegacyStoredOperatorAssignment {
+  id: string;
+  objectId: string;
+  operatorId: string;
+  importKey?: string;
+  operatorType: OperatorAssignmentType;
+}
+
 /** Compatibility shape for geography rows exposed to the current UI. */
 export interface LegacyStoredGeography {
   id: string;
@@ -94,6 +105,8 @@ export interface LegacyStoredGeography {
   type: string;
   role: string;
   value: string;
+  /** Required for Recruitment geography; omitted for Project geography. */
+  operatorId?: string;
 }
 
 /**
@@ -147,6 +160,7 @@ export interface LegacyStorageState {
   objects: LegacyStoredObject[];
   rules: LegacyStoredRule[];
   geographies?: LegacyStoredGeography[];
+  operatorAssignments?: LegacyStoredOperatorAssignment[];
   operatorContacts?: LegacyStoredOperatorContact[];
   fileSources?: LegacyStoredFileSource[];
   importSources?: ImportedSource[];

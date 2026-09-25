@@ -61,10 +61,12 @@
   const projectFields = {
     name: text("Nazwa"),
     operator_id: {
-      label: "Operator",
+      label: "Operator (legacy)",
       type: "reference",
       references: "operator",
       group: "Podstawowe",
+      hidden: true,
+      legacy: true,
     },
     type: choice("Typ projektu", { B2B: "B2B", B2C: "B2C" }),
     status: choice(
@@ -136,10 +138,12 @@
       group: "Podstawowe",
     },
     operator_id: {
-      label: "Operator naboru",
+      label: "Operator naboru (legacy)",
       type: "reference",
       references: "operator",
       group: "Podstawowe",
+      hidden: true,
+      legacy: true,
     },
     source_number: text("Numer źródłowy naboru"),
     sequence_number: integer("Numer kolejny", "Podstawowe", { min: 1 }),

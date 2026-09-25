@@ -68,9 +68,10 @@ export const SHEET_HEADERS = Object.freeze({
     "utworzono", "ostatnia_zmiana",
   ],
   Projekty_Operatorzy: ["id", "projekt_id", "operator_id", "typ"],
+  Nabory_Operatorzy: ["id", "nabor_id", "operator_id", "typ"],
   Geografia_Slownik: ["geo_id", "parent_geo_id", "poziom", "geo_typ", "nazwa", "canonical_geo_id"],
   Geografia_Projekty: ["geo_projekt_id", "projekt_id", "geo_id"],
-  Geografia_Nabory: ["id", "nabor_id", "miejscowosc_id", "typ"],
+  Geografia_Nabory: ["id", "nabor_id", "operator_id", "miejscowosc_id", "typ"],
 });
 
 const PROJECT_STATUS = { PLANOWANY: "planowany", AKTYWNY: "aktywny", ZAWIESZONY: "zawieszony", ZAKONCZONY: "zakończony" };
@@ -231,7 +232,23 @@ export function readBurSnapshot(db) {
     JOIN operators o ON o.id = po.operator_id
     ORDER BY po.id
   `).all();
-  return { state, projectOperators };
+  const hasRecruitmentOperators = Boolean(
+    db
+      .prepare(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'recruitment_operators'",
+      )
+      .get(),
+  );
+  const recruitmentOperators = hasRecruitmentOperators
+    ? db.prepare(`
+        SELECT r.object_id AS recruitment_object_id, o.object_id AS operator_object_id, ro.operator_type
+        FROM recruitment_operators ro
+        JOIN recruitments r ON r.id = ro.recruitment_id
+        JOIN operators o ON o.id = ro.operator_id
+        ORDER BY ro.id
+      `).all()
+    : [];
+  return { state, projectOperators, recruitmentOperators };
 }
 
 export function buildBurSheets(snapshot, geographySource) {
@@ -245,22 +262,94 @@ export function buildBurSheets(snapshot, geographySource) {
   const catalog = catalogFrom(geographySource);
 
   const relations = [...(snapshot.projectOperators ?? [])];
-  const relationKey = new Set(relations.map((item) => `${item.project_object_id}|${item.operator_object_id}|${item.operator_type}`));
+  const recruitmentRelations = [...(snapshot.recruitmentOperators ?? [])];
+  const projectRelationKey = new Set(
+    relations.map(
+      (item) =>
+        `${item.project_object_id}|${item.operator_object_id}|${item.operator_type}`,
+    ),
+  );
+  const recruitmentRelationKey = new Set(
+    recruitmentRelations.map(
+      (item) =>
+        `${item.recruitment_object_id}|${item.operator_object_id}|${item.operator_type}`,
+    ),
+  );
+
+  for (const assignment of state.operatorAssignments ?? []) {
+    const object = byId.get(String(assignment.objectId));
+    if (!object) continue;
+    if (object.type === "project") {
+      const signature =
+        `${object.id}|${assignment.operatorId}|${assignment.operatorType}`;
+      if (!projectRelationKey.has(signature)) {
+        relations.push({
+          project_object_id: object.id,
+          operator_object_id: assignment.operatorId,
+          operator_type: assignment.operatorType,
+        });
+        projectRelationKey.add(signature);
+      }
+    } else if (object.type === "recruitment") {
+      const signature =
+        `${object.id}|${assignment.operatorId}|${assignment.operatorType}`;
+      if (!recruitmentRelationKey.has(signature)) {
+        recruitmentRelations.push({
+          recruitment_object_id: object.id,
+          operator_object_id: assignment.operatorId,
+          operator_type: assignment.operatorType,
+        });
+        recruitmentRelationKey.add(signature);
+      }
+    }
+  }
+
   for (const project of projects) {
     const operatorId = project.values?.operator_id;
     if (!operatorId) continue;
     const signature = `${project.id}|${operatorId}|GLOWNY`;
-    if (!relationKey.has(signature)) relations.push({ project_object_id: project.id, operator_object_id: operatorId, operator_type: "GLOWNY" });
+    if (!projectRelationKey.has(signature)) {
+      relations.push({
+        project_object_id: project.id,
+        operator_object_id: operatorId,
+        operator_type: "GLOWNY",
+      });
+      projectRelationKey.add(signature);
+    }
+  }
+  for (const recruitment of recruitments) {
+    const operatorId = recruitment.values?.operator_id;
+    if (!operatorId) continue;
+    const signature = `${recruitment.id}|${operatorId}|GLOWNY`;
+    if (!recruitmentRelationKey.has(signature)) {
+      recruitmentRelations.push({
+        recruitment_object_id: recruitment.id,
+        operator_object_id: operatorId,
+        operator_type: "GLOWNY",
+      });
+      recruitmentRelationKey.add(signature);
+    }
   }
 
   const relationsByProject = new Map();
+  const relationsByRecruitment = new Map();
   const relationTypesByOperator = new Map();
-  for (const relation of relations) {
-    const projectId = String(relation.project_object_id);
+  for (const relation of [...relations, ...recruitmentRelations]) {
     const operatorId = String(relation.operator_object_id);
-    if (!relationsByProject.has(projectId)) relationsByProject.set(projectId, []);
-    relationsByProject.get(projectId).push(relation);
-    if (!relationTypesByOperator.has(operatorId)) relationTypesByOperator.set(operatorId, new Set());
+    if ("project_object_id" in relation) {
+      const projectId = String(relation.project_object_id);
+      if (!relationsByProject.has(projectId)) relationsByProject.set(projectId, []);
+      relationsByProject.get(projectId).push(relation);
+    } else {
+      const recruitmentId = String(relation.recruitment_object_id);
+      if (!relationsByRecruitment.has(recruitmentId)) {
+        relationsByRecruitment.set(recruitmentId, []);
+      }
+      relationsByRecruitment.get(recruitmentId).push(relation);
+    }
+    if (!relationTypesByOperator.has(operatorId)) {
+      relationTypesByOperator.set(operatorId, new Set());
+    }
     relationTypesByOperator.get(operatorId).add(String(relation.operator_type));
   }
 
@@ -348,7 +437,13 @@ export function buildBurSheets(snapshot, geographySource) {
   const recruitmentRows = recruitments.map((object) => {
     const values = object.values ?? {};
     const project = byId.get(String(values.project_id ?? ""));
-    const operator = byId.get(String(values.operator_id ?? ""));
+    const linked = relationsByRecruitment.get(String(object.id)) ?? [];
+    const main =
+      linked.find((item) => String(item.operator_type) === "GLOWNY") ??
+      linked[0];
+    const operator = main
+      ? byId.get(String(main.operator_object_id))
+      : byId.get(String(values.operator_id ?? ""));
     const micro = fundingFor(state, object.id, "MICRO");
     const small = fundingFor(state, object.id, "SMALL");
     const medium = fundingFor(state, object.id, "MEDIUM");
@@ -473,6 +568,15 @@ export function buildBurSheets(snapshot, geographySource) {
     typ: String(relation.operator_type) === "GLOWNY" ? "operator" : "partner",
   }));
 
+  const recruitmentOperatorRows = recruitmentRelations.map((relation, index) =>
+    row(SHEET_HEADERS.Nabory_Operatorzy, {
+      id: `NO_${String(index + 1).padStart(6, "0")}`,
+      nabor_id: keyOf(byId.get(String(relation.recruitment_object_id))),
+      operator_id: keyOf(byId.get(String(relation.operator_object_id))),
+      typ: String(relation.operator_type) === "GLOWNY" ? "operator" : "partner",
+    }),
+  );
+
   const dictionary = new Map();
   const ensureGeo = (type, value) => {
     const signature = `${type}:${value}`;
@@ -499,7 +603,15 @@ export function buildBurSheets(snapshot, geographySource) {
     }
     if (recruitmentIds.has(String(geo.objectId))) {
       gn += 1;
-      recruitmentGeoRows.push(row(SHEET_HEADERS.Geografia_Nabory, { id: geo.id || `GNAB_${String(gn).padStart(6, "0")}`, nabor_id: keyOf(byId.get(String(geo.objectId))), miejscowosc_id: mapped, typ: geo.role === "WYKLUCZA" ? "exclude" : "include" }));
+      recruitmentGeoRows.push(row(SHEET_HEADERS.Geografia_Nabory, {
+        id: geo.id || `GNAB_${String(gn).padStart(6, "0")}`,
+        nabor_id: keyOf(byId.get(String(geo.objectId))),
+        operator_id: geo.operatorId
+          ? keyOf(byId.get(String(geo.operatorId)))
+          : null,
+        miejscowosc_id: mapped,
+        typ: geo.role === "WYKLUCZA" ? "exclude" : "include",
+      }));
     }
   }
 
@@ -512,6 +624,7 @@ export function buildBurSheets(snapshot, geographySource) {
     { name: "Pliki", headers: SHEET_HEADERS.Pliki, rows: fileRows },
     { name: "Pola_Obiektow", headers: SHEET_HEADERS.Pola_Obiektow, rows: objectFieldRows },
     { name: "Projekty_Operatorzy", headers: SHEET_HEADERS.Projekty_Operatorzy, rows: projectOperatorRows },
+    { name: "Nabory_Operatorzy", headers: SHEET_HEADERS.Nabory_Operatorzy, rows: recruitmentOperatorRows },
     { name: "Geografia_Slownik", headers: SHEET_HEADERS.Geografia_Slownik, rows: [...dictionary.values()].sort((a, b) => Number(a.poziom) - Number(b.poziom) || a.nazwa.localeCompare(b.nazwa, "pl")).map((item) => row(SHEET_HEADERS.Geografia_Slownik, item)) },
     { name: "Geografia_Projekty", headers: SHEET_HEADERS.Geografia_Projekty, rows: projectGeoRows },
     { name: "Geografia_Nabory", headers: SHEET_HEADERS.Geografia_Nabory, rows: recruitmentGeoRows },

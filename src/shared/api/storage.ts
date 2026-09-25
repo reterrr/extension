@@ -2,6 +2,7 @@ import { clearActiveDraft } from "../commits/draftStore";
 import { stampLastCheckedAt } from "../commits/lastChecked";
 import {
   migrateFundingRefundRanges,
+  migrateMultiOperatorAssignments,
   migrateRecruitmentStatusesAndOperatorContacts,
 } from "../domain/stateMigrations";
 import { LEGACY_STORAGE_KEY } from "../storage/constants";
@@ -38,6 +39,7 @@ function assertLegacyState(value: unknown): asserts value is LegacyStorageState 
   }
   migrateFundingRefundRanges(state);
   migrateRecruitmentStatusesAndOperatorContacts(state);
+  migrateMultiOperatorAssignments(state);
 }
 
 function emptyState(): LegacyStorageState {
@@ -47,6 +49,7 @@ function emptyState(): LegacyStorageState {
     objects: [],
     rules: [],
     geographies: [],
+    operatorAssignments: [],
     operatorContacts: [],
     fileSources: [],
     importSources: [],

@@ -25,6 +25,34 @@ if (!document.querySelector("style[data-burbot-geography]")) {
   font-size: 11px;
   padding: 8px 2px;
 }
+.geography-operator-group {
+  margin: 9px 0 12px;
+  padding: 8px;
+  border: 1px solid #dce6d9;
+  border-radius: 8px;
+  background: #f7faf5;
+}
+.geography-operator-group-warning {
+  border-color: #ead8aa;
+  background: #fffaf0;
+}
+.geography-operator-heading {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 1px 1px 5px;
+}
+.geography-operator-heading strong {
+  font-size: 12px;
+}
+.geography-operator-heading small {
+  color: var(--muted);
+  font-size: 10px;
+}
+.geography-empty-operator {
+  padding: 5px 2px 2px;
+}
 .geography-row {
   border: 1px solid var(--line);
   border-radius: 7px;

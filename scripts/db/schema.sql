@@ -146,8 +146,18 @@ CREATE TABLE IF NOT EXISTS projects_operators (
   project_id INTEGER NOT NULL,
   operator_id INTEGER NOT NULL,
   operator_type TEXT NOT NULL,
-  UNIQUE(project_id, operator_id, operator_type),
+  UNIQUE(project_id, operator_id),
   FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+  FOREIGN KEY (operator_id) REFERENCES operators(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS recruitment_operators (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  recruitment_id INTEGER NOT NULL,
+  operator_id INTEGER NOT NULL,
+  operator_type TEXT NOT NULL,
+  UNIQUE(recruitment_id, operator_id),
+  FOREIGN KEY (recruitment_id) REFERENCES recruitments(id) ON DELETE CASCADE,
   FOREIGN KEY (operator_id) REFERENCES operators(id) ON DELETE CASCADE
 );
 
@@ -190,8 +200,10 @@ CREATE TABLE IF NOT EXISTS geographies (
   role TEXT NOT NULL,
   geography_object_id INTEGER NOT NULL,
   value TEXT NOT NULL,
+  operator_object_id TEXT,
   FOREIGN KEY (object_id) REFERENCES workspace_objects(object_id) ON DELETE CASCADE,
-  FOREIGN KEY (geography_group_id) REFERENCES geography_groups(id) ON DELETE CASCADE
+  FOREIGN KEY (geography_group_id) REFERENCES geography_groups(id) ON DELETE CASCADE,
+  FOREIGN KEY (operator_object_id) REFERENCES workspace_objects(object_id) ON DELETE CASCADE
 );
 
 CREATE INDEX IF NOT EXISTS ix_geographies_group ON geographies(geography_group_id);
@@ -276,4 +288,4 @@ CREATE TABLE IF NOT EXISTS document_requirements (
   FOREIGN KEY (object_id) REFERENCES workspace_objects(object_id) ON DELETE CASCADE
 );
 
-PRAGMA user_version = 6;
+PRAGMA user_version = 7;

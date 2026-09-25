@@ -104,6 +104,20 @@ function state() {
         },
       },
     ],
+    operatorAssignments: [
+      {
+        id: "project-op-1",
+        objectId: "project-1",
+        operatorId: "operator-1",
+        operatorType: "GLOWNY",
+      },
+      {
+        id: "recruitment-op-1",
+        objectId: "recruitment-1",
+        operatorId: "operator-1",
+        operatorType: "GLOWNY",
+      },
+    ],
     rules: [
       {
         id: "rule-1",
@@ -128,6 +142,7 @@ function state() {
         type: "MIASTO_NA_PRAWACH_POWIATU",
         role: "OBEJMUJE",
         value: "śląskie|miasto|Katowice",
+        operatorId: "operator-1",
       },
     ],
     financingRules: [
@@ -318,6 +333,14 @@ test("project export includes every related recruitment with full business data"
     type: "project",
   });
   assert.equal(recruitment.geography[0].label, "Katowice");
+  assert.equal(recruitment.operators.length, 1);
+  assert.equal(recruitment.operators[0].role, "GLOWNY");
+  assert.equal(recruitment.operators[0].operator.key, "operator-1");
+  assert.equal(recruitment.geography[0].operator.key, "operator-1");
+  assert.equal(
+    recruitment.geography_by_operator["operator-1"][0].label,
+    "Katowice",
+  );
   assert.equal(recruitment.financing[0].refund_percent_avg, 85);
   assert.equal(recruitment.financing[0].max_amount_pln, 12000);
   assert.equal(recruitment.documents, undefined);

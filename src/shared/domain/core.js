@@ -11,6 +11,7 @@
     objects: [],
     rules: [],
     geographies: [],
+    operatorAssignments: [],
     operatorContacts: [],
     financingRules: [],
     documentRequirements: [],
@@ -599,8 +600,30 @@
       if (!object) throw Error("Choose an object.");
 
       if (message.op === "DELETE") {
+        const removedGeographyIds = new Set(
+          (state.geographies || [])
+            .filter(
+              (row) =>
+                row.objectId === object.id ||
+                (object.type === "operator" && row.operatorId === object.id),
+            )
+            .map((row) => row.id),
+        );
         state.objects = state.objects.filter((o) => o.id !== object.id);
-        state.rules = state.rules.filter((r) => r.objectId !== object.id);
+        state.rules = state.rules.filter(
+          (r) =>
+            r.objectId !== object.id &&
+            !(
+              r.target?.kind === "geography" &&
+              removedGeographyIds.has(r.target.id)
+            ),
+        );
+        if (state.operatorAssignments)
+          state.operatorAssignments = state.operatorAssignments.filter(
+            (row) =>
+              row.objectId !== object.id &&
+              row.operatorId !== object.id,
+          );
         if (state.operatorContacts)
           state.operatorContacts = state.operatorContacts.filter(
             (r) => r.objectId !== object.id,
@@ -615,15 +638,25 @@
           );
         if (state.geographies)
           state.geographies = state.geographies.filter(
-            (row) => row.objectId !== object.id,
+            (row) => !removedGeographyIds.has(row.id),
           );
         if (state.fieldEvidence)
           state.fieldEvidence = state.fieldEvidence.filter(
-            (row) => row.objectId !== object.id,
+            (row) =>
+              row.objectId !== object.id &&
+              !(
+                row.target?.kind === "geography" &&
+                removedGeographyIds.has(row.target.id)
+              ),
           );
         if (state.importTargetEvidence)
           state.importTargetEvidence = state.importTargetEvidence.filter(
-            (row) => row.objectId !== object.id,
+            (row) =>
+              row.objectId !== object.id &&
+              !(
+                row.target?.kind === "geography" &&
+                removedGeographyIds.has(row.target.id)
+              ),
           );
       } else if (message.op === "ASSIGN") {
         assign(state, object, message, uuid, now);
@@ -702,6 +735,118 @@
           rule.lastExtractedAt = now;
         }
         object.updatedAt = now;
+      } else if (message.op === "ADD_OPERATOR_ASSIGNMENT") {
+        if (!["project", "recruitment"].includes(object.type))
+          throw Error("Operators can be assigned only to projects and recruitments.");
+        const operator = state.objects.find(
+          (candidate) =>
+            candidate.id === message.operatorId &&
+            candidate.type === "operator",
+        );
+        if (!operator) throw Error("Choose an existing operator.");
+        const operatorType = message.operatorType ?? "DODATKOWY";
+        if (!["GLOWNY", "DODATKOWY"].includes(operatorType))
+          throw Error("Unknown operator assignment type.");
+        const rows = (state.operatorAssignments ||= []);
+        if (
+          rows.some(
+            (row) =>
+              row.objectId === object.id &&
+              row.operatorId === operator.id,
+          )
+        )
+          throw Error("This operator is already assigned.");
+
+        const hasMain = rows.some(
+          (row) =>
+            row.objectId === object.id &&
+            row.operatorType === "GLOWNY",
+        );
+        const nextType = hasMain ? operatorType : "GLOWNY";
+        if (nextType === "GLOWNY") {
+          for (const row of rows) {
+            if (
+              row.objectId === object.id &&
+              row.operatorType === "GLOWNY"
+            ) {
+              row.operatorType = "DODATKOWY";
+            }
+          }
+        }
+        rows.push({
+          id: uuid(),
+          objectId: object.id,
+          operatorId: operator.id,
+          operatorType: nextType,
+        });
+        object.updatedAt = now;
+      } else if (message.op === "REMOVE_OPERATOR_ASSIGNMENT") {
+        if (!["project", "recruitment"].includes(object.type))
+          throw Error("Operators can be assigned only to projects and recruitments.");
+        const rows = state.operatorAssignments || [];
+        const assignment = rows.find(
+          (row) =>
+            row.id === message.assignmentId &&
+            row.objectId === object.id,
+        );
+        if (!assignment) throw Error("Operator assignment not found.");
+
+        const removedGeographyIds = new Set(
+          object.type === "recruitment"
+            ? (state.geographies || [])
+                .filter(
+                  (row) =>
+                    row.objectId === object.id &&
+                    row.operatorId === assignment.operatorId,
+                )
+                .map((row) => row.id)
+            : [],
+        );
+
+        state.operatorAssignments = rows.filter(
+          (row) => row.id !== assignment.id,
+        );
+        if (removedGeographyIds.size) {
+          state.geographies = (state.geographies || []).filter(
+            (row) => !removedGeographyIds.has(row.id),
+          );
+          state.rules = state.rules.filter(
+            (rule) =>
+              !(
+                rule.objectId === object.id &&
+                rule.target?.kind === "geography" &&
+                removedGeographyIds.has(rule.target.id)
+              ),
+          );
+          state.fieldEvidence = (state.fieldEvidence || []).filter(
+            (row) =>
+              !(
+                row.objectId === object.id &&
+                row.target?.kind === "geography" &&
+                removedGeographyIds.has(row.target.id)
+              ),
+          );
+          state.importTargetEvidence = (state.importTargetEvidence || []).filter(
+            (row) =>
+              !(
+                row.objectId === object.id &&
+                row.target?.kind === "geography" &&
+                removedGeographyIds.has(row.target.id)
+              ),
+          );
+        }
+
+        const remaining = state.operatorAssignments.filter(
+          (row) => row.objectId === object.id,
+        );
+        if (
+          assignment.operatorType === "GLOWNY" &&
+          remaining.length &&
+          !remaining.some((row) => row.operatorType === "GLOWNY")
+        ) {
+          remaining[0].operatorType = "GLOWNY";
+        }
+        object.updatedAt = now;
       } else if (message.op === "ADD_GEOGRAPHY") {
         if (!globalThis.BurbotSchema[object.type]?.geography)
           throw Error("Geography is supported only for projects and recruitments.");
@@ -715,13 +860,29 @@
         if (!entry || entry.type !== message.geographyType)
           throw Error("Choose a geography value matching the selected type.");
         const rows = (state.geographies ||= []);
+        let operatorId;
+        if (object.type === "recruitment") {
+          operatorId = clean(message.operatorId);
+          if (!operatorId)
+            throw Error("Choose the operator whose recruitment geography this is.");
+          const assigned = (state.operatorAssignments || []).some(
+            (row) =>
+              row.objectId === object.id &&
+              row.operatorId === operatorId,
+          );
+          if (!assigned)
+            throw Error("The selected operator is not assigned to this recruitment.");
+        }
+
         if (
           rows.some(
             (row) =>
               row.objectId === object.id &&
               row.type === message.geographyType &&
               row.role === message.geographyRole &&
-              row.value === entry.value,
+              row.value === entry.value &&
+              (object.type !== "recruitment" ||
+                row.operatorId === operatorId),
           )
         )
           throw Error("This geography condition is already added.");
@@ -731,6 +892,7 @@
           type: message.geographyType,
           role: message.geographyRole,
           value: entry.value,
+          ...(operatorId ? { operatorId } : {}),
         });
         object.updatedAt = now;
       } else if (message.op === "REMOVE_GEOGRAPHY") {

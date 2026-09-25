@@ -85,10 +85,11 @@ ensureColumn("recruitments", "notes", "TEXT");
 ensureColumn("recruitments", "funding_rules", "TEXT");
 ensureColumn("recruitments", "funding_verified_at", "TEXT");
 ensureColumn("recruitments", "funding_verification_url", "TEXT");
-db.pragma("user_version = 6");
+ensureColumn("geographies", "operator_object_id", "TEXT");
+db.pragma("user_version = 7");
 
 db.prepare(
-  `INSERT INTO app_meta(key, value) VALUES ('schema_version', '6')
+  `INSERT INTO app_meta(key, value) VALUES ('schema_version', '7')
    ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
 ).run();
 
@@ -153,6 +154,7 @@ function geographyTable(type) {
 
 function clearMaterializedTables() {
   db.exec(`
+    DELETE FROM recruitment_operators;
     DELETE FROM projects_operators;
     DELETE FROM operator_contacts;
     DELETE FROM recruitments;
@@ -240,8 +242,9 @@ function syncGeographies(state) {
   );
   const insertGeography = db.prepare(`
     INSERT INTO geographies(
-      legacy_id, object_id, geography_group_id, type, role, geography_object_id, value
-    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+      legacy_id, object_id, geography_group_id, type, role,
+      geography_object_id, value, operator_object_id
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   for (const entry of geographies) {
@@ -269,6 +272,7 @@ function syncGeographies(state) {
       String(entry.role),
       Number(dictionary.id),
       String(entry.value),
+      entry.operatorId ? String(entry.operatorId) : null,
     );
   }
 
@@ -278,6 +282,32 @@ function syncGeographies(state) {
 function syncBusinessTables(state, groupByObject) {
   const projectIdByObject = new Map();
   const operatorIdByObject = new Map();
+
+  const assignmentsByObject = new Map();
+  for (const assignment of state.operatorAssignments ?? []) {
+    const objectId = String(assignment.objectId);
+    const rows = assignmentsByObject.get(objectId) ?? [];
+    rows.push(assignment);
+    assignmentsByObject.set(objectId, rows);
+  }
+
+  const assignmentsFor = (object) => {
+    const rows = assignmentsByObject.get(String(object.id)) ?? [];
+    if (rows.length) return rows;
+    const legacyOperatorId =
+      typeof object.values?.operator_id === "string"
+        ? object.values.operator_id
+        : "";
+    return legacyOperatorId
+      ? [
+          {
+            objectId: object.id,
+            operatorId: legacyOperatorId,
+            operatorType: "GLOWNY",
+          },
+        ]
+      : [];
+  };
 
   const insertProject = db.prepare(`
     INSERT INTO projects(
@@ -298,6 +328,10 @@ function syncBusinessTables(state, groupByObject) {
   `);
   const insertProjectOperator = db.prepare(`
     INSERT INTO projects_operators(project_id, operator_id, operator_type)
+    VALUES (?, ?, ?)
+  `);
+  const insertRecruitmentOperator = db.prepare(`
+    INSERT INTO recruitment_operators(recruitment_id, operator_id, operator_type)
     VALUES (?, ?, ?)
   `);
   const insertRecruitment = db.prepare(`
@@ -371,17 +405,31 @@ function syncBusinessTables(state, groupByObject) {
       groupByObject.get(String(object.id)) ?? null,
     );
 
-    const operatorId = operatorIdByObject.get(String(values.operator_id ?? ""));
-    if (operatorId) insertProjectOperator.run(id, operatorId, "GLOWNY");
+    for (const assignment of assignmentsFor(object)) {
+      const operatorId = operatorIdByObject.get(String(assignment.operatorId ?? ""));
+      if (!operatorId) continue;
+      insertProjectOperator.run(
+        id,
+        operatorId,
+        String(assignment.operatorType ?? "DODATKOWY"),
+      );
+    }
   }
 
   for (const object of state.objects.filter((entry) => entry.type === "recruitment")) {
     const values = object.values ?? {};
+    const recruitmentId = objectDbId(object.id);
+    const assignments = assignmentsFor(object);
+    const mainAssignment =
+      assignments.find((row) => String(row.operatorType) === "GLOWNY") ??
+      assignments[0];
     insertRecruitment.run(
-      objectDbId(object.id),
+      recruitmentId,
       String(object.id),
       projectIdByObject.get(String(values.project_id ?? "")) ?? null,
-      operatorIdByObject.get(String(values.operator_id ?? "")) ?? null,
+      mainAssignment
+        ? operatorIdByObject.get(String(mainAssignment.operatorId ?? "")) ?? null
+        : null,
       nullableText(values.external_number),
       nullableText(values.source_number),
       nullableInt(values.sequence_number),
@@ -418,6 +466,16 @@ function syncBusinessTables(state, groupByObject) {
       nullableText(values.last_checked_at),
       groupByObject.get(String(object.id)) ?? null,
     );
+
+    for (const assignment of assignments) {
+      const operatorId = operatorIdByObject.get(String(assignment.operatorId ?? ""));
+      if (!operatorId) continue;
+      insertRecruitmentOperator.run(
+        recruitmentId,
+        operatorId,
+        String(assignment.operatorType ?? "DODATKOWY"),
+      );
+    }
   }
 }
 

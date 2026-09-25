@@ -176,3 +176,176 @@ test("geography is selected first and page text is stored as supporting evidence
   assert.equal(removed.geographies.length, 0);
   assert.equal(removed.rules.length, 0);
 });
+
+
+test("projects and recruitments support multiple operators and recruitment geography is operator-scoped", () => {
+  const uuid = ids();
+  let state = BurbotCore.empty();
+
+  const create = (objectType, initialValue, sourceUrl) => {
+    state = BurbotCore.mutate(
+      state,
+      {
+        op: "CREATE_FROM_SELECTION",
+        expectedRevision: state.revision,
+        objectType,
+        initialValue,
+        sourceUrl,
+      },
+      uuid,
+      "2026-09-25T14:00:00.000Z",
+    );
+    return state.objects.at(-1);
+  };
+
+  const operatorA = create(
+    "operator",
+    "Operator A",
+    "https://example.test/operator-a",
+  );
+  operatorA.importKey = "OP_A";
+  const operatorB = create(
+    "operator",
+    "Operator B",
+    "https://example.test/operator-b",
+  );
+  operatorB.importKey = "OP_B";
+  const project = create(
+    "project",
+    "Projekt wielu operatorów",
+    "https://example.test/project",
+  );
+  const recruitment = create(
+    "recruitment",
+    "Nabór wielu operatorów",
+    "https://example.test/recruitment",
+  );
+
+  for (const object of [project, recruitment]) {
+    state = BurbotCore.mutate(
+      state,
+      {
+        op: "ADD_OPERATOR_ASSIGNMENT",
+        expectedRevision: state.revision,
+        objectId: object.id,
+        operatorId: operatorA.id,
+        operatorType: "GLOWNY",
+      },
+      uuid,
+      "2026-09-25T14:01:00.000Z",
+    );
+    state = BurbotCore.mutate(
+      state,
+      {
+        op: "ADD_OPERATOR_ASSIGNMENT",
+        expectedRevision: state.revision,
+        objectId: object.id,
+        operatorId: operatorB.id,
+        operatorType: "DODATKOWY",
+      },
+      uuid,
+      "2026-09-25T14:02:00.000Z",
+    );
+  }
+
+  assert.equal(
+    state.operatorAssignments.filter((row) => row.objectId === project.id)
+      .length,
+    2,
+  );
+  assert.equal(
+    state.operatorAssignments.filter((row) => row.objectId === recruitment.id)
+      .length,
+    2,
+  );
+
+  assert.throws(
+    () =>
+      BurbotCore.mutate(
+        state,
+        {
+          op: "ADD_GEOGRAPHY",
+          expectedRevision: state.revision,
+          objectId: recruitment.id,
+          geographyType: "WOJEWODZTWO",
+          geographyRole: "OBEJMUJE",
+          value: "podkarpackie",
+        },
+        uuid,
+        "2026-09-25T14:03:00.000Z",
+      ),
+    /Choose the operator/,
+  );
+
+  state = BurbotCore.mutate(
+    state,
+    {
+      op: "ADD_GEOGRAPHY",
+      expectedRevision: state.revision,
+      objectId: recruitment.id,
+      operatorId: operatorA.id,
+      geographyType: "WOJEWODZTWO",
+      geographyRole: "OBEJMUJE",
+      value: "podkarpackie",
+    },
+    uuid,
+    "2026-09-25T14:04:00.000Z",
+  );
+  state = BurbotCore.mutate(
+    state,
+    {
+      op: "ADD_GEOGRAPHY",
+      expectedRevision: state.revision,
+      objectId: recruitment.id,
+      operatorId: operatorB.id,
+      geographyType: "WOJEWODZTWO",
+      geographyRole: "OBEJMUJE",
+      value: "podkarpackie",
+    },
+    uuid,
+    "2026-09-25T14:05:00.000Z",
+  );
+
+  const recruitmentGeo = state.geographies.filter(
+    (row) => row.objectId === recruitment.id,
+  );
+  assert.equal(recruitmentGeo.length, 2);
+  assert.deepEqual(
+    new Set(recruitmentGeo.map((row) => row.operatorId)),
+    new Set([operatorA.id, operatorB.id]),
+  );
+
+  const assignmentA = state.operatorAssignments.find(
+    (row) =>
+      row.objectId === recruitment.id &&
+      row.operatorId === operatorA.id,
+  );
+  state = BurbotCore.mutate(
+    state,
+    {
+      op: "REMOVE_OPERATOR_ASSIGNMENT",
+      expectedRevision: state.revision,
+      objectId: recruitment.id,
+      assignmentId: assignmentA.id,
+    },
+    uuid,
+    "2026-09-25T14:06:00.000Z",
+  );
+
+  assert.equal(
+    state.geographies.filter((row) => row.objectId === recruitment.id).length,
+    1,
+  );
+  assert.equal(
+    state.geographies.find((row) => row.objectId === recruitment.id).operatorId,
+    operatorB.id,
+  );
+  assert.equal(
+    state.operatorAssignments.find(
+      (row) =>
+        row.objectId === recruitment.id &&
+        row.operatorId === operatorB.id,
+    ).operatorType,
+    "GLOWNY",
+  );
+});

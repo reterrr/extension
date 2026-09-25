@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import "./geographyStyles";
+import "./operatorAssignmentsStyles";
 import "./fileSourceStyles";
 import "./commitStyles";
 import "./workspaceRedesignStyles";
@@ -16,6 +17,9 @@ export function App() {
       import("./workspace.js"),
       import("./importUi"),
       import("./excelExportUi"),
+      import("./operatorAssignmentsUi").then(({ initOperatorAssignmentsUi }) =>
+        initOperatorAssignmentsUi(),
+      ),
       import("./geographyUi").then(({ initGeographyUi }) => initGeographyUi()),
       import("./fileSourcesUi").then(({ initFileSourcesUi }) => initFileSourcesUi()),
       import("./pdfCaptureUi").then(({ initPdfCaptureUi }) => initPdfCaptureUi()),
@@ -125,12 +129,43 @@ export function App() {
             </details>
           </section>
 
+          <section id="operator-assignments-section" className="business-section" hidden>
+            <details id="operator-assignments-panel" className="workspace-section-card">
+              <summary className="workspace-section-summary">
+                <span className="workspace-section-title">
+                  <strong>Operatorzy</strong>
+                  <small>Projekt lub nabór może mieć kilku operatorów</small>
+                </span>
+                <span id="operator-assignment-count" className="workspace-section-status">Brak operatorów</span>
+              </summary>
+              <div className="workspace-section-body">
+                <div id="operator-assignment-list" />
+                <div className="operator-assignment-add">
+                  <label htmlFor="operator-assignment-select">
+                    Operator
+                    <select id="operator-assignment-select" />
+                  </label>
+                  <label htmlFor="operator-assignment-role">
+                    Rola
+                    <select id="operator-assignment-role" defaultValue="DODATKOWY">
+                      <option value="GLOWNY">Główny</option>
+                      <option value="DODATKOWY">Dodatkowy</option>
+                    </select>
+                  </label>
+                  <button id="operator-assignment-add-button" type="button">
+                    + Dodaj
+                  </button>
+                </div>
+              </div>
+            </details>
+          </section>
+
           <section id="geography-section" className="business-section" hidden>
             <details id="geography-panel" className="workspace-section-card">
               <summary className="workspace-section-summary">
                 <span className="workspace-section-title">
                   <strong>Geografia</strong>
-                  <small>Zakres terytorialny projektu lub naboru</small>
+                  <small id="geography-subtitle">Zakres terytorialny projektu lub naboru</small>
                 </span>
                 <span id="geography-count" className="workspace-section-status">Brak zakresu</span>
               </summary>
@@ -139,6 +174,9 @@ export function App() {
                 <details id="geography-add" className="geography-add">
                   <summary className="text-button">+ Dodaj geografię</summary>
                   <div className="geography-form">
+                    <label id="geography-operator-label" htmlFor="geography-operator" hidden>Operator naboru</label>
+                    <select id="geography-operator" hidden />
+
                     <label htmlFor="geography-role">Rola</label>
                     <select id="geography-role" />
 

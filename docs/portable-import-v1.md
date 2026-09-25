@@ -68,9 +68,65 @@ AI should output only values that are actually known from the sources. It does *
 
 `last_checked_at` is a system-managed date-time field on Project, Operator and Recruitment. It must **not** be supplied by AI imports. Burbot stamps it automatically when a changed/new object is committed to SQLite.
 
-`project.operator_id` is a reference to an imported `operator` via `{ "$ref": "operator-key" }`.
+Projects and recruitments now use `objects[].operators[]` for operator relations. The old single `data.operator_id` reference is still accepted as a backward-compatible import and is migrated to one `GLOWNY` assignment.
 
 Refund percentages are **not object-level Project/Recruitment fields**. They belong to a concrete financing variant in `objects[].financing[]`. This avoids a second, conflicting "Dofinansowanie" section next to the normal financing variants.
+
+## `objects[].operators[]`
+
+Both `project` and `recruitment` can have multiple operators.
+
+Each row contains:
+
+- `key` — stable relation key;
+- `operator` — `{ "$ref": "operator-key" }`;
+- `operator_type` — `GLOWNY` or `DODATKOWY`.
+
+Example:
+
+```json
+"operators": [
+  {
+    "key": "operator-main",
+    "operator": { "$ref": "operator-1" },
+    "operator_type": "GLOWNY"
+  },
+  {
+    "key": "operator-partner",
+    "operator": { "$ref": "operator-2" },
+    "operator_type": "DODATKOWY"
+  }
+]
+```
+
+At most one operator can be `GLOWNY`. If an import supplies operators but none is marked `GLOWNY`, Burbot promotes the first row to `GLOWNY`.
+
+### Recruitment geography per operator
+
+Project geography remains attached to the Project itself.
+
+Recruitment geography belongs to a concrete assigned operator. Use an `operator` reference on each recruitment geography row:
+
+```json
+"geography": [
+  {
+    "key": "op1-lubuskie",
+    "type": "WOJEWODZTWO",
+    "role": "OBEJMUJE",
+    "value": "lubuskie",
+    "operator": { "$ref": "operator-1" }
+  },
+  {
+    "key": "op2-lubuskie",
+    "type": "WOJEWODZTWO",
+    "role": "OBEJMUJE",
+    "value": "lubuskie",
+    "operator": { "$ref": "operator-2" }
+  }
+]
+```
+
+If a recruitment has exactly one assigned operator, old imports without `geography[].operator` are automatically scoped to that operator. With zero or multiple operators, `geography[].operator` is required.
 
 ## `objects[].files[]`
 

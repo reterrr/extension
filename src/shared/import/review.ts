@@ -24,6 +24,11 @@ export interface ImportApprovalReferencePatch {
   targetObjectId: string;
 }
 
+export interface ImportApprovalOperatorReferencePatch {
+  assignmentImportKey: string;
+  targetObjectId: string;
+}
+
 export interface ImportApprovalExistingReferenceLink {
   importKey: string;
   targetObjectId: string;
@@ -36,6 +41,7 @@ export interface ImportApprovalPlan {
   selectedDataFields: string[];
   financingFieldsByImportKey: Record<string, string[]>;
   referencePatches: ImportApprovalReferencePatch[];
+  operatorReferencePatches: ImportApprovalOperatorReferencePatch[];
   existingReferenceLinks: ImportApprovalExistingReferenceLink[];
   temporaryDependencyImportKeys: string[];
 }
@@ -877,6 +883,7 @@ export function buildImportApprovalPlan(
   const existingTarget = findExistingImportObjectMatch(object, existingState);
   const references = referencedObjects(session, object);
   const referencePatches: ImportApprovalReferencePatch[] = [];
+  const operatorReferencePatches: ImportApprovalOperatorReferencePatch[] = [];
   const existingReferenceLinks: ImportApprovalExistingReferenceLink[] = [];
   for (const { field, target } of references) {
     if (!target.importKey) throw new Error(`Could not resolve imported reference ${field}.`);
@@ -899,6 +906,40 @@ export function buildImportApprovalPlan(
       );
     }
     referencePatches.push({ field, targetObjectId });
+  }
+
+  const operatorAssignments = (session.previewState.operatorAssignments ?? [])
+    .filter((row) => row.objectId === object.id);
+  const operatorDependencies: LegacyStoredObject[] = [];
+  for (const assignment of operatorAssignments) {
+    const target = session.previewState.objects.find(
+      (entry) => entry.id === assignment.operatorId && entry.type === "operator",
+    );
+    if (!target?.importKey) {
+      throw new Error("Could not resolve imported operator assignment.");
+    }
+
+    let targetObjectId = session.approvedObjectIdByImportKey[target.importKey];
+    if (!targetObjectId) {
+      const existing = findExistingImportObjectMatch(target, existingState);
+      if (existing) {
+        targetObjectId = existing.id;
+        existingReferenceLinks.push({
+          importKey: target.importKey,
+          targetObjectId: existing.id,
+        });
+      }
+    }
+    if (!targetObjectId) {
+      throw new Error(
+        `Approve referenced operator “${BurbotCore.displayName(target)}” first, or make sure the existing operator has the same import key / NIP.`,
+      );
+    }
+    operatorDependencies.push(target);
+    operatorReferencePatches.push({
+      assignmentImportKey: String(assignment.importKey ?? assignment.id),
+      targetObjectId,
+    });
   }
 
   const importedSources = session.previewState.importSources ?? [];
@@ -926,6 +967,7 @@ export function buildImportApprovalPlan(
 
     const metadata = Object.fromEntries(
       [
+        "display_name",
         "document_kind",
         "purpose",
         "has_fields",
@@ -971,13 +1013,34 @@ export function buildImportApprovalPlan(
     };
   });
 
+  const portableOperators = operatorAssignments.map((assignment) => {
+    const target = session.previewState.objects.find(
+      (entry) => entry.id === assignment.operatorId && entry.type === "operator",
+    );
+    if (!target?.importKey) {
+      throw new Error("Could not resolve imported operator assignment.");
+    }
+    return {
+      key: String(assignment.importKey ?? assignment.id),
+      operator: { $ref: target.importKey },
+      operator_type: assignment.operatorType,
+    };
+  });
+
   const portableGeography = (session.previewState.geographies ?? [])
     .filter((row) => row.objectId === object.id)
-    .map((row) => ({
+    .map((row) => {
+      const operator = row.operatorId
+        ? session.previewState.objects.find(
+            (entry) => entry.id === row.operatorId && entry.type === "operator",
+          )
+        : undefined;
+      return {
       key: String(row.importKey ?? row.id),
       type: String(row.type),
       role: String(row.role),
       value: String(row.value),
+      ...(operator?.importKey ? { operator: { $ref: operator.importKey } } : {}),
       ...(portableTargetEvidence(
         session.previewState,
         object.id,
@@ -993,7 +1056,8 @@ export function buildImportApprovalPlan(
             ),
           }
         : {}),
-    }));
+    };
+    });
 
   const portableContacts = (session.previewState.operatorContacts ?? [])
     .filter((row) => row.objectId === object.id)
@@ -1077,6 +1141,9 @@ export function buildImportApprovalPlan(
   for (const { target } of references) {
     if (target.importKey) dependencyMap.set(target.importKey, target);
   }
+  for (const target of operatorDependencies) {
+    if (target.importKey) dependencyMap.set(target.importKey, target);
+  }
 
   return {
     selectedImportKey: object.importKey,
@@ -1084,6 +1151,7 @@ export function buildImportApprovalPlan(
     selectedDataFields: explicitObjectFields(session, object),
     financingFieldsByImportKey,
     referencePatches,
+    operatorReferencePatches,
     existingReferenceLinks,
     temporaryDependencyImportKeys: [...dependencyMap.keys()],
     document: {
@@ -1099,6 +1167,7 @@ export function buildImportApprovalPlan(
           ...(object.evidence
             ? { evidence: portableEvidence(object, sourceById) }
             : {}),
+          ...(portableOperators.length ? { operators: portableOperators } : {}),
           ...(portableFiles.length ? { files: portableFiles } : {}),
           ...(portableGeography.length
             ? { geography: portableGeography }

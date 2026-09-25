@@ -163,7 +163,7 @@ test("repository portable-import example stays importable", async () => {
     "2026-09-25T12:30:00.000Z",
   );
 
-  assert.equal(session.objectOrder.length, 3);
+  assert.equal(session.objectOrder.length, 4);
 
   const project = session.previewState.objects.find(
     (object) => object.importKey === "project-1",
@@ -183,6 +183,33 @@ test("repository portable-import example stays importable", async () => {
   assert.equal(files[1].fileType, "DOCX");
   assert.equal(files[1].purpose, "Formularz do uzupełnienia");
   assert.equal(files[1].has_fields, true);
+
+  const projectAssignments = (session.previewState.operatorAssignments ?? []).filter(
+    (entry) => entry.objectId === project.id,
+  );
+  assert.equal(projectAssignments.length, 2);
+  assert.deepEqual(
+    projectAssignments.map((entry) => entry.operatorType),
+    ["GLOWNY", "DODATKOWY"],
+  );
+
+  const recruitment = session.previewState.objects.find(
+    (object) => object.importKey === "recruitment-1",
+  );
+  assert.ok(recruitment);
+  const recruitmentAssignments = (
+    session.previewState.operatorAssignments ?? []
+  ).filter((entry) => entry.objectId === recruitment.id);
+  assert.equal(recruitmentAssignments.length, 2);
+
+  const recruitmentGeography = (session.previewState.geographies ?? []).filter(
+    (entry) => entry.objectId === recruitment.id,
+  );
+  assert.equal(recruitmentGeography.length, 2);
+  assert.deepEqual(
+    new Set(recruitmentGeography.map((entry) => entry.operatorId)),
+    new Set(recruitmentAssignments.map((entry) => entry.operatorId)),
+  );
 
   assert.ok((session.previewState.importTargetEvidence ?? []).length >= 10);
 });
