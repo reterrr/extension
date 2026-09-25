@@ -123,6 +123,11 @@ async function data(
     throw new Error(response?.error ?? "Storage is unavailable.");
   }
   state = response.value;
+  window.dispatchEvent(
+    new CustomEvent("burbot:workspace-state-changed", {
+      detail: { state },
+    }),
+  );
   return state;
 }
 
@@ -500,6 +505,24 @@ function metadataText(
   return typeof value === "string" ? value : "";
 }
 
+async function removeFileSource(source: LegacyStoredFileSource): Promise<void> {
+  const object = chosenObject();
+  if (!object || object.id !== source.objectId) {
+    throw new Error("Wybierz obiekt, do którego należy ten plik.");
+  }
+
+  const button = $("read-from-file");
+  const beforeTop = button.getBoundingClientRect().top;
+  await data("REMOVE_FILE_SOURCE", {
+    objectId: object.id,
+    sourceId: source.id,
+  });
+  expandedFileSources.delete(source.id);
+  notice(`Usunięto plik: ${source.name}.`);
+  render();
+  keepControlInPlace(button, beforeTop);
+}
+
 function renderSource(source: LegacyStoredFileSource): HTMLElement {
   const row = document.createElement("details");
   row.className = "file-source-row";
@@ -530,7 +553,22 @@ function renderSource(source: LegacyStoredFileSource): HTMLElement {
   status.textContent = progress.complete
     ? "Oznaczony"
     : `${progress.filled}/${progress.total} · Do oznaczenia`;
-  summary.append(summaryCopy, status);
+
+  const quickRemove = document.createElement("button");
+  quickRemove.type = "button";
+  quickRemove.className = "file-source-quick-remove icon-button danger";
+  quickRemove.setAttribute("aria-label", `Usuń plik ${source.name}`);
+  quickRemove.title = "Usuń plik";
+  quickRemove.textContent = "×";
+  quickRemove.onclick = (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    void removeFileSource(source).catch((error: unknown) =>
+      notice(error instanceof Error ? error.message : String(error), true),
+    );
+  };
+
+  summary.append(summaryCopy, status, quickRemove);
 
   const body = document.createElement("div");
   body.className = "file-source-body";
@@ -647,23 +685,9 @@ function renderSource(source: LegacyStoredFileSource): HTMLElement {
   remove.setAttribute("aria-label", `Usuń plik ${source.name}`);
   remove.textContent = "×";
   remove.onclick = () => {
-    const object = chosenObject();
-    if (!object) return;
-    const button = $("read-from-file");
-    const beforeTop = button.getBoundingClientRect().top;
-    void data("REMOVE_FILE_SOURCE", {
-      objectId: object.id,
-      sourceId: source.id,
-    })
-      .then(() => {
-        expandedFileSources.delete(source.id);
-        notice("Usunięto plik.");
-        render();
-        keepControlInPlace(button, beforeTop);
-      })
-      .catch((error: unknown) =>
-        notice(error instanceof Error ? error.message : String(error), true),
-      );
+    void removeFileSource(source).catch((error: unknown) =>
+      notice(error instanceof Error ? error.message : String(error), true),
+    );
   };
 
   if (read) actions.append(read);

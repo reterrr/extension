@@ -52,6 +52,45 @@ function highlightKey(selector, quote) {
   ].join("\u0000");
 }
 
+function cssAttributeValue(value) {
+  return String(value ?? "")
+    .replace(/\\/g, "\\\\")
+    .replace(/"/g, '\\"')
+    .replace(/[\r\n\f]/g, " ");
+}
+
+function fileLinkSelectors(value) {
+  try {
+    const url = new URL(String(value ?? ""));
+    const basename = url.pathname.split("/").filter(Boolean).at(-1) ?? "";
+    const candidates = [
+      url.href,
+      `${url.pathname}${url.search}${url.hash}`,
+      `${url.pathname}${url.search}`,
+      url.pathname,
+      url.pathname.replace(/^\//, ""),
+    ].filter(Boolean);
+
+    const selectors = Array.from(
+      new Set(
+        candidates.map(
+          (candidate) => `a[href="${cssAttributeValue(candidate)}"]`,
+        ),
+      ),
+    );
+
+    if (basename) {
+      selectors.push(
+        `a[href$="/${cssAttributeValue(basename)}"]`,
+        `a[href$="${cssAttributeValue(basename)}"]`,
+      );
+    }
+    return Array.from(new Set(selectors));
+  } catch {
+    return [];
+  }
+}
+
 function cleanText(value) {
   return String(value ?? "").replace(/\s+/g, " ").trim();
 }
@@ -276,6 +315,32 @@ export function buildStoredSelectorHighlights(
       selector: entry.selector,
       ...(fallbacks.length ? { selectorFallbacks: fallbacks } : {}),
       ...(quote ? { quote } : {}),
+    });
+  }
+
+  // Attached files are visual evidence too: on their source page, keep the
+  // corresponding download link highlighted so the user can immediately see
+  // which documents were already added.
+  for (const file of state.fileSources ?? []) {
+    if (
+      !file?.url ||
+      !file?.sourcePageUrl ||
+      !sameSelectorPage(file.sourcePageUrl, pageUrl)
+    ) {
+      continue;
+    }
+
+    const selectors = fileLinkSelectors(file.url);
+    if (!selectors.length) continue;
+    const [selector, ...fallbacks] = selectors;
+    const key = highlightKey(selector);
+    if (seen.has(key)) continue;
+    seen.add(key);
+
+    highlights.push({
+      id: "file-source:" + String(file.id ?? file.url),
+      selector,
+      ...(fallbacks.length ? { selectorFallbacks: fallbacks } : {}),
     });
   }
 
