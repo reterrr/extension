@@ -13,7 +13,10 @@ import {
   type PickerSelectionResponse,
 } from "../shared/messaging/picker";
 import { selectorColor } from "../shared/selectorPalette";
-import { createRemoteFileSourceCandidate } from "../shared/sources/remoteFile";
+import {
+  createRemoteFileSourceCandidate,
+  isRemoteSupportedFileUrl,
+} from "../shared/sources/remoteFile";
 import type {
   AttributeExtraction,
   SupportedExtractionAttribute,
@@ -252,7 +255,17 @@ if (!globalThis.__burbotPickerLoaded) {
         : event.target;
       const rect = target.getBoundingClientRect();
 
-      if (!filePicking) {
+      if (filePicking) {
+        const link =
+          target instanceof HTMLAnchorElement
+            ? target
+            : target.closest("a[href]");
+        const supported =
+          link instanceof HTMLAnchorElement &&
+          isRemoteSupportedFileUrl(link.href);
+        overlay.style.borderColor = supported ? "#2f7659" : "#b78024";
+        overlay.style.background = supported ? "#2f765924" : "#b780241a";
+      } else {
         try {
           const color = selectorColor(buildDurableSelectors(target).primary);
           overlay.style.borderColor = color.border;
@@ -347,7 +360,7 @@ if (!globalThis.__burbotPickerLoaded) {
       document.removeEventListener("keydown", key, true);
     }
 
-    function stop(): void {
+    function stop(notifyMode = true): void {
       const wasInteractive = picking || listenersAttached || overlay !== null;
       picking = false;
       filePicking = false;
@@ -357,7 +370,9 @@ if (!globalThis.__burbotPickerLoaded) {
       if (stopActiveInteractiveSession === stop) {
         stopActiveInteractiveSession = null;
       }
-      if (wasInteractive) send({ event: "MODE", picking: false });
+      if (notifyMode && wasInteractive) {
+        send({ event: "MODE", picking: false });
+      }
     }
 
     function start(fileMode: boolean): void {
@@ -368,7 +383,9 @@ if (!globalThis.__burbotPickerLoaded) {
         stopActiveInteractiveSession();
       }
 
-      stop();
+      // Reset this port without announcing MODE=false. Announcing a stop here
+      // made the sidepanel interpret every PICK_FILE start as an Esc/exit.
+      stop(false);
       picking = true;
       filePicking = fileMode;
       overlay = document.createElement("div");
