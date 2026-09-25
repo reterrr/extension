@@ -11,6 +11,8 @@ export type DataOperation =
   | "EDIT"
   | "APPLY"
   | "DELETE"
+  | "ADD_OPERATOR_ASSIGNMENT"
+  | "REMOVE_OPERATOR_ASSIGNMENT"
   | "ADD_GEOGRAPHY"
   | "REMOVE_GEOGRAPHY"
   | "ADD_FILE_SOURCE"
