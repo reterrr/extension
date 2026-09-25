@@ -346,6 +346,15 @@ function parseDocument(input: unknown): BurbotImportV1 {
         }
         refs.add(operator.operator.$ref);
       }
+      const mainCount = operators.filter(
+        (operator) => operator.operator_type === "GLOWNY",
+      ).length;
+      if (mainCount > 1) {
+        throw new Error(`${path}.operators can contain only one GLOWNY operator.`);
+      }
+      if (operators.length && mainCount === 0) {
+        operators[0].operator_type = "GLOWNY";
+      }
     }
 
     let geography: ImportGeography[] | undefined;
