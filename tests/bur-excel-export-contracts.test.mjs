@@ -108,6 +108,20 @@ function snapshot() {
         },
       ],
       rules: [],
+      operatorAssignments: [
+        {
+          id: "PA_1",
+          objectId: "PR_1",
+          operatorId: "OP_1",
+          operatorType: "GLOWNY",
+        },
+        {
+          id: "RA_1",
+          objectId: "NAB_1",
+          operatorId: "OP_1",
+          operatorType: "GLOWNY",
+        },
+      ],
       geographies: [
         {
           id: "GPR_1",
@@ -122,6 +136,7 @@ function snapshot() {
           type: "GMINA",
           role: "OBEJMUJE",
           value: "1816132",
+          operatorId: "OP_1",
         },
         {
           id: "GNAB_2",
@@ -129,6 +144,7 @@ function snapshot() {
           type: "GMINA",
           role: "WYKLUCZA",
           value: "0264011",
+          operatorId: "OP_1",
         },
       ],
       operatorContacts: [
@@ -223,6 +239,7 @@ test("BUR Excel export keeps complete business data and relations", () => {
       "Pliki",
       "Pola_Obiektow",
       "Projekty_Operatorzy",
+      "Nabory_Operatorzy",
       "Geografia_Slownik",
       "Geografia_Projekty",
       "Geografia_Nabory",
@@ -309,9 +326,15 @@ test("BUR Excel export keeps complete business data and relations", () => {
   assert.equal(projectRelations[0].projekt_id, "PR_1");
   assert.equal(projectRelations[0].operator_id, "OP_1");
 
+  const recruitmentRelations = asObjects("Nabory_Operatorzy");
+  assert.equal(recruitmentRelations[0].nabor_id, "NAB_1");
+  assert.equal(recruitmentRelations[0].operator_id, "OP_1");
+
   const recruitmentGeography = asObjects("Geografia_Nabory");
   assert.equal(recruitmentGeography[0].nabor_id, "NAB_1");
+  assert.equal(recruitmentGeography[0].operator_id, "OP_1");
   assert.equal(recruitmentGeography[0].typ, "include");
+  assert.equal(recruitmentGeography[1].operator_id, "OP_1");
   assert.equal(recruitmentGeography[1].typ, "exclude");
 
   const dictionary = asObjects("Geografia_Slownik");
