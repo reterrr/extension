@@ -32,6 +32,7 @@ test("SQLite schema creates typed business and provenance tables", () => {
     "operator_contacts",
     "recruitments",
     "projects_operators",
+    "recruitment_operators",
     "geography_groups",
     "geographies",
     "extraction_rules",
@@ -107,6 +108,28 @@ test("SQLite schema creates typed business and provenance tables", () => {
   );
   assert.ok(workspaceColumns.has("last_checked_at"));
 
+  const geographyColumns = new Set(
+    db.prepare("PRAGMA table_info(geographies)").all().map((row) => row.name),
+  );
+  assert.ok(geographyColumns.has("operator_object_id"));
+
+  const recruitmentOperatorColumns = new Set(
+    db
+      .prepare("PRAGMA table_info(recruitment_operators)")
+      .all()
+      .map((row) => row.name),
+  );
+  for (const column of [
+    "recruitment_id",
+    "operator_id",
+    "operator_type",
+  ]) {
+    assert.ok(
+      recruitmentOperatorColumns.has(column),
+      `missing recruitment_operators.${column}`,
+    );
+  }
+
   const evidenceColumns = new Set(
     db.prepare("PRAGMA table_info(field_evidence)").all().map((row) => row.name),
   );
@@ -126,7 +149,7 @@ test("SQLite schema creates typed business and provenance tables", () => {
     assert.ok(evidenceColumns.has(column), `missing field_evidence.${column}`);
   }
 
-  assert.equal(db.pragma("user_version", { simple: true }), 6);
+  assert.equal(db.pragma("user_version", { simple: true }), 7);
   db.close();
 });
 
