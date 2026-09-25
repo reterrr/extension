@@ -613,6 +613,11 @@ export async function initGeographyUi(): Promise<void> {
   });
 
   window.addEventListener("burbot:active-object-changed", queueRender);
+  window.addEventListener("burbot:workspace-state-changed", (event) => {
+    const next = (event as CustomEvent<{ state?: LegacyStorageState }>).detail?.state;
+    if (next) state = next;
+    queueRender();
+  });
   window.addEventListener("pagehide", persistGeographyUi);
   render();
 }
