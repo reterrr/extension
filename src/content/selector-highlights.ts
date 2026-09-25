@@ -264,7 +264,13 @@ function createOverlay(
   selector: string,
   exactText: boolean,
 ): HTMLDivElement {
-  const color = selectorColor(selector);
+  const color = id.startsWith("file-source:")
+    ? {
+        border: "#2f7659",
+        fill: "#2f765924",
+        soft: "#2f765933",
+      }
+    : selectorColor(selector);
   const overlay = document.createElement("div");
   overlay.dataset.burbotSelectorHighlight = id;
   overlay.style.cssText =
