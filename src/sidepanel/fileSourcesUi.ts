@@ -23,7 +23,7 @@ let fileModeStarting = false;
 let fileCaptureBusy = false;
 let fileModeGeneration = 0;
 let currentWindowId: number | null = null;
-let lastShortcutStamp = "";
+const handledShortcutStamps = new Set<string>();
 const expandedFileSources = new Set<string>();
 
 type FileTextMetadataKey =
@@ -413,11 +413,20 @@ function shortcutStorageKey(): string | null {
 }
 
 async function handleShortcutToggle(stamp = ""): Promise<void> {
-  if (stamp && stamp === lastShortcutStamp) return;
-  if (stamp) lastShortcutStamp = stamp;
-  await toggleFileMode();
-  const key = shortcutStorageKey();
-  if (key) await browser.storage.session.remove(key);
+  if (stamp && handledShortcutStamps.has(stamp)) return;
+  if (stamp) {
+    handledShortcutStamps.add(stamp);
+    if (handledShortcutStamps.size > 32) {
+      handledShortcutStamps.delete(handledShortcutStamps.values().next().value!);
+    }
+  }
+
+  try {
+    await toggleFileMode();
+  } finally {
+    const key = shortcutStorageKey();
+    if (key) await browser.storage.session.remove(key);
+  }
 }
 
 async function consumePendingShortcutToggle(): Promise<void> {
