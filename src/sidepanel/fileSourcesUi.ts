@@ -17,9 +17,13 @@ let activePageUrl = "";
 let activePageTabId: number | null = null;
 let port: browser.runtime.Port | null = null;
 let pickerClient: PickerClient | null = null;
+let fileModeEnabled = false;
 let filePicking = false;
 let fileModeStarting = false;
+let fileCaptureBusy = false;
 let fileModeGeneration = 0;
+let currentWindowId: number | null = null;
+let lastShortcutStamp = "";
 const expandedFileSources = new Set<string>();
 
 type FileTextMetadataKey =
@@ -189,35 +193,8 @@ function closeCurrentPickerConnection(): void {
   filePicking = false;
 }
 
-function disconnectPicker(): void {
-  fileModeGeneration++;
-  fileModeStarting = false;
-  closeCurrentPickerConnection();
-  renderMode();
-}
-
-async function attachFile(
-  object: LegacyStoredObject,
-  file: RemoteFileSourceCandidate,
-): Promise<void> {
-  const button = $("read-from-file");
-  const beforeTop = button.getBoundingClientRect().top;
-  await data("ADD_FILE_SOURCE", {
-    objectId: object.id,
-    file,
-  });
-  disconnectPicker();
-  const added = (state.fileSources ?? []).find(
-    (source) => source.objectId === object.id && source.url === file.url,
-  );
-  if (added) expandedFileSources.add(added.id);
-  notice(`Dodano plik: ${file.name}. Uzupełnij jego oznaczenia.`);
-  render();
-  keepControlInPlace(button, beforeTop);
-}
-
-async function stopFileMode(): Promise<void> {
-  // Invalidate an in-flight start before touching the current connection.
+async function stopPickerConnection(): Promise<void> {
+  // Invalidate callbacks from the old content-script port before requesting STOP.
   fileModeGeneration++;
   fileModeStarting = false;
   const currentClient = pickerClient;
@@ -236,17 +213,30 @@ async function stopFileMode(): Promise<void> {
   }
 }
 
-async function startFileMode(): Promise<void> {
-  if (fileModeStarting) return;
+async function attachFile(
+  object: LegacyStoredObject,
+  file: RemoteFileSourceCandidate,
+): Promise<void> {
+  const button = $("read-from-file");
+  const beforeTop = button.getBoundingClientRect().top;
+  await data("ADD_FILE_SOURCE", {
+    objectId: object.id,
+    file,
+  });
+  const added = (state.fileSources ?? []).find(
+    (source) => source.objectId === object.id && source.url === file.url,
+  );
+  if (added) expandedFileSources.add(added.id);
+  notice(`Dodano plik: ${file.name}. File Add Mode nadal jest aktywny.`);
+  render();
+  keepControlInPlace(button, beforeTop);
+}
+
+async function connectFileModeToActivePage(): Promise<void> {
+  if (!fileModeEnabled || fileModeStarting) return;
 
   const object = chosenObject();
-  if (!object) throw new Error("Choose an object first.");
-
-  if (filePicking) {
-    await stopFileMode();
-    notice("Read from file mode cancelled.");
-    return;
-  }
+  if (!object) throw new Error("Wybierz obiekt przed włączeniem File Add Mode.");
 
   fileModeStarting = true;
   const token = ++fileModeGeneration;
@@ -254,8 +244,11 @@ async function startFileMode(): Promise<void> {
 
   try {
     const tab = await activeTab();
-    if (token !== fileModeGeneration) return;
+    if (token !== fileModeGeneration || !fileModeEnabled) return;
     if (!tab.url) throw new Error("The active tab has no URL.");
+
+    activePageUrl = tab.url;
+    activePageTabId = tab.id ?? null;
 
     const current = new URL(tab.url);
     if (current.protocol === "file:") {
@@ -265,8 +258,15 @@ async function startFileMode(): Promise<void> {
     }
 
     if (isRemoteSupportedFileUrl(tab.url)) {
-      const file = createRemoteFileSourceCandidate(tab.url, tab.url);
-      await attachFile(object, file);
+      fileCaptureBusy = true;
+      renderMode();
+      try {
+        const file = createRemoteFileSourceCandidate(tab.url, tab.url);
+        await attachFile(object, file);
+      } finally {
+        fileCaptureBusy = false;
+        renderMode();
+      }
       return;
     }
 
@@ -275,16 +275,13 @@ async function startFileMode(): Promise<void> {
     }
     if (tab.id === undefined) throw new Error("The active tab cannot be connected.");
 
-    // Close an idle/stale file-picker connection before creating a new one.
     closeCurrentPickerConnection();
 
-    // Use the same lightweight picker bundles as the normal workspace. Injecting
-    // content.js here reparsed the whole content entrypoint on every file-pick.
     await browser.scripting.executeScript({
       target: { tabId: tab.id },
       files: ["core.js", "picker.js"],
     });
-    if (token !== fileModeGeneration) return;
+    if (token !== fileModeGeneration || !fileModeEnabled) return;
 
     const connectedPort = browser.tabs.connect(tab.id, {
       name: "burbot-file-picker",
@@ -295,22 +292,28 @@ async function startFileMode(): Promise<void> {
       if (token !== fileModeGeneration) return;
 
       if (event.event === "FILE_CAPTURE") {
-        const selectedObject = chosenObject();
-        if (!selectedObject || selectedObject.id !== object.id) {
-          disconnectPicker();
-          notice("Object changed. Start Read from file again.", true);
+        if (!fileModeEnabled) return;
+        if (fileCaptureBusy) {
+          notice("Poprzedni plik jest jeszcze zapisywany. Spróbuj ponownie za chwilę.", true);
           return;
         }
 
-        // Disable the button while the source is being persisted so another
-        // click cannot create a second picker connection for the same capture.
-        fileModeStarting = true;
-        filePicking = false;
+        const selectedObject = chosenObject();
+        if (!selectedObject) {
+          notice("Wybierz obiekt, do którego ma zostać dodany plik.", true);
+          return;
+        }
+
+        fileCaptureBusy = true;
         renderMode();
-        void attachFile(object, event.file).catch((error: unknown) => {
-          disconnectPicker();
-          notice(error instanceof Error ? error.message : String(error), true);
-        });
+        void attachFile(selectedObject, event.file)
+          .catch((error: unknown) => {
+            notice(error instanceof Error ? error.message : String(error), true);
+          })
+          .finally(() => {
+            fileCaptureBusy = false;
+            renderMode();
+          });
         return;
       }
 
@@ -321,11 +324,16 @@ async function startFileMode(): Promise<void> {
 
       if (event.event === "MODE") {
         filePicking = event.picking;
+        if (!event.picking && fileModeEnabled) {
+          // A MODE=false from the live picker means the user pressed Esc.
+          fileModeEnabled = false;
+          notice("File Add Mode wyłączony.");
+        }
         renderMode();
       }
     });
 
-    if (token !== fileModeGeneration) {
+    if (token !== fileModeGeneration || !fileModeEnabled) {
       closeConnection(client, connectedPort);
       return;
     }
@@ -335,8 +343,6 @@ async function startFileMode(): Promise<void> {
 
     connectedPort.onDisconnect.addListener(() => {
       client.dispose();
-
-      // A late disconnect from an older port must never clear a newer picker.
       if (port !== connectedPort || pickerClient !== client) return;
       port = null;
       pickerClient = null;
@@ -346,19 +352,63 @@ async function startFileMode(): Promise<void> {
     });
 
     await client.request("PICK_FILE");
-    if (token !== fileModeGeneration) {
+    if (token !== fileModeGeneration || !fileModeEnabled) {
       closeConnection(client, connectedPort);
       return;
     }
 
     filePicking = true;
-    notice("Read from file: click a .doc, .docx, .pdf, .xlsx, .png, .jpg or .jpeg link. Press Esc to cancel.");
+    notice("File Add Mode aktywny. Klikaj kolejne pliki; Ctrl+Alt+F lub Esc wyłącza tryb.");
   } finally {
     if (token === fileModeGeneration) {
       fileModeStarting = false;
       renderMode();
     }
   }
+}
+
+async function enableFileMode(): Promise<void> {
+  if (fileModeEnabled) return;
+  if (!chosenObject()) throw new Error("Wybierz obiekt przed włączeniem File Add Mode.");
+  fileModeEnabled = true;
+  renderMode();
+  try {
+    await connectFileModeToActivePage();
+  } catch (error) {
+    fileModeEnabled = false;
+    renderMode();
+    throw error;
+  }
+}
+
+async function disableFileMode(message = "File Add Mode wyłączony."): Promise<void> {
+  fileModeEnabled = false;
+  fileCaptureBusy = false;
+  await stopPickerConnection();
+  notice(message);
+}
+
+async function toggleFileMode(): Promise<void> {
+  if (fileModeEnabled) {
+    await disableFileMode();
+  } else {
+    await enableFileMode();
+  }
+}
+
+async function reconnectFileMode(): Promise<void> {
+  await stopPickerConnection();
+  await refreshActivePage();
+  if (fileModeEnabled) {
+    await connectFileModeToActivePage();
+  }
+  render();
+}
+
+async function handleShortcutToggle(stamp = ""): Promise<void> {
+  if (stamp && stamp === lastShortcutStamp) return;
+  if (stamp) lastShortcutStamp = stamp;
+  await toggleFileMode();
 }
 
 async function ensurePdfPermission(url: string): Promise<void> {
@@ -590,14 +640,20 @@ function renderSource(source: LegacyStoredFileSource): HTMLElement {
 function renderMode(): void {
   const button = $("read-from-file") as HTMLButtonElement;
   const hint = $("file-source-mode-hint");
-  button.disabled = fileModeStarting;
-  button.dataset.active = String(filePicking);
-  button.textContent = fileModeStarting
-    ? "Starting…"
-    : filePicking
-      ? "Cancel file mode"
-      : "Read from file";
-  hint.hidden = !filePicking;
+  button.disabled = fileModeStarting && !fileModeEnabled;
+  button.dataset.active = String(fileModeEnabled);
+  button.setAttribute("aria-pressed", String(fileModeEnabled));
+  button.title = "Ctrl+Alt+F";
+  button.textContent = fileCaptureBusy
+    ? "Dodawanie pliku…"
+    : fileModeEnabled
+      ? "✓ File Add Mode ON · Ctrl+Alt+F"
+      : "+ Dodaj pliki · Ctrl+Alt+F";
+  hint.hidden = !fileModeEnabled;
+  if (fileModeEnabled) {
+    hint.textContent =
+      "Tryb pozostaje aktywny po dodaniu pliku. Klikaj kolejne pliki; Ctrl+Alt+F lub Esc wyłącza.";
+  }
 }
 
 function render(): void {
@@ -628,14 +684,39 @@ export async function initFileSourcesUi(): Promise<void> {
   initialized = true;
 
   $("read-from-file").onclick = () => {
-    void startFileMode().catch((error: unknown) => {
-      disconnectPicker();
+    void toggleFileMode().catch((error: unknown) => {
       notice(error instanceof Error ? error.message : String(error), true);
     });
   };
 
+  const currentWindow = await browser.windows.getCurrent();
+  currentWindowId = currentWindow.id ?? null;
   state = await data("GET");
   await refreshActivePage();
+
+  browser.runtime.onMessage.addListener((message: unknown) => {
+    if (
+      !message ||
+      typeof message !== "object" ||
+      (message as { type?: unknown }).type !== "BURBOT_TOGGLE_FILE_MODE"
+    ) {
+      return undefined;
+    }
+    const payload = message as { windowId?: unknown; stamp?: unknown };
+    if (
+      typeof payload.windowId === "number" &&
+      currentWindowId !== null &&
+      payload.windowId !== currentWindowId
+    ) {
+      return undefined;
+    }
+    void handleShortcutToggle(
+      typeof payload.stamp === "string" ? payload.stamp : "",
+    ).catch((error: unknown) =>
+      notice(error instanceof Error ? error.message : String(error), true),
+    );
+    return undefined;
+  });
 
   const observer = new MutationObserver(render);
   observer.observe($("workspace"), {
@@ -660,21 +741,22 @@ export async function initFileSourcesUi(): Promise<void> {
   });
 
   browser.tabs.onActivated.addListener(() => {
-    void stopFileMode()
-      .then(refreshActivePage)
-      .then(render)
-      .catch(() => undefined);
+    void reconnectFileMode().catch((error: unknown) => {
+      notice(error instanceof Error ? error.message : String(error), true);
+    });
   });
 
   browser.tabs.onUpdated.addListener((id, change) => {
     if (id !== activePageTabId) return;
     if (!change.url && change.status !== "loading") return;
-    void stopFileMode()
-      .then(refreshActivePage)
-      .then(render)
-      .catch(() => undefined);
+    void reconnectFileMode().catch((error: unknown) => {
+      notice(error instanceof Error ? error.message : String(error), true);
+    });
   });
 
-  window.addEventListener("pagehide", () => void stopFileMode());
+  window.addEventListener("pagehide", () => {
+    fileModeEnabled = false;
+    void stopPickerConnection();
+  });
   render();
 }
