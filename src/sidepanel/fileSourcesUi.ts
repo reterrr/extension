@@ -1,5 +1,10 @@
 import { createPickerClient, type PickerClient } from "./pickerRpc";
 import {
+  FILE_CLIENT_REQUIREMENTS,
+  FILE_PURPOSES,
+  FILE_SIGNATURE_REQUIREMENTS,
+} from "../shared/fileMetadata";
+import {
   createRemoteFileSourceCandidate,
   isRemoteSupportedFileUrl,
 } from "../shared/sources/remoteFile";
@@ -26,55 +31,14 @@ let currentWindowId: number | null = null;
 const handledShortcutStamps = new Set<string>();
 const expandedFileSources = new Set<string>();
 
-type FileTextMetadataKey =
-  | "document_kind"
-  | "purpose"
-  | "intended_use"
-  | "client_requirement"
-  | "signature_requirement"
-  | "delivery_method";
-
-const FILE_TEXT_METADATA_FIELDS: Array<{
-  key: FileTextMetadataKey;
-  label: string;
-  multiline?: boolean;
-  placeholder?: string;
-}> = [
-  {
-    key: "document_kind",
-    label: "Rodzaj",
-    placeholder: "np. Oryginał operatora",
-  },
-  {
-    key: "purpose",
-    label: "Cel",
-    placeholder: "np. Formularz do uzupełnienia",
-  },
-  {
-    key: "intended_use",
-    label: "Przeznaczenie",
-    multiline: true,
-    placeholder: "Do czego służy ten dokument?",
-  },
-  {
-    key: "client_requirement",
-    label: "Wymagalność dla klienta",
-    multiline: true,
-    placeholder: "np. Obowiązkowy na etapie naboru / informacyjny / warunkowy",
-  },
-  {
-    key: "signature_requirement",
-    label: "Podpis",
-    multiline: true,
-    placeholder: "np. Wymagany podpisany plik",
-  },
-  {
-    key: "delivery_method",
-    label: "Sposób dostarczenia",
-    multiline: true,
-    placeholder: "np. Opracowany wzór / generator",
-  },
-];
+const CURRENT_FILE_METADATA_FIELDS = [
+  "display_name",
+  "purpose",
+  "has_fields",
+  "intended_use",
+  "client_requirement",
+  "signature_requirement",
+] as const;
 
 function $<T extends HTMLElement = HTMLElement>(id: string): T {
   const element = document.getElementById(id);
@@ -489,20 +453,38 @@ function metadataProgress(source: LegacyStoredFileSource): {
   total: number;
   complete: boolean;
 } {
-  const textFilled = FILE_TEXT_METADATA_FIELDS.filter(
-    ({ key }) => typeof source[key] === "string" && source[key]!.trim().length > 0,
-  ).length;
-  const filled = textFilled + (typeof source.has_fields === "boolean" ? 1 : 0);
-  const total = FILE_TEXT_METADATA_FIELDS.length + 1;
+  const filled = CURRENT_FILE_METADATA_FIELDS.filter((field) => {
+    if (field === "has_fields") return typeof source.has_fields === "boolean";
+    const value = source[field];
+    return typeof value === "string" && value.trim().length > 0;
+  }).length;
+  const total = CURRENT_FILE_METADATA_FIELDS.length;
   return { filled, total, complete: filled === total };
 }
 
 function metadataText(
   source: LegacyStoredFileSource,
-  key: FileTextMetadataKey,
+  key: "display_name" | "intended_use",
 ): string {
   const value = source[key];
   return typeof value === "string" ? value : "";
+}
+
+function appendSelectOptions(
+  select: HTMLSelectElement,
+  placeholder: string,
+  values: readonly string[],
+  current: string | undefined,
+): void {
+  select.append(new Option(placeholder, ""));
+  for (const value of values) select.append(new Option(value, value));
+
+  if (current && !values.includes(current)) {
+    const legacy = new Option(`Dotychczas: ${current}`, current);
+    legacy.dataset.legacy = "true";
+    select.append(legacy);
+  }
+  select.value = current ?? "";
 }
 
 async function removeFileSource(source: LegacyStoredFileSource): Promise<void> {
@@ -541,9 +523,11 @@ function renderSource(source: LegacyStoredFileSource): HTMLElement {
   const summaryCopy = document.createElement("span");
   summaryCopy.className = "file-source-summary-copy";
   const title = document.createElement("strong");
-  title.textContent = source.name;
+  title.textContent = source.display_name?.trim() || source.name;
   const meta = document.createElement("small");
-  meta.textContent = `${source.fileType} · ${host(source.url)}`;
+  meta.textContent = source.display_name?.trim()
+    ? `${source.name} · ${source.fileType} · ${host(source.url)}`
+    : `${source.fileType} · ${host(source.url)}`;
   summaryCopy.append(title, meta);
 
   const status = document.createElement("span");
@@ -581,40 +565,93 @@ function renderSource(source: LegacyStoredFileSource): HTMLElement {
   const classification = document.createElement("div");
   classification.className = "file-source-classification";
 
-  const controls = new Map<FileTextMetadataKey, HTMLInputElement | HTMLTextAreaElement>();
-  for (const definition of FILE_TEXT_METADATA_FIELDS) {
-    const label = document.createElement("label");
-    label.className = "file-source-field";
-    const caption = document.createElement("span");
-    caption.textContent = definition.label;
+  const nameLabel = document.createElement("label");
+  nameLabel.className = "file-source-field";
+  const nameCaption = document.createElement("span");
+  nameCaption.textContent = "Nazwa";
+  const displayName = document.createElement("input");
+  displayName.type = "text";
+  displayName.value = metadataText(source, "display_name");
+  displayName.placeholder = "Nazwa dokumentu";
+  displayName.autocomplete = "off";
+  nameLabel.append(nameCaption, displayName);
 
-    const input = definition.multiline
-      ? document.createElement("textarea")
-      : document.createElement("input");
-    if (input instanceof HTMLInputElement) input.type = "text";
-    if (input instanceof HTMLTextAreaElement) input.rows = 2;
-    input.value = metadataText(source, definition.key);
-    input.placeholder = definition.placeholder ?? "";
-    input.autocomplete = "off";
-    controls.set(definition.key, input);
-    label.append(caption, input);
-    classification.append(label);
-  }
+  const intendedUseLabel = document.createElement("label");
+  intendedUseLabel.className = "file-source-field";
+  const intendedUseCaption = document.createElement("span");
+  intendedUseCaption.textContent = "Przeznaczenie";
+  const intendedUse = document.createElement("input");
+  intendedUse.type = "text";
+  intendedUse.value = metadataText(source, "intended_use");
+  intendedUse.placeholder = "Do czego służy ten dokument?";
+  intendedUse.autocomplete = "off";
+  intendedUseLabel.append(intendedUseCaption, intendedUse);
+
+  const textRow = document.createElement("div");
+  textRow.className = "file-source-field-row";
+  textRow.append(nameLabel, intendedUseLabel);
+  classification.append(textRow);
+
+  const purposeLabel = document.createElement("label");
+  purposeLabel.className = "file-source-field";
+  const purposeCaption = document.createElement("span");
+  purposeCaption.textContent = "Cel dokumentu";
+  const purpose = document.createElement("select");
+  appendSelectOptions(
+    purpose,
+    "Wybierz na podstawie treści",
+    FILE_PURPOSES,
+    typeof source.purpose === "string" ? source.purpose : undefined,
+  );
+  purposeLabel.append(purposeCaption, purpose);
+  classification.append(purposeLabel);
 
   const hasFieldsLabel = document.createElement("label");
   hasFieldsLabel.className = "file-source-field";
   const hasFieldsCaption = document.createElement("span");
-  hasFieldsCaption.textContent = "Zawiera pola?";
+  hasFieldsCaption.textContent = "Czy plik zawiera pola do wypełnienia?";
   const hasFields = document.createElement("select");
   hasFields.append(
-    new Option("Nie ustawiono", ""),
-    new Option("Tak", "true"),
+    new Option("Wybierz", ""),
+    new Option("Tak, pola lub deklaracje", "true"),
     new Option("Nie", "false"),
   );
   hasFields.value =
     typeof source.has_fields === "boolean" ? String(source.has_fields) : "";
   hasFieldsLabel.append(hasFieldsCaption, hasFields);
-  classification.insertBefore(hasFieldsLabel, classification.children[2] ?? null);
+  classification.append(hasFieldsLabel);
+
+  const requirementLabel = document.createElement("label");
+  requirementLabel.className = "file-source-field";
+  const requirementCaption = document.createElement("span");
+  requirementCaption.textContent = "Wymagalność";
+  const clientRequirement = document.createElement("select");
+  appendSelectOptions(
+    clientRequirement,
+    "Nie ustalono",
+    FILE_CLIENT_REQUIREMENTS,
+    typeof source.client_requirement === "string"
+      ? source.client_requirement
+      : undefined,
+  );
+  requirementLabel.append(requirementCaption, clientRequirement);
+  classification.append(requirementLabel);
+
+  const signatureLabel = document.createElement("label");
+  signatureLabel.className = "file-source-field";
+  const signatureCaption = document.createElement("span");
+  signatureCaption.textContent = "Podpis";
+  const signatureRequirement = document.createElement("select");
+  appendSelectOptions(
+    signatureRequirement,
+    "Do ustalenia z instrukcji",
+    FILE_SIGNATURE_REQUIREMENTS,
+    typeof source.signature_requirement === "string"
+      ? source.signature_requirement
+      : undefined,
+  );
+  signatureLabel.append(signatureCaption, signatureRequirement);
+  classification.append(signatureLabel);
 
   const save = document.createElement("button");
   save.type = "button";
@@ -628,12 +665,17 @@ function renderSource(source: LegacyStoredFileSource): HTMLElement {
     }
 
     expandedFileSources.add(source.id);
-    const metadata: Record<string, unknown> = {};
-    for (const [key, input] of controls) metadata[key] = input.value;
-    metadata.has_fields =
-      hasFields.value === ""
-        ? undefined
-        : hasFields.value === "true";
+    const metadata: Record<string, unknown> = {
+      display_name: displayName.value,
+      intended_use: intendedUse.value,
+      purpose: purpose.value || undefined,
+      client_requirement: clientRequirement.value || undefined,
+      signature_requirement: signatureRequirement.value || undefined,
+      has_fields:
+        hasFields.value === ""
+          ? undefined
+          : hasFields.value === "true",
+    };
 
     void data("UPDATE_FILE_SOURCE", {
       objectId: object.id,
