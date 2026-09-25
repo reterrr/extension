@@ -59,15 +59,47 @@ function exportValues(object, objectsById, schema) {
   return output;
 }
 
-function geographyPresentation(entry, catalogByKey) {
+function geographyPresentation(entry, catalogByKey, objectsById) {
   const catalog = catalogByKey.get(entry.type + "\u0000" + entry.value);
+  const operator = entry.operatorId
+    ? objectsById.get(String(entry.operatorId))
+    : undefined;
   return compactRecord({
     type: entry.type,
     role: entry.role,
     label: catalog?.label ?? null,
     context: catalog?.context ?? null,
     value: entry.value,
+    operator: operator
+      ? {
+          id: String(operator.id),
+          key: String(operator.importKey ?? operator.id),
+          name: displayObjectName(operator),
+        }
+      : undefined,
   });
+}
+
+function exportOperatorAssignments(state, objectId, objectsById) {
+  return (state.operatorAssignments ?? [])
+    .filter((row) => String(row.objectId) === String(objectId))
+    .map((row) => {
+      const operator = objectsById.get(String(row.operatorId));
+      return compactRecord({
+        role: row.operatorType,
+        operator: operator
+          ? {
+              id: String(operator.id),
+              key: String(operator.importKey ?? operator.id),
+              name: displayObjectName(operator),
+            }
+          : {
+              id: String(row.operatorId),
+              key: String(row.operatorId),
+              name: null,
+            },
+      });
+    });
 }
 
 function exportFiles(state, objectId) {
@@ -171,9 +203,13 @@ function exportObject(
     ]),
   );
 
-  const geographies = (state.geographies ?? [])
-    .filter((entry) => String(entry.objectId) === String(object.id))
-    .map((entry) => geographyPresentation(entry, catalogByKey));
+  const geographyRows = (state.geographies ?? []).filter(
+    (entry) => String(entry.objectId) === String(object.id),
+  );
+  const geographies = geographyRows.map((entry) =>
+    geographyPresentation(entry, catalogByKey, objectsById),
+  );
+  const operators = exportOperatorAssignments(state, object.id, objectsById);
 
   const files = exportFiles(state, object.id);
   const result = {
@@ -184,7 +220,19 @@ function exportObject(
     values: exportValues(object, objectsById, schema),
   };
 
+  if (operators.length) result.operators = operators;
   if (geographies.length) result.geography = geographies;
+
+  if (object.type === "recruitment" && geographies.length) {
+    const grouped = {};
+    for (const geography of geographies) {
+      const key = geography.operator?.key ?? "UNASSIGNED";
+      (grouped[key] ||= []).push(
+        compactRecord(geography, ["operator"]),
+      );
+    }
+    result.geography_by_operator = grouped;
+  }
 
   const contacts = exportOperatorContacts(state, object.id);
   if (contacts.length) result.contacts = contacts;
