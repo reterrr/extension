@@ -818,6 +818,12 @@ browser.commands.onCommand.addListener((command) => {
     // stamped toggle briefly; the panel de-duplicates the stamp, while a panel
     // that was not listening to the first broadcast can still receive a retry.
     const stamp = crypto.randomUUID();
+    await browser.storage.session.set({
+      [`burbot:file-mode-toggle:${tab.windowId}`]: {
+        stamp,
+        createdAt: Date.now(),
+      },
+    });
     for (const delay of [0, 120, 400]) {
       if (delay) {
         await new Promise<void>((resolve) => setTimeout(resolve, delay));
