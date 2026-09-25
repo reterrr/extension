@@ -274,13 +274,12 @@ test("files replace the predefined document catalog in the workspace", () => {
   assert.equal(workspace.includes("renderDocuments(object)"), false);
 
   for (const label of [
-    "Rodzaj",
-    "Cel",
-    "Zawiera pola?",
+    "Nazwa",
+    "Cel dokumentu",
+    "Czy plik zawiera pola do wypełnienia?",
     "Przeznaczenie",
-    "Wymagalność dla klienta",
+    "Wymagalność",
     "Podpis",
-    "Sposób dostarczenia",
   ]) {
     assert.ok(files.includes(label), `missing file classification label: ${label}`);
   }
@@ -396,4 +395,48 @@ test("File Add Mode internal restart does not emit a false exit and attached fil
   assert.match(files, /async function removeFileSource/);
   assert.match(files, /REMOVE_FILE_SOURCE/);
   assert.match(styles, /\.file-source-quick-remove/);
+});
+
+
+test("file metadata uses fixed select vocabularies while keeping name and intended use editable", () => {
+  const files = source("src/sidepanel/fileSourcesUi.ts");
+  const metadata = source("src/shared/fileMetadata.ts");
+  const background = source("src/background/index.ts");
+
+  for (const option of [
+    "Formularz do uzupełnienia",
+    "Regulamin",
+    "Instrukcja",
+    "Inny dokument",
+    "Obowiązkowy",
+    "Warunkowy",
+    "Informacyjny",
+    "Nie jest wymagany",
+    "Wymagany podpisany plik",
+    "Dowód w systemie operatora",
+  ]) {
+    assert.ok(metadata.includes(option), `missing typed file option: ${option}`);
+  }
+
+  assert.match(files, /nameCaption\.textContent = "Nazwa"/);
+  assert.match(files, /intendedUseCaption\.textContent = "Przeznaczenie"/);
+  assert.match(files, /purposeCaption\.textContent = "Cel dokumentu"/);
+  assert.match(
+    files,
+    /hasFieldsCaption\.textContent = "Czy plik zawiera pola do wypełnienia\?"/,
+  );
+  assert.match(files, /requirementCaption\.textContent = "Wymagalność"/);
+  assert.match(files, /signatureCaption\.textContent = "Podpis"/);
+  assert.match(files, /new Option\("Tak, pola lub deklaracje", "true"\)/);
+  assert.match(files, /new Option\("Nie", "false"\)/);
+
+  assert.match(background, /setOptionalEnum\("purpose", isFilePurpose\)/);
+  assert.match(
+    background,
+    /setOptionalEnum\("client_requirement", isFileClientRequirement\)/,
+  );
+  assert.match(
+    background,
+    /setOptionalEnum\("signature_requirement", isFileSignatureRequirement\)/,
+  );
 });
