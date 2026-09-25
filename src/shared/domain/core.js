@@ -762,11 +762,22 @@
             row.objectId === object.id &&
             row.operatorType === "GLOWNY",
         );
+        const nextType = hasMain ? operatorType : "GLOWNY";
+        if (nextType === "GLOWNY") {
+          for (const row of rows) {
+            if (
+              row.objectId === object.id &&
+              row.operatorType === "GLOWNY"
+            ) {
+              row.operatorType = "DODATKOWY";
+            }
+          }
+        }
         rows.push({
           id: uuid(),
           objectId: object.id,
           operatorId: operator.id,
-          operatorType: hasMain ? operatorType : "GLOWNY",
+          operatorType: nextType,
         });
         object.updatedAt = now;
       } else if (message.op === "REMOVE_OPERATOR_ASSIGNMENT") {
