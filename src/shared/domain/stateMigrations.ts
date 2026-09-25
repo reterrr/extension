@@ -174,3 +174,86 @@ export function migrateRecruitmentStatusesAndOperatorContacts(
 
   return changed;
 }
+
+
+function migratedAssignmentId(
+  objectId: string,
+  operatorId: string,
+  used: Set<string>,
+): string {
+  const base = `migration:${objectId}:operator:${operatorId}`;
+  let candidate = base;
+  let suffix = 1;
+  while (used.has(candidate)) candidate = `${base}:${++suffix}`;
+  used.add(candidate);
+  return candidate;
+}
+
+/**
+ * Migrates the legacy single `values.operator_id` reference into first-class
+ * many-to-many operator assignments.
+ *
+ * Recruitment geography is operator-scoped. Legacy recruitment geography can
+ * be assigned automatically only when that recruitment resolves to exactly one
+ * operator; otherwise it remains unscoped and the UI asks the user to classify it.
+ */
+export function migrateMultiOperatorAssignments(
+  state: LegacyStorageState,
+): boolean {
+  let changed = false;
+  const assignments = (state.operatorAssignments ||= []);
+  const usedIds = new Set(assignments.map((row) => row.id));
+
+  for (const object of state.objects) {
+    if (object.type !== "project" && object.type !== "recruitment") continue;
+    const legacyOperatorId =
+      typeof object.values?.operator_id === "string"
+        ? object.values.operator_id
+        : "";
+    if (!legacyOperatorId) continue;
+
+    const exists = assignments.some(
+      (row) =>
+        row.objectId === object.id &&
+        row.operatorId === legacyOperatorId,
+    );
+    if (!exists) {
+      assignments.push({
+        id: migratedAssignmentId(object.id, legacyOperatorId, usedIds),
+        objectId: object.id,
+        operatorId: legacyOperatorId,
+        operatorType: "GLOWNY",
+      });
+      changed = true;
+    }
+
+    delete object.values.operator_id;
+    if (object.manualFields?.operator_id) {
+      delete object.manualFields.operator_id;
+      changed = true;
+    }
+    changed = true;
+  }
+
+  const assignmentOperatorsByObject = new Map<string, string[]>();
+  for (const row of assignments) {
+    const list = assignmentOperatorsByObject.get(row.objectId) ?? [];
+    if (!list.includes(row.operatorId)) list.push(row.operatorId);
+    assignmentOperatorsByObject.set(row.objectId, list);
+  }
+
+  const objectTypeById = new Map(
+    state.objects.map((object) => [object.id, object.type]),
+  );
+  for (const row of state.geographies ?? []) {
+    if (objectTypeById.get(row.objectId) !== "recruitment") continue;
+    if (row.operatorId) continue;
+    const operators = assignmentOperatorsByObject.get(row.objectId) ?? [];
+    if (operators.length === 1) {
+      row.operatorId = operators[0];
+      changed = true;
+    }
+  }
+
+  return changed;
+}
