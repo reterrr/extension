@@ -331,6 +331,48 @@ function stageExistingObjectUpdate(
     );
   }
 
+  const importedOperatorIdMap = new Map<string, string>();
+  const importedAssignments = (importedState.operatorAssignments ?? []).filter(
+    (row) => row.objectId === importedObject.id,
+  );
+  for (const importedRow of importedAssignments) {
+    const mapped = (plan.operatorReferencePatches ?? []).find(
+      (patch) =>
+        patch.assignmentImportKey === String(importedRow.importKey ?? importedRow.id),
+    )?.targetObjectId;
+    if (!mapped) {
+      throw new Error(
+        `Could not resolve imported operator assignment ${String(importedRow.importKey ?? importedRow.id)}.`,
+      );
+    }
+    importedOperatorIdMap.set(importedRow.operatorId, mapped);
+
+    let row = (state.operatorAssignments ?? []).find(
+      (candidate) =>
+        candidate.objectId === target.id &&
+        importedRow.importKey &&
+        candidate.importKey === importedRow.importKey,
+    );
+    row ??= (state.operatorAssignments ?? []).find(
+      (candidate) =>
+        candidate.objectId === target.id &&
+        candidate.operatorId === mapped,
+    );
+
+    if (row) {
+      row.importKey = importedRow.importKey;
+      row.operatorId = mapped;
+      row.operatorType = importedRow.operatorType;
+    } else {
+      (state.operatorAssignments ||= []).push({
+        ...importedRow,
+        id: uuid(),
+        objectId: target.id,
+        operatorId: mapped,
+      });
+    }
+  }
+
   const importedGeography = (importedState.geographies ?? []).filter(
     (row) => row.objectId === importedObject.id,
   );
@@ -346,18 +388,30 @@ function stageExistingObjectUpdate(
         candidate.objectId === target.id &&
         candidate.type === importedRow.type &&
         candidate.role === importedRow.role &&
-        candidate.value === importedRow.value,
+        candidate.value === importedRow.value &&
+        String(candidate.operatorId ?? "") ===
+          String(importedOperatorIdMap.get(importedRow.operatorId ?? "") ?? importedRow.operatorId ?? ""),
     );
     if (row) {
       row.importKey = importedRow.importKey;
       row.type = importedRow.type;
       row.role = importedRow.role;
       row.value = importedRow.value;
+      row.operatorId = importedRow.operatorId
+        ? importedOperatorIdMap.get(importedRow.operatorId) ?? importedRow.operatorId
+        : undefined;
     } else {
       row = {
         ...importedRow,
         id: uuid(),
         objectId: target.id,
+        ...(importedRow.operatorId
+          ? {
+              operatorId:
+                importedOperatorIdMap.get(importedRow.operatorId) ??
+                importedRow.operatorId,
+            }
+          : {}),
       };
       (state.geographies ||= []).push(row);
     }
@@ -528,6 +582,34 @@ function stageNewObject(
       uuid,
       now,
     );
+  }
+
+  for (const patch of plan.operatorReferencePatches ?? []) {
+    if (!state.objects.some((object) => object.id === patch.targetObjectId)) {
+      throw new Error(
+        "A referenced approved operator is no longer in the active commit.",
+      );
+    }
+    const assignment = (state.operatorAssignments ?? []).find(
+      (row) =>
+        row.objectId === selected.id &&
+        String(row.importKey ?? row.id) === patch.assignmentImportKey,
+    );
+    if (!assignment) {
+      throw new Error(
+        `Could not remap operator assignment ${patch.assignmentImportKey}.`,
+      );
+    }
+    const temporaryOperatorId = assignment.operatorId;
+    assignment.operatorId = patch.targetObjectId;
+    for (const geography of state.geographies ?? []) {
+      if (
+        geography.objectId === selected.id &&
+        geography.operatorId === temporaryOperatorId
+      ) {
+        geography.operatorId = patch.targetObjectId;
+      }
+    }
   }
 
   const fundingIdByImportKey = new Map(
