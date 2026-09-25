@@ -82,7 +82,7 @@ Supported remote file source types are:
 
 - `source` — required source key. It must point to one of the supported file source types with an HTTP(S) `url`.
 - `source_page` — optional source key for the page where the file link was found. If supplied, that source must have a URL.
-- `name` — legacy-only input. The stored technical filename is always derived from the remote file URL.
+- `name` — legacy-only input. The stored technical filename is always derived from the remote file URL; when `metadata.display_name` is absent, legacy `name` is used as the business display-name fallback.
 - `metadata` — optional business classification of the concrete file.
 - `evidence` — optional evidence for individual metadata fields, using the same Unicode code-point ranges as object evidence.
 

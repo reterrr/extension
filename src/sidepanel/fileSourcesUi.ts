@@ -455,6 +455,9 @@ function metadataProgress(source: LegacyStoredFileSource): {
 } {
   const filled = CURRENT_FILE_METADATA_FIELDS.filter((field) => {
     if (field === "has_fields") return typeof source.has_fields === "boolean";
+    if (field === "display_name") {
+      return Boolean(source.display_name?.trim() || source.name?.trim());
+    }
     const value = source[field];
     return typeof value === "string" && value.trim().length > 0;
   }).length;
@@ -571,7 +574,7 @@ function renderSource(source: LegacyStoredFileSource): HTMLElement {
   nameCaption.textContent = "Nazwa";
   const displayName = document.createElement("input");
   displayName.type = "text";
-  displayName.value = metadataText(source, "display_name");
+  displayName.value = metadataText(source, "display_name") || source.name;
   displayName.placeholder = "Nazwa dokumentu";
   displayName.autocomplete = "off";
   nameLabel.append(nameCaption, displayName);

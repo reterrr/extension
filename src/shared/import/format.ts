@@ -673,25 +673,37 @@ export function importDocumentIntoState(
             `objects.${item.key}.files[${fileIndex}].source_page must reference a source with a URL.`,
           );
         }
+        const technicalName = fileNameFromUrl(source.url);
+        const metadata = {
+          ...(file.metadata ?? {}),
+          // Current imports use metadata.display_name. Older imports used
+          // files[].name, and very old/minimal imports may provide neither.
+          // Always expose a usable business name in Workspace without
+          // overwriting the canonical technical filename.
+          display_name:
+            file.metadata?.display_name ??
+            file.name ??
+            technicalName,
+        };
         const row = {
           id: uuid(),
           objectId: object.id,
           fileType: source.type as SourceFileType,
           url: source.url,
-          // Canonical file name always comes from the actual remote filename.
-          name: fileNameFromUrl(source.url),
+          // Canonical technical filename always comes from the remote URL.
+          name: technicalName,
           sourcePageUrl: pageSource?.url ?? object.sourceUrl ?? source.url,
           addedAt: now,
           sourceImportKey: source.importKey,
           ...(pageSource ? { sourcePageImportKey: pageSource.importKey } : {}),
-          ...(file.metadata ?? {}),
+          ...metadata,
         };
         (state.fileSources ||= []).push(row);
 
         validateTargetEvidenceFields(
           file.evidence,
           FILE_METADATA_EVIDENCE_FIELDS,
-          file.metadata ?? {},
+          metadata,
           `${item.key}.files[${fileIndex}]`,
         );
         for (const [field, entries] of Object.entries(file.evidence ?? {})) {
