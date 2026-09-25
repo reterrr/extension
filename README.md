@@ -146,7 +146,7 @@ Every range is validated against the exact canonical `snapshot.text`. For exampl
       "data": {
         "name": "Generator Kompetencji 3.0",
         "type": "B2B",
-        "status": "ACTIVE"
+        "status": "AKTYWNY"
       },
       "evidence": {
         "name": [
