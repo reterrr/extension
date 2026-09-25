@@ -13,7 +13,7 @@ import {
   type PickerSelectionResponse,
 } from "../shared/messaging/picker";
 import { selectorColor } from "../shared/selectorPalette";
-import { createRemotePdfSourceCandidate } from "../shared/sources/remoteFile";
+import { createRemoteFileSourceCandidate } from "../shared/sources/remoteFile";
 import type {
   AttributeExtraction,
   SupportedExtractionAttribute,
@@ -290,9 +290,9 @@ if (!globalThis.__burbotPickerLoaded) {
         try {
           const link = element?.closest("a[href]");
           if (!(link instanceof HTMLAnchorElement)) {
-            throw new Error("Click a link to a PDF file.");
+            throw new Error("Click a supported file link (.doc, .docx, .pdf, .xlsx, .png, .jpg, .jpeg).");
           }
-          const file = createRemotePdfSourceCandidate(
+          const file = createRemoteFileSourceCandidate(
             link.href,
             location.href,
             link.download || link.textContent,

@@ -110,7 +110,7 @@ export function App() {
               </summary>
               <div className="workspace-section-body">
                 <p className="muted">
-                  Dodaj oryginalny plik PDF ze strony. Burbot bierze nazwę z pliku, a Ty oznaczasz jego rodzaj, cel, wymagalność, podpis i sposób dostarczenia.
+                  Dodaj plik ze strony (.doc, .docx, .pdf, .xlsx, .png, .jpg, .jpeg). Burbot bierze nazwę z pliku, a Ty oznaczasz jego rodzaj, cel, wymagalność, podpis i sposób dostarczenia.
                 </p>
                 <div id="file-source-list" className="file-source-list" />
                 <div className="file-source-toolbar">
@@ -119,7 +119,7 @@ export function App() {
                   </button>
                 </div>
                 <p id="file-source-mode-hint" className="file-source-mode-hint" hidden>
-                  Kliknij link do PDF na stronie. Esc anuluje tryb.
+                  Kliknij link do pliku .doc, .docx, .pdf, .xlsx, .png, .jpg lub .jpeg. Esc anuluje tryb.
                 </p>
               </div>
             </details>

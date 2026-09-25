@@ -5,7 +5,7 @@ import type {
   SelectionQuote,
 } from "../types/extraction";
 import type { ElementExtractionCandidate } from "../types/picker";
-import type { RemoteFileSourceCandidate } from "../types/source";
+import { isSourceFileType, type RemoteFileSourceCandidate } from "../types/source";
 
 export interface SelectorHighlight {
   id: string;
@@ -105,7 +105,7 @@ function isRemoteFileSourceCandidate(
 ): value is RemoteFileSourceCandidate {
   return (
     isRecord(value) &&
-    value.fileType === "PDF" &&
+    isSourceFileType(value.fileType) &&
     typeof value.url === "string" &&
     typeof value.sourcePageUrl === "string" &&
     typeof value.name === "string"
