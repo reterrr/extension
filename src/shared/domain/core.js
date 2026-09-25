@@ -11,6 +11,7 @@
     objects: [],
     rules: [],
     geographies: [],
+    operatorAssignments: [],
     operatorContacts: [],
     financingRules: [],
     documentRequirements: [],
