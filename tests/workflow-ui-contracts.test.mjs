@@ -316,3 +316,14 @@ test("Import Review colors are derived from concrete evidence entries", () => {
     /const text = String\(value \?\? ""\)[\s\S]*?text\.length/,
   );
 });
+
+
+test("workspace advertises supported file extensions and keeps value extraction PDF-only", () => {
+  const app = source("src/sidepanel/App.tsx");
+  const files = source("src/sidepanel/fileSourcesUi.ts");
+
+  for (const extension of [".doc", ".docx", ".pdf", ".xlsx", ".png", ".jpg", ".jpeg"]) {
+    assert.ok(app.includes(extension), `missing supported file extension: ${extension}`);
+  }
+  assert.match(files, /source\.fileType === "PDF"[\s\S]*?Wydziel wartości/);
+});
