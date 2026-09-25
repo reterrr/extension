@@ -41,7 +41,7 @@ import {
   assignPdfRuleIntoState,
   type AssignPdfRuleMessage,
 } from "../shared/pdf/assignPdfRule";
-import { createRemotePdfSourceCandidate } from "../shared/sources/remoteFile";
+import { createRemoteFileSourceCandidate } from "../shared/sources/remoteFile";
 import type { DraftCommit } from "../shared/types/commit";
 import type { FocusPayload } from "../shared/types/domain";
 import type { CapturedExtractionInput } from "../shared/types/extraction";
@@ -466,7 +466,7 @@ function mutateFileSource(
 
   if (message.op === "ADD_FILE_SOURCE") {
     if (!isRecord(message.file)) throw new Error("Invalid file source.");
-    const file = createRemotePdfSourceCandidate(
+    const file = createRemoteFileSourceCandidate(
       String(message.file.url ?? ""),
       String(message.file.sourcePageUrl ?? ""),
       typeof message.file.name === "string" ? message.file.name : undefined,
@@ -477,7 +477,7 @@ function mutateFileSource(
         (source) => source.objectId === object.id && source.url === file.url,
       )
     ) {
-      throw new Error("This PDF source is already attached to the object.");
+      throw new Error("This file source is already attached to the object.");
     }
     sources.push({
       id: crypto.randomUUID(),
