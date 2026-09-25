@@ -232,13 +232,22 @@ export function readBurSnapshot(db) {
     JOIN operators o ON o.id = po.operator_id
     ORDER BY po.id
   `).all();
-  const recruitmentOperators = db.prepare(`
-    SELECT r.object_id AS recruitment_object_id, o.object_id AS operator_object_id, ro.operator_type
-    FROM recruitment_operators ro
-    JOIN recruitments r ON r.id = ro.recruitment_id
-    JOIN operators o ON o.id = ro.operator_id
-    ORDER BY ro.id
-  `).all();
+  const hasRecruitmentOperators = Boolean(
+    db
+      .prepare(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'recruitment_operators'",
+      )
+      .get(),
+  );
+  const recruitmentOperators = hasRecruitmentOperators
+    ? db.prepare(`
+        SELECT r.object_id AS recruitment_object_id, o.object_id AS operator_object_id, ro.operator_type
+        FROM recruitment_operators ro
+        JOIN recruitments r ON r.id = ro.recruitment_id
+        JOIN operators o ON o.id = ro.operator_id
+        ORDER BY ro.id
+      `).all()
+    : [];
   return { state, projectOperators, recruitmentOperators };
 }
 
