@@ -123,6 +123,11 @@ async function data(
     throw new Error(response?.error ?? "Storage is unavailable.");
   }
   state = response.value;
+  window.dispatchEvent(
+    new CustomEvent("burbot:workspace-state-changed", {
+      detail: { state },
+    }),
+  );
   return state;
 }
 
