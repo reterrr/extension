@@ -805,14 +805,15 @@ browser.action.onClicked.addListener((tab) => {
 browser.commands.onCommand.addListener((command) => {
   if (command !== "toggle-file-add-mode") return;
 
+  // Call open() synchronously inside the command user gesture. Awaiting a tab
+  // lookup first can cause Firefox to reject sidebarAction.open().
+  const opening = browser.sidebarAction.open();
+
   void (async () => {
+    await opening;
     const tabs = await browser.tabs.query({ active: true, currentWindow: true });
     const tab = tabs[0];
     if (!tab || tab.windowId === undefined) return;
-
-    // The keyboard command is a user gesture, so Firefox allows opening the
-    // sidebar here. If it is already open this is effectively a no-op.
-    await browser.sidebarAction.open();
 
     // A newly-opened sidepanel initializes asynchronously. Repeat the same
     // stamped toggle briefly; the panel de-duplicates the stamp, while a panel
