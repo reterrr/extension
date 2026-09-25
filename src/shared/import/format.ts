@@ -692,6 +692,65 @@ export function importDocumentIntoState(
 
     object.label = String(object.values[schema.primary!]);
 
+    if (item.type === "project" || item.type === "recruitment") {
+      const explicit = item.operators ?? [];
+      const legacyOperatorId =
+        typeof object.values.operator_id === "string"
+          ? object.values.operator_id
+          : undefined;
+
+      const assignments = explicit.length
+        ? explicit.map((assignment) => ({
+            key: assignment.key,
+            operatorRef: assignment.operator.$ref,
+            operatorType: assignment.operator_type,
+          }))
+        : legacyOperatorId
+          ? [
+              {
+                key: `${item.key}:legacy-operator`,
+                operatorRef:
+                  document.objects.find(
+                    (candidate) =>
+                      objectIdByKey.get(candidate.key) === legacyOperatorId,
+                  )?.key ?? "",
+                operatorType: "GLOWNY" as const,
+              },
+            ]
+          : [];
+
+      for (const assignment of assignments) {
+        if (!assignment.operatorRef) continue;
+        const target = document.objects.find(
+          (candidate) => candidate.key === assignment.operatorRef,
+        );
+        const targetId = objectIdByKey.get(assignment.operatorRef);
+        if (!target || !targetId) {
+          throw new Error(
+            `Unknown operator reference ${assignment.operatorRef} in ${item.key}.operators.`,
+          );
+        }
+        if (target.type !== "operator") {
+          throw new Error(
+            `${item.key}.operators must reference operator objects.`,
+          );
+        }
+        const exists = (state.operatorAssignments ?? []).some(
+          (row) =>
+            row.objectId === object.id &&
+            row.operatorId === targetId,
+        );
+        if (exists) continue;
+        (state.operatorAssignments ||= []).push({
+          id: uuid(),
+          objectId: object.id,
+          operatorId: targetId,
+          importKey: assignment.key,
+          operatorType: assignment.operatorType,
+        });
+      }
+    }
+
     if (item.evidence) {
       for (const [field, entries] of Object.entries(item.evidence)) {
         if (!schema.fields?.[field]) {
@@ -793,6 +852,41 @@ export function importDocumentIntoState(
             `Unknown geography value ${geography.value} for type ${geography.type} in ${item.key}.geography[${geographyIndex}].`,
           );
         }
+        let operatorId: string | undefined;
+        if (item.type === "recruitment") {
+          const assigned = (state.operatorAssignments ?? []).filter(
+            (assignment) => assignment.objectId === object.id,
+          );
+
+          if (geography.operator) {
+            const target = document.objects.find(
+              (candidate) => candidate.key === geography.operator?.$ref,
+            );
+            const targetId = objectIdByKey.get(geography.operator.$ref);
+            if (!target || !targetId || target.type !== "operator") {
+              throw new Error(
+                `${item.key}.geography[${geographyIndex}].operator must reference an imported operator.`,
+              );
+            }
+            if (!assigned.some((assignment) => assignment.operatorId === targetId)) {
+              throw new Error(
+                `${item.key}.geography[${geographyIndex}] references an operator that is not assigned to the recruitment.`,
+              );
+            }
+            operatorId = targetId;
+          } else if (assigned.length === 1) {
+            operatorId = assigned[0].operatorId;
+          } else {
+            throw new Error(
+              `${item.key}.geography[${geographyIndex}].operator is required when the recruitment has ${assigned.length} operators.`,
+            );
+          }
+        } else if (geography.operator) {
+          throw new Error(
+            `${item.key}.geography[${geographyIndex}].operator is supported only for recruitment geography.`,
+          );
+        }
+
         const row = {
           id: uuid(),
           objectId: object.id,
@@ -800,6 +894,7 @@ export function importDocumentIntoState(
           type: geography.type,
           role: geography.role,
           value: geography.value,
+          ...(operatorId ? { operatorId } : {}),
         };
         (state.geographies ||= []).push(row);
 
