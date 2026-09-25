@@ -88,3 +88,58 @@ test("non-PDF links are rejected", () => {
   );
   assert.equal(remoteFile.isRemotePdfUrl("file:///tmp/regulamin.pdf"), false);
 });
+
+
+test("all configured file extensions are accepted", () => {
+  const expected = {
+    doc: "DOC",
+    docx: "DOCX",
+    pdf: "PDF",
+    xlsx: "XLSX",
+    png: "PNG",
+    jpg: "JPG",
+    jpeg: "JPEG",
+  };
+
+  for (const [extension, fileType] of Object.entries(expected)) {
+    const file = remoteFile.createRemoteFileSourceCandidate(
+      `https://projekt.test/files/sample.${extension}?download=1`,
+      "https://projekt.test/nabor",
+    );
+    assert.equal(file.fileType, fileType);
+    assert.equal(file.name, `sample.${extension}`);
+    assert.equal(remoteFile.isRemoteSupportedFileUrl(file.url), true);
+  }
+});
+
+test("unsupported remote file extensions are rejected", () => {
+  for (const extension of ["html", "zip", "xls", "gif", "webp"]) {
+    assert.throws(
+      () =>
+        remoteFile.createRemoteFileSourceCandidate(
+          `https://projekt.test/files/sample.${extension}`,
+          "https://projekt.test/nabor",
+        ),
+      /\.doc/,
+    );
+  }
+});
+
+test("PDF compatibility helpers remain PDF-only", () => {
+  assert.equal(
+    remoteFile.isRemotePdfUrl("https://projekt.test/regulamin.pdf?download=1"),
+    true,
+  );
+  assert.equal(
+    remoteFile.isRemotePdfUrl("https://projekt.test/formularz.docx"),
+    false,
+  );
+  assert.throws(
+    () =>
+      remoteFile.createRemotePdfSourceCandidate(
+        "https://projekt.test/formularz.docx",
+        "https://projekt.test/nabor",
+      ),
+    /PDF/,
+  );
+});
