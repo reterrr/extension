@@ -29,7 +29,10 @@ function oneOf<T extends readonly string[]>(
   options: T,
   value: unknown,
 ): value is T[number] {
-  return typeof value === "string" && options.includes(value);
+  return (
+    typeof value === "string" &&
+    (options as readonly string[]).includes(value)
+  );
 }
 
 export function isFilePurpose(value: unknown): value is FilePurpose {
