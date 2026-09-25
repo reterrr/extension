@@ -372,3 +372,28 @@ test("File Add Mode is persistent and has Ctrl+Alt+F toggle", () => {
     "capturing a file must not stop persistent File Add Mode",
   );
 });
+
+
+test("File Add Mode internal restart does not emit a false exit and attached files have quick delete", () => {
+  const picker = source("src/content/picker.ts");
+  const files = source("src/sidepanel/fileSourcesUi.ts");
+  const styles = source("src/sidepanel/fileSourceStyles.ts");
+
+  assert.match(
+    picker,
+    /function stop\(notifyMode = true\)[\s\S]*?if \(notifyMode && wasInteractive\)[\s\S]*?MODE/,
+  );
+  assert.match(
+    picker,
+    /function start\(fileMode: boolean\)[\s\S]*?stop\(false\)[\s\S]*?picking = true/,
+  );
+  assert.match(
+    picker,
+    /if \(filePicking\)[\s\S]*?isRemoteSupportedFileUrl\(link\.href\)[\s\S]*?#2f7659/,
+  );
+
+  assert.match(files, /file-source-quick-remove/);
+  assert.match(files, /async function removeFileSource/);
+  assert.match(files, /REMOVE_FILE_SOURCE/);
+  assert.match(styles, /\.file-source-quick-remove/);
+});
