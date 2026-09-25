@@ -76,6 +76,7 @@ function exportFiles(state, objectId) {
     .map((source) =>
       compactRecord({
         name: source.name,
+        display_name: source.display_name,
         file_type: source.fileType,
         url: source.url,
         source_page_url: source.sourcePageUrl,
