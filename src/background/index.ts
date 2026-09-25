@@ -542,13 +542,17 @@ function mutateFileSource(
         raw === undefined || raw === null || String(raw).trim() === ""
           ? undefined
           : String(raw).trim();
-      if (next !== undefined && !validator(next)) {
-        throw new Error(`Unsupported value for file metadata field ${field}: ${next}`);
-      }
       const previous =
         typeof mutableSource[field] === "string"
           ? String(mutableSource[field])
           : undefined;
+      if (
+        next !== undefined &&
+        !validator(next) &&
+        next !== previous
+      ) {
+        throw new Error(`Unsupported value for file metadata field ${field}: ${next}`);
+      }
       if (previous !== next) changedFields.add(field);
       if (next === undefined) delete mutableSource[field];
       else mutableSource[field] = next;
