@@ -1,3 +1,4 @@
+import { isSourceFileType } from "../types/source";
 import { importDocumentIntoState } from "./format";
 import type {
   ImportReviewEditorOption,
@@ -795,7 +796,7 @@ function importedSourceForFile(
 ): ImportedSource {
   const source =
     sources.find((entry) => entry.importKey === file.sourceImportKey) ??
-    sources.find((entry) => entry.type === "PDF" && entry.url === file.url);
+    sources.find((entry) => isSourceFileType(entry.type) && entry.url === file.url);
   if (!source?.url) {
     throw new Error(`Could not resolve import source for file ${file.name}.`);
   }
