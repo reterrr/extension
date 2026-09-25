@@ -802,6 +802,42 @@ browser.action.onClicked.addListener((tab) => {
     .catch(console.error);
 });
 
+browser.commands.onCommand.addListener((command) => {
+  if (command !== "toggle-file-add-mode") return;
+
+  // Call open() synchronously inside the command user gesture. Awaiting a tab
+  // lookup first can cause Firefox to reject sidebarAction.open().
+  const opening = browser.sidebarAction.open();
+
+  void (async () => {
+    await opening;
+    const tabs = await browser.tabs.query({ active: true, currentWindow: true });
+    const tab = tabs[0];
+    if (!tab || tab.windowId === undefined) return;
+
+    // A newly-opened sidepanel initializes asynchronously. Repeat the same
+    // stamped toggle briefly; the panel de-duplicates the stamp, while a panel
+    // that was not listening to the first broadcast can still receive a retry.
+    const stamp = crypto.randomUUID();
+    await browser.storage.session.set({
+      [`burbot:file-mode-toggle:${tab.windowId}`]: {
+        stamp,
+        createdAt: Date.now(),
+      },
+    });
+    for (const delay of [0, 120, 400]) {
+      if (delay) {
+        await new Promise<void>((resolve) => setTimeout(resolve, delay));
+      }
+      await broadcast({
+        type: "BURBOT_TOGGLE_FILE_MODE",
+        windowId: tab.windowId,
+        stamp,
+      });
+    }
+  })().catch(console.error);
+});
+
 browser.runtime.onMessage.addListener((message: unknown, sender) => {
   const extensionRoot = browser.runtime.getURL("");
   if (

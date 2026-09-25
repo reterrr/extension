@@ -8,14 +8,26 @@
       "id": "burbot-picker@local.example",
       "strict_min_version": "140.0",
       "data_collection_permissions": {
-        "required": ["none"]
+        "required": [
+          "none"
+        ]
       }
     }
   },
-  "permissions": ["storage", "activeTab", "scripting", "contextMenus"],
-  "host_permissions": ["http://*/*", "https://*/*"],
+  "permissions": [
+    "storage",
+    "activeTab",
+    "scripting",
+    "contextMenus"
+  ],
+  "host_permissions": [
+    "http://*/*",
+    "https://*/*"
+  ],
   "background": {
-    "scripts": ["background.js"]
+    "scripts": [
+      "background.js"
+    ]
   },
   "action": {
     "default_title": "Burbot",
@@ -32,5 +44,13 @@
   "icons": {
     "48": "icon.svg",
     "96": "icon.svg"
+  },
+  "commands": {
+    "toggle-file-add-mode": {
+      "suggested_key": {
+        "default": "Ctrl+Alt+F"
+      },
+      "description": "Toggle Burbot File Add Mode"
+    }
   }
 }
