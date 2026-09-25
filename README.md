@@ -171,6 +171,34 @@ References between objects use portable import keys instead of database/storage 
 }
 ```
 
+Projects and recruitments can have multiple operators through `objects[].operators[]`. Recruitment geography is scoped to an assigned operator through `geography[].operator`:
+
+```json
+{
+  "operators": [
+    {
+      "key": "main-operator",
+      "operator": { "$ref": "operator-1" },
+      "operator_type": "GLOWNY"
+    },
+    {
+      "key": "additional-operator",
+      "operator": { "$ref": "operator-2" },
+      "operator_type": "DODATKOWY"
+    }
+  ],
+  "geography": [
+    {
+      "key": "operator-1-lubuskie",
+      "type": "WOJEWODZTWO",
+      "role": "OBEJMUJE",
+      "value": "lubuskie",
+      "operator": { "$ref": "operator-1" }
+    }
+  ]
+}
+```
+
 Import is additive and atomic: the full document is validated before the new state is committed, and the workspace revision is incremented once. If an imported field is later edited or re-extracted, its old imported evidence is discarded so stale provenance is not retained.
 
 The existing **Export workspace state** action still exports the extension's internal local state, including extraction rules. It is intentionally different from Burbot Import v1.
