@@ -256,5 +256,34 @@ export function missingReferences(
     }
   }
 
+  for (const assignment of state.operatorAssignments ?? []) {
+    if (
+      !existing.has(String(assignment.objectId)) ||
+      existing.has(String(assignment.operatorId))
+    ) {
+      continue;
+    }
+    missing.push({
+      objectId: String(assignment.objectId),
+      field: "operators",
+      targetId: String(assignment.operatorId),
+    });
+  }
+
+  for (const geography of state.geographies ?? []) {
+    if (
+      !geography.operatorId ||
+      !existing.has(String(geography.objectId)) ||
+      existing.has(String(geography.operatorId))
+    ) {
+      continue;
+    }
+    missing.push({
+      objectId: String(geography.objectId),
+      field: "geography.operator",
+      targetId: String(geography.operatorId),
+    });
+  }
+
   return missing;
 }
