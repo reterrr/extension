@@ -612,12 +612,11 @@ function renderSource(source: LegacyStoredFileSource): HTMLElement {
   hasFieldsCaption.textContent = "Czy plik zawiera pola do wypełnienia?";
   const hasFields = document.createElement("select");
   hasFields.append(
-    new Option("Wybierz", ""),
     new Option("Tak, pola lub deklaracje", "true"),
     new Option("Nie", "false"),
   );
   hasFields.value =
-    typeof source.has_fields === "boolean" ? String(source.has_fields) : "";
+    typeof source.has_fields === "boolean" ? String(source.has_fields) : "false";
   hasFieldsLabel.append(hasFieldsCaption, hasFields);
   classification.append(hasFieldsLabel);
 
