@@ -1,3 +1,4 @@
+import { isSourceFileType, type SourceFileType } from "../types/source";
 import type {
   ImportSourceType,
   ImportedEvidence,
@@ -12,7 +13,7 @@ const IMPORTABLE_OBJECT_TYPES = new Set<LegacyObjectType>([
   "recruitment",
   "operator",
 ]);
-const IMPORT_SOURCE_TYPES = new Set<ImportSourceType>(["HTML", "PDF", "XLSX"]);
+const IMPORT_SOURCE_TYPES = new Set<ImportSourceType>(["HTML", "DOC", "DOCX", "PDF", "XLSX", "PNG", "JPG", "JPEG"]);
 const FUNDING_SIZES = new Set(["MICRO", "SMALL", "MEDIUM", "LARGE", "B2C"]);
 const GEOGRAPHY_TYPES = new Set([
   "POLSKA",
@@ -243,7 +244,7 @@ function parseDocument(input: unknown): BurbotImportV1 {
     const key = requiredString(raw.key, `${path}.key`);
     const type = raw.type as ImportSourceType;
     if (!IMPORT_SOURCE_TYPES.has(type)) {
-      throw new Error(`${path}.type must be HTML, PDF or XLSX.`);
+      throw new Error(`${path}.type must be HTML, DOC, DOCX, PDF, XLSX, PNG, JPG or JPEG.`);
     }
     const url = optionalString(raw.url, `${path}.url`);
     if (url !== undefined) BurbotCore.coerce(url, "url");
@@ -447,7 +448,7 @@ function fileNameFromUrl(url: string): string {
   try {
     const pathname = new URL(url).pathname;
     const name = decodeURIComponent(pathname.split("/").filter(Boolean).at(-1) ?? "");
-    return name || "document.pdf";
+    return name || "document";
   } catch {
     return "document.pdf";
   }
@@ -651,9 +652,9 @@ export function importDocumentIntoState(
       for (const [fileIndex, file] of item.files.entries()) {
         const source = sourceByKey.get(file.source);
         if (!source) throw new Error(`Unknown file source: ${file.source}.`);
-        if (source.type !== "PDF" || !source.url) {
+        if (!isSourceFileType(source.type) || !source.url) {
           throw new Error(
-            `objects.${item.key}.files[${fileIndex}].source must reference a PDF source with an HTTP(S) URL.`,
+            `objects.${item.key}.files[${fileIndex}].source must reference a supported file source with an HTTP(S) URL.`,
           );
         }
         const pageSource = file.source_page
@@ -670,9 +671,9 @@ export function importDocumentIntoState(
         const row = {
           id: uuid(),
           objectId: object.id,
-          fileType: "PDF" as const,
+          fileType: source.type as SourceFileType,
           url: source.url,
-          // Canonical file name always comes from the actual PDF filename.
+          // Canonical file name always comes from the actual remote filename.
           name: fileNameFromUrl(source.url),
           sourcePageUrl: pageSource?.url ?? object.sourceUrl ?? source.url,
           addedAt: now,
