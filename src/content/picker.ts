@@ -1,4 +1,8 @@
-import { buildDurableSelectors, selectionContainer } from "./durable-selector";
+import {
+  buildDurableSelectors,
+  selectionContainer,
+  type DurableSelectorSet,
+} from "./durable-selector";
 import { runExtractionRules } from "./extraction-runner";
 import { readSelectionFromDocument } from "./selection-fallback";
 import {
@@ -44,7 +48,7 @@ if (!globalThis.__burbotPickerLoaded) {
       throw new Error("Choose page content outside editable controls.");
     }
 
-    let selectors;
+    let selectors: DurableSelectorSet;
     let quoteOnly = false;
     try {
       selectors = buildDurableSelectors(element);
