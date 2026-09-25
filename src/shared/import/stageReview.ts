@@ -301,6 +301,7 @@ function stageExistingObjectUpdate(
       targetFile.addedAt = now;
 
       for (const field of [
+        "display_name",
         "document_kind",
         "purpose",
         "has_fields",
