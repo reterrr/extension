@@ -176,6 +176,7 @@ function state() {
         name: "Regulamin.pdf",
         url: "https://example.test/regulamin.pdf",
         sourcePageUrl: "https://example.test/project",
+        display_name: "Regulamin projektu",
         document_kind: "Oryginał operatora",
         purpose: "Regulamin",
         has_fields: false,
@@ -273,12 +274,14 @@ test("AI View export includes readable related business data", () => {
   assert.equal(project.financing[0].id, undefined);
   assert.equal(project.documents, undefined);
   assert.equal(project.files[0].name, "Regulamin.pdf");
+  assert.equal(project.files[0].display_name, "Regulamin projektu");
   assert.equal(project.files[0].url, "https://example.test/regulamin.pdf");
-  assert.equal(project.files[0].document_kind, "Oryginał operatora");
   assert.equal(project.files[0].purpose, "Regulamin");
   assert.equal(project.files[0].has_fields, false);
   assert.equal(project.files[0].client_requirement, "Informacyjny");
-  assert.equal(project.files[0].delivery_method, "Z oryginału operatora");
+  assert.equal(project.files[0].signature_requirement, "Nie jest wymagany");
+  assert.equal(project.files[0].document_kind, undefined);
+  assert.equal(project.files[0].delivery_method, undefined);
 });
 
 test("project export includes every related recruitment with full business data", () => {

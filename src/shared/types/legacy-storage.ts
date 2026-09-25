@@ -1,4 +1,9 @@
 import type { ExecutableExtractionRule, ExtractionSpec } from "./extraction";
+import type {
+  FileClientRequirement,
+  FilePurpose,
+  FileSignatureRequirement,
+} from "../fileMetadata";
 import type { SourceFileType } from "./source";
 
 /**
@@ -105,13 +110,16 @@ export interface LegacyStoredFileSource {
   sourcePageUrl: string;
   addedAt: string;
 
-  /** Free-form classification attached to this concrete file. */
-  document_kind?: string;
-  purpose?: string;
+  /** Business-facing document name; the physical filename remains in `name`. */
+  display_name?: string;
+  purpose?: FilePurpose | string;
   has_fields?: boolean;
   intended_use?: string;
-  client_requirement?: string;
-  signature_requirement?: string;
+  client_requirement?: FileClientRequirement | string;
+  signature_requirement?: FileSignatureRequirement | string;
+
+  /** Legacy metadata kept for backward-compatible imports/exports. */
+  document_kind?: string;
   delivery_method?: string;
 
   /** Present during portable-import review so approval can rebuild `files[].source`. */

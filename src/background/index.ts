@@ -24,6 +24,11 @@ import {
   unstageObject,
 } from "../shared/commits/staging";
 import { createCapturedExtractionInput } from "../shared/extraction/rules";
+import {
+  isFileClientRequirement,
+  isFilePurpose,
+  isFileSignatureRequirement,
+} from "../shared/fileMetadata";
 import { discardStaleImportedEvidence } from "../shared/import/evidence";
 import { importDocumentIntoState } from "../shared/import/format";
 import { isPickerSelectionResponse } from "../shared/messaging/picker";
@@ -502,35 +507,62 @@ function mutateFileSource(
       throw new Error("Invalid file metadata.");
     }
 
-    const textFields = [
-      "document_kind",
-      "purpose",
-      "intended_use",
-      "client_requirement",
-      "signature_requirement",
-      "delivery_method",
-    ] as const;
     const mutableSource = source as unknown as Record<string, unknown>;
     const changedFields = new Set<string>();
-    for (const field of textFields) {
+
+    const setOptionalText = (
+      field: "display_name" | "intended_use",
+      maxLength = 5000,
+    ) => {
+      if (!Object.prototype.hasOwnProperty.call(message.metadata, field)) return;
       const raw = message.metadata[field];
       const next =
         raw === undefined || raw === null || String(raw).trim() === ""
           ? undefined
           : String(raw).replace(/\s+/g, " ").trim();
-      if (next !== undefined && next.length > 5000) {
+      if (next !== undefined && next.length > maxLength) {
         throw new Error(`File metadata field ${field} is too long.`);
       }
-
       const previous =
         typeof mutableSource[field] === "string"
           ? String(mutableSource[field])
           : undefined;
       if (previous !== next) changedFields.add(field);
-
       if (next === undefined) delete mutableSource[field];
       else mutableSource[field] = next;
-    }
+    };
+
+    const setOptionalEnum = (
+      field: "purpose" | "client_requirement" | "signature_requirement",
+      validator: (value: unknown) => boolean,
+    ) => {
+      if (!Object.prototype.hasOwnProperty.call(message.metadata, field)) return;
+      const raw = message.metadata[field];
+      const next =
+        raw === undefined || raw === null || String(raw).trim() === ""
+          ? undefined
+          : String(raw).trim();
+      const previous =
+        typeof mutableSource[field] === "string"
+          ? String(mutableSource[field])
+          : undefined;
+      if (
+        next !== undefined &&
+        !validator(next) &&
+        next !== previous
+      ) {
+        throw new Error(`Unsupported value for file metadata field ${field}: ${next}`);
+      }
+      if (previous !== next) changedFields.add(field);
+      if (next === undefined) delete mutableSource[field];
+      else mutableSource[field] = next;
+    };
+
+    setOptionalText("display_name", 500);
+    setOptionalText("intended_use", 5000);
+    setOptionalEnum("purpose", isFilePurpose);
+    setOptionalEnum("client_requirement", isFileClientRequirement);
+    setOptionalEnum("signature_requirement", isFileSignatureRequirement);
 
     const hasFields = message.metadata.has_fields;
     let nextHasFields: boolean | undefined;

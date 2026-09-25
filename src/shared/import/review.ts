@@ -372,6 +372,7 @@ function fileViews(
     .map((source) => ({
       id: source.id,
       name: source.name,
+      ...(source.display_name ? { displayName: source.display_name } : {}),
       url: source.url,
       sourcePageUrl: source.sourcePageUrl,
       ...(source.document_kind ? { documentKind: source.document_kind } : {}),

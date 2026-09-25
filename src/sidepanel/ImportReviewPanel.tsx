@@ -902,26 +902,23 @@ export function ImportReviewPanel() {
                               {file.url}
                             </a>
                             <div className="import-review-file-metadata">
-                              {file.documentKind && (
-                                <span><small>Rodzaj</small><strong>{file.documentKind}</strong></span>
+                              {file.displayName && (
+                                <span><small>Nazwa</small><strong>{file.displayName}</strong></span>
                               )}
                               {file.purpose && (
-                                <span><small>Cel</small><strong>{file.purpose}</strong></span>
+                                <span><small>Cel dokumentu</small><strong>{file.purpose}</strong></span>
                               )}
                               {file.hasFields !== undefined && (
-                                <span><small>Zawiera pola?</small><strong>{file.hasFields ? "Tak" : "Nie"}</strong></span>
+                                <span><small>Czy plik zawiera pola do wypełnienia?</small><strong>{file.hasFields ? "Tak, pola lub deklaracje" : "Nie"}</strong></span>
                               )}
                               {file.intendedUse && (
                                 <span><small>Przeznaczenie</small><strong>{file.intendedUse}</strong></span>
                               )}
                               {file.clientRequirement && (
-                                <span><small>Wymagalność dla klienta</small><strong>{file.clientRequirement}</strong></span>
+                                <span><small>Wymagalność</small><strong>{file.clientRequirement}</strong></span>
                               )}
                               {file.signatureRequirement && (
                                 <span><small>Podpis</small><strong>{file.signatureRequirement}</strong></span>
-                              )}
-                              {file.deliveryMethod && (
-                                <span><small>Sposób dostarczenia</small><strong>{file.deliveryMethod}</strong></span>
                               )}
                             </div>
                             <div className="import-review-card-actions">
