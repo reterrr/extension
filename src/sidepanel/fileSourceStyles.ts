@@ -64,6 +64,20 @@ if (!document.querySelector("style[data-burbot-file-sources]")) {
   background: #fff4df;
   color: #9a5d00;
 }
+.file-source-quick-remove {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
+  padding: 0;
+  border-radius: 5px;
+  opacity: .72;
+}
+.file-source-quick-remove:hover,
+.file-source-quick-remove:focus-visible {
+  opacity: 1;
+  background: #fff0f0;
+}
 .file-source-body {
   padding: 0 9px 9px;
   border-top: 1px solid var(--line);
