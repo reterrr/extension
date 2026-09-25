@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -148,6 +148,44 @@ function documentFixture() {
     ],
   };
 }
+
+test("repository portable-import example stays importable", async () => {
+  const document = JSON.parse(
+    await readFile(
+      resolve(root, "examples/portable-import-v1.example.json"),
+      "utf8",
+    ),
+  );
+  const session = reviewModule.createImportReviewSession(
+    document,
+    "portable-import-v1.example.json",
+    ids(),
+    "2026-09-25T12:30:00.000Z",
+  );
+
+  assert.equal(session.objectOrder.length, 3);
+
+  const project = session.previewState.objects.find(
+    (object) => object.importKey === "project-1",
+  );
+  assert.ok(project);
+
+  const files = (session.previewState.fileSources ?? []).filter(
+    (entry) => entry.objectId === project.id,
+  );
+  assert.equal(files.length, 2);
+  assert.equal(files[0].display_name, "Regulamin projektu");
+  assert.equal(files[0].purpose, "Regulamin");
+  assert.equal(files[0].has_fields, false);
+  assert.equal(files[0].client_requirement, "Informacyjny");
+  assert.equal(files[0].signature_requirement, "Nie jest wymagany");
+
+  assert.equal(files[1].fileType, "DOCX");
+  assert.equal(files[1].purpose, "Formularz do uzupełnienia");
+  assert.equal(files[1].has_fields, true);
+
+  assert.ok((session.previewState.importTargetEvidence ?? []).length >= 10);
+});
 
 test("import review exposes selected object evidence, file attachments and financing", () => {
   const uuid = ids();
