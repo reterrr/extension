@@ -81,11 +81,19 @@ interface ImportFinancingVariant {
   evidence?: Record<string, ImportEvidence[]>;
 }
 
+interface ImportOperatorAssignment {
+  key: string;
+  operator: ImportReference;
+  operator_type: "GLOWNY" | "DODATKOWY";
+}
+
 interface ImportGeography {
   key: string;
   type: string;
   role: string;
   value: string;
+  /** Required for Recruitment when more than one operator is assigned. */
+  operator?: ImportReference;
   evidence?: Record<string, ImportEvidence[]>;
 }
 
@@ -303,6 +311,43 @@ function parseDocument(input: unknown): BurbotImportV1 {
     }
 
 
+    let operators: ImportOperatorAssignment[] | undefined;
+    if (raw.operators !== undefined) {
+      if (!Array.isArray(raw.operators)) {
+        throw new Error(`${path}.operators must be an array.`);
+      }
+      if (type !== "project" && type !== "recruitment") {
+        throw new Error(`${path}.operators is supported only for project and recruitment.`);
+      }
+      operators = raw.operators.map((entry, operatorIndex) => {
+        const operatorPath = `${path}.operators[${operatorIndex}]`;
+        if (!isRecord(entry)) throw new Error(`${operatorPath} must be an object.`);
+        if (!isReference(entry.operator)) {
+          throw new Error(`${operatorPath}.operator must use {"$ref":"operator-key"}.`);
+        }
+        const operatorType = requiredString(
+          entry.operator_type,
+          `${operatorPath}.operator_type`,
+        );
+        if (!["GLOWNY", "DODATKOWY"].includes(operatorType)) {
+          throw new Error(`${operatorPath}.operator_type must be GLOWNY or DODATKOWY.`);
+        }
+        return {
+          key: requiredString(entry.key, `${operatorPath}.key`),
+          operator: entry.operator,
+          operator_type: operatorType as "GLOWNY" | "DODATKOWY",
+        };
+      });
+      uniqueByKey(operators, `${path} operators`);
+      const refs = new Set<string>();
+      for (const operator of operators) {
+        if (refs.has(operator.operator.$ref)) {
+          throw new Error(`Duplicate operator reference in ${path}.operators: ${operator.operator.$ref}`);
+        }
+        refs.add(operator.operator.$ref);
+      }
+    }
+
     let geography: ImportGeography[] | undefined;
     if (raw.geography !== undefined) {
       if (!Array.isArray(raw.geography)) {
@@ -324,6 +369,16 @@ function parseDocument(input: unknown): BurbotImportV1 {
           type,
           role,
           value: requiredString(entry.value, `${geographyPath}.value`),
+          operator:
+            entry.operator === undefined
+              ? undefined
+              : isReference(entry.operator)
+                ? entry.operator
+                : (() => {
+                    throw new Error(
+                      `${geographyPath}.operator must use {"$ref":"operator-key"}.`,
+                    );
+                  })(),
           evidence: parseEvidenceMap(
             entry.evidence,
             `${geographyPath}.evidence`,
@@ -428,6 +483,7 @@ function parseDocument(input: unknown): BurbotImportV1 {
       type,
       data: raw.data,
       evidence,
+      operators,
       files,
       geography,
       contacts,
