@@ -4,6 +4,7 @@ import type { LegacyStorageState } from "../types/legacy-storage";
 const OBJECT_SCOPED_KEYS = [
   "rules",
   "geographies",
+  "operatorAssignments",
   "operatorContacts",
   "fileSources",
   "financingRules",
