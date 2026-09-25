@@ -59,6 +59,7 @@ That example is covered by the import-review tests so its offsets, references, f
   ]
 }
 ```
+
 ## Object fields relevant to AI import
 
 AI should output only values that are actually known from the sources. It does **not** need to invent empty keys. Import Review is schema-driven and shows the same normal fields as Workspace even when they are absent from `objects[].data`; omitted fields appear as `Nie ustawiono`.
@@ -115,7 +116,7 @@ This creates an object-level Burbot file source that remains available after app
 Each financing entry becomes one Burbot financing variant. Project and Recruitment use the same financing structure.
 
 - `key` — required stable key unique within the object's financing list.
-- `company_size` — one of `MICRO`, `SMALL`, `MEDIUM`, `LARGE`.
+- `company_size` — one of `MICRO`, `SMALL`, `MEDIUM`, `LARGE`, `B2C`.
 - `data` — any supported financing fields:
   - `refund_percent_min` — minimum refund percentage, `0..100`;
   - `refund_percent_avg` — average refund percentage, `0..100`;
