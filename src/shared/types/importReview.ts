@@ -47,6 +47,7 @@ export interface ImportReviewEvidenceView {
 export interface ImportReviewFileView {
   id: string;
   name: string;
+  displayName?: string;
   url: string;
   sourcePageUrl: string;
   documentKind?: string;
