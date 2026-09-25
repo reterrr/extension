@@ -80,26 +80,40 @@ function geographyPresentation(entry, catalogByKey, objectsById) {
   });
 }
 
-function exportOperatorAssignments(state, objectId, objectsById) {
-  return (state.operatorAssignments ?? [])
-    .filter((row) => String(row.objectId) === String(objectId))
-    .map((row) => {
-      const operator = objectsById.get(String(row.operatorId));
-      return compactRecord({
-        role: row.operatorType,
-        operator: operator
-          ? {
-              id: String(operator.id),
-              key: String(operator.importKey ?? operator.id),
-              name: displayObjectName(operator),
-            }
-          : {
-              id: String(row.operatorId),
-              key: String(row.operatorId),
-              name: null,
-            },
-      });
+function exportOperatorAssignments(state, object, objectsById) {
+  let rows = (state.operatorAssignments ?? []).filter(
+    (row) => String(row.objectId) === String(object.id),
+  );
+
+  // Backward compatibility for states that have not yet passed through the
+  // multi-operator migration.
+  if (!rows.length && typeof object.values?.operator_id === "string") {
+    rows = [
+      {
+        objectId: object.id,
+        operatorId: object.values.operator_id,
+        operatorType: "GLOWNY",
+      },
+    ];
+  }
+
+  return rows.map((row) => {
+    const operator = objectsById.get(String(row.operatorId));
+    return compactRecord({
+      role: row.operatorType,
+      operator: operator
+        ? {
+            id: String(operator.id),
+            key: String(operator.importKey ?? operator.id),
+            name: displayObjectName(operator),
+          }
+        : {
+            id: String(row.operatorId),
+            key: String(row.operatorId),
+            name: null,
+          },
     });
+  });
 }
 
 function exportFiles(state, objectId) {
@@ -209,7 +223,7 @@ function exportObject(
   const geographies = geographyRows.map((entry) =>
     geographyPresentation(entry, catalogByKey, objectsById),
   );
-  const operators = exportOperatorAssignments(state, object.id, objectsById);
+  const operators = exportOperatorAssignments(state, object, objectsById);
 
   const files = exportFiles(state, object.id);
   const result = {
