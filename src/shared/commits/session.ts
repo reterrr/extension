@@ -154,6 +154,7 @@ const RELATED_COLLECTIONS: Array<{
   label: string;
 }> = [
   { key: "geographies", label: "Geografia" },
+  { key: "operatorAssignments", label: "Operatorzy" },
   { key: "operatorContacts", label: "Kontakty" },
   { key: "financingRules", label: "Dofinansowanie" },
   { key: "documentRequirements", label: "Dokumenty" },
