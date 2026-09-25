@@ -53,12 +53,15 @@ interface ImportEvidence {
 }
 
 interface ImportFileMetadata {
-  document_kind?: string;
+  display_name?: string;
   purpose?: string;
   has_fields?: boolean;
   intended_use?: string;
   client_requirement?: string;
   signature_requirement?: string;
+
+  // Backward-compatible metadata accepted from older portable imports.
+  document_kind?: string;
   delivery_method?: string;
 }
 
@@ -152,6 +155,7 @@ function parseFileMetadata(
 
   const result: ImportFileMetadata = {};
   const textFields = [
+    "display_name",
     "document_kind",
     "purpose",
     "intended_use",
@@ -176,6 +180,7 @@ function parseFileMetadata(
 }
 
 const FILE_METADATA_EVIDENCE_FIELDS = Object.freeze({
+  display_name: true,
   document_kind: true,
   purpose: true,
   has_fields: true,
