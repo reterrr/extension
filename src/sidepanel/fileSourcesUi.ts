@@ -1,7 +1,7 @@
 import { createPickerClient, type PickerClient } from "./pickerRpc";
 import {
-  createRemotePdfSourceCandidate,
-  isRemotePdfUrl,
+  createRemoteFileSourceCandidate,
+  isRemoteSupportedFileUrl,
 } from "../shared/sources/remoteFile";
 import type {
   LegacyStorageState,
@@ -260,18 +260,18 @@ async function startFileMode(): Promise<void> {
     const current = new URL(tab.url);
     if (current.protocol === "file:") {
       throw new Error(
-        "Local file paths are never stored. Open the original project page and pick its remote PDF link.",
+        "Local file paths are never stored. Open the original project page and pick its remote file link.",
       );
     }
 
-    if (isRemotePdfUrl(tab.url)) {
-      const file = createRemotePdfSourceCandidate(tab.url, tab.url);
+    if (isRemoteSupportedFileUrl(tab.url)) {
+      const file = createRemoteFileSourceCandidate(tab.url, tab.url);
       await attachFile(object, file);
       return;
     }
 
     if (current.protocol !== "http:" && current.protocol !== "https:") {
-      throw new Error("Open an HTTP(S) webpage containing the PDF link first.");
+      throw new Error("Open an HTTP(S) webpage containing the file link first.");
     }
     if (tab.id === undefined) throw new Error("The active tab cannot be connected.");
 
@@ -352,7 +352,7 @@ async function startFileMode(): Promise<void> {
     }
 
     filePicking = true;
-    notice("Read from file: click a PDF link on the webpage. Press Esc to cancel.");
+    notice("Read from file: click a .doc, .docx, .pdf, .xlsx, .png, .jpg or .jpeg link. Press Esc to cancel.");
   } finally {
     if (token === fileModeGeneration) {
       fileModeStarting = false;
@@ -530,21 +530,24 @@ function renderSource(source: LegacyStoredFileSource): HTMLElement {
   const actions = document.createElement("div");
   actions.className = "file-source-actions";
 
-  const read = document.createElement("button");
-  read.type = "button";
-  read.className = "text-button";
-  read.textContent = "Wydziel wartości";
-  read.onclick = () => {
-    const object = chosenObject();
-    if (!object || object.id !== source.objectId) {
-      notice("Choose the object that owns this PDF first.", true);
-      return;
-    }
+  const read =
+    source.fileType === "PDF" ? document.createElement("button") : null;
+  if (read) {
+    read.type = "button";
+    read.className = "text-button";
+    read.textContent = "Wydziel wartości";
+    read.onclick = () => {
+      const object = chosenObject();
+      if (!object || object.id !== source.objectId) {
+        notice("Wybierz obiekt, do którego należy ten PDF.", true);
+        return;
+      }
 
-    void openPdfReader(object, source).catch((error: unknown) =>
-      notice(error instanceof Error ? error.message : String(error), true),
-    );
-  };
+      void openPdfReader(object, source).catch((error: unknown) =>
+        notice(error instanceof Error ? error.message : String(error), true),
+      );
+    };
+  }
 
   const open = document.createElement("a");
   open.href = source.url;
@@ -577,7 +580,8 @@ function renderSource(source: LegacyStoredFileSource): HTMLElement {
       );
   };
 
-  actions.append(read, open, remove);
+  if (read) actions.append(read);
+  actions.append(open, remove);
   body.append(actions);
   row.append(summary, body);
   return row;
