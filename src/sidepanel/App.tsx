@@ -110,7 +110,7 @@ export function App() {
               </summary>
               <div className="workspace-section-body">
                 <p className="muted">
-                  Dodaj plik ze strony (.doc, .docx, .pdf, .xlsx, .png, .jpg, .jpeg). Burbot bierze nazwę z pliku, a Ty oznaczasz jego rodzaj, cel, wymagalność, podpis i sposób dostarczenia.
+                  Dodaj plik ze strony (.doc, .docx, .pdf, .xlsx, .png, .jpg, .jpeg). Nazwę pliku Burbot zachowuje technicznie, a Ty uzupełniasz nazwę dokumentu, cel, pola do wypełnienia, przeznaczenie, wymagalność i podpis.
                 </p>
                 <div id="file-source-list" className="file-source-list" />
                 <div className="file-source-toolbar">
