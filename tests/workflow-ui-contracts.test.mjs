@@ -327,3 +327,48 @@ test("workspace advertises supported file extensions and keeps value extraction 
   }
   assert.match(files, /source\.fileType === "PDF"[\s\S]*?Wydziel wartości/);
 });
+
+
+test("File Add Mode is persistent and has Ctrl+Alt+F toggle", () => {
+  const files = source("src/sidepanel/fileSourcesUi.ts");
+  const picker = source("src/content/picker.ts");
+  const background = source("src/background/index.ts");
+  const manifest = JSON.parse(source("manifest.json"));
+
+  assert.equal(
+    manifest.commands?.["toggle-file-add-mode"]?.suggested_key?.default,
+    "Ctrl+Alt+F",
+  );
+  assert.match(
+    background,
+    /browser\.commands\.onCommand\.addListener[\s\S]*?toggle-file-add-mode[\s\S]*?BURBOT_TOGGLE_FILE_MODE/,
+  );
+
+  assert.match(files, /let fileModeEnabled = false/);
+  assert.match(
+    files,
+    /async function toggleFileMode\(\)[\s\S]*?fileModeEnabled[\s\S]*?disableFileMode[\s\S]*?enableFileMode/,
+  );
+  assert.match(
+    files,
+    /Dodano plik:[\s\S]*?File Add Mode nadal jest aktywny/,
+  );
+  assert.match(
+    files,
+    /browser\.tabs\.onActivated\.addListener[\s\S]*?reconnectFileMode/,
+  );
+  assert.match(
+    files,
+    /change\.status !== "loading"[\s\S]*?change\.status !== "complete"/,
+  );
+
+  const fileCaptureBlock = picker.match(
+    /if \(filePicking\) \{[\s\S]*?send\(\{ event: "FILE_CAPTURE", file \}\);[\s\S]*?return;/,
+  )?.[0] ?? "";
+  assert.ok(fileCaptureBlock.includes('send({ event: "FILE_CAPTURE", file });'));
+  assert.equal(
+    fileCaptureBlock.includes("stop();"),
+    false,
+    "capturing a file must not stop persistent File Add Mode",
+  );
+});
