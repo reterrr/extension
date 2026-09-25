@@ -967,6 +967,7 @@ export function buildImportApprovalPlan(
 
     const metadata = Object.fromEntries(
       [
+        "display_name",
         "document_kind",
         "purpose",
         "has_fields",
