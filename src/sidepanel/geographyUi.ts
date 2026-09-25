@@ -110,6 +110,63 @@ function geographyLabel(value: string): string {
   return BurbotGeography.catalog.find((entry) => entry.value === value)?.label ?? value;
 }
 
+function operatorAssignments(objectId: string) {
+  return (state.operatorAssignments ?? []).filter(
+    (row) => row.objectId === objectId,
+  );
+}
+
+function operatorObject(operatorId: string) {
+  return state.objects.find(
+    (object) => object.id === operatorId && object.type === "operator",
+  );
+}
+
+function operatorKey(operatorId: string): string {
+  const operator = operatorObject(operatorId);
+  return String(operator?.importKey || operator?.id || operatorId);
+}
+
+function operatorName(operatorId: string): string {
+  const operator = operatorObject(operatorId);
+  return String(operator?.values?.name ?? operator?.label ?? "");
+}
+
+function renderRecruitmentOperatorSelect(object: LegacyStoredObject): string {
+  const select = $("geography-operator") as HTMLSelectElement;
+  const label = $("geography-operator-label");
+  const assignments = operatorAssignments(object.id);
+  const previous = select.value;
+
+  label.hidden = object.type !== "recruitment";
+  select.hidden = object.type !== "recruitment";
+  if (object.type !== "recruitment") {
+    select.replaceChildren();
+    return "";
+  }
+
+  select.replaceChildren();
+  if (!assignments.length) {
+    select.append(new Option("Najpierw dodaj operatora do naboru", ""));
+    select.disabled = true;
+    return "";
+  }
+
+  select.disabled = false;
+  for (const assignment of assignments) {
+    const key = operatorKey(assignment.operatorId);
+    const name = operatorName(assignment.operatorId);
+    select.append(
+      new Option(name ? `${key} — ${name}` : key, assignment.operatorId),
+    );
+  }
+
+  select.value = assignments.some((row) => row.operatorId === previous)
+    ? previous
+    : assignments[0].operatorId;
+  return select.value;
+}
+
 function normalizeSearch(value: string): string {
   return value
     .normalize("NFD")
@@ -214,6 +271,77 @@ async function captureSelectedText(
   );
 }
 
+function geographyRowCard(
+  object: LegacyStoredObject,
+  row: LegacyStoredGeography,
+): HTMLElement {
+  const card = document.createElement("div");
+  card.className = "geography-row";
+
+  const copy = document.createElement("div");
+  copy.className = "geography-copy";
+
+  const title = document.createElement("strong");
+  title.textContent = geographyLabel(row.value);
+
+  const meta = document.createElement("small");
+  meta.textContent = `${BurbotGeography.roles[row.role] ?? row.role} · ${BurbotGeography.types[row.type] ?? row.type}`;
+
+  const badges = document.createElement("span");
+  badges.className = "geography-badges";
+  if (hasEvidenceRule(object.id, row.id)) {
+    const badge = document.createElement("span");
+    badge.className = "badge";
+    badge.textContent = "potwierdzone ze strony";
+    badges.append(badge);
+  }
+
+  copy.append(title, meta, badges);
+
+  const actions = document.createElement("div");
+  actions.className = "geography-actions";
+
+  const confirm = document.createElement("button");
+  confirm.type = "button";
+  confirm.className = "text-button";
+  confirm.textContent = hasEvidenceRule(object.id, row.id)
+    ? "Zmień potwierdzenie"
+    : "Potwierdź zaznaczeniem";
+  confirm.onclick = () => {
+    void captureSelectedText(object, row)
+      .then(render)
+      .catch((error: unknown) =>
+        notice(error instanceof Error ? error.message : String(error), true),
+      );
+  };
+
+  const remove = document.createElement("button");
+  remove.type = "button";
+  remove.className = "icon-button danger";
+  remove.setAttribute("aria-label", "Usuń geografię");
+  remove.textContent = "×";
+  remove.onclick = () => {
+    const addPanel = $("geography-add");
+    const beforeTop = addPanel.getBoundingClientRect().top;
+    void data("REMOVE_GEOGRAPHY", {
+      objectId: object.id,
+      geographyId: row.id,
+    })
+      .then(() => {
+        notice("Usunięto warunek geograficzny.");
+        render();
+        keepControlInPlace(addPanel, beforeTop);
+      })
+      .catch((error: unknown) =>
+        notice(error instanceof Error ? error.message : String(error), true),
+      );
+  };
+
+  actions.append(confirm, remove);
+  card.append(copy, actions);
+  return card;
+}
+
 function renderRows(object: LegacyStoredObject): void {
   const root = $("geography-list");
   root.replaceChildren();
@@ -222,84 +350,83 @@ function renderRows(object: LegacyStoredObject): void {
     (row) => row.objectId === object.id,
   );
 
-  if (!rows.length) {
+  if (object.type !== "recruitment") {
+    if (!rows.length) {
+      const empty = document.createElement("p");
+      empty.className = "geography-empty";
+      empty.textContent = "Brak ograniczeń geograficznych.";
+      root.append(empty);
+      return;
+    }
+    for (const row of rows) root.append(geographyRowCard(object, row));
+    return;
+  }
+
+  const assignments = operatorAssignments(object.id);
+  if (!assignments.length) {
     const empty = document.createElement("p");
     empty.className = "geography-empty";
-    empty.textContent = "Brak ograniczeń geograficznych.";
+    empty.textContent =
+      "Najpierw dodaj operatora do naboru. Geografia naboru jest przypisana do operatora.";
     root.append(empty);
     return;
   }
 
-  for (const row of rows) {
-    const card = document.createElement("div");
-    card.className = "geography-row";
+  for (const assignment of assignments) {
+    const group = document.createElement("section");
+    group.className = "geography-operator-group";
 
-    const copy = document.createElement("div");
-    copy.className = "geography-copy";
-
+    const heading = document.createElement("div");
+    heading.className = "geography-operator-heading";
     const title = document.createElement("strong");
-    title.textContent = geographyLabel(row.value);
+    title.textContent = `${operatorKey(assignment.operatorId)} — geografia:`;
+    heading.append(title);
 
-    const meta = document.createElement("small");
-    meta.textContent = `${BurbotGeography.roles[row.role] ?? row.role} · ${BurbotGeography.types[row.type] ?? row.type}`;
-
-    const badges = document.createElement("span");
-    badges.className = "geography-badges";
-    if (hasEvidenceRule(object.id, row.id)) {
-      const badge = document.createElement("span");
-      badge.className = "badge";
-      badge.textContent = "potwierdzone ze strony";
-      badges.append(badge);
+    const name = operatorName(assignment.operatorId);
+    if (name) {
+      const small = document.createElement("small");
+      small.textContent = name;
+      heading.append(small);
     }
+    group.append(heading);
 
-    copy.append(title, meta, badges);
+    const operatorRows = rows.filter(
+      (row) => row.operatorId === assignment.operatorId,
+    );
+    if (!operatorRows.length) {
+      const empty = document.createElement("p");
+      empty.className = "geography-empty geography-empty-operator";
+      empty.textContent = "Brak geografii dla tego operatora.";
+      group.append(empty);
+    } else {
+      for (const row of operatorRows) {
+        group.append(geographyRowCard(object, row));
+      }
+    }
+    root.append(group);
+  }
 
-    const actions = document.createElement("div");
-    actions.className = "geography-actions";
-
-    const confirm = document.createElement("button");
-    confirm.type = "button";
-    confirm.className = "text-button";
-    confirm.textContent = hasEvidenceRule(object.id, row.id)
-      ? "Zmień potwierdzenie"
-      : "Potwierdź zaznaczeniem";
-    confirm.onclick = () => {
-      void captureSelectedText(object, row)
-        .then(render)
-        .catch((error: unknown) =>
-          notice(error instanceof Error ? error.message : String(error), true),
-        );
-    };
-
-    const remove = document.createElement("button");
-    remove.type = "button";
-    remove.className = "icon-button danger";
-    remove.setAttribute("aria-label", "Usuń geografię");
-    remove.textContent = "×";
-    remove.onclick = () => {
-      const addPanel = $("geography-add");
-      const beforeTop = addPanel.getBoundingClientRect().top;
-      void data("REMOVE_GEOGRAPHY", {
-        objectId: object.id,
-        geographyId: row.id,
-      })
-        .then(() => {
-          notice("Usunięto warunek geograficzny.");
-          render();
-          keepControlInPlace(addPanel, beforeTop);
-        })
-        .catch((error: unknown) =>
-          notice(error instanceof Error ? error.message : String(error), true),
-        );
-    };
-
-    actions.append(confirm, remove);
-    card.append(copy, actions);
-    root.append(card);
+  const unassigned = rows.filter(
+    (row) =>
+      !row.operatorId ||
+      !assignments.some((assignment) => assignment.operatorId === row.operatorId),
+  );
+  if (unassigned.length) {
+    const group = document.createElement("section");
+    group.className = "geography-operator-group geography-operator-group-warning";
+    const heading = document.createElement("div");
+    heading.className = "geography-operator-heading";
+    const title = document.createElement("strong");
+    title.textContent = "Nieprzypisana geografia:";
+    heading.append(title);
+    group.append(heading);
+    for (const row of unassigned) group.append(geographyRowCard(object, row));
+    root.append(group);
   }
 }
 
 function renderSearch(object: LegacyStoredObject): void {
+  const operatorId = renderRecruitmentOperatorSelect(object);
   const type = $("geography-type") as HTMLSelectElement;
   const role = $("geography-role") as HTMLSelectElement;
   const search = $("geography-search") as HTMLInputElement;
@@ -308,6 +435,11 @@ function renderSearch(object: LegacyStoredObject): void {
   const matches = matchingCatalog(type.value, search.value);
 
   results.replaceChildren();
+  if (object.type === "recruitment" && !operatorId) {
+    help.textContent = "Najpierw przypisz co najmniej jednego operatora do naboru.";
+    results.replaceChildren();
+    return;
+  }
   help.textContent = search.value
     ? `${matches.length}${matches.length === 20 ? "+" : ""} wyników`
     : "Wpisz nazwę albo wybierz z listy.";
@@ -336,6 +468,7 @@ function renderSearch(object: LegacyStoredObject): void {
         geographyType: entry.type,
         geographyRole: role.value,
         value: entry.value,
+        ...(object.type === "recruitment" ? { operatorId } : {}),
       })
         .then(() => {
           search.value = "";
@@ -360,6 +493,19 @@ function render(): void {
   const enabled = !!object && !!BurbotSchema[object.type]?.geography;
   section.hidden = !enabled;
   if (!object || !enabled) return;
+
+  const subtitle = $("geography-subtitle");
+  subtitle.textContent =
+    object.type === "recruitment"
+      ? "Zakres terytorialny naboru osobno dla każdego operatora"
+      : "Zakres terytorialny projektu";
+
+  const count = (state.geographies ?? []).filter(
+    (row) => row.objectId === object.id,
+  ).length;
+  $("geography-count").textContent = count
+    ? `${count} ${count === 1 ? "warunek" : "warunków"}`
+    : "Brak zakresu";
 
   renderRows(object);
   renderSearch(object);
@@ -398,6 +544,9 @@ function populateSelectors(): void {
   };
   ($("geography-search") as HTMLInputElement).oninput = () => {
     scheduleGeographyUiPersist();
+    queueRender();
+  };
+  ($("geography-operator") as HTMLSelectElement).onchange = () => {
     queueRender();
   };
 }
