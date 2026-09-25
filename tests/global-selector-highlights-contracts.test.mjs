@@ -370,3 +370,46 @@ test("nested imported evidence participates in locator materialization and highl
   assert.equal(highlights[0].selector, "#region");
   assert.match(highlights[0].id, /^import-target-evidence:/);
 });
+
+
+test("attached files are projected as persistent highlights on their source page", () => {
+  const state = {
+    objects: [{ id: "recruitment-1", type: "recruitment" }],
+    rules: [],
+    fieldEvidence: [],
+    fileSources: [
+      {
+        id: "file-1",
+        objectId: "recruitment-1",
+        fileType: "PDF",
+        url: "https://example.test/files/regulamin.pdf",
+        name: "regulamin.pdf",
+        sourcePageUrl: "https://example.test/dokumentacja-projektowa",
+        addedAt: "2026-09-25T10:00:00.000Z",
+      },
+      {
+        id: "file-other",
+        objectId: "recruitment-1",
+        fileType: "PDF",
+        url: "https://example.test/files/inny.pdf",
+        name: "inny.pdf",
+        sourcePageUrl: "https://example.test/inne",
+        addedAt: "2026-09-25T10:00:00.000Z",
+      },
+    ],
+  };
+
+  const highlights = buildStoredSelectorHighlights(
+    state,
+    "https://example.test/dokumentacja-projektowa#docs",
+  );
+
+  assert.equal(highlights.length, 1);
+  assert.equal(highlights[0].id, "file-source:file-1");
+  assert.match(highlights[0].selector, /^a\[href=/);
+  assert.ok(
+    highlights[0].selectorFallbacks.some((selector) =>
+      selector.includes("regulamin.pdf"),
+    ),
+  );
+});
