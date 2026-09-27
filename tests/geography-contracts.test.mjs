@@ -8,6 +8,7 @@ import { build } from "esbuild";
 
 const root = resolve(fileURLToPath(new URL("..", import.meta.url)));
 let outputDir;
+let migrations;
 
 before(async () => {
   outputDir = await mkdtemp(join(tmpdir(), "burbot-geography-"));
@@ -18,6 +19,7 @@ before(async () => {
       schema: "src/shared/domain/schema.js",
       geography: "src/shared/domain/geographyRuntime.ts",
       core: "src/shared/domain/core.js",
+      migrations: "src/shared/domain/stateMigrations.ts",
     },
     outdir: outputDir,
     bundle: true,
@@ -30,6 +32,7 @@ before(async () => {
   await import(pathToFileURL(join(outputDir, "schema.js")).href);
   await import(pathToFileURL(join(outputDir, "geography.js")).href);
   await import(pathToFileURL(join(outputDir, "core.js")).href);
+  migrations = await import(pathToFileURL(join(outputDir, "migrations.js")).href);
 });
 
 after(async () => {
@@ -76,18 +79,30 @@ test("typed recruitment fields are exposed with choice controls where appropriat
     "godzinaRozpoczecia",
     "dataZakonczeniaDo",
     "godzinaZakonczenia",
-    "planned_start_date",
-    "planned_start_time",
-    "planned_end_date",
-    "planned_end_time",
-    "planowanyStartRok",
-    "planowanyStartMiesiac",
-    "planowanyStartTydzien",
-    "planowanyStartKwartal",
-    "planowanyKoniecRok",
-    "planowanyKoniecMiesiac",
-    "planowanyKoniecTydzien",
-    "planowanyKoniecKwartal",
+    "planned_start_low_date",
+    "planned_start_ceil_date",
+    "planned_start_low_time",
+    "planned_start_ceil_time",
+    "planned_end_low_date",
+    "planned_end_ceil_date",
+    "planned_end_low_time",
+    "planned_end_ceil_time",
+    "planned_start_low_year",
+    "planned_start_ceil_year",
+    "planned_start_low_month",
+    "planned_start_ceil_month",
+    "planned_start_low_week",
+    "planned_start_ceil_week",
+    "planned_start_low_quarter",
+    "planned_start_ceil_quarter",
+    "planned_end_low_year",
+    "planned_end_ceil_year",
+    "planned_end_low_month",
+    "planned_end_ceil_month",
+    "planned_end_low_week",
+    "planned_end_ceil_week",
+    "planned_end_low_quarter",
+    "planned_end_ceil_quarter",
     "statusZakonczenia",
     "powodStatusu",
     "urlOgloszenia",
@@ -96,18 +111,75 @@ test("typed recruitment fields are exposed with choice controls where appropriat
   }
 
   assert.equal(fields.status.type, "enum");
-  assert.equal(fields.planowanyStartMiesiac.type, "enum");
-  assert.equal(fields.planowanyKoniecMiesiac.type, "enum");
+  assert.equal(fields.planned_start_low_month.type, "enum");
+  assert.equal(fields.planned_start_ceil_month.type, "enum");
+  assert.equal(fields.planned_end_low_month.type, "enum");
+  assert.equal(fields.planned_end_ceil_month.type, "enum");
   assert.equal(fields.godzinaRozpoczecia.type, "time");
   assert.equal(fields.godzinaZakonczenia.type, "time");
-  assert.equal(fields.planowanyStartTydzien.type, "enum");
-  assert.equal(fields.planowanyKoniecTydzien.type, "enum");
-  assert.equal(fields.planowanyStartKwartal.type, "enum");
-  assert.equal(fields.planowanyKoniecKwartal.type, "enum");
-  assert.equal(Object.keys(fields.planowanyStartMiesiac.options).length, 12);
-  assert.equal(Object.keys(fields.planowanyStartTydzien.options).length, 5);
+  assert.equal(fields.planned_start_low_time.type, "time");
+  assert.equal(fields.planned_start_ceil_time.type, "time");
+  assert.equal(fields.planned_start_low_week.type, "enum");
+  assert.equal(fields.planned_start_ceil_week.type, "enum");
+  assert.equal(fields.planned_end_low_week.type, "enum");
+  assert.equal(fields.planned_end_ceil_week.type, "enum");
+  assert.equal(fields.planned_start_low_quarter.type, "enum");
+  assert.equal(fields.planned_start_ceil_quarter.type, "enum");
+  assert.equal(Object.keys(fields.planned_start_low_month.options).length, 12);
+  assert.equal(Object.keys(fields.planned_start_low_week.options).length, 5);
   assert.equal(fields.dataRozpoczeciaDo.hidden, true);
   assert.equal(fields.dataZakonczeniaOd.hidden, true);
+  assert.equal(fields.planned_start_date.hidden, true);
+  assert.equal(fields.planowanyStartTydzien.hidden, true);
+});
+
+test("legacy scalar planned recruitment values migrate to collapsed floor/ceil ranges", () => {
+  const state = {
+    version: 1,
+    revision: 1,
+    objects: [
+      {
+        id: "nab-1",
+        type: "recruitment",
+        values: {
+          planned_start_date: "2028-01-10",
+          planned_start_time: "09:00",
+          planned_end_date: "2028-01-14",
+          planned_end_time: "15:00",
+          planowanyStartRok: 2028,
+          planowanyStartMiesiac: 1,
+          planowanyStartTydzien: 2,
+          planowanyStartKwartal: 1,
+          planowanyKoniecRok: 2028,
+          planowanyKoniecMiesiac: 1,
+          planowanyKoniecTydzien: 2,
+          planowanyKoniecKwartal: 1,
+        },
+      },
+    ],
+    rules: [
+      {
+        id: "rule-start",
+        objectId: "nab-1",
+        field: "planned_start_date",
+        pageUrl: "https://example.test/nabor",
+        selector: "#start",
+        extraction: { type: "text" },
+        sampleValue: "10 sty 2028",
+      },
+    ],
+  };
+
+  assert.equal(migrations.migratePlannedRecruitmentRanges(state), true);
+  const values = state.objects[0].values;
+  assert.equal(values.planned_start_low_date, "2028-01-10");
+  assert.equal(values.planned_start_ceil_date, "2028-01-10");
+  assert.equal(values.planned_end_low_date, "2028-01-14");
+  assert.equal(values.planned_end_ceil_date, "2028-01-14");
+  assert.equal(values.planned_start_low_week, 2);
+  assert.equal(values.planned_start_ceil_week, 2);
+  assert.ok(state.rules.some((rule) => rule.field === "planned_start_low_date"));
+  assert.ok(state.rules.some((rule) => rule.field === "planned_start_ceil_date"));
 });
 
 test("geography is selected first and page text is stored as supporting evidence rule", () => {

@@ -91,36 +91,50 @@ class RecruitmentImporterContracts(unittest.TestCase):
         self.assertEqual(variant["max_refund_standard_pln"], 8000)
         self.assertEqual(variant["max_refund_max_pln"], 9500)
 
-    def test_planned_components_use_exact_date_or_explicit_name_period(self) -> None:
-        exact = importer.planned_components(
-            "2026-10-15",
-            "2026-12-20",
+    def test_planned_components_use_floor_and_ceil_bounds(self) -> None:
+        ranged = importer.planned_range_components(
+            "2026-06-22",
+            "2026-06-23",
+            "2026-06-25",
+            "2026-06-27",
             "Planowany nabór",
         )
-        self.assertEqual(exact["planowanyStartRok"], 2026)
-        self.assertEqual(exact["planowanyStartMiesiac"], 10)
-        self.assertEqual(exact["planowanyStartTydzien"], 3)
-        self.assertEqual(exact["planowanyStartKwartal"], 4)
-        self.assertEqual(exact["planowanyKoniecMiesiac"], 12)
-        self.assertEqual(exact["planowanyKoniecTydzien"], 3)
-        self.assertEqual(exact["planowanyKoniecKwartal"], 4)
+        self.assertEqual(ranged["planned_start_low_year"], 2026)
+        self.assertEqual(ranged["planned_start_ceil_year"], 2026)
+        self.assertEqual(ranged["planned_start_low_month"], 6)
+        self.assertEqual(ranged["planned_start_ceil_month"], 6)
+        self.assertEqual(ranged["planned_start_low_week"], 4)
+        self.assertEqual(ranged["planned_start_ceil_week"], 4)
+        self.assertEqual(ranged["planned_end_low_week"], 4)
+        self.assertEqual(ranged["planned_end_ceil_week"], 4)
+        self.assertEqual(ranged["planned_start_low_quarter"], 2)
+        self.assertEqual(ranged["planned_end_ceil_quarter"], 2)
 
-        named = importer.planned_components(
+        named = importer.planned_range_components(
+            None,
+            None,
             None,
             None,
             "Planowany nabór – wrzesień 2026",
         )
-        self.assertEqual(named["planowanyStartRok"], 2026)
-        self.assertEqual(named["planowanyStartMiesiac"], 9)
-        self.assertEqual(named["planowanyStartKwartal"], 3)
+        self.assertEqual(named["planned_start_low_year"], 2026)
+        self.assertEqual(named["planned_start_ceil_year"], 2026)
+        self.assertEqual(named["planned_start_low_month"], 9)
+        self.assertEqual(named["planned_start_ceil_month"], 9)
+        self.assertEqual(named["planned_start_low_quarter"], 3)
+        self.assertEqual(named["planned_start_ceil_quarter"], 3)
 
-        quarter = importer.planned_components(
+        quarter = importer.planned_range_components(
+            None,
+            None,
             None,
             None,
             "Planowany nabór – IV kwartał 2026",
         )
-        self.assertEqual(quarter["planowanyStartRok"], 2026)
-        self.assertEqual(quarter["planowanyStartKwartal"], 4)
+        self.assertEqual(quarter["planned_start_low_year"], 2026)
+        self.assertEqual(quarter["planned_start_ceil_year"], 2026)
+        self.assertEqual(quarter["planned_start_low_quarter"], 4)
+        self.assertEqual(quarter["planned_start_ceil_quarter"], 4)
 
     def test_multiple_source_urls_are_normalized_without_loss(self) -> None:
         value = (

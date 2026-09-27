@@ -155,6 +155,47 @@ def optional_date(value: str, field: str, recruitment_id: str) -> str | None:
     return common.excel_date(value, field, recruitment_id)
 
 
+def optional_time(value: str, field: str, recruitment_id: str) -> str | None:
+    value = value.strip()
+    if not value:
+        return None
+    match = re.fullmatch(r"(\d{1,2})(?::(\d{2}))?", value.replace(".", ":"))
+    if not match:
+        raise ValueError(
+            f"{recruitment_id}.{field}: expected HH:MM, got {value!r}."
+        )
+    hour = int(match.group(1))
+    minute = int(match.group(2) or "0")
+    if hour > 23 or minute > 59:
+        raise ValueError(
+            f"{recruitment_id}.{field}: invalid time {value!r}."
+        )
+    return f"{hour:02d}:{minute:02d}"
+
+
+def optional_int_range(
+    value: str,
+    field: str,
+    recruitment_id: str,
+    minimum: int,
+    maximum: int,
+) -> int | None:
+    value = value.strip()
+    if not value:
+        return None
+    try:
+        parsed = int(value)
+    except ValueError as exc:
+        raise ValueError(
+            f"{recruitment_id}.{field}: expected integer, got {value!r}."
+        ) from exc
+    if parsed < minimum or parsed > maximum:
+        raise ValueError(
+            f"{recruitment_id}.{field}: expected {minimum}..{maximum}, got {parsed}."
+        )
+    return parsed
+
+
 def optional_url(value: str, field: str, recruitment_id: str) -> str | None:
     value = value.strip()
     if not value:
@@ -258,33 +299,53 @@ MONTH_BY_NAME = {
 ROMAN_QUARTER = {"I": 1, "II": 2, "III": 3, "IV": 4}
 
 
-def planned_components(
-    start_date: str | None,
-    end_date: str | None,
+def planned_range_components(
+    start_low_date: str | None,
+    start_ceil_date: str | None,
+    end_low_date: str | None,
+    end_ceil_date: str | None,
     name: str,
 ) -> dict[str, int | None]:
     result: dict[str, int | None] = {
-        "planowanyStartRok": None,
-        "planowanyStartMiesiac": None,
-        "planowanyStartTydzien": None,
-        "planowanyStartKwartal": None,
-        "planowanyKoniecRok": None,
-        "planowanyKoniecMiesiac": None,
-        "planowanyKoniecTydzien": None,
-        "planowanyKoniecKwartal": None,
+        "planned_start_low_year": None,
+        "planned_start_ceil_year": None,
+        "planned_start_low_month": None,
+        "planned_start_ceil_month": None,
+        "planned_start_low_week": None,
+        "planned_start_ceil_week": None,
+        "planned_start_low_quarter": None,
+        "planned_start_ceil_quarter": None,
+        "planned_end_low_year": None,
+        "planned_end_ceil_year": None,
+        "planned_end_low_month": None,
+        "planned_end_ceil_month": None,
+        "planned_end_low_week": None,
+        "planned_end_ceil_week": None,
+        "planned_end_low_quarter": None,
+        "planned_end_ceil_quarter": None,
     }
 
-    if start_date:
-        year, month, day = (int(part) for part in start_date.split("-"))
-        result["planowanyStartRok"] = year
-        result["planowanyStartMiesiac"] = month
-        result["planowanyStartTydzien"] = min(5, (day - 1) // 7 + 1)
-        result["planowanyStartKwartal"] = (month - 1) // 3 + 1
-    else:
+    def apply_date(prefix: str, bound: str, value: str | None) -> None:
+        if not value:
+            return
+        year, month, day = (int(part) for part in value.split("-"))
+        result[f"{prefix}_{bound}_year"] = year
+        result[f"{prefix}_{bound}_month"] = month
+        result[f"{prefix}_{bound}_week"] = min(5, (day - 1) // 7 + 1)
+        result[f"{prefix}_{bound}_quarter"] = (month - 1) // 3 + 1
+
+    apply_date("planned_start", "low", start_low_date)
+    apply_date("planned_start", "ceil", start_ceil_date)
+    apply_date("planned_end", "low", end_low_date)
+    apply_date("planned_end", "ceil", end_ceil_date)
+
+    if not start_low_date and not start_ceil_date:
         normalized = common.normalize_key(name)
         years = sorted(set(re.findall(r"\b20\d{2}\b", name)))
         if len(years) == 1:
-            result["planowanyStartRok"] = int(years[0])
+            year = int(years[0])
+            result["planned_start_low_year"] = year
+            result["planned_start_ceil_year"] = year
         months = [
             number
             for month_name, number in MONTH_BY_NAME.items()
@@ -292,23 +353,19 @@ def planned_components(
         ]
         if len(set(months)) == 1:
             month = months[0]
-            result["planowanyStartMiesiac"] = month
-            result["planowanyStartKwartal"] = (month - 1) // 3 + 1
+            quarter = (month - 1) // 3 + 1
+            result["planned_start_low_month"] = month
+            result["planned_start_ceil_month"] = month
+            result["planned_start_low_quarter"] = quarter
+            result["planned_start_ceil_quarter"] = quarter
         quarter_match = re.search(
             r"(?:^|_)(I|II|III|IV)_KWARTAL(?:_|$)",
             normalized,
         )
         if quarter_match:
-            result["planowanyStartKwartal"] = ROMAN_QUARTER[
-                quarter_match.group(1)
-            ]
-
-    if end_date:
-        year, month, day = (int(part) for part in end_date.split("-"))
-        result["planowanyKoniecRok"] = year
-        result["planowanyKoniecMiesiac"] = month
-        result["planowanyKoniecTydzien"] = min(5, (day - 1) // 7 + 1)
-        result["planowanyKoniecKwartal"] = (month - 1) // 3 + 1
+            quarter = ROMAN_QUARTER[quarter_match.group(1)]
+            result["planned_start_low_quarter"] = quarter
+            result["planned_start_ceil_quarter"] = quarter
 
     return result
 
@@ -657,6 +714,36 @@ def merge_recruitments(
         )
 
         planned_fields = (
+            "planned_start_low_date",
+            "planned_start_ceil_date",
+            "planned_start_low_time",
+            "planned_start_ceil_time",
+            "planned_end_low_date",
+            "planned_end_ceil_date",
+            "planned_end_low_time",
+            "planned_end_ceil_time",
+            "planned_start_low_year",
+            "planned_start_ceil_year",
+            "planned_start_low_month",
+            "planned_start_ceil_month",
+            "planned_start_low_week",
+            "planned_start_ceil_week",
+            "planned_start_low_quarter",
+            "planned_start_ceil_quarter",
+            "planned_end_low_year",
+            "planned_end_ceil_year",
+            "planned_end_low_month",
+            "planned_end_ceil_month",
+            "planned_end_low_week",
+            "planned_end_ceil_week",
+            "planned_end_low_quarter",
+            "planned_end_ceil_quarter",
+        )
+        legacy_planned_fields = (
+            "planned_start_date",
+            "planned_start_time",
+            "planned_end_date",
+            "planned_end_time",
             "planowanyStartRok",
             "planowanyStartMiesiac",
             "planowanyStartTydzien",
@@ -676,26 +763,140 @@ def merge_recruitments(
                 "godzinaZakonczenia",
             ):
                 values.pop(field, None)
-            set_or_remove(values, "planned_start_date", start_date)
-            set_or_remove(values, "planned_end_date", end_date)
-            components = planned_components(
-                start_date,
-                end_date,
+            for field in legacy_planned_fields:
+                values.pop(field, None)
+
+            start_low_date = optional_date(
+                row.get("planowany_start_data_od", ""),
+                "planowany_start_data_od",
+                recruitment_key,
+            ) or start_date
+            start_ceil_date = optional_date(
+                row.get("planowany_start_data_do", ""),
+                "planowany_start_data_do",
+                recruitment_key,
+            ) or start_low_date
+            end_low_date = optional_date(
+                row.get("planowany_koniec_data_od", ""),
+                "planowany_koniec_data_od",
+                recruitment_key,
+            ) or end_date
+            end_ceil_date = optional_date(
+                row.get("planowany_koniec_data_do", ""),
+                "planowany_koniec_data_do",
+                recruitment_key,
+            ) or end_low_date
+
+            set_or_remove(values, "planned_start_low_date", start_low_date)
+            set_or_remove(values, "planned_start_ceil_date", start_ceil_date)
+            set_or_remove(values, "planned_end_low_date", end_low_date)
+            set_or_remove(values, "planned_end_ceil_date", end_ceil_date)
+            legacy_start_time = optional_time(
+                row.get("planowana_godzina_rozpoczecia", ""),
+                "planowana_godzina_rozpoczecia",
+                recruitment_key,
+            )
+            legacy_end_time = optional_time(
+                row.get("planowana_godzina_zakonczenia", ""),
+                "planowana_godzina_zakonczenia",
+                recruitment_key,
+            )
+            start_low_time = optional_time(
+                row.get("planowany_start_godzina_od", ""),
+                "planowany_start_godzina_od",
+                recruitment_key,
+            )
+            start_ceil_time = optional_time(
+                row.get("planowany_start_godzina_do", ""),
+                "planowany_start_godzina_do",
+                recruitment_key,
+            )
+            end_low_time = optional_time(
+                row.get("planowany_koniec_godzina_od", ""),
+                "planowany_koniec_godzina_od",
+                recruitment_key,
+            )
+            end_ceil_time = optional_time(
+                row.get("planowany_koniec_godzina_do", ""),
+                "planowany_koniec_godzina_do",
+                recruitment_key,
+            )
+            if legacy_start_time and not start_low_time and not start_ceil_time:
+                start_low_time = legacy_start_time
+                start_ceil_time = legacy_start_time
+            if legacy_end_time and not end_low_time and not end_ceil_time:
+                end_low_time = legacy_end_time
+                end_ceil_time = legacy_end_time
+
+            set_or_remove(values, "planned_start_low_time", start_low_time)
+            set_or_remove(values, "planned_start_ceil_time", start_ceil_time)
+            set_or_remove(values, "planned_end_low_time", end_low_time)
+            set_or_remove(values, "planned_end_ceil_time", end_ceil_time)
+
+            components = planned_range_components(
+                start_low_date,
+                start_ceil_date,
+                end_low_date,
+                end_ceil_date,
                 row["nabor_nazwa"],
             )
-            for field in planned_fields:
-                set_or_remove(values, field, components[field])
+            explicit_component_columns = {
+                "planned_start_low_year": ("planowany_start_rok_od", "planowany_start_rok", 1000, 9999),
+                "planned_start_ceil_year": ("planowany_start_rok_do", "planowany_start_rok", 1000, 9999),
+                "planned_start_low_month": ("planowany_start_miesiac_od", "planowany_start_miesiac", 1, 12),
+                "planned_start_ceil_month": ("planowany_start_miesiac_do", "planowany_start_miesiac", 1, 12),
+                "planned_start_low_week": ("planowany_start_tydzien_od", "planowany_start_tydzien", 1, 5),
+                "planned_start_ceil_week": ("planowany_start_tydzien_do", "planowany_start_tydzien", 1, 5),
+                "planned_start_low_quarter": ("planowany_start_kwartal_od", "planowany_start_kwartal", 1, 4),
+                "planned_start_ceil_quarter": ("planowany_start_kwartal_do", "planowany_start_kwartal", 1, 4),
+                "planned_end_low_year": ("planowany_koniec_rok_od", "planowany_koniec_rok", 1000, 9999),
+                "planned_end_ceil_year": ("planowany_koniec_rok_do", "planowany_koniec_rok", 1000, 9999),
+                "planned_end_low_month": ("planowany_koniec_miesiac_od", "planowany_koniec_miesiac", 1, 12),
+                "planned_end_ceil_month": ("planowany_koniec_miesiac_do", "planowany_koniec_miesiac", 1, 12),
+                "planned_end_low_week": ("planowany_koniec_tydzien_od", "planowany_koniec_tydzien", 1, 5),
+                "planned_end_ceil_week": ("planowany_koniec_tydzien_do", "planowany_koniec_tydzien", 1, 5),
+                "planned_end_low_quarter": ("planowany_koniec_kwartal_od", "planowany_koniec_kwartal", 1, 4),
+                "planned_end_ceil_quarter": ("planowany_koniec_kwartal_do", "planowany_koniec_kwartal", 1, 4),
+            }
+            for field, (column, legacy_column, minimum, maximum) in explicit_component_columns.items():
+                raw = row.get(column, "") or row.get(legacy_column, "")
+                explicit = optional_int_range(
+                    raw,
+                    column if row.get(column, "") else legacy_column,
+                    recruitment_key,
+                    minimum,
+                    maximum,
+                )
+                set_or_remove(
+                    values,
+                    field,
+                    explicit if explicit is not None else components[field],
+                )
         else:
-            values.pop("planned_start_date", None)
-            values.pop("planned_start_time", None)
-            values.pop("planned_end_date", None)
-            values.pop("planned_end_time", None)
-            for field in planned_fields:
+            for field in planned_fields + legacy_planned_fields:
                 values.pop(field, None)
             values.pop("dataRozpoczeciaDo", None)
             values.pop("dataZakonczeniaOd", None)
             set_or_remove(values, "dataRozpoczeciaOd", start_date)
+            set_or_remove(
+                values,
+                "godzinaRozpoczecia",
+                optional_time(
+                    row.get("godzina_rozpoczecia", ""),
+                    "godzina_rozpoczecia",
+                    recruitment_key,
+                ),
+            )
             set_or_remove(values, "dataZakonczeniaDo", end_date)
+            set_or_remove(
+                values,
+                "godzinaZakonczenia",
+                optional_time(
+                    row.get("godzina_zakonczenia", ""),
+                    "godzina_zakonczenia",
+                    recruitment_key,
+                ),
+            )
 
         set_or_remove(
             values,

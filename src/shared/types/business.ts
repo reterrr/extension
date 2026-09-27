@@ -110,11 +110,62 @@ export interface Nabor {
   dataRozpoczeciaDo: string | null;
   dataZakonczeniaOd: string | null;
 
+  plannedStartLowDate: string | null;
+  plannedStartCeilDate: string | null;
+  plannedStartLowTime: string | null;
+  plannedStartCeilTime: string | null;
+  plannedEndLowDate: string | null;
+  plannedEndCeilDate: string | null;
+  plannedEndLowTime: string | null;
+  plannedEndCeilTime: string | null;
+
+  plannedStartLowYear: number | null;
+  plannedStartCeilYear: number | null;
+  plannedStartLowMonth: number | null;
+  plannedStartCeilMonth: number | null;
+  plannedStartLowWeek: 1 | 2 | 3 | 4 | 5 | null;
+  plannedStartCeilWeek: 1 | 2 | 3 | 4 | 5 | null;
+  plannedStartLowQuarter: 1 | 2 | 3 | 4 | null;
+  plannedStartCeilQuarter: 1 | 2 | 3 | 4 | null;
+
+  plannedEndLowYear: number | null;
+  plannedEndCeilYear: number | null;
+  plannedEndLowMonth: number | null;
+  plannedEndCeilMonth: number | null;
+  plannedEndLowWeek: 1 | 2 | 3 | 4 | 5 | null;
+  plannedEndCeilWeek: 1 | 2 | 3 | 4 | 5 | null;
+  plannedEndLowQuarter: 1 | 2 | 3 | 4 | null;
+  plannedEndCeilQuarter: 1 | 2 | 3 | 4 | null;
+
+  /** Legacy single-value planned fields. */
+  plannedStartLowDate: string | null;
+  plannedStartCeilDate: string | null;
+  plannedStartLowTime: string | null;
+  plannedStartCeilTime: string | null;
+  plannedEndLowDate: string | null;
+  plannedEndCeilDate: string | null;
+  plannedEndLowTime: string | null;
+  plannedEndCeilTime: string | null;
+  plannedStartLowYear: number | null;
+  plannedStartCeilYear: number | null;
+  plannedStartLowMonth: number | null;
+  plannedStartCeilMonth: number | null;
+  plannedStartLowWeek: 1 | 2 | 3 | 4 | 5 | null;
+  plannedStartCeilWeek: 1 | 2 | 3 | 4 | 5 | null;
+  plannedStartLowQuarter: 1 | 2 | 3 | 4 | null;
+  plannedStartCeilQuarter: 1 | 2 | 3 | 4 | null;
+  plannedEndLowYear: number | null;
+  plannedEndCeilYear: number | null;
+  plannedEndLowMonth: number | null;
+  plannedEndCeilMonth: number | null;
+  plannedEndLowWeek: 1 | 2 | 3 | 4 | 5 | null;
+  plannedEndCeilWeek: 1 | 2 | 3 | 4 | 5 | null;
+  plannedEndLowQuarter: 1 | 2 | 3 | 4 | null;
+  plannedEndCeilQuarter: 1 | 2 | 3 | 4 | null;
   planowanyStartRok: number | null;
   planowanyStartMiesiac: number | null;
   planowanyStartTydzien: 1 | 2 | 3 | 4 | 5 | null;
   planowanyStartKwartal: 1 | 2 | 3 | 4 | null;
-
   planowanyKoniecRok: number | null;
   planowanyKoniecMiesiac: number | null;
   planowanyKoniecTydzien: 1 | 2 | 3 | 4 | 5 | null;

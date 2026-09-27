@@ -100,6 +100,32 @@ CREATE TABLE IF NOT EXISTS recruitments (
   end_ceil_date TEXT,
   start_time TEXT,
   end_time TEXT,
+  planned_start_low_date TEXT,
+  planned_start_ceil_date TEXT,
+  planned_start_low_time TEXT,
+  planned_start_ceil_time TEXT,
+  planned_end_low_date TEXT,
+  planned_end_ceil_date TEXT,
+  planned_end_low_time TEXT,
+  planned_end_ceil_time TEXT,
+  planned_start_low_year INTEGER,
+  planned_start_ceil_year INTEGER,
+  planned_start_low_month INTEGER,
+  planned_start_ceil_month INTEGER,
+  planned_start_low_week INTEGER,
+  planned_start_ceil_week INTEGER,
+  planned_start_low_quarter INTEGER,
+  planned_start_ceil_quarter INTEGER,
+  planned_end_low_year INTEGER,
+  planned_end_ceil_year INTEGER,
+  planned_end_low_month INTEGER,
+  planned_end_ceil_month INTEGER,
+  planned_end_low_week INTEGER,
+  planned_end_ceil_week INTEGER,
+  planned_end_low_quarter INTEGER,
+  planned_end_ceil_quarter INTEGER,
+
+  -- Legacy single-value planned columns retained for existing databases.
   planned_start_date TEXT,
   planned_start_time TEXT,
   planned_end_date TEXT,
@@ -294,4 +320,4 @@ CREATE TABLE IF NOT EXISTS document_requirements (
   FOREIGN KEY (object_id) REFERENCES workspace_objects(object_id) ON DELETE CASCADE
 );
 
-PRAGMA user_version = 8;
+PRAGMA user_version = 9;

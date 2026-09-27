@@ -42,6 +42,18 @@ export const SHEET_HEADERS = Object.freeze({
     "numer_kolejny", "rok", "nabor_ciagly", "status_systemowy",
     "data_rozpoczecia_od", "godzina_rozpoczecia", "data_rozpoczecia_do",
     "data_zakonczenia_od", "data_zakonczenia_do", "godzina_zakonczenia",
+    "planowany_start_data_od", "planowany_start_data_do",
+    "planowany_start_godzina_od", "planowany_start_godzina_do",
+    "planowany_koniec_data_od", "planowany_koniec_data_do",
+    "planowany_koniec_godzina_od", "planowany_koniec_godzina_do",
+    "planowany_start_rok_od", "planowany_start_rok_do",
+    "planowany_start_miesiac_od", "planowany_start_miesiac_do",
+    "planowany_start_tydzien_od", "planowany_start_tydzien_do",
+    "planowany_start_kwartal_od", "planowany_start_kwartal_do",
+    "planowany_koniec_rok_od", "planowany_koniec_rok_do",
+    "planowany_koniec_miesiac_od", "planowany_koniec_miesiac_do",
+    "planowany_koniec_tydzien_od", "planowany_koniec_tydzien_do",
+    "planowany_koniec_kwartal_od", "planowany_koniec_kwartal_do",
     "planowana_data_rozpoczecia", "planowana_godzina_rozpoczecia",
     "planowana_data_zakonczenia", "planowana_godzina_zakonczenia",
     "planowany_start_rok", "planowany_start_miesiac", "planowany_start_tydzien",
@@ -136,6 +148,16 @@ function catalogFrom(source) {
 const keyOf = (object) => String(object?.importKey || object?.id || "");
 const row = (headers, values) => headers.map((header) => values[header] ?? null);
 const dateCell = (value) => value ? excelDate(new Date(`${String(value).slice(0, 10)}T00:00:00Z`)) : null;
+const collapsedRange = (low, ceil) =>
+  low !== undefined &&
+  low !== null &&
+  low !== "" &&
+  ceil !== undefined &&
+  ceil !== null &&
+  ceil !== "" &&
+  String(low) === String(ceil)
+    ? low
+    : null;
 const yesNo = (value) => value === null || value === undefined ? null : value ? "tak" : "nie";
 const titleCase = (value) => String(value).toLocaleLowerCase("pl-PL").replace(/(^|[\s-])\p{L}/gu, (letter) => letter.toLocaleUpperCase("pl-PL"));
 
@@ -454,8 +476,12 @@ export function buildBurSheets(snapshot, geographySource) {
     const wojs = [...new Set(included.map((meta) => meta.woj).filter(Boolean).map(titleCase))];
     const powiats = [...new Set(included.map((meta) => meta.powiat).filter(Boolean).map(titleCase))];
     const planned = values.status === "PLANOWANY";
-    const start = planned ? values.planned_start_date : (values.dataRozpoczeciaOd ?? values.dataRozpoczeciaDo);
-    const end = planned ? values.planned_end_date : (values.dataZakonczeniaDo ?? values.dataZakonczeniaOd);
+    const start = planned
+      ? (values.planned_start_low_date ?? values.planned_start_date)
+      : (values.dataRozpoczeciaOd ?? values.dataRozpoczeciaDo);
+    const end = planned
+      ? (values.planned_end_ceil_date ?? values.planned_end_date)
+      : (values.dataZakonczeniaDo ?? values.dataZakonczeniaOd);
     return row(SHEET_HEADERS.Nabory, {
       nabor_id: keyOf(object), nabor_nr: values.source_number ?? values.sequence_number,
       operator_id: keyOf(operator), projekt_id: keyOf(project), nabor_nazwa: values.external_number ?? object.label,
@@ -483,18 +509,84 @@ export function buildBurSheets(snapshot, geographySource) {
       data_zakonczenia_od: dateCell(values.dataZakonczeniaOd),
       data_zakonczenia_do: dateCell(values.dataZakonczeniaDo),
       godzina_zakonczenia: values.godzinaZakonczenia,
-      planowana_data_rozpoczecia: dateCell(values.planned_start_date),
-      planowana_godzina_rozpoczecia: values.planned_start_time,
-      planowana_data_zakonczenia: dateCell(values.planned_end_date),
-      planowana_godzina_zakonczenia: values.planned_end_time,
-      planowany_start_rok: values.planowanyStartRok,
-      planowany_start_miesiac: values.planowanyStartMiesiac,
-      planowany_start_tydzien: values.planowanyStartTydzien,
-      planowany_start_kwartal: values.planowanyStartKwartal,
-      planowany_koniec_rok: values.planowanyKoniecRok,
-      planowany_koniec_miesiac: values.planowanyKoniecMiesiac,
-      planowany_koniec_tydzien: values.planowanyKoniecTydzien,
-      planowany_koniec_kwartal: values.planowanyKoniecKwartal,
+      planowany_start_data_od: dateCell(values.planned_start_low_date ?? values.planned_start_date),
+      planowany_start_data_do: dateCell(values.planned_start_ceil_date ?? values.planned_start_date),
+      planowany_start_godzina_od: values.planned_start_low_time ?? values.planned_start_time,
+      planowany_start_godzina_do: values.planned_start_ceil_time ?? values.planned_start_time,
+      planowany_koniec_data_od: dateCell(values.planned_end_low_date ?? values.planned_end_date),
+      planowany_koniec_data_do: dateCell(values.planned_end_ceil_date ?? values.planned_end_date),
+      planowany_koniec_godzina_od: values.planned_end_low_time ?? values.planned_end_time,
+      planowany_koniec_godzina_do: values.planned_end_ceil_time ?? values.planned_end_time,
+      planowany_start_rok_od: values.planned_start_low_year ?? values.planowanyStartRok,
+      planowany_start_rok_do: values.planned_start_ceil_year ?? values.planowanyStartRok,
+      planowany_start_miesiac_od: values.planned_start_low_month ?? values.planowanyStartMiesiac,
+      planowany_start_miesiac_do: values.planned_start_ceil_month ?? values.planowanyStartMiesiac,
+      planowany_start_tydzien_od: values.planned_start_low_week ?? values.planowanyStartTydzien,
+      planowany_start_tydzien_do: values.planned_start_ceil_week ?? values.planowanyStartTydzien,
+      planowany_start_kwartal_od: values.planned_start_low_quarter ?? values.planowanyStartKwartal,
+      planowany_start_kwartal_do: values.planned_start_ceil_quarter ?? values.planowanyStartKwartal,
+      planowany_koniec_rok_od: values.planned_end_low_year ?? values.planowanyKoniecRok,
+      planowany_koniec_rok_do: values.planned_end_ceil_year ?? values.planowanyKoniecRok,
+      planowany_koniec_miesiac_od: values.planned_end_low_month ?? values.planowanyKoniecMiesiac,
+      planowany_koniec_miesiac_do: values.planned_end_ceil_month ?? values.planowanyKoniecMiesiac,
+      planowany_koniec_tydzien_od: values.planned_end_low_week ?? values.planowanyKoniecTydzien,
+      planowany_koniec_tydzien_do: values.planned_end_ceil_week ?? values.planowanyKoniecTydzien,
+      planowany_koniec_kwartal_od: values.planned_end_low_quarter ?? values.planowanyKoniecKwartal,
+      planowany_koniec_kwartal_do: values.planned_end_ceil_quarter ?? values.planowanyKoniecKwartal,
+
+      // Compatibility columns are populated only when a range collapses to one value.
+      planowana_data_rozpoczecia: dateCell(
+        collapsedRange(
+          values.planned_start_low_date ?? values.planned_start_date,
+          values.planned_start_ceil_date ?? values.planned_start_date,
+        ),
+      ),
+      planowana_godzina_rozpoczecia: collapsedRange(
+        values.planned_start_low_time ?? values.planned_start_time,
+        values.planned_start_ceil_time ?? values.planned_start_time,
+      ),
+      planowana_data_zakonczenia: dateCell(
+        collapsedRange(
+          values.planned_end_low_date ?? values.planned_end_date,
+          values.planned_end_ceil_date ?? values.planned_end_date,
+        ),
+      ),
+      planowana_godzina_zakonczenia: collapsedRange(
+        values.planned_end_low_time ?? values.planned_end_time,
+        values.planned_end_ceil_time ?? values.planned_end_time,
+      ),
+      planowany_start_rok: collapsedRange(
+        values.planned_start_low_year ?? values.planowanyStartRok,
+        values.planned_start_ceil_year ?? values.planowanyStartRok,
+      ),
+      planowany_start_miesiac: collapsedRange(
+        values.planned_start_low_month ?? values.planowanyStartMiesiac,
+        values.planned_start_ceil_month ?? values.planowanyStartMiesiac,
+      ),
+      planowany_start_tydzien: collapsedRange(
+        values.planned_start_low_week ?? values.planowanyStartTydzien,
+        values.planned_start_ceil_week ?? values.planowanyStartTydzien,
+      ),
+      planowany_start_kwartal: collapsedRange(
+        values.planned_start_low_quarter ?? values.planowanyStartKwartal,
+        values.planned_start_ceil_quarter ?? values.planowanyStartKwartal,
+      ),
+      planowany_koniec_rok: collapsedRange(
+        values.planned_end_low_year ?? values.planowanyKoniecRok,
+        values.planned_end_ceil_year ?? values.planowanyKoniecRok,
+      ),
+      planowany_koniec_miesiac: collapsedRange(
+        values.planned_end_low_month ?? values.planowanyKoniecMiesiac,
+        values.planned_end_ceil_month ?? values.planowanyKoniecMiesiac,
+      ),
+      planowany_koniec_tydzien: collapsedRange(
+        values.planned_end_low_week ?? values.planowanyKoniecTydzien,
+        values.planned_end_ceil_week ?? values.planowanyKoniecTydzien,
+      ),
+      planowany_koniec_kwartal: collapsedRange(
+        values.planned_end_low_quarter ?? values.planowanyKoniecKwartal,
+        values.planned_end_ceil_quarter ?? values.planowanyKoniecKwartal,
+      ),
       status_zakonczenia: values.statusZakonczenia,
       powod_statusu: values.powodStatusu,
       ostatnio_sprawdzono: values.last_checked_at,

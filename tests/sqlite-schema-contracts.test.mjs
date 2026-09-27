@@ -72,12 +72,34 @@ test("SQLite schema creates typed business and provenance tables", () => {
   assert.ok(recruitmentColumns.has("source_number"));
   assert.ok(recruitmentColumns.has("start_time"));
   assert.ok(recruitmentColumns.has("end_time"));
-  assert.ok(recruitmentColumns.has("planned_start_date"));
-  assert.ok(recruitmentColumns.has("planned_start_time"));
-  assert.ok(recruitmentColumns.has("planned_end_date"));
-  assert.ok(recruitmentColumns.has("planned_end_time"));
-  assert.ok(recruitmentColumns.has("planned_start_week"));
-  assert.ok(recruitmentColumns.has("planned_end_week"));
+  for (const column of [
+    "planned_start_low_date",
+    "planned_start_ceil_date",
+    "planned_start_low_time",
+    "planned_start_ceil_time",
+    "planned_end_low_date",
+    "planned_end_ceil_date",
+    "planned_end_low_time",
+    "planned_end_ceil_time",
+    "planned_start_low_year",
+    "planned_start_ceil_year",
+    "planned_start_low_month",
+    "planned_start_ceil_month",
+    "planned_start_low_week",
+    "planned_start_ceil_week",
+    "planned_start_low_quarter",
+    "planned_start_ceil_quarter",
+    "planned_end_low_year",
+    "planned_end_ceil_year",
+    "planned_end_low_month",
+    "planned_end_ceil_month",
+    "planned_end_low_week",
+    "planned_end_ceil_week",
+    "planned_end_low_quarter",
+    "planned_end_ceil_quarter",
+  ]) {
+    assert.ok(recruitmentColumns.has(column), `missing recruitments.${column}`);
+  }
   assert.ok(recruitmentColumns.has("action_code"));
   assert.ok(recruitmentColumns.has("documents_url"));
   assert.ok(recruitmentColumns.has("data_source_url"));
@@ -155,7 +177,7 @@ test("SQLite schema creates typed business and provenance tables", () => {
     assert.ok(evidenceColumns.has(column), `missing field_evidence.${column}`);
   }
 
-  assert.equal(db.pragma("user_version", { simple: true }), 8);
+  assert.equal(db.pragma("user_version", { simple: true }), 9);
   db.close();
 });
 
