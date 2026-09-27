@@ -317,12 +317,12 @@ function createEditor(info: NonNullable<ReturnType<typeof fieldInfo>>): HTMLElem
         : definition.type === "time"
           ? "time"
           : definition.type === "url"
-          ? "url"
-          : ["integer", "money", "percentage", "number"].includes(
-                definition.type,
-              )
-            ? "number"
-            : "text";
+            ? "url"
+            : ["integer", "money", "percentage", "number"].includes(
+                  definition.type,
+                )
+              ? "number"
+              : "text";
     if (valueInput.type === "number") valueInput.step = definition.type === "integer" ? "1" : "any";
     valueInput.value = String(draft ?? "");
     input = valueInput;
