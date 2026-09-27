@@ -455,7 +455,7 @@ test("project and recruitment workspace expose multiple operators and operator-s
   assert.match(app, /id="geography-operator"/);
   assert.match(operators, /compileObjectSearch/);
   assert.match(operators, /createObjectSearchDocument/);
-  assert.match(operators, /nip:/);
+  assert.match(app, /Szukaj: nazwa, NIP, ID/);
   assert.match(operators, /ADD_OPERATOR_ASSIGNMENT/);
   assert.match(operators, /REMOVE_OPERATOR_ASSIGNMENT/);
   assert.match(
