@@ -99,8 +99,10 @@ class RecruitmentImporterContracts(unittest.TestCase):
         )
         self.assertEqual(exact["planowanyStartRok"], 2026)
         self.assertEqual(exact["planowanyStartMiesiac"], 10)
+        self.assertEqual(exact["planowanyStartTydzien"], 3)
         self.assertEqual(exact["planowanyStartKwartal"], 4)
         self.assertEqual(exact["planowanyKoniecMiesiac"], 12)
+        self.assertEqual(exact["planowanyKoniecTydzien"], 3)
         self.assertEqual(exact["planowanyKoniecKwartal"], 4)
 
         named = importer.planned_components(
