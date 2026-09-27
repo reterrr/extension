@@ -359,9 +359,6 @@ test("refund range belongs to financing variants, not normal project/recruitment
   assert.ok(recruitmentFields.has("godzinaZakonczenia"));
   assert.ok(recruitmentFields.has("planowanyStartTydzien"));
   assert.ok(recruitmentFields.has("planowanyKoniecTydzien"));
-  const recruitmentFields = new Map(
-    recruitmentView.fields.map((field) => [field.field, field]),
-  );
   assert.equal(recruitmentFields.has("refund_percent_min"), false);
   assert.equal(recruitmentFields.has("refund_percent_avg"), false);
   assert.equal(recruitmentFields.has("refund_percent_max"), false);
