@@ -197,11 +197,13 @@
       ...date("Data rozpoczęcia — do (legacy)", "Earlier captures"),
       legacy: true,
       hidden: true,
+      reviewHidden: true,
     },
     dataZakonczeniaOd: {
       ...date("Data zakończenia — od (legacy)", "Earlier captures"),
       legacy: true,
       hidden: true,
+      reviewHidden: true,
     },
 
     // Plan można zapisać dokładnie (data + godzina) albo z mniejszą
