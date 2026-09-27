@@ -233,12 +233,24 @@
     ),
     planowanyStartTydzien: choice(
       "Planowany start — tydzień miesiąca",
-      { 1: "1. tydzień", 2: "2. tydzień", 3: "3. tydzień", 4: "4. tydzień", 5: "5. tydzień" },
+      {
+        1: "1. tydzień",
+        2: "2. tydzień",
+        3: "3. tydzień",
+        4: "4. tydzień",
+        5: "5. tydzień",
+      },
       { numeric: true, group: "Termin planowany" },
     ),
     planowanyKoniecTydzien: choice(
       "Planowany koniec — tydzień miesiąca",
-      { 1: "1. tydzień", 2: "2. tydzień", 3: "3. tydzień", 4: "4. tydzień", 5: "5. tydzień" },
+      {
+        1: "1. tydzień",
+        2: "2. tydzień",
+        3: "3. tydzień",
+        4: "4. tydzień",
+        5: "5. tydzień",
+      },
       { numeric: true, group: "Termin planowany" },
     ),
     planowanyStartKwartal: choice(
