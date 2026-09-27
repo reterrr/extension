@@ -127,6 +127,17 @@
       return date.toISOString().slice(0, 10);
     }
 
+    if (type === "time") {
+      const normalized = text.replace(".", ":");
+      const match = /^(\d{1,2})(?::(\d{2}))?(?::\d{2})?$/.exec(normalized);
+      if (!match) throw Error("Use HH:MM, for example 10:00.");
+      const hour = Number(match[1]);
+      const minute = match[2] === undefined ? 0 : Number(match[2]);
+      if (hour < 0 || hour > 23 || minute < 0 || minute > 59)
+        throw Error("Use a valid time between 00:00 and 23:59.");
+      return String(hour).padStart(2, "0") + ":" + String(minute).padStart(2, "0");
+    }
+
     throw Error("Unsupported field type.");
   }
 

@@ -217,6 +217,7 @@ function editorType(definition: Record<string, unknown> | undefined): ImportRevi
     return "select";
   }
   if (definition.type === "date") return "date";
+  if (definition.type === "time") return "time";
   if (
     ["integer", "number", "money", "percentage"].includes(
       String(definition.type),
@@ -241,11 +242,12 @@ function fieldViews(
   return Object.entries(fields)
     .filter(
       ([field, definition]) =>
-        !definition.legacy ||
-        BurbotCore.hasValue(object.values[field]) ||
-        session.previewState.rules.some((rule) =>
-          BurbotCore.matches(rule, object.id, field),
-        ),
+        !definition.reviewHidden &&
+        (!definition.legacy ||
+          BurbotCore.hasValue(object.values[field]) ||
+          session.previewState.rules.some((rule) =>
+            BurbotCore.matches(rule, object.id, field),
+          )),
     )
     .map(([field, rawDefinition]) => {
       const definition = rawDefinition as Record<string, unknown>;

@@ -73,14 +73,20 @@ test("typed recruitment fields are exposed with choice controls where appropriat
 
   for (const key of [
     "dataRozpoczeciaOd",
-    "dataRozpoczeciaDo",
-    "dataZakonczeniaOd",
+    "godzinaRozpoczecia",
     "dataZakonczeniaDo",
+    "godzinaZakonczenia",
+    "planned_start_date",
+    "planned_start_time",
+    "planned_end_date",
+    "planned_end_time",
     "planowanyStartRok",
     "planowanyStartMiesiac",
+    "planowanyStartTydzien",
     "planowanyStartKwartal",
     "planowanyKoniecRok",
     "planowanyKoniecMiesiac",
+    "planowanyKoniecTydzien",
     "planowanyKoniecKwartal",
     "statusZakonczenia",
     "powodStatusu",
@@ -92,9 +98,16 @@ test("typed recruitment fields are exposed with choice controls where appropriat
   assert.equal(fields.status.type, "enum");
   assert.equal(fields.planowanyStartMiesiac.type, "enum");
   assert.equal(fields.planowanyKoniecMiesiac.type, "enum");
+  assert.equal(fields.godzinaRozpoczecia.type, "time");
+  assert.equal(fields.godzinaZakonczenia.type, "time");
+  assert.equal(fields.planowanyStartTydzien.type, "enum");
+  assert.equal(fields.planowanyKoniecTydzien.type, "enum");
   assert.equal(fields.planowanyStartKwartal.type, "enum");
   assert.equal(fields.planowanyKoniecKwartal.type, "enum");
   assert.equal(Object.keys(fields.planowanyStartMiesiac.options).length, 12);
+  assert.equal(Object.keys(fields.planowanyStartTydzien.options).length, 5);
+  assert.equal(fields.dataRozpoczeciaDo.hidden, true);
+  assert.equal(fields.dataZakonczeniaOd.hidden, true);
 });
 
 test("geography is selected first and page text is stored as supporting evidence rule", () => {

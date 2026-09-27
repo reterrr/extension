@@ -85,16 +85,22 @@ function snapshot() {
             operator_id: "OP_1",
             status: "OGLOSZONY",
             dataRozpoczeciaOd: "2026-09-01",
+            godzinaRozpoczecia: "08:30",
             dataRozpoczeciaDo: "2026-09-01",
             dataZakonczeniaOd: "2026-09-30",
             dataZakonczeniaDo: "2026-09-30",
+            godzinaZakonczenia: "16:00",
             planned_start_date: "2026-09-01",
+            planned_start_time: "09:00",
             planned_end_date: "2026-09-30",
+            planned_end_time: "15:30",
             planowanyStartRok: 2026,
             planowanyStartMiesiac: 9,
+            planowanyStartTydzien: 1,
             planowanyStartKwartal: 3,
             planowanyKoniecRok: 2026,
             planowanyKoniecMiesiac: 9,
+            planowanyKoniecTydzien: 5,
             planowanyKoniecKwartal: 3,
             urlOgloszenia: "https://rarr.example/nabor",
             data_source_url: "https://rarr.example/nabor",
@@ -281,7 +287,13 @@ test("BUR Excel export keeps complete business data and relations", () => {
   assert.equal(recruitment.numer_kolejny, 1);
   assert.equal(recruitment.rok, 2026);
   assert.equal(recruitment.nabor_ciagly, "nie");
+  assert.equal(recruitment.godzina_rozpoczecia, "08:30");
+  assert.equal(recruitment.godzina_zakonczenia, "16:00");
+  assert.equal(recruitment.planowana_godzina_rozpoczecia, "09:00");
+  assert.equal(recruitment.planowana_godzina_zakonczenia, "15:30");
   assert.equal(recruitment.planowany_start_miesiac, 9);
+  assert.equal(recruitment.planowany_start_tydzien, 1);
+  assert.equal(recruitment.planowany_koniec_tydzien, 5);
   assert.equal(recruitment.status_zakonczenia, "ZAKONCZONY");
   assert.equal(recruitment.ostatnia_zmiana, "2026-09-21T14:22:33.000Z");
 

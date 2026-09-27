@@ -179,11 +179,13 @@ function renderValueControl(): void {
       input.type =
         definition.type === "date"
           ? "date"
-          : definition.type === "url"
-            ? "url"
-            : definition.type === "integer"
-              ? "number"
-              : "text";
+          : definition.type === "time"
+            ? "time"
+            : definition.type === "url"
+              ? "url"
+              : definition.type === "integer"
+                ? "number"
+                : "text";
       if (definition.type === "integer") {
         input.step = "1";
         if (definition.min !== undefined) input.min = String(definition.min);
@@ -316,7 +318,7 @@ function captureSelection(): void {
       );
     } catch {
       const definition = fieldDefinition();
-      draft = ["enum", "reference", "boolean", "date"].includes(definition.type)
+      draft = ["enum", "reference", "boolean", "date", "time"].includes(definition.type)
         ? object.values[selectedField] ?? ""
         : candidate.options[0].raw;
     }

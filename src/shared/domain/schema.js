@@ -7,6 +7,7 @@
     ...extra,
   });
   const date = (label, group = "Daty") => ({ label, type: "date", group });
+  const time = (label, group = "Daty") => ({ label, type: "time", group });
   const systemDateTime = (label = "Ostatnio sprawdzono") => ({
     label,
     type: "datetime",
@@ -186,15 +187,37 @@
       },
     ),
 
-    dataRozpoczeciaOd: date("Data rozpoczęcia — od", "Termin rzeczywisty"),
-    dataRozpoczeciaDo: date("Data rozpoczęcia — do", "Termin rzeczywisty"),
-    dataZakonczeniaOd: date("Data zakończenia — od", "Termin rzeczywisty"),
-    dataZakonczeniaDo: date("Data zakończenia — do", "Termin rzeczywisty"),
+    // Rzeczywisty termin jest konkretnym początkiem i końcem.
+    // Dawne pola zakresowe zostają ukryte wyłącznie dla kompatybilności danych.
+    dataRozpoczeciaOd: date("Data rozpoczęcia", "Termin rzeczywisty"),
+    godzinaRozpoczecia: time("Godzina rozpoczęcia", "Termin rzeczywisty"),
+    dataZakonczeniaDo: date("Data zakończenia", "Termin rzeczywisty"),
+    godzinaZakonczenia: time("Godzina zakończenia", "Termin rzeczywisty"),
+    dataRozpoczeciaDo: {
+      ...date("Data rozpoczęcia — do (legacy)", "Earlier captures"),
+      legacy: true,
+      hidden: true,
+      reviewHidden: true,
+    },
+    dataZakonczeniaOd: {
+      ...date("Data zakończenia — od (legacy)", "Earlier captures"),
+      legacy: true,
+      hidden: true,
+      reviewHidden: true,
+    },
 
+    // Plan można zapisać dokładnie (data + godzina) albo z mniejszą
+    // precyzją: rok, miesiąc, tydzień miesiąca i/lub kwartał.
     planned_start_date: date("Planowana data rozpoczęcia", "Termin planowany"),
+    planned_start_time: time("Planowana godzina rozpoczęcia", "Termin planowany"),
     planned_end_date: date("Planowana data zakończenia", "Termin planowany"),
+    planned_end_time: time("Planowana godzina zakończenia", "Termin planowany"),
 
     planowanyStartRok: integer("Planowany start — rok", "Termin planowany", {
+      min: 1000,
+      max: 9999,
+    }),
+    planowanyKoniecRok: integer("Planowany koniec — rok", "Termin planowany", {
       min: 1000,
       max: 9999,
     }),
@@ -203,19 +226,36 @@
       months,
       { numeric: true, group: "Termin planowany" },
     ),
-    planowanyStartKwartal: choice(
-      "Planowany start — kwartał",
-      { 1: "Q1", 2: "Q2", 3: "Q3", 4: "Q4" },
-      { numeric: true, group: "Termin planowany" },
-    ),
-
-    planowanyKoniecRok: integer("Planowany koniec — rok", "Termin planowany", {
-      min: 1000,
-      max: 9999,
-    }),
     planowanyKoniecMiesiac: choice(
       "Planowany koniec — miesiąc",
       months,
+      { numeric: true, group: "Termin planowany" },
+    ),
+    planowanyStartTydzien: choice(
+      "Planowany start — tydzień miesiąca",
+      {
+        1: "1. tydzień",
+        2: "2. tydzień",
+        3: "3. tydzień",
+        4: "4. tydzień",
+        5: "5. tydzień",
+      },
+      { numeric: true, group: "Termin planowany" },
+    ),
+    planowanyKoniecTydzien: choice(
+      "Planowany koniec — tydzień miesiąca",
+      {
+        1: "1. tydzień",
+        2: "2. tydzień",
+        3: "3. tydzień",
+        4: "4. tydzień",
+        5: "5. tydzień",
+      },
+      { numeric: true, group: "Termin planowany" },
+    ),
+    planowanyStartKwartal: choice(
+      "Planowany start — kwartał",
+      { 1: "Q1", 2: "Q2", 3: "Q3", 4: "Q4" },
       { numeric: true, group: "Termin planowany" },
     ),
     planowanyKoniecKwartal: choice(
