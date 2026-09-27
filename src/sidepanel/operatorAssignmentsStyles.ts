@@ -50,6 +50,19 @@ if (!document.querySelector("style[data-burbot-operator-assignments]")) {
   font-size: 10px;
   color: var(--muted);
 }
+#operator-assignment-search {
+  width: 100%;
+  min-width: 0;
+}
+#operator-assignment-search.is-invalid {
+  border-color: #b94a48;
+}
+.operator-assignment-search-feedback {
+  min-height: 14px;
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.2;
+}
 @media (max-width: 520px) {
   .operator-assignment-add {
     grid-template-columns: 1fr;
