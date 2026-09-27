@@ -449,8 +449,13 @@ test("project and recruitment workspace expose multiple operators and operator-s
   const core = source("src/shared/domain/core.js");
 
   assert.match(app, /id="operator-assignments-section"/);
+  assert.match(app, /id="operator-assignment-search"/);
+  assert.match(app, /id="operator-assignment-search-feedback"/);
   assert.match(app, /id="operator-assignment-select"/);
   assert.match(app, /id="geography-operator"/);
+  assert.match(operators, /compileObjectSearch/);
+  assert.match(operators, /createObjectSearchDocument/);
+  assert.match(operators, /nip:/);
   assert.match(operators, /ADD_OPERATOR_ASSIGNMENT/);
   assert.match(operators, /REMOVE_OPERATOR_ASSIGNMENT/);
   assert.match(
