@@ -176,6 +176,22 @@ test("formats business values, validates enums, dates, NIP, percentages and refe
   const recruitment = s.context.BurbotSchema.recruitment.fields;
   assert.equal(recruitment.operator_id.references, "operator");
   assert.equal(recruitment.planned_start_date.type, "date");
+  assert.equal(recruitment.godzinaRozpoczecia.type, "time");
+  assert.equal(
+    s.C.coerceField("9.30", recruitment.godzinaRozpoczecia, s.state),
+    "09:30",
+  );
+  assert.equal(
+    s.C.coerceField("10", recruitment.planned_start_time, s.state),
+    "10:00",
+  );
+  assert.throws(() =>
+    s.C.coerceField("24:15", recruitment.godzinaZakonczenia, s.state),
+  );
+  assert.equal(
+    s.C.coerceField("5", recruitment.planowanyStartTydzien, s.state),
+    5,
+  );
   assert.equal(recruitment.documents_url.type, "url");
   assert.equal(recruitment.funding_rules.multiline, true);
   assert.equal(
