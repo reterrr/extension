@@ -1,7 +1,7 @@
 import type { LegacyStorageState } from "./legacy-storage";
 
 export type ImportReviewObjectStatus = "PENDING" | "APPROVED" | "REJECTED";
-export type ImportReviewEditorType = "text" | "number" | "date" | "select";
+export type ImportReviewEditorType = "text" | "number" | "date" | "time" | "select";
 
 export interface ImportReviewSession {
   id: string;
