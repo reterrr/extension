@@ -266,16 +266,19 @@ def planned_components(
     result: dict[str, int | None] = {
         "planowanyStartRok": None,
         "planowanyStartMiesiac": None,
+        "planowanyStartTydzien": None,
         "planowanyStartKwartal": None,
         "planowanyKoniecRok": None,
         "planowanyKoniecMiesiac": None,
+        "planowanyKoniecTydzien": None,
         "planowanyKoniecKwartal": None,
     }
 
     if start_date:
-        year, month, _day = (int(part) for part in start_date.split("-"))
+        year, month, day = (int(part) for part in start_date.split("-"))
         result["planowanyStartRok"] = year
         result["planowanyStartMiesiac"] = month
+        result["planowanyStartTydzien"] = min(5, (day - 1) // 7 + 1)
         result["planowanyStartKwartal"] = (month - 1) // 3 + 1
     else:
         normalized = common.normalize_key(name)
@@ -301,9 +304,10 @@ def planned_components(
             ]
 
     if end_date:
-        year, month, _day = (int(part) for part in end_date.split("-"))
+        year, month, day = (int(part) for part in end_date.split("-"))
         result["planowanyKoniecRok"] = year
         result["planowanyKoniecMiesiac"] = month
+        result["planowanyKoniecTydzien"] = min(5, (day - 1) // 7 + 1)
         result["planowanyKoniecKwartal"] = (month - 1) // 3 + 1
 
     return result
@@ -655,17 +659,21 @@ def merge_recruitments(
         planned_fields = (
             "planowanyStartRok",
             "planowanyStartMiesiac",
+            "planowanyStartTydzien",
             "planowanyStartKwartal",
             "planowanyKoniecRok",
             "planowanyKoniecMiesiac",
+            "planowanyKoniecTydzien",
             "planowanyKoniecKwartal",
         )
         if status == "PLANOWANY":
             for field in (
                 "dataRozpoczeciaOd",
+                "godzinaRozpoczecia",
                 "dataRozpoczeciaDo",
                 "dataZakonczeniaOd",
                 "dataZakonczeniaDo",
+                "godzinaZakonczenia",
             ):
                 values.pop(field, None)
             set_or_remove(values, "planned_start_date", start_date)
@@ -679,13 +687,15 @@ def merge_recruitments(
                 set_or_remove(values, field, components[field])
         else:
             values.pop("planned_start_date", None)
+            values.pop("planned_start_time", None)
             values.pop("planned_end_date", None)
+            values.pop("planned_end_time", None)
             for field in planned_fields:
                 values.pop(field, None)
-            for field in ("dataRozpoczeciaOd", "dataRozpoczeciaDo"):
-                set_or_remove(values, field, start_date)
-            for field in ("dataZakonczeniaOd", "dataZakonczeniaDo"):
-                set_or_remove(values, field, end_date)
+            values.pop("dataRozpoczeciaDo", None)
+            values.pop("dataZakonczeniaOd", None)
+            set_or_remove(values, "dataRozpoczeciaOd", start_date)
+            set_or_remove(values, "dataZakonczeniaDo", end_date)
 
         set_or_remove(
             values,
