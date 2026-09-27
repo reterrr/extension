@@ -1,3 +1,7 @@
+import {
+  compileObjectSearch,
+  createObjectSearchDocument,
+} from "../shared/search/objectSearch.js";
 import type {
   LegacyStorageState,
   LegacyStoredObject,
@@ -7,6 +11,7 @@ import type {
 const STORAGE_KEY = "burbot:v1";
 let initialized = false;
 let state = BurbotCore.empty() as LegacyStorageState;
+let operatorSearchQuery = "";
 
 function $<T extends HTMLElement = HTMLElement>(id: string): T {
   const element = document.getElementById(id);
@@ -140,6 +145,8 @@ function renderRows(object: LegacyStoredObject): void {
 }
 
 function renderAdd(object: LegacyStoredObject): void {
+  const search = $("operator-assignment-search") as HTMLInputElement;
+  const feedback = $("operator-assignment-search-feedback");
   const select = $("operator-assignment-select") as HTMLSelectElement;
   const role = $("operator-assignment-role") as HTMLSelectElement;
   const add = $("operator-assignment-add-button") as HTMLButtonElement;
@@ -149,25 +156,88 @@ function renderAdd(object: LegacyStoredObject): void {
     .filter((candidate) => candidate.type === "operator" && !assigned.has(candidate.id))
     .sort((a, b) => operatorLabel(a).localeCompare(operatorLabel(b), "pl"));
 
-  const previous = select.value;
-  select.replaceChildren(new Option("Wybierz operatora…", ""));
-  for (const operator of operators) {
-    select.append(new Option(operatorLabel(operator), operator.id));
-  }
-  if (operators.some((operator) => operator.id === previous)) {
-    select.value = previous;
-  }
+  const searchDocument = (operator: LegacyStoredObject) =>
+    createObjectSearchDocument(
+      operator,
+      operatorLabel(operator),
+      "Operator",
+    );
+
+  const renderOptions = (): void => {
+    const previous = select.value;
+    const compiled = compileObjectSearch(operatorSearchQuery);
+
+    search.classList.toggle("is-invalid", Boolean(compiled.error));
+    search.setAttribute("aria-invalid", String(Boolean(compiled.error)));
+
+    const matches = compiled.error
+      ? []
+      : operators.filter((operator) => compiled.matches(searchDocument(operator)));
+
+    select.replaceChildren(
+      new Option(
+        compiled.error
+          ? "Popraw wyszukiwanie…"
+          : matches.length
+            ? "Wybierz operatora…"
+            : "Brak pasujących operatorów",
+        "",
+      ),
+    );
+
+    for (const operator of matches) {
+      select.append(new Option(operatorLabel(operator), operator.id));
+    }
+
+    if (matches.some((operator) => operator.id === previous)) {
+      select.value = previous;
+    } else {
+      select.value = "";
+    }
+
+    feedback.textContent = compiled.error
+      ? compiled.error
+      : operatorSearchQuery
+        ? `${matches.length} ${matches.length === 1 ? "wynik" : "wyników"}`
+        : operators.length
+          ? `${operators.length} dostępnych operatorów`
+          : "Brak operatorów do przypisania.";
+
+    add.disabled = !select.value;
+  };
+
+  search.value = operatorSearchQuery;
+  search.oninput = () => {
+    operatorSearchQuery = search.value;
+    renderOptions();
+  };
+  search.onkeydown = (event) => {
+    if (event.key === "Escape" && operatorSearchQuery) {
+      event.preventDefault();
+      operatorSearchQuery = "";
+      search.value = "";
+      renderOptions();
+      return;
+    }
+    if (event.key === "Enter" && select.options.length === 2) {
+      event.preventDefault();
+      select.selectedIndex = 1;
+      add.disabled = false;
+      select.focus();
+    }
+  };
 
   const hasMain = assignmentsFor(object.id).some(
     (row) => row.operatorType === "GLOWNY",
   );
   role.value = hasMain ? "DODATKOWY" : "GLOWNY";
   role.disabled = !hasMain;
-  add.disabled = !select.value;
 
   select.onchange = () => {
     add.disabled = !select.value;
   };
+
+  renderOptions();
 
   add.onclick = () => {
     if (!select.value) return;
@@ -177,6 +247,7 @@ function renderAdd(object: LegacyStoredObject): void {
       operatorType: role.value,
     })
       .then(() => {
+        operatorSearchQuery = "";
         notice("Dodano operatora.");
         render();
       })
