@@ -141,9 +141,22 @@ export function App() {
               <div className="workspace-section-body">
                 <div id="operator-assignment-list" />
                 <div className="operator-assignment-add">
-                  <label htmlFor="operator-assignment-select">
+                  <label htmlFor="operator-assignment-search">
                     Operator
-                    <select id="operator-assignment-select" />
+                    <input
+                      id="operator-assignment-search"
+                      type="search"
+                      autoComplete="off"
+                      placeholder="Szukaj: nazwa, NIP, ID…"
+                    />
+                    <small
+                      id="operator-assignment-search-feedback"
+                      className="operator-assignment-search-feedback"
+                    />
+                    <select
+                      id="operator-assignment-select"
+                      aria-label="Wybierz operatora z wyników wyszukiwania"
+                    />
                   </label>
                   <label htmlFor="operator-assignment-role">
                     Rola
