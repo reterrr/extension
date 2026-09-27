@@ -606,7 +606,7 @@ import {
     try {
       draft = C.coerceField(raw, activeInfo().definition, db);
     } catch {
-      draft = ["enum", "reference", "boolean", "date"].includes(
+      draft = ["enum", "reference", "boolean", "date", "time"].includes(
         activeInfo().definition.type,
       )
         ? ""
@@ -1620,7 +1620,9 @@ import {
         input.type =
           definition.type === "date"
             ? "date"
-            : definition.type === "url"
+            : definition.type === "time"
+              ? "time"
+              : definition.type === "url"
               ? "url"
               : definition.type === "email"
                 ? "email"
