@@ -242,11 +242,12 @@ function fieldViews(
   return Object.entries(fields)
     .filter(
       ([field, definition]) =>
-        !definition.legacy ||
-        BurbotCore.hasValue(object.values[field]) ||
-        session.previewState.rules.some((rule) =>
-          BurbotCore.matches(rule, object.id, field),
-        ),
+        !definition.hidden &&
+        (!definition.legacy ||
+          BurbotCore.hasValue(object.values[field]) ||
+          session.previewState.rules.some((rule) =>
+            BurbotCore.matches(rule, object.id, field),
+          )),
     )
     .map(([field, rawDefinition]) => {
       const definition = rawDefinition as Record<string, unknown>;
