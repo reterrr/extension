@@ -75,8 +75,14 @@ ensureColumn("recruitments", "last_checked_at", "TEXT");
 ensureColumn("recruitments", "continuous", "INTEGER");
 ensureColumn("recruitments", "operator_id", "INTEGER");
 ensureColumn("recruitments", "source_number", "TEXT");
+ensureColumn("recruitments", "start_time", "TEXT");
+ensureColumn("recruitments", "end_time", "TEXT");
 ensureColumn("recruitments", "planned_start_date", "TEXT");
+ensureColumn("recruitments", "planned_start_time", "TEXT");
 ensureColumn("recruitments", "planned_end_date", "TEXT");
+ensureColumn("recruitments", "planned_end_time", "TEXT");
+ensureColumn("recruitments", "planned_start_week", "INTEGER");
+ensureColumn("recruitments", "planned_end_week", "INTEGER");
 ensureColumn("recruitments", "action_code", "TEXT");
 ensureColumn("recruitments", "documents_url", "TEXT");
 ensureColumn("recruitments", "data_source_url", "TEXT");
@@ -86,10 +92,10 @@ ensureColumn("recruitments", "funding_rules", "TEXT");
 ensureColumn("recruitments", "funding_verified_at", "TEXT");
 ensureColumn("recruitments", "funding_verification_url", "TEXT");
 ensureColumn("geographies", "operator_object_id", "TEXT");
-db.pragma("user_version = 7");
+db.pragma("user_version = 8");
 
 db.prepare(
-  `INSERT INTO app_meta(key, value) VALUES ('schema_version', '7')
+  `INSERT INTO app_meta(key, value) VALUES ('schema_version', '8')
    ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
 ).run();
 
@@ -340,9 +346,10 @@ function syncBusinessTables(state, groupByObject) {
       external_number, source_number, sequence_number, year, status,
       continuous, refund_percent_min, refund_percent_max,
       start_low_date, start_ceil_date, end_low_date, end_ceil_date,
-      planned_start_date, planned_end_date,
-      planned_start_year, planned_start_month, planned_start_quarter,
-      planned_end_year, planned_end_month, planned_end_quarter,
+      start_time, end_time,
+      planned_start_date, planned_start_time, planned_end_date, planned_end_time,
+      planned_start_year, planned_start_month, planned_start_week, planned_start_quarter,
+      planned_end_year, planned_end_month, planned_end_week, planned_end_quarter,
       closed_status, status_reason, action_code,
       announcement_url, documents_url, data_source_url,
       direct_recruitment_link, notes, funding_rules,
@@ -352,7 +359,8 @@ function syncBusinessTables(state, groupByObject) {
       ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
       ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
       ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-      ?, ?, ?, ?, ?, ?, ?, ?, ?
+      ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+      ?, ?, ?, ?, ?
     )
   `);
 
@@ -442,13 +450,19 @@ function syncBusinessTables(state, groupByObject) {
       nullableText(values.dataRozpoczeciaDo),
       nullableText(values.dataZakonczeniaOd),
       nullableText(values.dataZakonczeniaDo),
+      nullableText(values.godzinaRozpoczecia),
+      nullableText(values.godzinaZakonczenia),
       nullableText(values.planned_start_date),
+      nullableText(values.planned_start_time),
       nullableText(values.planned_end_date),
+      nullableText(values.planned_end_time),
       nullableInt(values.planowanyStartRok),
       nullableInt(values.planowanyStartMiesiac),
+      nullableInt(values.planowanyStartTydzien),
       nullableInt(values.planowanyStartKwartal),
       nullableInt(values.planowanyKoniecRok),
       nullableInt(values.planowanyKoniecMiesiac),
+      nullableInt(values.planowanyKoniecTydzien),
       nullableInt(values.planowanyKoniecKwartal),
       nullableText(values.statusZakonczenia),
       nullableText(values.powodStatusu),
