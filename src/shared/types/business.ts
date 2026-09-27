@@ -102,16 +102,22 @@ export interface Nabor {
   status: StatusNaboru;
 
   dataRozpoczeciaOd: string | null;
+  godzinaRozpoczecia: string | null;
+  dataZakonczeniaDo: string | null;
+  godzinaZakonczenia: string | null;
+
+  /** Legacy range-boundary fields kept only for older stored data. */
   dataRozpoczeciaDo: string | null;
   dataZakonczeniaOd: string | null;
-  dataZakonczeniaDo: string | null;
 
   planowanyStartRok: number | null;
   planowanyStartMiesiac: number | null;
+  planowanyStartTydzien: 1 | 2 | 3 | 4 | 5 | null;
   planowanyStartKwartal: 1 | 2 | 3 | 4 | null;
 
   planowanyKoniecRok: number | null;
   planowanyKoniecMiesiac: number | null;
+  planowanyKoniecTydzien: 1 | 2 | 3 | 4 | 5 | null;
   planowanyKoniecKwartal: 1 | 2 | 3 | 4 | null;
 
   statusZakonczenia: string | null;
@@ -169,14 +175,18 @@ export interface NaborRow {
   rok: number | null;
   status: StatusNaboru;
   dataRozpoczeciaOd: string | null;
+  godzinaRozpoczecia: string | null;
   dataRozpoczeciaDo: string | null;
   dataZakonczeniaOd: string | null;
   dataZakonczeniaDo: string | null;
+  godzinaZakonczenia: string | null;
   planowanyStartRok: number | null;
   planowanyStartMiesiac: number | null;
+  planowanyStartTydzien: 1 | 2 | 3 | 4 | 5 | null;
   planowanyStartKwartal: 1 | 2 | 3 | 4 | null;
   planowanyKoniecRok: number | null;
   planowanyKoniecMiesiac: number | null;
+  planowanyKoniecTydzien: 1 | 2 | 3 | 4 | 5 | null;
   planowanyKoniecKwartal: 1 | 2 | 3 | 4 | null;
   statusZakonczenia: string | null;
   powodStatusu: string | null;
