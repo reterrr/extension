@@ -182,10 +182,10 @@ function renderValueControl(): void {
           : definition.type === "time"
             ? "time"
             : definition.type === "url"
-            ? "url"
-            : definition.type === "integer"
-              ? "number"
-              : "text";
+              ? "url"
+              : definition.type === "integer"
+                ? "number"
+                : "text";
       if (definition.type === "integer") {
         input.step = "1";
         if (definition.min !== undefined) input.min = String(definition.min);
