@@ -179,7 +179,9 @@ function renderValueControl(): void {
       input.type =
         definition.type === "date"
           ? "date"
-          : definition.type === "url"
+          : definition.type === "time"
+            ? "time"
+            : definition.type === "url"
             ? "url"
             : definition.type === "integer"
               ? "number"
@@ -316,7 +318,7 @@ function captureSelection(): void {
       );
     } catch {
       const definition = fieldDefinition();
-      draft = ["enum", "reference", "boolean", "date"].includes(definition.type)
+      draft = ["enum", "reference", "boolean", "date", "time"].includes(definition.type)
         ? object.values[selectedField] ?? ""
         : candidate.options[0].raw;
     }
