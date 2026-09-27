@@ -791,42 +791,47 @@ def merge_recruitments(
             set_or_remove(values, "planned_start_ceil_date", start_ceil_date)
             set_or_remove(values, "planned_end_low_date", end_low_date)
             set_or_remove(values, "planned_end_ceil_date", end_ceil_date)
-            set_or_remove(
-                values,
-                "planned_start_low_time",
-                optional_time(
-                    row.get("planowany_start_godzina_od", ""),
-                    "planowany_start_godzina_od",
-                    recruitment_key,
-                ),
+            legacy_start_time = optional_time(
+                row.get("planowana_godzina_rozpoczecia", ""),
+                "planowana_godzina_rozpoczecia",
+                recruitment_key,
             )
-            set_or_remove(
-                values,
-                "planned_start_ceil_time",
-                optional_time(
-                    row.get("planowany_start_godzina_do", ""),
-                    "planowany_start_godzina_do",
-                    recruitment_key,
-                ),
+            legacy_end_time = optional_time(
+                row.get("planowana_godzina_zakonczenia", ""),
+                "planowana_godzina_zakonczenia",
+                recruitment_key,
             )
-            set_or_remove(
-                values,
-                "planned_end_low_time",
-                optional_time(
-                    row.get("planowany_koniec_godzina_od", ""),
-                    "planowany_koniec_godzina_od",
-                    recruitment_key,
-                ),
+            start_low_time = optional_time(
+                row.get("planowany_start_godzina_od", ""),
+                "planowany_start_godzina_od",
+                recruitment_key,
             )
-            set_or_remove(
-                values,
-                "planned_end_ceil_time",
-                optional_time(
-                    row.get("planowany_koniec_godzina_do", ""),
-                    "planowany_koniec_godzina_do",
-                    recruitment_key,
-                ),
+            start_ceil_time = optional_time(
+                row.get("planowany_start_godzina_do", ""),
+                "planowany_start_godzina_do",
+                recruitment_key,
             )
+            end_low_time = optional_time(
+                row.get("planowany_koniec_godzina_od", ""),
+                "planowany_koniec_godzina_od",
+                recruitment_key,
+            )
+            end_ceil_time = optional_time(
+                row.get("planowany_koniec_godzina_do", ""),
+                "planowany_koniec_godzina_do",
+                recruitment_key,
+            )
+            if legacy_start_time and not start_low_time and not start_ceil_time:
+                start_low_time = legacy_start_time
+                start_ceil_time = legacy_start_time
+            if legacy_end_time and not end_low_time and not end_ceil_time:
+                end_low_time = legacy_end_time
+                end_ceil_time = legacy_end_time
+
+            set_or_remove(values, "planned_start_low_time", start_low_time)
+            set_or_remove(values, "planned_start_ceil_time", start_ceil_time)
+            set_or_remove(values, "planned_end_low_time", end_low_time)
+            set_or_remove(values, "planned_end_ceil_time", end_ceil_time)
 
             components = planned_range_components(
                 start_low_date,
@@ -836,27 +841,28 @@ def merge_recruitments(
                 row["nabor_nazwa"],
             )
             explicit_component_columns = {
-                "planned_start_low_year": ("planowany_start_rok_od", 1000, 9999),
-                "planned_start_ceil_year": ("planowany_start_rok_do", 1000, 9999),
-                "planned_start_low_month": ("planowany_start_miesiac_od", 1, 12),
-                "planned_start_ceil_month": ("planowany_start_miesiac_do", 1, 12),
-                "planned_start_low_week": ("planowany_start_tydzien_od", 1, 5),
-                "planned_start_ceil_week": ("planowany_start_tydzien_do", 1, 5),
-                "planned_start_low_quarter": ("planowany_start_kwartal_od", 1, 4),
-                "planned_start_ceil_quarter": ("planowany_start_kwartal_do", 1, 4),
-                "planned_end_low_year": ("planowany_koniec_rok_od", 1000, 9999),
-                "planned_end_ceil_year": ("planowany_koniec_rok_do", 1000, 9999),
-                "planned_end_low_month": ("planowany_koniec_miesiac_od", 1, 12),
-                "planned_end_ceil_month": ("planowany_koniec_miesiac_do", 1, 12),
-                "planned_end_low_week": ("planowany_koniec_tydzien_od", 1, 5),
-                "planned_end_ceil_week": ("planowany_koniec_tydzien_do", 1, 5),
-                "planned_end_low_quarter": ("planowany_koniec_kwartal_od", 1, 4),
-                "planned_end_ceil_quarter": ("planowany_koniec_kwartal_do", 1, 4),
+                "planned_start_low_year": ("planowany_start_rok_od", "planowany_start_rok", 1000, 9999),
+                "planned_start_ceil_year": ("planowany_start_rok_do", "planowany_start_rok", 1000, 9999),
+                "planned_start_low_month": ("planowany_start_miesiac_od", "planowany_start_miesiac", 1, 12),
+                "planned_start_ceil_month": ("planowany_start_miesiac_do", "planowany_start_miesiac", 1, 12),
+                "planned_start_low_week": ("planowany_start_tydzien_od", "planowany_start_tydzien", 1, 5),
+                "planned_start_ceil_week": ("planowany_start_tydzien_do", "planowany_start_tydzien", 1, 5),
+                "planned_start_low_quarter": ("planowany_start_kwartal_od", "planowany_start_kwartal", 1, 4),
+                "planned_start_ceil_quarter": ("planowany_start_kwartal_do", "planowany_start_kwartal", 1, 4),
+                "planned_end_low_year": ("planowany_koniec_rok_od", "planowany_koniec_rok", 1000, 9999),
+                "planned_end_ceil_year": ("planowany_koniec_rok_do", "planowany_koniec_rok", 1000, 9999),
+                "planned_end_low_month": ("planowany_koniec_miesiac_od", "planowany_koniec_miesiac", 1, 12),
+                "planned_end_ceil_month": ("planowany_koniec_miesiac_do", "planowany_koniec_miesiac", 1, 12),
+                "planned_end_low_week": ("planowany_koniec_tydzien_od", "planowany_koniec_tydzien", 1, 5),
+                "planned_end_ceil_week": ("planowany_koniec_tydzien_do", "planowany_koniec_tydzien", 1, 5),
+                "planned_end_low_quarter": ("planowany_koniec_kwartal_od", "planowany_koniec_kwartal", 1, 4),
+                "planned_end_ceil_quarter": ("planowany_koniec_kwartal_do", "planowany_koniec_kwartal", 1, 4),
             }
-            for field, (column, minimum, maximum) in explicit_component_columns.items():
+            for field, (column, legacy_column, minimum, maximum) in explicit_component_columns.items():
+                raw = row.get(column, "") or row.get(legacy_column, "")
                 explicit = optional_int_range(
-                    row.get(column, ""),
-                    column,
+                    raw,
+                    column if row.get(column, "") else legacy_column,
                     recruitment_key,
                     minimum,
                     maximum,
@@ -872,7 +878,25 @@ def merge_recruitments(
             values.pop("dataRozpoczeciaDo", None)
             values.pop("dataZakonczeniaOd", None)
             set_or_remove(values, "dataRozpoczeciaOd", start_date)
+            set_or_remove(
+                values,
+                "godzinaRozpoczecia",
+                optional_time(
+                    row.get("godzina_rozpoczecia", ""),
+                    "godzina_rozpoczecia",
+                    recruitment_key,
+                ),
+            )
             set_or_remove(values, "dataZakonczeniaDo", end_date)
+            set_or_remove(
+                values,
+                "godzinaZakonczenia",
+                optional_time(
+                    row.get("godzina_zakonczenia", ""),
+                    "godzina_zakonczenia",
+                    recruitment_key,
+                ),
+            )
 
         set_or_remove(
             values,
