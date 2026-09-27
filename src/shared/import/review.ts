@@ -242,7 +242,7 @@ function fieldViews(
   return Object.entries(fields)
     .filter(
       ([field, definition]) =>
-        !definition.hidden &&
+        !definition.reviewHidden &&
         (!definition.legacy ||
           BurbotCore.hasValue(object.values[field]) ||
           session.previewState.rules.some((rule) =>
