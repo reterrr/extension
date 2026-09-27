@@ -76,18 +76,30 @@ test("typed recruitment fields are exposed with choice controls where appropriat
     "godzinaRozpoczecia",
     "dataZakonczeniaDo",
     "godzinaZakonczenia",
-    "planned_start_date",
-    "planned_start_time",
-    "planned_end_date",
-    "planned_end_time",
-    "planowanyStartRok",
-    "planowanyStartMiesiac",
-    "planowanyStartTydzien",
-    "planowanyStartKwartal",
-    "planowanyKoniecRok",
-    "planowanyKoniecMiesiac",
-    "planowanyKoniecTydzien",
-    "planowanyKoniecKwartal",
+    "planned_start_low_date",
+    "planned_start_ceil_date",
+    "planned_start_low_time",
+    "planned_start_ceil_time",
+    "planned_end_low_date",
+    "planned_end_ceil_date",
+    "planned_end_low_time",
+    "planned_end_ceil_time",
+    "planned_start_low_year",
+    "planned_start_ceil_year",
+    "planned_start_low_month",
+    "planned_start_ceil_month",
+    "planned_start_low_week",
+    "planned_start_ceil_week",
+    "planned_start_low_quarter",
+    "planned_start_ceil_quarter",
+    "planned_end_low_year",
+    "planned_end_ceil_year",
+    "planned_end_low_month",
+    "planned_end_ceil_month",
+    "planned_end_low_week",
+    "planned_end_ceil_week",
+    "planned_end_low_quarter",
+    "planned_end_ceil_quarter",
     "statusZakonczenia",
     "powodStatusu",
     "urlOgloszenia",
@@ -96,18 +108,26 @@ test("typed recruitment fields are exposed with choice controls where appropriat
   }
 
   assert.equal(fields.status.type, "enum");
-  assert.equal(fields.planowanyStartMiesiac.type, "enum");
-  assert.equal(fields.planowanyKoniecMiesiac.type, "enum");
+  assert.equal(fields.planned_start_low_month.type, "enum");
+  assert.equal(fields.planned_start_ceil_month.type, "enum");
+  assert.equal(fields.planned_end_low_month.type, "enum");
+  assert.equal(fields.planned_end_ceil_month.type, "enum");
   assert.equal(fields.godzinaRozpoczecia.type, "time");
   assert.equal(fields.godzinaZakonczenia.type, "time");
-  assert.equal(fields.planowanyStartTydzien.type, "enum");
-  assert.equal(fields.planowanyKoniecTydzien.type, "enum");
-  assert.equal(fields.planowanyStartKwartal.type, "enum");
-  assert.equal(fields.planowanyKoniecKwartal.type, "enum");
-  assert.equal(Object.keys(fields.planowanyStartMiesiac.options).length, 12);
-  assert.equal(Object.keys(fields.planowanyStartTydzien.options).length, 5);
+  assert.equal(fields.planned_start_low_time.type, "time");
+  assert.equal(fields.planned_start_ceil_time.type, "time");
+  assert.equal(fields.planned_start_low_week.type, "enum");
+  assert.equal(fields.planned_start_ceil_week.type, "enum");
+  assert.equal(fields.planned_end_low_week.type, "enum");
+  assert.equal(fields.planned_end_ceil_week.type, "enum");
+  assert.equal(fields.planned_start_low_quarter.type, "enum");
+  assert.equal(fields.planned_start_ceil_quarter.type, "enum");
+  assert.equal(Object.keys(fields.planned_start_low_month.options).length, 12);
+  assert.equal(Object.keys(fields.planned_start_low_week.options).length, 5);
   assert.equal(fields.dataRozpoczeciaDo.hidden, true);
   assert.equal(fields.dataZakonczeniaOd.hidden, true);
+  assert.equal(fields.planned_start_date.hidden, true);
+  assert.equal(fields.planowanyStartTydzien.hidden, true);
 });
 
 test("geography is selected first and page text is stored as supporting evidence rule", () => {
