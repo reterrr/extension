@@ -3,6 +3,7 @@ import { stampLastCheckedAt } from "../commits/lastChecked";
 import {
   migrateFundingRefundRanges,
   migrateMultiOperatorAssignments,
+  migratePlannedRecruitmentRanges,
   migrateRecruitmentStatusesAndOperatorContacts,
 } from "../domain/stateMigrations";
 import { LEGACY_STORAGE_KEY } from "../storage/constants";
@@ -38,6 +39,7 @@ function assertLegacyState(value: unknown): asserts value is LegacyStorageState 
     throw new Error("Unsupported stored data format.");
   }
   migrateFundingRefundRanges(state);
+  migratePlannedRecruitmentRanges(state);
   migrateRecruitmentStatusesAndOperatorContacts(state);
   migrateMultiOperatorAssignments(state);
 }
