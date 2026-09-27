@@ -87,6 +87,103 @@ export function migrateFundingRefundRanges(state: LegacyStorageState): boolean {
 }
 
 
+
+const PLANNED_RECRUITMENT_RANGE_FIELDS = [
+  ["planned_start_date", "planned_start_low_date", "planned_start_ceil_date"],
+  ["planned_start_time", "planned_start_low_time", "planned_start_ceil_time"],
+  ["planned_end_date", "planned_end_low_date", "planned_end_ceil_date"],
+  ["planned_end_time", "planned_end_low_time", "planned_end_ceil_time"],
+  ["planowanyStartRok", "planned_start_low_year", "planned_start_ceil_year"],
+  ["planowanyStartMiesiac", "planned_start_low_month", "planned_start_ceil_month"],
+  ["planowanyStartTydzien", "planned_start_low_week", "planned_start_ceil_week"],
+  ["planowanyStartKwartal", "planned_start_low_quarter", "planned_start_ceil_quarter"],
+  ["planowanyKoniecRok", "planned_end_low_year", "planned_end_ceil_year"],
+  ["planowanyKoniecMiesiac", "planned_end_low_month", "planned_end_ceil_month"],
+  ["planowanyKoniecTydzien", "planned_end_low_week", "planned_end_ceil_week"],
+  ["planowanyKoniecKwartal", "planned_end_low_quarter", "planned_end_ceil_quarter"],
+] as const;
+
+function uniqueMigrationRuleId(base: string, used: Set<string>): string {
+  let candidate = base;
+  let suffix = 1;
+  while (used.has(candidate)) candidate = `${base}:${++suffix}`;
+  used.add(candidate);
+  return candidate;
+}
+
+/**
+ * Converts the previous one-value planned recruitment model into bounded
+ * floor/ceil ranges. A previously exact value becomes a collapsed range
+ * (floor === ceil), so existing data keeps the same meaning.
+ */
+export function migratePlannedRecruitmentRanges(
+  state: LegacyStorageState,
+): boolean {
+  let changed = false;
+
+  for (const object of state.objects) {
+    if (object.type !== "recruitment") continue;
+    const values = object.values ?? {};
+
+    for (const [legacy, low, ceil] of PLANNED_RECRUITMENT_RANGE_FIELDS) {
+      const value = values[legacy];
+      if (value === undefined || value === null || value === "") continue;
+      if (!own(values, low)) {
+        values[low] = value;
+        changed = true;
+      }
+      if (!own(values, ceil)) {
+        values[ceil] = value;
+        changed = true;
+      }
+    }
+  }
+
+  const objectTypes = new Map(
+    state.objects.map((object) => [object.id, object.type]),
+  );
+  const usedRuleIds = new Set(state.rules.map((rule) => rule.id));
+  const addedRules: LegacyStoredRule[] = [];
+
+  for (const rule of state.rules) {
+    if (objectTypes.get(rule.objectId) !== "recruitment" || rule.target) continue;
+    const mapping = PLANNED_RECRUITMENT_RANGE_FIELDS.find(
+      ([legacy]) => legacy === rule.field,
+    );
+    if (!mapping) continue;
+
+    const [, low, ceil] = mapping;
+    for (const field of [low, ceil]) {
+      const exists =
+        state.rules.some(
+          (candidate) =>
+            candidate.objectId === rule.objectId &&
+            !candidate.target &&
+            candidate.field === field,
+        ) ||
+        addedRules.some(
+          (candidate) =>
+            candidate.objectId === rule.objectId &&
+            !candidate.target &&
+            candidate.field === field,
+        );
+      if (exists) continue;
+
+      const copy = cloneRule(rule);
+      copy.id = uniqueMigrationRuleId(
+        `${rule.id}:planned-range:${field}`,
+        usedRuleIds,
+      );
+      copy.field = field;
+      addedRules.push(copy);
+      changed = true;
+    }
+  }
+
+  if (addedRules.length) state.rules.push(...addedRules);
+  return changed;
+}
+
 function splitContactValues(value: unknown): string[] {
   if (typeof value !== "string") return [];
   return value
