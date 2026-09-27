@@ -8,6 +8,7 @@ import { build } from "esbuild";
 
 const root = resolve(fileURLToPath(new URL("..", import.meta.url)));
 let outputDir;
+let migrations;
 
 before(async () => {
   outputDir = await mkdtemp(join(tmpdir(), "burbot-geography-"));
@@ -18,6 +19,7 @@ before(async () => {
       schema: "src/shared/domain/schema.js",
       geography: "src/shared/domain/geographyRuntime.ts",
       core: "src/shared/domain/core.js",
+      migrations: "src/shared/domain/stateMigrations.ts",
     },
     outdir: outputDir,
     bundle: true,
@@ -30,6 +32,7 @@ before(async () => {
   await import(pathToFileURL(join(outputDir, "schema.js")).href);
   await import(pathToFileURL(join(outputDir, "geography.js")).href);
   await import(pathToFileURL(join(outputDir, "core.js")).href);
+  migrations = await import(pathToFileURL(join(outputDir, "migrations.js")).href);
 });
 
 after(async () => {
@@ -128,6 +131,55 @@ test("typed recruitment fields are exposed with choice controls where appropriat
   assert.equal(fields.dataZakonczeniaOd.hidden, true);
   assert.equal(fields.planned_start_date.hidden, true);
   assert.equal(fields.planowanyStartTydzien.hidden, true);
+});
+
+test("legacy scalar planned recruitment values migrate to collapsed floor/ceil ranges", () => {
+  const state = {
+    version: 1,
+    revision: 1,
+    objects: [
+      {
+        id: "nab-1",
+        type: "recruitment",
+        values: {
+          planned_start_date: "2028-01-10",
+          planned_start_time: "09:00",
+          planned_end_date: "2028-01-14",
+          planned_end_time: "15:00",
+          planowanyStartRok: 2028,
+          planowanyStartMiesiac: 1,
+          planowanyStartTydzien: 2,
+          planowanyStartKwartal: 1,
+          planowanyKoniecRok: 2028,
+          planowanyKoniecMiesiac: 1,
+          planowanyKoniecTydzien: 2,
+          planowanyKoniecKwartal: 1,
+        },
+      },
+    ],
+    rules: [
+      {
+        id: "rule-start",
+        objectId: "nab-1",
+        field: "planned_start_date",
+        pageUrl: "https://example.test/nabor",
+        selector: "#start",
+        extraction: { type: "text" },
+        sampleValue: "10 sty 2028",
+      },
+    ],
+  };
+
+  assert.equal(migrations.migratePlannedRecruitmentRanges(state), true);
+  const values = state.objects[0].values;
+  assert.equal(values.planned_start_low_date, "2028-01-10");
+  assert.equal(values.planned_start_ceil_date, "2028-01-10");
+  assert.equal(values.planned_end_low_date, "2028-01-14");
+  assert.equal(values.planned_end_ceil_date, "2028-01-14");
+  assert.equal(values.planned_start_low_week, 2);
+  assert.equal(values.planned_start_ceil_week, 2);
+  assert.ok(state.rules.some((rule) => rule.field === "planned_start_low_date"));
+  assert.ok(state.rules.some((rule) => rule.field === "planned_start_ceil_date"));
 });
 
 test("geography is selected first and page text is stored as supporting evidence rule", () => {
