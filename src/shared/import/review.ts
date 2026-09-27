@@ -217,6 +217,7 @@ function editorType(definition: Record<string, unknown> | undefined): ImportRevi
     return "select";
   }
   if (definition.type === "date") return "date";
+  if (definition.type === "time") return "time";
   if (
     ["integer", "number", "money", "percentage"].includes(
       String(definition.type),
