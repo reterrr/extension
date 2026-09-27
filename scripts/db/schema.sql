@@ -98,13 +98,19 @@ CREATE TABLE IF NOT EXISTS recruitments (
   start_ceil_date TEXT,
   end_low_date TEXT,
   end_ceil_date TEXT,
+  start_time TEXT,
+  end_time TEXT,
   planned_start_date TEXT,
+  planned_start_time TEXT,
   planned_end_date TEXT,
+  planned_end_time TEXT,
   planned_start_year INTEGER,
   planned_start_month INTEGER,
+  planned_start_week INTEGER,
   planned_start_quarter INTEGER,
   planned_end_year INTEGER,
   planned_end_month INTEGER,
+  planned_end_week INTEGER,
   planned_end_quarter INTEGER,
   closed_status TEXT,
   status_reason TEXT,
@@ -288,4 +294,4 @@ CREATE TABLE IF NOT EXISTS document_requirements (
   FOREIGN KEY (object_id) REFERENCES workspace_objects(object_id) ON DELETE CASCADE
 );
 
-PRAGMA user_version = 7;
+PRAGMA user_version = 8;
