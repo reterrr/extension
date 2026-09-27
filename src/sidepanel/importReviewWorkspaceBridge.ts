@@ -167,7 +167,7 @@ function updateDraftFromCandidate(): void {
   try {
     draft = BurbotCore.coerceField(raw, info.definition, session!.previewState);
   } catch {
-    draft = ["enum", "reference", "boolean", "date"].includes(
+    draft = ["enum", "reference", "boolean", "date", "time"].includes(
       info.definition.type,
     )
       ? ""
@@ -314,7 +314,9 @@ function createEditor(info: NonNullable<ReturnType<typeof fieldInfo>>): HTMLElem
     valueInput.type =
       definition.type === "date"
         ? "date"
-        : definition.type === "url"
+        : definition.type === "time"
+          ? "time"
+          : definition.type === "url"
           ? "url"
           : ["integer", "money", "percentage", "number"].includes(
                 definition.type,
