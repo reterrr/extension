@@ -148,6 +148,9 @@ export interface LegacyStoredFileSource {
   copiedFromProjectId?: string;
   copiedFromFileSourceId?: string;
   copiedAt?: string;
+
+  /** Internal marker so filename defaults are applied once and never fight manual edits. */
+  metadataInferenceVersion?: number;
 }
 
 export type LegacyStoredRule = ExecutableExtractionRule & {
