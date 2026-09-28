@@ -121,6 +121,14 @@ export function App() {
                   <button id="read-from-file" className="text-button" type="button">
                     + Dodaj plik ze strony
                   </button>
+                  <button
+                    id="download-all-files"
+                    className="text-button file-source-download-all"
+                    type="button"
+                    hidden
+                  >
+                    ↓ Pobierz wszystkie
+                  </button>
                 </div>
                 <p id="file-source-mode-hint" className="file-source-mode-hint" hidden>
                   Kliknij link do pliku .doc, .docx, .pdf, .xlsx, .png, .jpg lub .jpeg. Esc anuluje tryb.

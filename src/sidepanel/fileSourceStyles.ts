@@ -170,8 +170,16 @@ if (!document.querySelector("style[data-burbot-file-sources]")) {
 .file-source-toolbar {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 7px;
   margin-top: 8px;
+}
+.file-source-download-all {
+  margin-left: auto;
+}
+.file-source-download-all:disabled {
+  opacity: .5;
+  cursor: default;
 }
 .file-source-mode-hint {
   color: var(--green);
