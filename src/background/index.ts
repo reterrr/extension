@@ -25,6 +25,8 @@ import {
 } from "../shared/commits/staging";
 import { createCapturedExtractionInput } from "../shared/extraction/rules";
 import {
+  FILE_METADATA_INFERENCE_VERSION,
+  inferFileMetadataFromName,
   isFileClientRequirement,
   isFilePurpose,
   isFileSignatureRequirement,
@@ -496,6 +498,8 @@ function mutateFileSource(
       name: file.name,
       sourcePageUrl: file.sourcePageUrl,
       addedAt: now,
+      ...inferFileMetadataFromName(file.name),
+      metadataInferenceVersion: FILE_METADATA_INFERENCE_VERSION,
     });
   } else if (message.op === "UPDATE_FILE_SOURCE") {
     if (typeof message.sourceId !== "string") {
