@@ -438,6 +438,29 @@ test("attachments containing 'do Regulaminu' use the specific document pattern f
   );
 });
 
+test("Polish filename normalization keeps ł-based patterns matchable", () => {
+  assert.deepEqual(
+    fileMetadata.inferFileMetadataFromName(
+      "Plan_Usług_Rozwojowych_cz_1_wzór.docx",
+    ),
+    {
+      purpose: "Formularz do uzupełnienia",
+      has_fields: true,
+      client_requirement: "Obowiązkowy",
+      signature_requirement: "Wymagany podpisany plik",
+    },
+  );
+  assert.deepEqual(
+    fileMetadata.inferFileMetadataFromName("Wzór_pełnomocnictwa.docx"),
+    {
+      purpose: "Formularz do uzupełnienia",
+      has_fields: true,
+      client_requirement: "Warunkowy",
+      signature_requirement: "Wymagany podpisany plik",
+    },
+  );
+});
+
 test("common BUR filenames get conservative metadata defaults", () => {
   assert.deepEqual(
     fileMetadata.inferFileMetadataFromName(
