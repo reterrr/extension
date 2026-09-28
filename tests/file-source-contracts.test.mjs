@@ -167,6 +167,29 @@ test("PDF compatibility helpers remain PDF-only", () => {
 });
 
 
+test("project download plan puts all project files in one project folder", () => {
+  const plan = fileDownloads.buildProjectDownloadPlan(
+    "Wsparcie śląskich przedsiębiorców / PSF",
+    [
+      { name: "regulamin.pdf", url: "https://example.test/regulamin.pdf" },
+      { name: "formularz.docx", url: "https://example.test/formularz.docx" },
+    ],
+    false,
+  );
+
+  assert.equal(
+    plan.folderName,
+    "Wsparcie śląskich przedsiębiorców - PSF",
+  );
+  assert.deepEqual(
+    plan.files.map((file) => file.relativePath),
+    [
+      "Wsparcie śląskich przedsiębiorców - PSF/regulamin.pdf",
+      "Wsparcie śląskich przedsiębiorców - PSF/formularz.docx",
+    ],
+  );
+});
+
 test("recruitment download plan puts all files in one recruitment/project folder", () => {
   const plan = fileDownloads.buildRecruitmentDownloadPlan(
     "Nabór IX/2026",
