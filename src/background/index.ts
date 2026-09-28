@@ -618,12 +618,17 @@ function mutateFileSource(
         ),
     );
   } else if (message.op === "INHERIT_PROJECT_FILES") {
-    inheritProjectFilesAsCopies(
+    const inherited = inheritProjectFilesAsCopies(
       state,
       object.id,
       () => crypto.randomUUID(),
       now,
     );
+    if (!inherited.copied.length) {
+      throw new Error(
+        "Brak nowych plików projektu do skopiowania. Istniejące kopie naboru pozostają bez zmian.",
+      );
+    }
   } else {
     throw new Error("Unknown file source operation.");
   }
