@@ -15,7 +15,10 @@ import type {
   LegacyStoredObject,
 } from "../shared/types/legacy-storage";
 import type { RemoteFileSourceCandidate } from "../shared/types/source";
-import { buildRecruitmentDownloadPlan } from "../shared/fileDownloads";
+import {
+  buildProjectDownloadPlan,
+  buildRecruitmentDownloadPlan,
+} from "../shared/fileDownloads";
 import {
   projectFileInheritanceStatus,
   projectForRecruitment,
@@ -161,21 +164,30 @@ function objectDisplayName(object: LegacyStoredObject): string {
   return object.label?.trim() || object.importKey?.trim() || object.id;
 }
 
-async function downloadAllRecruitmentFiles(
-  recruitment: LegacyStoredObject,
+async function downloadAllObjectFiles(
+  object: LegacyStoredObject,
 ): Promise<void> {
-  if (recruitment.type !== "recruitment") {
-    throw new Error("Pobieranie wszystkich plików jest dostępne dla naboru.");
+  if (object.type !== "recruitment" && object.type !== "project") {
+    throw new Error(
+      "Pobieranie wszystkich plików jest dostępne dla projektu i naboru.",
+    );
   }
 
   const sources = (state.fileSources ?? []).filter(
-    (source) => source.objectId === recruitment.id,
+    (source) => source.objectId === object.id,
   );
   if (!sources.length) {
-    throw new Error("Ten nabór nie ma przypiętych plików.");
+    throw new Error(
+      object.type === "project"
+        ? "Ten projekt nie ma przypiętych plików."
+        : "Ten nabór nie ma przypiętych plików.",
+    );
   }
 
-  const project = projectForRecruitment(state, recruitment);
+  const project =
+    object.type === "recruitment"
+      ? projectForRecruitment(state, object)
+      : object;
   if (!project) {
     throw new Error(
       "Najpierw przypisz projekt do naboru — nazwa katalogu używa nazwy naboru i projektu.",
@@ -186,12 +198,23 @@ async function downloadAllRecruitmentFiles(
   render();
   try {
     const platform = await browser.runtime.getPlatformInfo();
-    const plan = buildRecruitmentDownloadPlan(
-      objectDisplayName(recruitment),
-      objectDisplayName(project),
-      sources.map((source) => ({ name: source.name, url: source.url })),
-      platform.os === "win",
-    );
+    const inputFiles = sources.map((source) => ({
+      name: source.name,
+      url: source.url,
+    }));
+    const plan =
+      object.type === "project"
+        ? buildProjectDownloadPlan(
+            objectDisplayName(project),
+            inputFiles,
+            platform.os === "win",
+          )
+        : buildRecruitmentDownloadPlan(
+            objectDisplayName(object),
+            objectDisplayName(project),
+            inputFiles,
+            platform.os === "win",
+          );
     const results = await Promise.allSettled(
       plan.files.map((file) =>
         browser.downloads.download({
@@ -978,13 +1001,19 @@ function render(): void {
   }
 
   const downloadAll = $("download-all-files") as HTMLButtonElement;
-  downloadAll.hidden = !isRecruitment;
+  const canBulkDownload =
+    object.type === "project" || object.type === "recruitment";
+  downloadAll.hidden = !canBulkDownload;
   downloadAll.disabled =
-    fileDownloadBusy || sources.length === 0 || !project;
+    fileDownloadBusy ||
+    sources.length === 0 ||
+    (isRecruitment && !project);
   downloadAll.textContent = fileDownloadBusy
     ? "Pobieranie…"
     : `↓ Pobierz wszystkie (${sources.length})`;
-  if (isRecruitment) {
+  if (object.type === "project") {
+    downloadAll.title = `Pobierz do: ${objectDisplayName(object)}`;
+  } else if (isRecruitment) {
     downloadAll.title = project
       ? `Pobierz do: ${objectDisplayName(object)} - ${objectDisplayName(project)}`
       : "Przypisz projekt, aby utworzyć katalog naboru.";
@@ -1019,10 +1048,10 @@ export async function initFileSourcesUi(): Promise<void> {
   $("download-all-files").onclick = () => {
     const object = chosenObject();
     if (!object) {
-      notice("Wybierz nabór przed pobieraniem plików.", true);
+      notice("Wybierz projekt lub nabór przed pobieraniem plików.", true);
       return;
     }
-    void downloadAllRecruitmentFiles(object).catch((error: unknown) => {
+    void downloadAllObjectFiles(object).catch((error: unknown) => {
       notice(error instanceof Error ? error.message : String(error), true);
     });
   };
