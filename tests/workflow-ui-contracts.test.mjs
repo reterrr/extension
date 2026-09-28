@@ -328,6 +328,21 @@ test("workspace advertises supported file extensions and keeps value extraction 
 });
 
 
+test("bulk file download is available for projects and recruitments", () => {
+  const files = source("src/sidepanel/fileSourcesUi.ts");
+  const downloads = source("src/shared/fileDownloads.ts");
+
+  assert.match(
+    files,
+    /const canBulkDownload =\s*object\.type === "project" \|\| object\.type === "recruitment"/,
+  );
+  assert.match(files, /downloadAll\.hidden = !canBulkDownload/);
+  assert.match(files, /downloadAllObjectFiles/);
+  assert.match(files, /buildProjectDownloadPlan/);
+  assert.match(files, /buildRecruitmentDownloadPlan/);
+  assert.match(downloads, /export function buildProjectDownloadPlan/);
+});
+
 test("File Add Mode is persistent and has Ctrl+Alt+F toggle", () => {
   const files = source("src/sidepanel/fileSourcesUi.ts");
   const picker = source("src/content/picker.ts");
