@@ -206,13 +206,17 @@ style.textContent = `
   }
 
   .import-review-fields > div.import-review-workspace-field:hover {
-    background: var(--surface-soft, #f7faf6) !important;
+    background: var(--field-hover) !important;
+    box-shadow:
+      inset 3px 0 var(--field-hover-border),
+      inset 0 0 0 1px var(--field-hover-border) !important;
   }
 
   .import-review-fields > div.import-review-workspace-field.selected {
-    background: #eaf2e7 !important;
-    box-shadow: inset 3px 0 var(--green) !important;
-    outline: 0 !important;
+    background: var(--field-selected) !important;
+    box-shadow:
+      inset 5px 0 var(--field-selected-border),
+      inset 0 0 0 2px var(--field-selected-border) !important;
   }
 
   .import-review-field-head {
@@ -335,13 +339,34 @@ style.textContent = `
   }
 
   .import-review-finance-fields > label.import-review-workspace-field:hover {
-    background: var(--surface-soft, #f3f7f2);
+    background: var(--field-hover);
+    box-shadow:
+      inset 3px 0 var(--field-hover-border),
+      inset 0 0 0 1px var(--field-hover-border);
   }
 
   .import-review-finance-fields > label.import-review-workspace-field.selected {
-    background: #eaf2e7;
-    box-shadow: inset 3px 0 var(--green);
-    outline: 0;
+    background: var(--field-selected);
+    box-shadow:
+      inset 5px 0 var(--field-selected-border),
+      inset 0 0 0 2px var(--field-selected-border);
+  }
+
+  .import-review-workspace-field:is(:hover, .selected) .import-review-field-head small:first-child,
+  .import-review-finance-fields > label.import-review-workspace-field:is(:hover, .selected) > small {
+    color: #204d35;
+  }
+
+  .import-review-workspace-field:focus-visible {
+    outline: 3px solid var(--field-selected-border) !important;
+    outline-offset: 2px;
+  }
+
+  @media (forced-colors: active) {
+    .import-review-workspace-field:is(:hover, .selected, :focus-visible) {
+      outline: 2px solid Highlight !important;
+      outline-offset: -2px;
+    }
   }
 
   .import-review-remove-finance {
