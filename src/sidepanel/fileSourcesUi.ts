@@ -15,6 +15,10 @@ import type {
 } from "../shared/types/legacy-storage";
 import type { RemoteFileSourceCandidate } from "../shared/types/source";
 import { buildRecruitmentDownloadPlan } from "../shared/fileDownloads";
+import {
+  projectFileInheritanceStatus,
+  projectForRecruitment,
+} from "../shared/fileInheritance";
 
 const STORAGE_KEY = "burbot:v1";
 let initialized = false;
@@ -28,6 +32,7 @@ let filePicking = false;
 let fileModeStarting = false;
 let fileCaptureBusy = false;
 let fileDownloadBusy = false;
+let fileInheritanceBusy = false;
 let fileModeGeneration = 0;
 let currentWindowId: number | null = null;
 const handledShortcutStamps = new Set<string>();
@@ -155,18 +160,6 @@ function objectDisplayName(object: LegacyStoredObject): string {
   return object.label?.trim() || object.importKey?.trim() || object.id;
 }
 
-function recruitmentProject(
-  recruitment: LegacyStoredObject,
-): LegacyStoredObject | undefined {
-  const projectId = recruitment.values?.project_id;
-  if (typeof projectId !== "string" || !projectId) return undefined;
-  return state.objects.find(
-    (object) =>
-      object.type === "project" &&
-      (object.id === projectId || object.importKey === projectId),
-  );
-}
-
 async function downloadAllRecruitmentFiles(
   recruitment: LegacyStoredObject,
 ): Promise<void> {
@@ -181,7 +174,7 @@ async function downloadAllRecruitmentFiles(
     throw new Error("Ten nabór nie ma przypiętych plików.");
   }
 
-  const project = recruitmentProject(recruitment);
+  const project = projectForRecruitment(state, recruitment);
   if (!project) {
     throw new Error(
       "Najpierw przypisz projekt do naboru — nazwa katalogu używa nazwy naboru i projektu.",
@@ -243,6 +236,53 @@ async function downloadAllRecruitmentFiles(
     );
   } finally {
     fileDownloadBusy = false;
+    render();
+  }
+}
+
+async function inheritProjectFiles(
+  recruitment: LegacyStoredObject,
+): Promise<void> {
+  if (recruitment.type !== "recruitment") {
+    throw new Error("Dziedziczenie plików jest dostępne dla naboru.");
+  }
+
+  const before = projectFileInheritanceStatus(state, recruitment);
+  if (!before.project) {
+    throw new Error("Najpierw przypisz projekt do naboru.");
+  }
+  if (!before.projectFiles.length) {
+    throw new Error("Przypisany projekt nie ma plików do skopiowania.");
+  }
+  if (!before.pendingFiles.length) {
+    notice(
+      "Wszystkie aktualne pliki projektu są już skopiowane do naboru. Kopie pozostają niezależne od projektu.",
+    );
+    return;
+  }
+
+  fileInheritanceBusy = true;
+  render();
+  try {
+    const expected = before.pendingFiles.length;
+    await data("INHERIT_PROJECT_FILES", {
+      objectId: recruitment.id,
+    });
+    const refreshed = state.objects.find(
+      (object) => object.id === recruitment.id,
+    );
+    const after = refreshed
+      ? projectFileInheritanceStatus(state, refreshed)
+      : undefined;
+    const copied = after
+      ? Math.max(0, expected - after.pendingFiles.length)
+      : expected;
+
+    notice(
+      `Skopiowano ${copied} plików z projektu do naboru. To niezależne kopie — późniejsze zmiany projektu ich nie zmienią.`,
+    );
+  } finally {
+    fileInheritanceBusy = false;
     render();
   }
 }
@@ -637,6 +677,14 @@ function renderSource(source: LegacyStoredFileSource): HTMLElement {
   meta.textContent = source.display_name?.trim()
     ? `${source.name} · ${source.fileType} · ${host(source.url)}`
     : `${source.fileType} · ${host(source.url)}`;
+  if (source.copiedFromProjectId) {
+    const inherited = document.createElement("span");
+    inherited.className = "file-source-inherited-badge";
+    inherited.textContent = "kopia z projektu";
+    inherited.title =
+      "Ten plik został skopiowany z projektu i nie aktualizuje się automatycznie.";
+    meta.append(inherited);
+  }
   summaryCopy.append(title, meta);
 
   const status = document.createElement("span");
@@ -887,16 +935,54 @@ function render(): void {
     for (const source of sources) root.append(renderSource(source));
   }
 
+  const isRecruitment = object.type === "recruitment";
+  const inheritance = isRecruitment
+    ? projectFileInheritanceStatus(state, object)
+    : undefined;
+  const project = inheritance?.project;
+
+  const inherit = $("inherit-project-files") as HTMLButtonElement;
+  const inheritanceHint = $("file-source-inheritance-hint");
+  inherit.hidden = !isRecruitment;
+  inheritanceHint.hidden = !isRecruitment;
+  if (isRecruitment && inheritance) {
+    const pending = inheritance.pendingFiles.length;
+    const projectFileCount = inheritance.projectFiles.length;
+    const alreadyInherited = inheritance.inheritedFiles.length;
+    inherit.disabled =
+      fileInheritanceBusy ||
+      !project ||
+      projectFileCount === 0 ||
+      pending === 0;
+    inherit.textContent = fileInheritanceBusy
+      ? "Kopiowanie plików…"
+      : !project
+        ? "↳ Dziedzicz pliki z projektu"
+        : projectFileCount === 0
+          ? "Projekt nie ma plików"
+          : pending > 0
+            ? alreadyInherited > 0
+              ? `↳ Skopiuj nowe z projektu (${pending})`
+              : `↳ Dziedzicz pliki z projektu (${pending})`
+            : `✓ Pliki projektu skopiowane (${projectFileCount})`;
+    inherit.title = !project
+      ? "Najpierw przypisz projekt do naboru."
+      : pending > 0
+        ? "Tworzy niezależne kopie brakujących plików projektu."
+        : "Kopie naboru są niezależne. Zmiany plików projektu nie aktualizują ich automatycznie.";
+  } else {
+    inherit.disabled = true;
+    inherit.title = "";
+  }
+
   const downloadAll = $("download-all-files") as HTMLButtonElement;
-  const project =
-    object.type === "recruitment" ? recruitmentProject(object) : undefined;
-  downloadAll.hidden = object.type !== "recruitment";
+  downloadAll.hidden = !isRecruitment;
   downloadAll.disabled =
     fileDownloadBusy || sources.length === 0 || !project;
   downloadAll.textContent = fileDownloadBusy
     ? "Pobieranie…"
     : `↓ Pobierz wszystkie (${sources.length})`;
-  if (object.type === "recruitment") {
+  if (isRecruitment) {
     downloadAll.title = project
       ? `Pobierz do: ${objectDisplayName(object)} - ${objectDisplayName(project)}`
       : "Przypisz projekt, aby utworzyć katalog naboru.";
@@ -913,6 +999,17 @@ export async function initFileSourcesUi(): Promise<void> {
 
   $("read-from-file").onclick = () => {
     void toggleFileMode().catch((error: unknown) => {
+      notice(error instanceof Error ? error.message : String(error), true);
+    });
+  };
+
+  $("inherit-project-files").onclick = () => {
+    const object = chosenObject();
+    if (!object) {
+      notice("Wybierz nabór przed dziedziczeniem plików.", true);
+      return;
+    }
+    void inheritProjectFiles(object).catch((error: unknown) => {
       notice(error instanceof Error ? error.message : String(error), true);
     });
   };

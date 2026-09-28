@@ -10,6 +10,7 @@ const root = resolve(fileURLToPath(new URL("..", import.meta.url)));
 let outputDir;
 let remoteFile;
 let fileDownloads;
+let fileInheritance;
 
 before(async () => {
   outputDir = await mkdtemp(join(tmpdir(), "burbot-file-source-"));
@@ -18,6 +19,7 @@ before(async () => {
     entryPoints: {
       remoteFile: "src/shared/sources/remoteFile.ts",
       fileDownloads: "src/shared/fileDownloads.ts",
+      fileInheritance: "src/shared/fileInheritance.ts",
     },
     outdir: outputDir,
     bundle: true,
@@ -31,6 +33,9 @@ before(async () => {
   );
   fileDownloads = await import(
     pathToFileURL(join(outputDir, "fileDownloads.js")).href
+  );
+  fileInheritance = await import(
+    pathToFileURL(join(outputDir, "fileInheritance.js")).href
   );
 });
 
@@ -223,4 +228,173 @@ test("download path sanitizer removes Firefox-rejected invisible characters", ()
     plan.files[0].relativePath,
     "Nabór IX - Projekt Śląski/formularz wersja - 20finalna.pdf",
   );
+});
+
+
+test("project files are inherited as independent recruitment copies", () => {
+  const state = {
+    version: 1,
+    revision: 1,
+    objects: [
+      {
+        id: "project-1",
+        type: "project",
+        label: "Projekt",
+        values: { name: "Projekt", project_number: "P1" },
+      },
+      {
+        id: "recruitment-1",
+        type: "recruitment",
+        label: "Nabór",
+        values: { external_number: "N1", project_id: "project-1" },
+      },
+    ],
+    rules: [],
+    fileSources: [
+      {
+        id: "project-file-1",
+        objectId: "project-1",
+        fileType: "PDF",
+        url: "https://example.test/regulamin.pdf",
+        name: "regulamin.pdf",
+        sourcePageUrl: "https://example.test/project",
+        addedAt: "2026-09-01T10:00:00.000Z",
+        display_name: "Regulamin projektu",
+        purpose: "Regulamin / zasady",
+        has_fields: false,
+        intended_use: "Warunki udziału",
+        client_requirement: "Wymagany",
+        signature_requirement: "Nie wymaga podpisu",
+        sourceImportKey: "project-pdf-import",
+        sourcePageImportKey: "project-page-import",
+      },
+    ],
+  };
+
+  let sequence = 0;
+  const result = fileInheritance.inheritProjectFilesAsCopies(
+    state,
+    "recruitment-1",
+    () => `copy-${++sequence}`,
+    "2026-09-28T16:00:00.000Z",
+  );
+
+  assert.equal(result.copied.length, 1);
+  const copy = state.fileSources.find(
+    (file) => file.objectId === "recruitment-1",
+  );
+  assert.ok(copy);
+  assert.notEqual(copy.id, "project-file-1");
+  assert.equal(copy.url, "https://example.test/regulamin.pdf");
+  assert.equal(copy.display_name, "Regulamin projektu");
+  assert.equal(copy.purpose, "Regulamin / zasady");
+  assert.equal(copy.copiedFromProjectId, "project-1");
+  assert.equal(copy.copiedFromFileSourceId, "project-file-1");
+  assert.equal(copy.copiedAt, "2026-09-28T16:00:00.000Z");
+  assert.equal(copy.sourceImportKey, undefined);
+  assert.equal(copy.sourcePageImportKey, undefined);
+
+  const projectFile = state.fileSources.find(
+    (file) => file.id === "project-file-1",
+  );
+  projectFile.display_name = "NOWA nazwa na projekcie";
+  projectFile.purpose = "Inny cel";
+  projectFile.url = "https://example.test/regulamin-v2.pdf";
+
+  assert.equal(copy.display_name, "Regulamin projektu");
+  assert.equal(copy.purpose, "Regulamin / zasady");
+  assert.equal(copy.url, "https://example.test/regulamin.pdf");
+
+  state.fileSources = state.fileSources.filter(
+    (file) => file.id !== "project-file-1",
+  );
+  state.objects = state.objects.filter((object) => object.id !== "project-1");
+
+  assert.ok(
+    state.fileSources.some(
+      (file) =>
+        file.id === copy.id &&
+        file.objectId === "recruitment-1" &&
+        file.url === "https://example.test/regulamin.pdf",
+    ),
+  );
+});
+
+test("re-inheriting adds only new project files and never overwrites recruitment copies", () => {
+  const state = {
+    version: 1,
+    revision: 1,
+    objects: [
+      {
+        id: "project-1",
+        type: "project",
+        values: { name: "Projekt" },
+      },
+      {
+        id: "recruitment-1",
+        type: "recruitment",
+        values: { external_number: "N1", project_id: "project-1" },
+      },
+    ],
+    rules: [],
+    fileSources: [
+      {
+        id: "project-file-1",
+        objectId: "project-1",
+        fileType: "PDF",
+        url: "https://example.test/a.pdf",
+        name: "a.pdf",
+        sourcePageUrl: "https://example.test/project",
+        addedAt: "2026-09-01T10:00:00.000Z",
+        display_name: "A",
+      },
+    ],
+  };
+
+  let sequence = 0;
+  fileInheritance.inheritProjectFilesAsCopies(
+    state,
+    "recruitment-1",
+    () => `copy-${++sequence}`,
+    "2026-09-28T16:00:00.000Z",
+  );
+
+  const firstCopy = state.fileSources.find(
+    (file) => file.objectId === "recruitment-1",
+  );
+  firstCopy.display_name = "Nabór ma własną nazwę";
+
+  state.fileSources.push({
+    id: "project-file-2",
+    objectId: "project-1",
+    fileType: "DOCX",
+    url: "https://example.test/b.docx",
+    name: "b.docx",
+    sourcePageUrl: "https://example.test/project",
+    addedAt: "2026-09-28T17:00:00.000Z",
+    display_name: "B",
+  });
+
+  const statusBefore = fileInheritance.projectFileInheritanceStatus(
+    state,
+    state.objects.find((object) => object.id === "recruitment-1"),
+  );
+  assert.deepEqual(
+    statusBefore.pendingFiles.map((file) => file.id),
+    ["project-file-2"],
+  );
+
+  const second = fileInheritance.inheritProjectFilesAsCopies(
+    state,
+    "recruitment-1",
+    () => `copy-${++sequence}`,
+    "2026-09-28T18:00:00.000Z",
+  );
+
+  assert.equal(second.copied.length, 1);
+  assert.equal(
+    state.fileSources.filter((file) => file.objectId === "recruitment-1").length,
+    2,
+  );
+  assert.equal(firstCopy.display_name, "Nabór ma własną nazwę");
 });

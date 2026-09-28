@@ -174,12 +174,33 @@ if (!document.querySelector("style[data-burbot-file-sources]")) {
   gap: 7px;
   margin-top: 8px;
 }
+.file-source-inherit {
+  color: var(--green);
+}
 .file-source-download-all {
   margin-left: auto;
 }
+.file-source-inherit:disabled,
 .file-source-download-all:disabled {
   opacity: .5;
   cursor: default;
+}
+.file-source-inheritance-hint {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.35;
+}
+.file-source-inherited-badge {
+  display: inline-flex;
+  margin-left: 4px;
+  padding: 1px 5px;
+  border-radius: 999px;
+  background: #eef5eb;
+  color: var(--green);
+  font-size: 9px;
+  font-weight: 700;
+  white-space: nowrap;
 }
 .file-source-mode-hint {
   color: var(--green);

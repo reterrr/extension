@@ -139,6 +139,15 @@ export interface LegacyStoredFileSource {
   sourceImportKey?: string;
   /** Optional portable-import source key for the page where the file link was found. */
   sourcePageImportKey?: string;
+
+  /**
+   * Snapshot provenance only. These fields never create a live dependency:
+   * after copying project files into a recruitment, both sides can change or
+   * be deleted independently.
+   */
+  copiedFromProjectId?: string;
+  copiedFromFileSourceId?: string;
+  copiedAt?: string;
 }
 
 export type LegacyStoredRule = ExecutableExtractionRule & {

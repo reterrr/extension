@@ -122,6 +122,14 @@ export function App() {
                     + Dodaj plik ze strony
                   </button>
                   <button
+                    id="inherit-project-files"
+                    className="text-button file-source-inherit"
+                    type="button"
+                    hidden
+                  >
+                    ↳ Dziedzicz pliki z projektu
+                  </button>
+                  <button
                     id="download-all-files"
                     className="text-button file-source-download-all"
                     type="button"
@@ -130,6 +138,13 @@ export function App() {
                     ↓ Pobierz wszystkie
                   </button>
                 </div>
+                <p
+                  id="file-source-inheritance-hint"
+                  className="file-source-inheritance-hint"
+                  hidden
+                >
+                  Dziedziczenie tworzy niezależne kopie plików projektu. Późniejsze zmiany projektu nie zmieniają plików tego naboru.
+                </p>
                 <p id="file-source-mode-hint" className="file-source-mode-hint" hidden>
                   Kliknij link do pliku .doc, .docx, .pdf, .xlsx, .png, .jpg lub .jpeg. Esc anuluje tryb.
                 </p>

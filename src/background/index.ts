@@ -29,6 +29,7 @@ import {
   isFilePurpose,
   isFileSignatureRequirement,
 } from "../shared/fileMetadata";
+import { inheritProjectFilesAsCopies } from "../shared/fileInheritance";
 import { discardStaleImportedEvidence } from "../shared/import/evidence";
 import { importDocumentIntoState } from "../shared/import/format";
 import { isPickerSelectionResponse } from "../shared/messaging/picker";
@@ -69,6 +70,7 @@ const ALLOWED_WRITES = new Set<string>([
   "ADD_FILE_SOURCE",
   "UPDATE_FILE_SOURCE",
   "REMOVE_FILE_SOURCE",
+  "INHERIT_PROJECT_FILES",
   "ADD_OPERATOR_CONTACT",
   "REMOVE_OPERATOR_CONTACT",
   "ADD_FUNDING",
@@ -615,6 +617,18 @@ function mutateFileSource(
           String(entry.target.id) === sourceId
         ),
     );
+  } else if (message.op === "INHERIT_PROJECT_FILES") {
+    const inherited = inheritProjectFilesAsCopies(
+      state,
+      object.id,
+      () => crypto.randomUUID(),
+      now,
+    );
+    if (!inherited.copied.length) {
+      throw new Error(
+        "Brak nowych plików projektu do skopiowania. Istniejące kopie naboru pozostają bez zmian.",
+      );
+    }
   } else {
     throw new Error("Unknown file source operation.");
   }
@@ -1079,7 +1093,8 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
     } else if (
       message.op === "ADD_FILE_SOURCE" ||
       message.op === "UPDATE_FILE_SOURCE" ||
-      message.op === "REMOVE_FILE_SOURCE"
+      message.op === "REMOVE_FILE_SOURCE" ||
+      message.op === "INHERIT_PROJECT_FILES"
     ) {
       next = mutateFileSource(state, message, now);
     } else if (message.op === "ASSIGN_PDF") {
