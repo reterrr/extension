@@ -88,7 +88,7 @@ main {
   border-radius: 5px;
   background: #dceee3;
   color: var(--success);
-  font-size: 8px;
+  font-size: 12px;
   font-weight: 800;
   letter-spacing: .7px;
 }
@@ -96,7 +96,7 @@ main {
 .active-object-view-count {
   flex: none;
   color: #315945;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 700;
 }
 
@@ -105,7 +105,7 @@ main {
   flex: 1;
   overflow: hidden;
   color: #6f7d74;
-  font-size: 9px;
+  font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -114,7 +114,7 @@ main {
   flex: none;
   min-height: 24px;
   padding: 3px 6px;
-  font-size: 9px;
+  font-size: 12px;
 }
 
 .object-picker-view-actions {
@@ -130,7 +130,7 @@ main {
   min-width: 0;
   flex: 1;
   color: #76827a;
-  font-size: 9px;
+  font-size: 12px;
 }
 
 .object-picker-set-view,
@@ -142,7 +142,7 @@ main {
   border-radius: 7px;
   background: #edf5f0;
   color: #315e47;
-  font-size: 9px;
+  font-size: 12px;
   font-weight: 700;
 }
 
@@ -230,13 +230,13 @@ main {
 
 .object-picker-search-hint {
   color: #87928b;
-  font-size: 8px;
+  font-size: 12px;
   line-height: 1.35;
 }
 
 .object-picker-search-error {
   color: var(--danger);
-  font-size: 9px;
+  font-size: 12px;
   font-weight: 600;
   line-height: 1.35;
 }
@@ -261,7 +261,7 @@ main {
   border-radius: 999px;
   background: #fff;
   color: #69776e;
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .object-picker-filter:hover {
@@ -296,7 +296,7 @@ main {
   min-height: 26px;
   padding: 5px 7px 4px;
   color: #7a877f;
-  font-size: 9px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: .9px;
   text-transform: uppercase;
@@ -309,7 +309,7 @@ main {
   background: #eef2ef;
   color: #7c8880;
   text-align: center;
-  font-size: 8px;
+  font-size: 12px;
   letter-spacing: 0;
 }
 
@@ -358,7 +358,7 @@ main {
   display: block;
   margin-top: 2px;
   color: #7b8880;
-  font-size: 9px;
+  font-size: 12px;
   line-height: 1.25;
 }
 
@@ -371,7 +371,7 @@ main {
   border-radius: 999px;
   background: #dceee3;
   color: var(--success);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 800;
 }
 
@@ -407,7 +407,7 @@ main {
 .reference-object-picker-selected-copy > strong {
   overflow: hidden;
   color: var(--text);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -415,7 +415,7 @@ main {
 
 .reference-object-picker-selected-label {
   color: var(--success);
-  font-size: 8px;
+  font-size: 12px;
   font-weight: 800;
   letter-spacing: .7px;
   text-transform: uppercase;
@@ -425,7 +425,7 @@ main {
   flex: none;
   min-height: 26px;
   padding: 4px 7px;
-  font-size: 9px;
+  font-size: 12px;
 }
 
 .reference-object-picker-search {
@@ -475,7 +475,7 @@ main {
 .reference-object-picker-empty {
   padding: 14px 10px;
   color: #859087;
-  font-size: 10px;
+  font-size: 12px;
   text-align: center;
 }
 
@@ -484,7 +484,7 @@ main {
   border-top: 1px solid #e9eeea;
   background: #f8faf8;
   color: #7b877f;
-  font-size: 9px;
+  font-size: 12px;
 }
 
 .object-picker-empty {
@@ -501,12 +501,12 @@ main {
 
 .object-picker-empty small {
   color: #8b968f;
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .progress-label {
   margin-top: 10px;
-  font-size: 10px;
+  font-size: 12px;
 }
 
 progress {
@@ -573,7 +573,7 @@ progress {
 .workspace-section-title small {
   display: block;
   margin-top: 2px;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 400;
   color: var(--text-soft);
 }
@@ -582,7 +582,7 @@ progress {
   flex: none;
   max-width: 42%;
   text-align: right;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 650;
   line-height: 1.25;
   color: var(--text-soft);
@@ -648,12 +648,12 @@ progress {
 
 .field-row.system-field .field-mark {
   color: #87948b;
-  font-size: 8px;
+  font-size: 12px;
   letter-spacing: .5px;
 }
 
 .field-label {
-  font-size: 10px;
+  font-size: 12px;
   color: var(--text-soft);
 }
 
@@ -678,7 +678,7 @@ progress {
 .field-mark {
   min-width: 30px;
   text-align: right;
-  font-size: 9px;
+  font-size: 12px;
   font-weight: 700;
 }
 
@@ -717,13 +717,13 @@ progress {
 
 .field-evidence-header strong {
   color: var(--text);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
 }
 
 .field-evidence-header small {
   color: var(--text-soft);
-  font-size: 9px;
+  font-size: 12px;
 }
 
 .field-evidence-count {
@@ -733,7 +733,7 @@ progress {
   border-radius: 999px;
   background: #e4efe8;
   color: var(--success);
-  font-size: 9px;
+  font-size: 12px;
   font-weight: 800;
   text-align: center;
 }
@@ -751,7 +751,7 @@ progress {
   border: 1px solid #d6e0d8;
   border-radius: 7px;
   background: #fff;
-  font-size: 9px;
+  font-size: 12px;
 }
 
 .field-evidence-preview {
@@ -766,7 +766,7 @@ progress {
 
 .field-evidence-preview > label {
   color: #617269;
-  font-size: 9px;
+  font-size: 12px;
   font-weight: 650;
 }
 
@@ -783,7 +783,7 @@ progress {
   border-radius: 6px;
   background: #fff;
   color: var(--text);
-  font-size: 10px;
+  font-size: 12px;
   line-height: 1.35;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -793,7 +793,7 @@ progress {
   display: block;
   overflow: hidden;
   color: #7b8880;
-  font-size: 8px;
+  font-size: 12px;
   line-height: 1.25;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -812,7 +812,7 @@ progress {
   border-radius: 7px;
   background: var(--success);
   color: #fff;
-  font-size: 9px;
+  font-size: 12px;
   font-weight: 700;
 }
 
@@ -840,7 +840,7 @@ progress {
 
 .field-evidence-copy > strong {
   color: var(--success);
-  font-size: 9px;
+  font-size: 12px;
   font-weight: 750;
 }
 
@@ -848,7 +848,7 @@ progress {
   display: -webkit-box;
   overflow: hidden;
   color: var(--text);
-  font-size: 10px;
+  font-size: 12px;
   line-height: 1.3;
   overflow-wrap: anywhere;
   -webkit-box-orient: vertical;
@@ -859,13 +859,13 @@ progress {
   flex: none;
   min-height: 24px;
   padding: 3px 6px;
-  font-size: 8px;
+  font-size: 12px;
 }
 
 .field-evidence-empty {
   padding: 8px 9px;
   color: #88938c;
-  font-size: 9px;
+  font-size: 12px;
 }
 
 #file-sources-section .workspace-section-body,
@@ -890,7 +890,7 @@ progress {
 .file-source-empty,
 .geography-empty {
   color: var(--text-soft);
-  font-size: 11px;
+  font-size: 12px;
   padding: 3px 1px;
 }
 
@@ -922,7 +922,7 @@ progress {
   border-radius: 6px 6px 0 0;
   border-bottom: 2px solid transparent;
   color: #758078;
-  font-size: 11px;
+  font-size: 12px;
   white-space: nowrap;
 }
 
@@ -944,7 +944,7 @@ progress {
   place-items: center;
   padding: 0 4px;
   border-radius: 999px;
-  font-size: 8px;
+  font-size: 12px;
   line-height: 1;
   background: #eef1ee;
   color: #7d8780;
@@ -1017,14 +1017,14 @@ progress {
 
 .funding-field-group-heading strong {
   color: #415148;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 760;
   letter-spacing: .1px;
 }
 
 .funding-field-group-heading small {
   color: #859087;
-  font-size: 8px;
+  font-size: 12px;
 }
 
 .funding-field-group-unit {
@@ -1035,7 +1035,7 @@ progress {
   border-radius: 999px;
   background: #fff;
   color: #52705d;
-  font-size: 8px;
+  font-size: 12px;
   font-weight: 800;
   text-align: center;
   letter-spacing: .2px;
@@ -1058,7 +1058,7 @@ progress {
 }
 
 .variant .funding-field-grid .field-label {
-  font-size: 9px;
+  font-size: 12px;
 }
 
 .variant .funding-field-grid .field-value {
@@ -1154,7 +1154,7 @@ progress {
   border: 1px solid #dbe5dd;
   background: #f3f7f4;
   color: #365d48;
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .capture-tools button:hover {
@@ -1204,21 +1204,7 @@ progress {
     margin-right: 8px;
   }
 }
-/* Denser workspace: keep hierarchy, remove unnecessary vertical chrome. */
-.brandbar {
-  padding: 9px 12px;
-}
-.connection-bar {
-  padding: 5px 10px;
-}
-main {
-  padding: 0 9px 8px;
-}
-.object-header {
-  margin: 7px 0 6px;
-  padding: 9px 44px 9px 10px;
-  border-radius: 9px;
-}
+/* Keep the object menu inside the available workspace width. */
 .header-actions {
   top: 7px;
   right: 7px;
@@ -1226,86 +1212,8 @@ main {
 #more .popover {
   right: 0;
   left: auto;
-  width: 178px;
+  width: 220px;
   max-width: calc(100vw - 28px);
-}
-.object-header h1 {
-  margin: 3px 0 5px;
-  font-size: 17px;
-}
-.object-header .eyebrow {
-  font-size: 8px;
-}
-.active-object-view {
-  margin-top: 5px;
-  padding: 4px 6px;
-}
-.progress-label {
-  margin-top: 5px;
-  font-size: 9px;
-}
-#progress-bar {
-  height: 4px;
-}
-.workspace-section-card {
-  margin: 5px 0;
-  border-radius: 9px;
-}
-.workspace-section-summary {
-  min-height: 40px;
-  padding: 6px 8px;
-}
-.workspace-section-title strong {
-  font-size: 11px;
-}
-.workspace-section-title small {
-  margin-top: 1px;
-  font-size: 9px;
-}
-.workspace-section-status {
-  font-size: 9px;
-}
-.field-group-card .workspace-section-body {
-  padding: 3px 5px 6px;
-}
-.field-row {
-  min-height: 40px;
-  margin: 3px 0;
-  padding: 6px 7px;
-  border-radius: 7px;
-}
-.field-label {
-  font-size: 9px;
-}
-.field-value {
-  margin-top: 1px;
-  font-size: 11.5px;
-}
-.field-value.empty {
-  font-size: 10px;
-}
-.field-mark {
-  font-size: 8px;
-}
-#file-sources-section .workspace-section-body,
-#operator-contacts-section .workspace-section-body,
-#geography-section .workspace-section-body,
-#funding-section .workspace-section-body {
-  padding: 7px 8px 9px;
-}
-.review-section {
-  margin: 5px 0 2px;
-  padding: 4px 1px;
-}
-.capture-hint {
-  margin: 5px 10px 7px;
-  padding: 7px 9px;
-}
-.capture-area {
-  bottom: 6px;
-  margin: 6px 10px 8px;
-  padding: 9px;
-  border-radius: 9px;
 }
 
 `;

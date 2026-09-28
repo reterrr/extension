@@ -9,7 +9,7 @@ if (!document.querySelector("style[data-burbot-file-sources]")) {
 }
 .file-source-empty {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
   padding: 6px 2px;
 }
 .file-source-row {
@@ -52,7 +52,7 @@ if (!document.querySelector("style[data-burbot-file-sources]")) {
   flex: none;
   padding: 3px 6px;
   border-radius: 999px;
-  font-size: 9px;
+  font-size: 12px;
   font-weight: 700;
   white-space: nowrap;
 }
@@ -105,7 +105,7 @@ if (!document.querySelector("style[data-burbot-file-sources]")) {
 }
 .file-source-field > span {
   color: var(--muted);
-  font-size: 9px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: .02em;
 }
@@ -158,7 +158,7 @@ if (!document.querySelector("style[data-burbot-file-sources]")) {
 }
 .file-source-actions a {
   color: var(--green);
-  font-size: 10px;
+  font-size: 12px;
   text-decoration: none;
 }
 .file-source-actions a:hover {
@@ -188,7 +188,7 @@ if (!document.querySelector("style[data-burbot-file-sources]")) {
 .file-source-inheritance-hint {
   margin: 6px 0 0;
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
   line-height: 1.35;
 }
 .file-source-inherited-badge {
@@ -198,13 +198,13 @@ if (!document.querySelector("style[data-burbot-file-sources]")) {
   border-radius: 999px;
   background: #eef5eb;
   color: var(--green);
-  font-size: 9px;
+  font-size: 12px;
   font-weight: 700;
   white-space: nowrap;
 }
 .file-source-mode-hint {
   color: var(--green);
-  font-size: 10px;
+  font-size: 12px;
   margin-top: 5px;
 }
 #read-from-file[data-active="true"] {

@@ -58,7 +58,7 @@ style.textContent = `
     padding: 0;
     color: #718074;
     background: transparent !important;
-    font-size: 9px;
+    font-size: 12px;
     font-weight: 700;
     letter-spacing: .8px;
     text-transform: uppercase;
@@ -118,7 +118,7 @@ style.textContent = `
 
   .import-review-sources .text-button {
     padding: 3px 0;
-    font-size: 10px;
+    font-size: 12px;
   }
 
   .import-review-section {
@@ -146,7 +146,7 @@ style.textContent = `
 
   .import-review-section-heading > div > strong {
     color: var(--muted);
-    font-size: 10px;
+    font-size: 12px;
     font-weight: 500;
   }
 
@@ -224,7 +224,7 @@ style.textContent = `
   .import-review-field-head small:first-child {
     display: block;
     color: #718074;
-    font-size: 11px;
+    font-size: 12px;
   }
 
   .import-review-field-head > span {
@@ -265,7 +265,7 @@ style.textContent = `
 
   .import-review-source-button {
     padding: 3px 0;
-    font-size: 9px;
+    font-size: 12px;
     white-space: nowrap;
   }
 
@@ -325,7 +325,7 @@ style.textContent = `
 
   .import-review-finance-fields > label.import-review-workspace-field > small {
     color: #718074;
-    font-size: 10px;
+    font-size: 12px;
   }
 
   .import-review-finance-fields > label.import-review-workspace-field > .import-review-workspace-value {

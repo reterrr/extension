@@ -5,7 +5,7 @@ let initialized = false;
 let reconnectTimer: number | undefined;
 
 function isConnected(): boolean {
-  return document.getElementById("connection")?.textContent?.includes("· connected") ?? false;
+  return document.getElementById("connection")?.dataset.connected === "true";
 }
 
 function reconnectWorkspace(): void {

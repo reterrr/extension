@@ -58,6 +58,7 @@ import {
     pendingViewportAnchor = null,
     objectView = null;
   const expanded = new Set();
+  const evidenceExpanded = new Set();
   const chosen = () => db.objects.find((o) => o.id === objectId);
   const keyOf = (descriptor) =>
     descriptor ? C.targetKey(descriptor.target) + "/" + descriptor.field : "";
@@ -142,8 +143,10 @@ import {
         const dock = $("capture-area");
         if (dock && !dock.hidden) {
           const rect = element.getBoundingClientRect();
-          const dockTop = dock.getBoundingClientRect().top;
-          if (rect.bottom > dockTop - 10) {
+          const dockRect = dock.getBoundingClientRect();
+          const dockTop = dockRect.top;
+          const overlaps = rect.left < dockRect.right && rect.right > dockRect.left;
+          if (overlaps && rect.bottom > dockTop - 10) {
             window.scrollBy(0, rect.bottom - dockTop + 10);
           }
         }
@@ -418,6 +421,7 @@ import {
     }
   }
   function disconnect() {
+    $("connection").dataset.connected = "false";
     generation++;
     viewEpoch++;
     const previousClient = pickerClient;
@@ -435,7 +439,7 @@ import {
     if (!ready) return;
     disconnect();
     const token = generation;
-    $("connection").textContent = "Connecting…";
+    $("connection").textContent = "Łączenie…";
     render();
     try {
       const tabs = await browser.tabs.query({ active: true, windowId });
@@ -465,19 +469,20 @@ import {
         if (token !== generation) return;
         disconnect();
         $("connection").textContent =
-          "Page disconnected · reconnect to capture";
+          "Strona rozłączona · połącz ponownie";
         render();
       });
       const url = await rpc("URL");
       if (token !== generation) return;
       pageUrl = url;
-      $("connection").textContent = new URL(url).hostname + " · connected";
+      $("connection").dataset.connected = "true";
+      $("connection").textContent = new URL(url).hostname + " · połączono";
       render();
     } catch {
       if (token !== generation) return;
       disconnect();
       $("connection").textContent =
-        "Click Connect or the Burbot toolbar button on a website";
+        "Otwórz stronę źródłową i wybierz Połącz stronę.";
       render();
     }
   }
@@ -576,7 +581,7 @@ import {
     publishSelectorPreview();
     renderEditor();
     controls();
-    notice("Review the value, then save its extraction rule.");
+    notice("Sprawdź pobraną wartość i zapisz regułę odczytu.");
   }
   function acceptEvidenceCapture(value) {
     if (!active || !chosen()) {
@@ -662,7 +667,15 @@ import {
           .filter(Boolean)
           .join(" · ");
     button.append(copy, node("span", "field-mark", markText));
-    if (!readOnly) button.onclick = () => selectField(descriptor);
+    if (!readOnly) button.onclick = (event) => {
+      selectField(descriptor);
+      if (event.detail === 0) {
+        requestAnimationFrame(() => {
+          if ($("capture-area").classList.contains("is-collapsed")) $("capture-collapse").click();
+          ($("edit-value") || $("value-control").querySelector("input, button"))?.focus({ preventScroll: true });
+        });
+      }
+    };
     container.append(button);
   }
   function trackExpansion(details, key) {
@@ -1408,11 +1421,18 @@ import {
   function renderFieldEvidence(root) {
     if (!active || !chosen()) return;
 
-    const section = node("section", "field-evidence-editor");
-    const header = node("div", "field-evidence-header");
+    const section = node("details", "field-evidence-editor");
+    const evidenceKey = objectId + "/" + keyOf(active);
+    section.open = evidenceExpanded.has(evidenceKey) || !!evidenceCandidate || evidencePicking;
+    section.addEventListener("toggle", () => {
+      if (!section.isConnected) return;
+      if (section.open) evidenceExpanded.add(evidenceKey);
+      else evidenceExpanded.delete(evidenceKey);
+    });
+    const header = node("summary", "field-evidence-header");
     const headerCopy = node("div");
     headerCopy.append(
-      node("strong", "", "Evidence"),
+      node("strong", "", "Źródła potwierdzające"),
       node("small", "", "Opcjonalne źródła potwierdzające wartość pola."),
     );
     const count = fieldEvidenceFor().length;
@@ -1471,6 +1491,8 @@ import {
       const previewBox = node("div", "field-evidence-preview");
       const methodLabel = node("label", "", "Odczytaj jako");
       const method = node("select", "field-evidence-method");
+      method.id = "evidence-method";
+      methodLabel.htmlFor = method.id;
       evidenceCandidate.options.forEach((option, index) =>
         method.append(new Option(option.label, String(index))),
       );
@@ -1500,7 +1522,7 @@ import {
         renderEditor();
         controls();
       };
-      const saveEvidence = node("button", "field-evidence-save", "Dodaj evidence");
+      const saveEvidence = node("button", "field-evidence-save", "Dodaj źródło");
       saveEvidence.type = "button";
       saveEvidence.disabled = busy || !option;
       saveEvidence.onclick = action(async () => {
@@ -1520,7 +1542,7 @@ import {
         });
         evidenceCandidate = null;
         evidenceMethodIndex = 0;
-        notice("Evidence dodane.");
+        notice("Źródło dodane.");
       });
       actions.append(cancel, saveEvidence);
       previewBox.append(actions);
@@ -1548,7 +1570,7 @@ import {
           objectId,
           evidenceId: entry.id,
         });
-        notice("Evidence usunięte.");
+        notice("Źródło usunięte.");
       });
       row.append(copy, remove);
       list.append(row);
@@ -1558,7 +1580,7 @@ import {
         node(
           "div",
           "field-evidence-empty",
-          "Brak evidence. Pole może pozostać bez evidence.",
+          "Nie dodano źródeł potwierdzających. To pole jest opcjonalne.",
         ),
       );
     }
@@ -1576,6 +1598,7 @@ import {
     $("active-context").textContent = active.context || "";
     $("capture-source").hidden = !candidate;
     if (candidate) {
+      $("capture-acquire").open = true;
       $("method").replaceChildren(
         ...candidate.options.map((o, i) => new Option(o.label, String(i))),
       );
@@ -1593,7 +1616,7 @@ import {
         new Option(
           definition.allowEmpty
             ? definition.emptyLabel || "Nie ustawiono"
-            : "Choose…",
+            : "Wybierz…",
           "",
         ),
       );
@@ -1604,7 +1627,7 @@ import {
         C.hasValue(draft) &&
         !options.some(([value]) => String(value) === String(draft))
       )
-        input.append(new Option("Previously saved: " + draft, draft));
+        input.append(new Option("Zapisana wartość: " + draft, draft));
       input.value = String(draft);
     } else if (definition.type === "boolean") {
       input = node("input");
@@ -1612,7 +1635,7 @@ import {
       input.checked = draft === true;
       input.indeterminate = draft === "";
       const label = node("label", "toggle-control");
-      label.append(input, node("span", "", "Enable auto-fill"));
+      label.append(input, node("span", "", "Tak"));
       root.append(label);
     } else {
       input = node(definition.multiline ? "textarea" : "input");
@@ -1642,6 +1665,7 @@ import {
     }
     if (input) {
       input.id = "edit-value";
+      input.setAttribute("aria-describedby", "converted");
       input.disabled = busy;
       input.oninput = () => {
         draft = definition.type === "boolean" ? input.checked : input.value;
@@ -1653,14 +1677,16 @@ import {
     if (definition.type === "url" && C.hasValue(values[active.field])) {
       try {
         const href = C.coerce(values[active.field], "url"),
-          link = node("a", "open-link", "Open saved page ↗");
+          link = node("a", "open-link", "Otwórz zapisaną stronę ↗");
         link.href = href;
         link.target = "_blank";
         link.rel = "noopener noreferrer";
         root.append(link);
       } catch {}
     }
-    renderFieldEvidence(root);
+    const evidenceRoot = $("field-evidence");
+    evidenceRoot.replaceChildren();
+    renderFieldEvidence(evidenceRoot);
 
     const rule = activeRule();
     $("rule-details").hidden = !candidate && !rule;
@@ -1678,11 +1704,11 @@ import {
   }
   function controls() {
     $("pick").disabled = !port || !active || busy || evidencePicking;
-    $("pick").textContent = picking && !evidencePicking ? "Cancel picker" : "Pick element";
+    $("pick").textContent = picking && !evidencePicking ? "Anuluj wybór" : "Wybierz element";
     $("selected-text").disabled = !port || !active || busy || evidencePicking;
     $("page-url").disabled = !port || !active || busy || evidencePicking;
     $("connect").disabled = busy;
-    $("connect").textContent = port ? "Reconnect" : "Connect";
+    $("connect").textContent = port ? "Połącz ponownie" : "Połącz stronę";
     $("preview").disabled =
       !port ||
       !chosen() ||
@@ -1695,6 +1721,8 @@ import {
     $("delete").disabled = busy;
     $("export").disabled = busy;
     if (!active) return;
+    $("converted").classList.remove("error");
+    $("edit-value")?.removeAttribute("aria-invalid");
     try {
       const definition = activeInfo().definition;
       const clearingOptionalValue =
@@ -1708,19 +1736,56 @@ import {
       } else {
         const value = C.coerceField(draft, definition, db);
         $("converted").textContent = candidate
-          ? "Save as " + C.formatValue(value, definition, db)
+          ? "Wartość do zapisania: " + C.formatValue(value, definition, db)
           : activeRule()
-            ? "Adjustment keeps the existing extraction rule."
-            : "Manual value. Pick from the page to save an extraction rule.";
+            ? "Zmiana zachowa istniejącą regułę odczytu ze strony."
+            : "Wartość wpisana ręcznie. Możesz też pobrać ją ze strony.";
         $("save").disabled = busy || (candidate && !port);
       }
     } catch (error) {
-      $("converted").textContent = error.message;
+      const empty = String(draft ?? "").trim() === "";
+      $("converted").textContent = validationMessage(error, activeInfo().definition);
+      $("converted").classList.toggle("error", !empty);
+      $("edit-value")?.setAttribute("aria-invalid", String(!empty));
       $("save").disabled = true;
     }
-    $("save").textContent = candidate
-      ? "Save rule & next"
-      : "Save value & next";
+    $("save").textContent = busy ? "Proszę czekać…" : candidate
+      ? "Zapisz regułę i przejdź dalej"
+      : "Zapisz wartość i przejdź dalej";
+  }
+
+  function validationMessage(error, definition) {
+    const message = String(error.message || error);
+    const messages = {
+      "Choose or enter a value.": "Wybierz lub wpisz wartość, aby ją zapisać.",
+      "The value is empty.": "Wpisz wartość, aby ją zapisać.",
+      "Value is too long.": "Wartość jest zbyt długa (maksymalnie 100 000 znaków).",
+      "Choose one of the available options.": "Wybierz jedną z dostępnych opcji.",
+      "Choose Yes or No.": "Wybierz Tak lub Nie.",
+      "Choose a geography value from search results.": "Wybierz obszar z wyników wyszukiwania.",
+      "Choose an existing project. Create it from the page first if needed.": "Wybierz istniejący projekt z listy.",
+      "NIP must contain 10 digits.": "NIP musi zawierać 10 cyfr.",
+      "Enter an amount in PLN. Currency conversion is not automatic.": "Wpisz kwotę w PLN. Waluty nie są przeliczane automatycznie.",
+      "Enter a value without a currency.": "Wpisz liczbę bez oznaczenia waluty.",
+      "Enter a whole number.": "Wpisz liczbę całkowitą.",
+      "Ambiguous number. Use spaces for thousands, e.g. 1 234.": "Oddziel tysiące spacją (np. 1 234), a część dziesiętną przecinkiem.",
+      "Number is outside the supported range.": "Liczba przekracza obsługiwany zakres.",
+      "Use a valid ISO date-time.": "Wpisz datę i godzinę w formacie ISO, np. 2026-09-28T10:00:00Z.",
+      "Use YYYY-MM-DD or DD.MM.YYYY.": "Wpisz datę w formacie RRRR-MM-DD lub DD.MM.RRRR.",
+      "Invalid calendar date.": "Wpisz istniejącą datę w kalendarzu.",
+      "Use HH:MM, for example 10:00.": "Wpisz godzinę w formacie GG:MM, np. 10:00.",
+      "Use a valid time between 00:00 and 23:59.": "Wpisz godzinę od 00:00 do 23:59.",
+    };
+    if (messages[message]) return messages[message];
+    if (definition.type === "url") return "Wpisz pełny adres strony, np. https://example.pl.";
+    const range = message.match(/^Value must be between (.+) and (.+)\.$/);
+    if (range) return `Wpisz wartość od ${range[1]} do ${range[2]}.`;
+    if (/number|thousands grouping/i.test(message)) {
+      return definition.type === "percentage"
+        ? "Wpisz procent jako liczbę, np. 80 lub 80,5."
+        : "Wpisz liczbę, np. 5 000 lub 1 234,56.";
+    }
+    return message;
   }
   function publishActiveObject(nextObjectId) {
     const workspace = $("workspace");
@@ -1910,11 +1975,16 @@ import {
     controls();
   };
   $("deselect").onclick = () => {
+    const previous = active;
     if (port && picking) void rpc("STOP").catch(() => {});
     active = null;
     resetCapture();
     scheduleWorkspaceUiPersist();
     render();
+    if (previous) {
+      const selector = `.field-row[data-field="${CSS.escape(previous.field)}"][data-target="${CSS.escape(C.targetKey(previous.target))}"]`;
+      document.querySelector(selector)?.focus({ preventScroll: true });
+    }
   };
   $("save").onclick = action(async () => {
     const id = objectId,
@@ -1964,9 +2034,17 @@ import {
       clearingOptionalValue
         ? "Wartość wyczyszczona."
         : capture
-          ? "Extraction rule saved."
-          : "Value saved.",
+          ? "Reguła odczytu zapisana."
+          : "Wartość zapisana.",
     );
+    requestAnimationFrame(() => {
+      if (next) {
+        ($("edit-value") || $("value-control").querySelector("input, button"))?.focus({ preventScroll: true });
+      } else {
+        const selector = `.field-row[data-field="${CSS.escape(selected.field)}"][data-target="${CSS.escape(C.targetKey(selected.target))}"]`;
+        document.querySelector(selector)?.focus({ preventScroll: true });
+      }
+    });
   });
   $("preview").onclick = action(async () => {
     const id = objectId,

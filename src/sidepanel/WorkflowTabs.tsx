@@ -93,8 +93,13 @@ export function WorkflowTabs() {
 
     const refresh = () => void refreshCounts();
     const modeRequested = (event: Event) => {
-      const requested = (event as CustomEvent<{ mode?: WorkflowMode }>).detail?.mode;
-      if (requested === "view" || requested === "commit" || requested === "import") {
+      const requested = (event as CustomEvent<{ mode?: WorkflowMode }>).detail
+        ?.mode;
+      if (
+        requested === "view" ||
+        requested === "commit" ||
+        requested === "import"
+      ) {
         void setMode(requested);
       }
     };
@@ -126,26 +131,29 @@ export function WorkflowTabs() {
   }, []);
 
   return (
-    <nav className="workflow-tabs" aria-label="Workflow Burbot">
+    <nav className="workflow-tabs" aria-label="Tryb pracy">
       <button
         type="button"
         className={mode === "view" ? "active" : ""}
+        aria-pressed={mode === "view"}
         onClick={() => void setMode("view")}
       >
-        View
+        Obiekty
         {activeViewCount > 0 && <span>{activeViewCount}</span>}
       </button>
       <button
         type="button"
         className={mode === "commit" ? "active" : ""}
+        aria-pressed={mode === "commit"}
         onClick={() => void setMode("commit")}
       >
-        Commit
+        Zapis zmian
         {stagedCount > 0 && <span>{stagedCount}</span>}
       </button>
       <button
         type="button"
         className={mode === "import" ? "active" : ""}
+        aria-pressed={mode === "import"}
         onClick={() => void setMode("import")}
       >
         Import

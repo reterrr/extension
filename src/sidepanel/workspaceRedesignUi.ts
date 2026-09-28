@@ -1,7 +1,4 @@
-import {
-  patchSidepanelUiState,
-  readSidepanelUiState,
-} from "./uiSessionState";
+import { patchSidepanelUiState, readSidepanelUiState } from "./uiSessionState";
 
 let initialized = false;
 let enhanceQueued = false;
@@ -19,6 +16,7 @@ const fieldSectionOpen = new Map<string, boolean>();
 
 const BUSINESS_PANEL_IDS = [
   "operator-contacts-panel",
+  "operator-assignments-panel",
   "file-sources-panel",
   "geography-panel",
   "funding-panel",
@@ -67,9 +65,7 @@ function setHidden(element: HTMLElement, value: boolean): void {
 }
 
 function missingLabel(count: number): string {
-  if (count === 1) return "1 pole brakujące";
-  if (count >= 2 && count <= 4) return `${count} pola brakujące`;
-  return `${count} pól brakujących`;
+  return `Bez danych: ${count}`;
 }
 
 function itemLabel(count: number, singular: string, plural: string): string {
@@ -82,6 +78,7 @@ function isNeutralAnswer(value: string): boolean {
     normalized.includes("not distinguished") ||
     normalized.includes("nie rozróżniono") ||
     normalized.includes("nie rozrozniono") ||
+    normalized === "nie ustalono" ||
     normalized === "nie dotyczy"
   );
 }
@@ -92,7 +89,8 @@ function annotateFieldRows(root: ParentNode): void {
     const mark = row.querySelector<HTMLElement>(".field-mark");
     const system = row.classList.contains("system-field");
     const missing = !system && !!value?.classList.contains("empty");
-    const neutral = !missing && !!value && isNeutralAnswer(value.textContent ?? "");
+    const neutral =
+      !missing && !!value && isNeutralAnswer(value.textContent ?? "");
 
     row.classList.toggle("is-missing", missing);
     row.classList.toggle("is-neutral-answer", neutral);
@@ -107,18 +105,22 @@ function annotateFieldRows(root: ParentNode): void {
           ? ""
           : "AUTO"
         : missing
-          ? "Brak"
+          ? "—"
           : "✓";
-      const evidenceLabel = !system && evidenceCount ? `EV ${evidenceCount}` : "";
+      const evidenceLabel =
+        !system && evidenceCount ? `Źródła: ${evidenceCount}` : "";
       setText(mark, [stateLabel, evidenceLabel].filter(Boolean).join(" · "));
     }
   }
 }
 
-function sectionStatus(total: number, missing: number): { text: string; state: string } {
+function sectionStatus(
+  total: number,
+  missing: number,
+): { text: string; state: string } {
   if (!total) return { text: "Brak pól", state: "muted" };
   if (!missing) return { text: "Wszystko uzupełnione", state: "complete" };
-  return { text: missingLabel(missing), state: "missing" };
+  return { text: missingLabel(missing), state: "muted" };
 }
 
 function enhanceFieldGroups(): void {
@@ -129,7 +131,8 @@ function enhanceFieldGroups(): void {
 
   const groups = Array.from(root.children).filter(
     (element): element is HTMLElement =>
-      element instanceof HTMLElement && element.classList.contains("field-group"),
+      element instanceof HTMLElement &&
+      element.classList.contains("field-group"),
   );
 
   groups.forEach((group, index) => {
@@ -137,9 +140,15 @@ function enhanceFieldGroups(): void {
 
     const heading = group.querySelector<HTMLElement>(":scope > h2");
     const title = heading?.textContent?.trim() || `Sekcja ${index + 1}`;
-    const rows = Array.from(group.querySelectorAll<HTMLElement>(":scope > .field-row"));
-    const businessRows = rows.filter((row) => !row.classList.contains("system-field"));
-    const missing = businessRows.filter((row) => row.classList.contains("is-missing")).length;
+    const rows = Array.from(
+      group.querySelectorAll<HTMLElement>(":scope > .field-row"),
+    );
+    const businessRows = rows.filter(
+      (row) => !row.classList.contains("system-field"),
+    );
+    const missing = businessRows.filter((row) =>
+      row.classList.contains("is-missing"),
+    ).length;
     const systemOnly = rows.length > 0 && businessRows.length === 0;
     const status = systemOnly
       ? { text: "Automatyczne", state: "muted" }
@@ -150,11 +159,12 @@ function enhanceFieldGroups(): void {
     details.className = "workspace-section-card field-group-card";
     details.dataset.redesigned = "true";
     details.dataset.sectionKey = title;
+    details.id = `field-section-${index}`;
 
     const remembered = fieldSectionOpen.get(title);
     // An explicit user choice wins over automatic opening for the selected
     // field. This keeps a manually collapsed section collapsed across rerenders.
-    details.open = remembered ?? selected;
+    details.open = remembered ?? (selected || index === 0);
     fieldSectionOpen.set(title, details.open);
 
     const summary = document.createElement("summary");
@@ -206,13 +216,18 @@ function fundingGroupLabel(group: HTMLElement, index: number): string {
 function selectFundingTab(root: HTMLElement, size: string): void {
   activeFundingSize = size;
   persistWorkspaceChrome({ fundingSize: size });
-  for (const button of root.querySelectorAll<HTMLButtonElement>(".funding-tab")) {
+  for (const button of root.querySelectorAll<HTMLButtonElement>(
+    ".funding-tab",
+  )) {
     const selected = button.dataset.size === size;
     if (button.getAttribute("aria-selected") !== String(selected)) {
       button.setAttribute("aria-selected", String(selected));
     }
+    button.tabIndex = selected ? 0 : -1;
   }
-  for (const panel of root.querySelectorAll<HTMLElement>(".funding-tab-panel")) {
+  for (const panel of root.querySelectorAll<HTMLElement>(
+    ".funding-tab-panel",
+  )) {
     setHidden(panel, panel.dataset.size !== size);
   }
 }
@@ -225,7 +240,8 @@ function enhanceFunding(): void {
 
   const groups = Array.from(root.children).filter(
     (element): element is HTMLElement =>
-      element instanceof HTMLElement && element.classList.contains("size-group"),
+      element instanceof HTMLElement &&
+      element.classList.contains("size-group"),
   );
 
   const totalRows = groups.reduce(
@@ -233,7 +249,8 @@ function enhanceFunding(): void {
     0,
   );
   const missing = groups.reduce(
-    (sum, group) => sum + group.querySelectorAll(".field-row.is-missing").length,
+    (sum, group) =>
+      sum + group.querySelectorAll(".field-row.is-missing").length,
     0,
   );
 
@@ -245,23 +262,30 @@ function enhanceFunding(): void {
         ? "Wszystko uzupełnione"
         : "Nie skonfigurowano";
     setText(status, text);
-    status.dataset.state = missing ? "missing" : totalRows ? "complete" : "muted";
+    status.dataset.state = missing ? "muted" : totalRows ? "complete" : "muted";
   }
 
   if (!groups.length || root.querySelector(":scope > .funding-tabs")) return;
 
-  const selectedGroup = groups.find((group) => group.querySelector(".field-row.selected"));
+  const selectedGroup = groups.find((group) =>
+    group.querySelector(".field-row.selected"),
+  );
   const labels = groups.map(fundingGroupLabel);
 
   if (selectedGroup) {
-    activeFundingSize = fundingGroupLabel(selectedGroup, groups.indexOf(selectedGroup));
+    activeFundingSize = fundingGroupLabel(
+      selectedGroup,
+      groups.indexOf(selectedGroup),
+    );
   } else if (!labels.includes(activeFundingSize)) {
     const preferred = groups.find(
       (group) =>
         group.querySelectorAll(".variant").length > 0 &&
         group.querySelectorAll(".field-row.is-missing").length > 0,
     );
-    const firstConfigured = groups.find((group) => group.querySelector(".variant"));
+    const firstConfigured = groups.find((group) =>
+      group.querySelector(".variant"),
+    );
     const fallback = preferred ?? firstConfigured ?? groups[0];
     activeFundingSize = fundingGroupLabel(fallback, groups.indexOf(fallback));
   }
@@ -274,16 +298,24 @@ function enhanceFunding(): void {
   groups.forEach((group, index) => {
     const label = fundingGroupLabel(group, index);
     const variants = group.querySelectorAll(".variant").length;
-    const missingFields = group.querySelectorAll(".field-row.is-missing").length;
+    const missingFields = group.querySelectorAll(
+      ".field-row.is-missing",
+    ).length;
 
     group.classList.add("funding-tab-panel");
     group.dataset.size = label;
+    group.id = `funding-size-panel-${index}`;
+    group.setAttribute("role", "tabpanel");
+    group.setAttribute("aria-labelledby", `funding-size-tab-${index}`);
+    group.tabIndex = 0;
 
     const button = document.createElement("button");
     button.type = "button";
     button.className = "funding-tab";
     button.dataset.size = label;
     button.setAttribute("role", "tab");
+    button.id = `funding-size-tab-${index}`;
+    button.setAttribute("aria-controls", group.id);
 
     const copy = document.createElement("span");
     copy.textContent = label;
@@ -294,7 +326,8 @@ function enhanceFunding(): void {
       state.dataset.state = "muted";
     } else if (missingFields) {
       state.textContent = String(missingFields);
-      state.dataset.state = "missing";
+      state.dataset.state = "muted";
+      state.setAttribute("aria-label", missingLabel(missingFields));
     } else {
       state.textContent = "✓";
       state.dataset.state = "complete";
@@ -307,6 +340,30 @@ function enhanceFunding(): void {
       const onlyVariant = group.querySelector<HTMLDetailsElement>(".variant");
       setOpen(onlyVariant, true);
     }
+  });
+
+  tabs.addEventListener("keydown", (event) => {
+    const buttons = Array.from(
+      tabs.querySelectorAll<HTMLButtonElement>("[role=tab]"),
+    );
+    const current = buttons.indexOf(
+      document.activeElement as HTMLButtonElement,
+    );
+    if (current < 0) return;
+    const next =
+      event.key === "ArrowRight"
+        ? (current + 1) % buttons.length
+        : event.key === "ArrowLeft"
+          ? (current - 1 + buttons.length) % buttons.length
+          : event.key === "Home"
+            ? 0
+            : event.key === "End"
+              ? buttons.length - 1
+              : -1;
+    if (next < 0) return;
+    event.preventDefault();
+    selectFundingTab(root, buttons[next].dataset.size!);
+    buttons[next].focus();
   });
 
   root.prepend(tabs);
@@ -322,11 +379,12 @@ function enhanceFunding(): void {
   }
 }
 
-
 function translateObjectProgress(): void {
   const progress = $("progress");
   if (progress) {
-    const match = progress.textContent?.match(/(\d+)\s*\/\s*(\d+)\s*fields?\s*completed/i);
+    const match = progress.textContent?.match(
+      /(\d+)\s*\/\s*(\d+)\s*fields?\s*completed/i,
+    );
     if (match) setText(progress, `${match[1]}/${match[2]} pól uzupełnionych`);
   }
 
@@ -340,7 +398,9 @@ function translateObjectProgress(): void {
 function enhanceStaticStatuses(): void {
   translateObjectProgress();
 
-  const fileRows = document.querySelectorAll("#file-source-list .file-source-row");
+  const fileRows = document.querySelectorAll(
+    "#file-source-list .file-source-row",
+  );
   const fileCount = fileRows.length;
   const pendingFiles = Array.from(fileRows).filter(
     (row) => (row as HTMLElement).dataset.classified !== "true",
@@ -362,14 +422,18 @@ function enhanceStaticStatuses(): void {
         : "complete";
   }
 
-  const geographyRows = document.querySelectorAll("#geography-list .geography-row").length;
+  const geographyRows = document.querySelectorAll(
+    "#geography-list .geography-row",
+  ).length;
   const geographyStatus = $("geography-count");
   if (geographyStatus) {
     setText(
       geographyStatus,
-      geographyRows ? itemLabel(geographyRows, "zakres", "zakresów") : "Brak zakresu",
+      geographyRows
+        ? itemLabel(geographyRows, "zakres", "zakresów")
+        : "Brak zakresu",
     );
-    geographyStatus.dataset.state = geographyRows ? "complete" : "missing";
+    geographyStatus.dataset.state = geographyRows ? "complete" : "muted";
   }
 }
 
@@ -382,13 +446,48 @@ function enhanceCaptureDock(): void {
   const currentLabel = label.textContent?.trim() || "";
   if (currentLabel && currentLabel !== lastCaptureLabel) {
     area.classList.toggle("is-collapsed", captureCollapsedPreference);
-    collapse.setAttribute(
-      "aria-expanded",
-      String(!captureCollapsedPreference),
-    );
+    collapse.setAttribute("aria-expanded", String(!captureCollapsedPreference));
     collapse.textContent = captureCollapsedPreference ? "⌃" : "⌄";
+    collapse.setAttribute(
+      "aria-label",
+      captureCollapsedPreference ? "Rozwiń edytor pola" : "Zwiń edytor pola",
+    );
     lastCaptureLabel = currentLabel;
   }
+}
+
+function visibleSections(): HTMLDetailsElement[] {
+  return Array.from(
+    document.querySelectorAll<HTMLDetailsElement>(
+      "#workspace .workspace-section-card",
+    ),
+  ).filter((panel) => !panel.closest("[hidden]"));
+}
+
+function enhanceSectionNavigation(): void {
+  const select = $<HTMLSelectElement>("section-select");
+  const toggle = $<HTMLButtonElement>("sections-toggle");
+  if (!select || !toggle) return;
+  const sections = visibleSections();
+  const options = sections.map((panel) => ({
+    id: panel.id,
+    label:
+      panel.querySelector(".workspace-section-title strong")?.textContent ??
+      "Sekcja",
+  }));
+  const signature = JSON.stringify(options);
+  if (select.dataset.sections !== signature) {
+    const selected = select.value;
+    select.replaceChildren(
+      ...options.map(({ id, label }) => new Option(label, id)),
+    );
+    if (options.some(({ id }) => id === selected)) select.value = selected;
+    select.dataset.sections = signature;
+  }
+  const allOpen = sections.length > 0 && sections.every((panel) => panel.open);
+  // Other modules observe child-list changes to update selector colors.
+  // Do not emit a fresh mutation when the label has not changed.
+  setText(toggle, allOpen ? "Zwiń sekcje" : "Rozwiń sekcje");
 }
 
 function observeWorkspaceChanges(): void {
@@ -427,6 +526,7 @@ function enhanceAll(): void {
     enhanceFunding();
     enhanceStaticStatuses();
     enhanceCaptureDock();
+    enhanceSectionNavigation();
   } finally {
     enhancing = false;
     observeWorkspaceChanges();
@@ -467,15 +567,13 @@ export async function initWorkspaceRedesignUi(): Promise<void> {
   const collapse = $("capture-collapse") as HTMLButtonElement | null;
   const capture = $("capture-area");
   if (capture && collapse) {
-    capture.classList.toggle(
-      "is-collapsed",
-      captureCollapsedPreference,
-    );
-    collapse.setAttribute(
-      "aria-expanded",
-      String(!captureCollapsedPreference),
-    );
+    capture.classList.toggle("is-collapsed", captureCollapsedPreference);
+    collapse.setAttribute("aria-expanded", String(!captureCollapsedPreference));
     collapse.textContent = captureCollapsedPreference ? "⌃" : "⌄";
+    collapse.setAttribute(
+      "aria-label",
+      captureCollapsedPreference ? "Rozwiń edytor pola" : "Zwiń edytor pola",
+    );
   }
 
   collapse?.addEventListener("click", () => {
@@ -484,7 +582,32 @@ export async function initWorkspaceRedesignUi(): Promise<void> {
     captureCollapsedPreference = collapsed;
     collapse.setAttribute("aria-expanded", String(!collapsed));
     collapse.textContent = collapsed ? "⌃" : "⌄";
+    collapse.setAttribute(
+      "aria-label",
+      collapsed ? "Rozwiń edytor pola" : "Zwiń edytor pola",
+    );
     persistWorkspaceChrome({ captureCollapsed: collapsed });
+  });
+
+  $("section-go")?.addEventListener("click", () => {
+    const panel = $<HTMLDetailsElement>(
+      $("section-select") instanceof HTMLSelectElement
+        ? ($("section-select") as HTMLSelectElement).value
+        : "",
+    );
+    if (!panel) return;
+    panel.open = true;
+    const summary = panel.querySelector("summary");
+    summary?.focus({ preventScroll: true });
+    panel.scrollIntoView({ block: "start" });
+  });
+  $("sections-toggle")?.addEventListener("click", () => {
+    const sections = visibleSections();
+    const open = !sections.every((panel) => panel.open);
+    sections.forEach((panel) => {
+      panel.open = open;
+    });
+    enhanceSectionNavigation();
   });
 
   restoreBusinessPanels(restoredPanels);

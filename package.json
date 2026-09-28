@@ -15,7 +15,8 @@
     "import:operators": "python3 scripts/import-operators-xlsx.py",
     "import:projects": "python3 scripts/import-projects-xlsx.py",
     "check:importers": "python3 -m py_compile scripts/import-operators-xlsx.py scripts/import-projects-xlsx.py scripts/import-recruitments-xlsx.py && python3 tests/import-operators-contracts.py && python3 tests/import-recruitments-contracts.py",
-    "import:recruitments": "python3 scripts/import-recruitments-xlsx.py"
+    "import:recruitments": "python3 scripts/import-recruitments-xlsx.py",
+    "test:ui": "npm run build && node --test tests/workspace-usability.browser.test.mjs"
   },
   "dependencies": {
     "better-sqlite3": "^13.0.3",
@@ -29,6 +30,7 @@
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "esbuild": "^0.25.0",
+    "playwright": "^1.62.1",
     "prettier": "^3.6.0",
     "typescript": "^5.9.0",
     "web-ext": "^9.0.0"
