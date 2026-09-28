@@ -74,6 +74,8 @@ function normalizeFileName(name: string): string {
     .normalize("NFKD")
     .replace(/[\u0300-\u036f]/g, "")
     .toLocaleLowerCase("pl-PL")
+    // Polish ł/Ł does not decompose under NFKD.
+    .replace(/ł/g, "l")
     .replace(/[^a-z0-9]+/g, " ")
     .trim()
     .replace(/\s+/g, " ");
