@@ -14,6 +14,7 @@ import type {
   LegacyStoredObject,
 } from "../shared/types/legacy-storage";
 import type { RemoteFileSourceCandidate } from "../shared/types/source";
+import { buildRecruitmentDownloadPlan } from "../shared/fileDownloads";
 
 const STORAGE_KEY = "burbot:v1";
 let initialized = false;
@@ -26,6 +27,7 @@ let fileModeEnabled = false;
 let filePicking = false;
 let fileModeStarting = false;
 let fileCaptureBusy = false;
+let fileDownloadBusy = false;
 let fileModeGeneration = 0;
 let currentWindowId: number | null = null;
 const handledShortcutStamps = new Set<string>();
@@ -138,6 +140,90 @@ function host(url: string): string {
     return new URL(url).hostname;
   } catch {
     return url;
+  }
+}
+
+function objectDisplayName(object: LegacyStoredObject): string {
+  if (object.type === "recruitment") {
+    const name = object.values?.external_number;
+    if (typeof name === "string" && name.trim()) return name.trim();
+  }
+  if (object.type === "project" || object.type === "operator") {
+    const name = object.values?.name;
+    if (typeof name === "string" && name.trim()) return name.trim();
+  }
+  return object.label?.trim() || object.importKey?.trim() || object.id;
+}
+
+function recruitmentProject(
+  recruitment: LegacyStoredObject,
+): LegacyStoredObject | undefined {
+  const projectId = recruitment.values?.project_id;
+  if (typeof projectId !== "string" || !projectId) return undefined;
+  return state.objects.find(
+    (object) =>
+      object.type === "project" &&
+      (object.id === projectId || object.importKey === projectId),
+  );
+}
+
+async function downloadAllRecruitmentFiles(
+  recruitment: LegacyStoredObject,
+): Promise<void> {
+  if (recruitment.type !== "recruitment") {
+    throw new Error("Pobieranie wszystkich plików jest dostępne dla naboru.");
+  }
+
+  const sources = (state.fileSources ?? []).filter(
+    (source) => source.objectId === recruitment.id,
+  );
+  if (!sources.length) {
+    throw new Error("Ten nabór nie ma przypiętych plików.");
+  }
+
+  const project = recruitmentProject(recruitment);
+  if (!project) {
+    throw new Error(
+      "Najpierw przypisz projekt do naboru — nazwa katalogu używa nazwy naboru i projektu.",
+    );
+  }
+
+  const platform = await browser.runtime.getPlatformInfo();
+  const plan = buildRecruitmentDownloadPlan(
+    objectDisplayName(recruitment),
+    objectDisplayName(project),
+    sources.map((source) => ({ name: source.name, url: source.url })),
+    platform.os === "win",
+  );
+
+  fileDownloadBusy = true;
+  render();
+  try {
+    const results = await Promise.allSettled(
+      plan.files.map((file) =>
+        browser.downloads.download({
+          url: file.url,
+          filename: file.relativePath,
+          conflictAction: "uniquify",
+          saveAs: false,
+        }),
+      ),
+    );
+
+    const failed = results.filter((result) => result.status === "rejected");
+    if (failed.length) {
+      const downloaded = results.length - failed.length;
+      throw new Error(
+        `Pobrano ${downloaded}/${results.length} plików do katalogu „${plan.folderName}”. ${failed.length} pobrań nie udało się uruchomić.`,
+      );
+    }
+
+    notice(
+      `Pobieranie ${results.length} plików uruchomione. Katalog: „${plan.folderName}”.`,
+    );
+  } finally {
+    fileDownloadBusy = false;
+    render();
   }
 }
 
@@ -780,6 +866,22 @@ function render(): void {
   } else {
     for (const source of sources) root.append(renderSource(source));
   }
+
+  const downloadAll = $("download-all-files") as HTMLButtonElement;
+  downloadAll.hidden = object.type !== "recruitment";
+  downloadAll.disabled = fileDownloadBusy || sources.length === 0;
+  downloadAll.textContent = fileDownloadBusy
+    ? "Pobieranie…"
+    : `↓ Pobierz wszystkie (${sources.length})`;
+  if (object.type === "recruitment") {
+    const project = recruitmentProject(object);
+    downloadAll.title = project
+      ? `Pobierz do: ${objectDisplayName(object)}: ${objectDisplayName(project)}`
+      : "Przypisz projekt, aby utworzyć katalog naboru.";
+  } else {
+    downloadAll.title = "";
+  }
+
   renderMode();
 }
 
@@ -789,6 +891,17 @@ export async function initFileSourcesUi(): Promise<void> {
 
   $("read-from-file").onclick = () => {
     void toggleFileMode().catch((error: unknown) => {
+      notice(error instanceof Error ? error.message : String(error), true);
+    });
+  };
+
+  $("download-all-files").onclick = () => {
+    const object = chosenObject();
+    if (!object) {
+      notice("Wybierz nabór przed pobieraniem plików.", true);
+      return;
+    }
+    void downloadAllRecruitmentFiles(object).catch((error: unknown) => {
       notice(error instanceof Error ? error.message : String(error), true);
     });
   };
