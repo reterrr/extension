@@ -9,12 +9,16 @@ import { build } from "esbuild";
 const root = resolve(fileURLToPath(new URL("..", import.meta.url)));
 let outputDir;
 let remoteFile;
+let fileDownloads;
 
 before(async () => {
   outputDir = await mkdtemp(join(tmpdir(), "burbot-file-source-"));
   await build({
     absWorkingDir: root,
-    entryPoints: { remoteFile: "src/shared/sources/remoteFile.ts" },
+    entryPoints: {
+      remoteFile: "src/shared/sources/remoteFile.ts",
+      fileDownloads: "src/shared/fileDownloads.ts",
+    },
     outdir: outputDir,
     bundle: true,
     platform: "node",
@@ -24,6 +28,9 @@ before(async () => {
   });
   remoteFile = await import(
     pathToFileURL(join(outputDir, "remoteFile.js")).href
+  );
+  fileDownloads = await import(
+    pathToFileURL(join(outputDir, "fileDownloads.js")).href
   );
 });
 
@@ -142,4 +149,57 @@ test("PDF compatibility helpers remain PDF-only", () => {
       ),
     /PDF/,
   );
+});
+
+
+test("recruitment download plan puts all files in one recruitment/project folder", () => {
+  const plan = fileDownloads.buildRecruitmentDownloadPlan(
+    "Nabór IX/2026",
+    "Generator Kompetencji 3.0",
+    [
+      { name: "regulamin.pdf", url: "https://example.test/regulamin.pdf" },
+      { name: "formularz.docx", url: "https://example.test/formularz.docx" },
+    ],
+    false,
+  );
+
+  assert.equal(plan.folderName, "Nabór IX - 2026: Generator Kompetencji 3.0");
+  assert.deepEqual(
+    plan.files.map((file) => file.relativePath),
+    [
+      "Nabór IX - 2026: Generator Kompetencji 3.0/regulamin.pdf",
+      "Nabór IX - 2026: Generator Kompetencji 3.0/formularz.docx",
+    ],
+  );
+});
+
+test("download plan uniquifies duplicate filenames", () => {
+  const plan = fileDownloads.buildRecruitmentDownloadPlan(
+    "Nabór",
+    "Projekt",
+    [
+      { name: "załącznik.pdf", url: "https://example.test/a" },
+      { name: "załącznik.pdf", url: "https://example.test/b" },
+      { name: "ZAŁĄCZNIK.PDF", url: "https://example.test/c" },
+    ],
+    false,
+  );
+
+  assert.deepEqual(
+    plan.files.map((file) => file.relativePath),
+    [
+      "Nabór: Projekt/załącznik.pdf",
+      "Nabór: Projekt/załącznik (2).pdf",
+      "Nabór: Projekt/ZAŁĄCZNIK (3).PDF",
+    ],
+  );
+});
+
+test("Windows download folder uses a filesystem-safe separator", () => {
+  const folder = fileDownloads.recruitmentDownloadFolderName(
+    "Nabór: IX",
+    "Projekt/A",
+    true,
+  );
+  assert.equal(folder, "Nabór - IX - Projekt - A");
 });
