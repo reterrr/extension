@@ -12,7 +12,10 @@ if (!document.querySelector("style[data-burbot-workspace-redesign]")) {
   --border-strong: #ced9d0;
   --field-surface: #fbfcfb;
   --field-border: #d5ded6;
-  --field-hover: #f0f4f1;
+  --field-hover: #d9ede1;
+  --field-hover-border: #679077;
+  --field-selected: #bfe3cc;
+  --field-selected-border: #236a42;
   --success: #2f7659;
   --success-soft: #eaf4ee;
   --warning: #a76100;
@@ -615,18 +618,32 @@ progress {
   box-shadow: 0 1px 2px rgba(32, 53, 40, .035);
 }
 
-.field-row:hover {
+/* Interaction states take precedence over empty-field and source colors. */
+#workspace .field-row:where(:not(.system-field):not(:disabled)):hover {
   background: var(--field-hover);
-  border-color: #bccbc0;
-  box-shadow: 0 1px 3px rgba(32, 53, 40, .07);
+  border-color: var(--field-hover-border);
+  box-shadow: inset 3px 0 var(--field-hover-border);
 }
 
-.field-row.selected {
-  background: var(--success-soft);
-  border-color: #a9c9b4;
+#workspace .field-row.selected {
+  background: var(--field-selected);
+  border-color: var(--field-selected-border);
   box-shadow:
-    inset 4px 0 var(--success),
-    0 0 0 1px rgba(47, 118, 89, .08);
+    inset 5px 0 var(--field-selected-border),
+    inset 0 0 0 1px var(--field-selected-border);
+}
+
+#workspace .field-row:where(:not(.system-field):not(:disabled)):hover .field-label,
+#workspace .field-row.selected .field-label {
+  color: #204d35;
+}
+
+@media (forced-colors: active) {
+  #workspace .field-row:where(:not(.system-field):not(:disabled)):hover,
+  #workspace .field-row.selected {
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
+  }
 }
 
 .field-row.is-missing:not(.selected) {
