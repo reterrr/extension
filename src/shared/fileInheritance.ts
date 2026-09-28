@@ -1,3 +1,7 @@
+import {
+  FILE_METADATA_INFERENCE_VERSION,
+  inferFileMetadataFromName,
+} from "./fileMetadata";
 import type {
   LegacyStorageState,
   LegacyStoredFileSource,
@@ -132,9 +136,11 @@ export function inheritProjectFilesAsCopies(
       name: source.name,
       sourcePageUrl: source.sourcePageUrl,
       addedAt: now,
+      ...inferFileMetadataFromName(source.name),
       copiedFromProjectId: status.project!.id,
       copiedFromFileSourceId: source.id,
       copiedAt: now,
+      metadataInferenceVersion: FILE_METADATA_INFERENCE_VERSION,
     };
     copyOptionalMetadata(copy, source);
     sources.push(copy);

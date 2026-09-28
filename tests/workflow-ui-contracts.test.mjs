@@ -427,8 +427,28 @@ test("file metadata uses fixed select vocabularies while keeping name and intend
   );
   assert.match(files, /requirementCaption\.textContent = "Wymagalność"/);
   assert.match(files, /signatureCaption\.textContent = "Podpis"/);
+  assert.ok(
+    metadata.includes('FILE_METADATA_UNSET_LABEL = "Nie ustalono"'),
+    "all structured file metadata selects need one explicit unset option",
+  );
+  assert.match(
+    files,
+    /new Option\(FILE_METADATA_UNSET_LABEL, ""\)/,
+  );
   assert.match(files, /new Option\("Tak, pola lub deklaracje", "true"\)/);
   assert.match(files, /new Option\("Nie", "false"\)/);
+  assert.match(
+    files,
+    /appendSelectOptions\([\s\S]*?purpose,[\s\S]*?FILE_METADATA_UNSET_LABEL,[\s\S]*?FILE_PURPOSES/,
+  );
+  assert.match(
+    files,
+    /appendSelectOptions\([\s\S]*?clientRequirement,[\s\S]*?FILE_METADATA_UNSET_LABEL,[\s\S]*?FILE_CLIENT_REQUIREMENTS/,
+  );
+  assert.match(
+    files,
+    /appendSelectOptions\([\s\S]*?signatureRequirement,[\s\S]*?FILE_METADATA_UNSET_LABEL,[\s\S]*?FILE_SIGNATURE_REQUIREMENTS/,
+  );
 
   assert.match(background, /setOptionalEnum\("purpose", isFilePurpose\)/);
   assert.match(

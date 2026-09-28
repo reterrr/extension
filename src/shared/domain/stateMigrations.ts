@@ -1,3 +1,7 @@
+import {
+  FILE_METADATA_INFERENCE_VERSION,
+  inferFileMetadataFromName,
+} from "../fileMetadata";
 import type { LegacyStorageState, LegacyStoredRule } from "../types/legacy-storage";
 
 function own(value: object, key: PropertyKey): boolean {
@@ -181,6 +185,48 @@ export function migratePlannedRecruitmentRanges(
   }
 
   if (addedRules.length) state.rules.push(...addedRules);
+  return changed;
+}
+
+/**
+ * Applies conservative filename-based defaults once to existing file sources.
+ *
+ * Only missing fields are filled. The version marker is then stored even when
+ * nothing matched, so a later manual "Nie ustalono" choice is never
+ * automatically overwritten on every load.
+ */
+export function migrateFileMetadataInference(
+  state: LegacyStorageState,
+): boolean {
+  let changed = false;
+
+  for (const source of state.fileSources ?? []) {
+    if (
+      Number(source.metadataInferenceVersion ?? 0) >=
+      FILE_METADATA_INFERENCE_VERSION
+    ) {
+      continue;
+    }
+
+    const inferred = inferFileMetadataFromName(source.name);
+    const mutable = source as unknown as Record<string, unknown>;
+
+    for (const [field, value] of Object.entries(inferred)) {
+      const current = mutable[field];
+      if (
+        current === undefined ||
+        current === null ||
+        (typeof current === "string" && current.trim() === "")
+      ) {
+        mutable[field] = value;
+        changed = true;
+      }
+    }
+
+    source.metadataInferenceVersion = FILE_METADATA_INFERENCE_VERSION;
+    changed = true;
+  }
+
   return changed;
 }
 

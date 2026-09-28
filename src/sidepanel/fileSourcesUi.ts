@@ -1,6 +1,7 @@
 import { createPickerClient, type PickerClient } from "./pickerRpc";
 import {
   FILE_CLIENT_REQUIREMENTS,
+  FILE_METADATA_UNSET_LABEL,
   FILE_PURPOSES,
   FILE_SIGNATURE_REQUIREMENTS,
 } from "../shared/fileMetadata";
@@ -740,7 +741,7 @@ function renderSource(source: LegacyStoredFileSource): HTMLElement {
   const intendedUse = document.createElement("input");
   intendedUse.type = "text";
   intendedUse.value = metadataText(source, "intended_use");
-  intendedUse.placeholder = "Do czego służy ten dokument?";
+  intendedUse.placeholder = FILE_METADATA_UNSET_LABEL;
   intendedUse.autocomplete = "off";
   intendedUseLabel.append(intendedUseCaption, intendedUse);
 
@@ -756,7 +757,7 @@ function renderSource(source: LegacyStoredFileSource): HTMLElement {
   const purpose = document.createElement("select");
   appendSelectOptions(
     purpose,
-    "Wybierz na podstawie treści",
+    FILE_METADATA_UNSET_LABEL,
     FILE_PURPOSES,
     typeof source.purpose === "string" ? source.purpose : undefined,
   );
@@ -769,11 +770,12 @@ function renderSource(source: LegacyStoredFileSource): HTMLElement {
   hasFieldsCaption.textContent = "Czy plik zawiera pola do wypełnienia?";
   const hasFields = document.createElement("select");
   hasFields.append(
+    new Option(FILE_METADATA_UNSET_LABEL, ""),
     new Option("Tak, pola lub deklaracje", "true"),
     new Option("Nie", "false"),
   );
   hasFields.value =
-    typeof source.has_fields === "boolean" ? String(source.has_fields) : "false";
+    typeof source.has_fields === "boolean" ? String(source.has_fields) : "";
   hasFieldsLabel.append(hasFieldsCaption, hasFields);
   classification.append(hasFieldsLabel);
 
@@ -784,7 +786,7 @@ function renderSource(source: LegacyStoredFileSource): HTMLElement {
   const clientRequirement = document.createElement("select");
   appendSelectOptions(
     clientRequirement,
-    "Nie ustalono",
+    FILE_METADATA_UNSET_LABEL,
     FILE_CLIENT_REQUIREMENTS,
     typeof source.client_requirement === "string"
       ? source.client_requirement
@@ -800,7 +802,7 @@ function renderSource(source: LegacyStoredFileSource): HTMLElement {
   const signatureRequirement = document.createElement("select");
   appendSelectOptions(
     signatureRequirement,
-    "Do ustalenia z instrukcji",
+    FILE_METADATA_UNSET_LABEL,
     FILE_SIGNATURE_REQUIREMENTS,
     typeof source.signature_requirement === "string"
       ? source.signature_requirement

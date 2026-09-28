@@ -11,6 +11,8 @@ let outputDir;
 let remoteFile;
 let fileDownloads;
 let fileInheritance;
+let fileMetadata;
+let stateMigrations;
 
 before(async () => {
   outputDir = await mkdtemp(join(tmpdir(), "burbot-file-source-"));
@@ -20,6 +22,8 @@ before(async () => {
       remoteFile: "src/shared/sources/remoteFile.ts",
       fileDownloads: "src/shared/fileDownloads.ts",
       fileInheritance: "src/shared/fileInheritance.ts",
+      fileMetadata: "src/shared/fileMetadata.ts",
+      stateMigrations: "src/shared/domain/stateMigrations.ts",
     },
     outdir: outputDir,
     bundle: true,
@@ -36,6 +40,12 @@ before(async () => {
   );
   fileInheritance = await import(
     pathToFileURL(join(outputDir, "fileInheritance.js")).href
+  );
+  fileMetadata = await import(
+    pathToFileURL(join(outputDir, "fileMetadata.js")).href
+  );
+  stateMigrations = await import(
+    pathToFileURL(join(outputDir, "stateMigrations.js")).href
   );
 });
 
@@ -397,4 +407,121 @@ test("re-inheriting adds only new project files and never overwrites recruitment
     2,
   );
   assert.equal(firstCopy.display_name, "Nabór ma własną nazwę");
+});
+
+
+test("regulation filenames get safe informational defaults", () => {
+  assert.deepEqual(
+    fileMetadata.inferFileMetadataFromName(
+      "5.15_Regulamin-naboru-do-projektu-01.07.2026.pdf",
+    ),
+    {
+      purpose: "Regulamin",
+      has_fields: false,
+      client_requirement: "Informacyjny",
+      signature_requirement: "Nie jest wymagany",
+    },
+  );
+});
+
+test("attachments containing 'do Regulaminu' use the specific document pattern first", () => {
+  assert.deepEqual(
+    fileMetadata.inferFileMetadataFromName(
+      "Zalacznik_nr_1_do_Regulaminu_PUR_cz1_-_wersja__od_22.12.2025.docx",
+    ),
+    {
+      purpose: "Formularz do uzupełnienia",
+      has_fields: true,
+      client_requirement: "Obowiązkowy",
+      signature_requirement: "Wymagany podpisany plik",
+    },
+  );
+});
+
+test("Polish filename normalization keeps ł-based patterns matchable", () => {
+  assert.deepEqual(
+    fileMetadata.inferFileMetadataFromName(
+      "Plan_Usług_Rozwojowych_cz_1_wzór.docx",
+    ),
+    {
+      purpose: "Formularz do uzupełnienia",
+      has_fields: true,
+      client_requirement: "Obowiązkowy",
+      signature_requirement: "Wymagany podpisany plik",
+    },
+  );
+  assert.deepEqual(
+    fileMetadata.inferFileMetadataFromName("Wzór_pełnomocnictwa.docx"),
+    {
+      purpose: "Formularz do uzupełnienia",
+      has_fields: true,
+      client_requirement: "Warunkowy",
+      signature_requirement: "Wymagany podpisany plik",
+    },
+  );
+});
+
+test("common BUR filenames get conservative metadata defaults", () => {
+  assert.deepEqual(
+    fileMetadata.inferFileMetadataFromName(
+      "Zal._nr_7_do_Regulaminu_Instrukcja_statusu_MSP.docx",
+    ),
+    {
+      purpose: "Instrukcja",
+      has_fields: false,
+      client_requirement: "Informacyjny",
+      signature_requirement: "Nie jest wymagany",
+    },
+  );
+
+  assert.deepEqual(
+    fileMetadata.inferFileMetadataFromName(
+      "Zal._nr_10_do_Regulaminu_Podstawowa_lista_rankingowa_PUR.docx",
+    ),
+    {
+      purpose: "Inny dokument",
+      has_fields: true,
+      client_requirement: "Informacyjny",
+      signature_requirement: "Nie jest wymagany",
+    },
+  );
+
+  assert.deepEqual(
+    fileMetadata.inferFileMetadataFromName("random_document_123.pdf"),
+    {},
+  );
+});
+
+test("existing files receive filename defaults once and manual unset stays unset", () => {
+  const state = {
+    version: 1,
+    revision: 1,
+    objects: [],
+    rules: [],
+    fileSources: [
+      {
+        id: "file-1",
+        objectId: "project-1",
+        fileType: "PDF",
+        url: "https://example.test/Regulamin_naboru.pdf",
+        name: "Regulamin_naboru.pdf",
+        sourcePageUrl: "https://example.test",
+        addedAt: "2026-09-28T10:00:00.000Z",
+      },
+    ],
+  };
+
+  assert.equal(stateMigrations.migrateFileMetadataInference(state), true);
+  assert.equal(state.fileSources[0].purpose, "Regulamin");
+  assert.equal(state.fileSources[0].has_fields, false);
+  assert.equal(state.fileSources[0].client_requirement, "Informacyjny");
+  assert.equal(state.fileSources[0].signature_requirement, "Nie jest wymagany");
+  assert.equal(
+    state.fileSources[0].metadataInferenceVersion,
+    fileMetadata.FILE_METADATA_INFERENCE_VERSION,
+  );
+
+  delete state.fileSources[0].purpose;
+  assert.equal(stateMigrations.migrateFileMetadataInference(state), false);
+  assert.equal(state.fileSources[0].purpose, undefined);
 });

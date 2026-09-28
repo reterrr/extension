@@ -447,9 +447,11 @@ Plik nie ma własnych pól `key`, `url`, `filename`, `type`, `operator`, `docume
 | `client_requirement` | `Obowiązkowy`, `Warunkowy`, `Informacyjny` | Wymóg wobec uczestnika/klienta. Dla `Warunkowy` zapisz warunek w `intended_use`; „Informacyjny” nie oznacza, że zasad regulaminu nie trzeba przestrzegać. |
 | `signature_requirement` | `Nie jest wymagany`, `Wymagany podpisany plik`, `Dowód w systemie operatora` | Wymóg dostarczenia podpisu/dowodu. Rodzaj podpisu, sposób podpisania i etap doprecyzuj w `intended_use`, jeśli wynikają z instrukcji. |
 
-Wszystkie napisy enumów powyżej wymagają zachowania polskich znaków i pisowni. Technicznie `parseFileMetadata` przyjmuje niepuste teksty także spoza tych list, ale bieżący edytor/eksport ma **właśnie te zamknięte warianty**; AI ma ich przestrzegać. „Nie ustalono”, „Do ustalenia z instrukcji” i „Wybierz na podstawie treści” to placeholdery UI, a nie wartości do zapisania.
+Wszystkie napisy enumów powyżej wymagają zachowania polskich znaków i pisowni. Technicznie `parseFileMetadata` przyjmuje niepuste teksty także spoza tych list, ale bieżący edytor/eksport ma **właśnie te zamknięte warianty**; AI ma ich przestrzegać. „Nie ustalono” jest wspólnym placeholderem UI dla braku rozstrzygnięcia i nie jest wartością enumu do zapisania.
 
-Metadane wynikają z treści i instrukcji: sama nazwa „Załącznik” nie dowodzi obowiązku złożenia, samo pole „podpis” nie rozstrzyga wszystkich dopuszczalnych ścieżek elektronicznych. Nie zakładaj podpisu kwalifikowanego, zaufanego lub odręcznego bez potwierdzenia. Nie przypisuj braku podpisu tylko dlatego, że go nie znalazłeś w niepełnym OCR.
+Metadane generowane przez AI nadal mają wynikać przede wszystkim z treści i instrukcji. Sama nazwa „Załącznik” nie dowodzi obowiązku złożenia, samo pole „podpis” nie rozstrzyga wszystkich dopuszczalnych ścieżek elektronicznych. Nie zakładaj podpisu kwalifikowanego, zaufanego lub odręcznego bez potwierdzenia. Nie przypisuj braku podpisu tylko dlatego, że go nie znalazłeś w niepełnym OCR.
+
+Importer i ręczne dodawanie plików mają dodatkowy **fallback po nazwie pliku** dla typowych dokumentów BUR/PSF, używany wyłącznie do uzupełnienia brakujących metadanych. Reguły są celowo zachowawcze i mają priorytety: np. plik `Regulamin_naboru...` może dostać cel „Regulamin”, brak pól i wymagalność „Informacyjny”, ale `Zalacznik_do_Regulaminu_PUR_cz1...` najpierw rozpoznawany jest jako PUR, a nie jako regulamin. Jawne metadane z importu zawsze mają pierwszeństwo przed tym fallbackiem.
 
 Starsze `document_kind` i `delivery_method` przyjmują dowolny niepusty tekst, lecz są polami kompatybilności. Nowe importy korzystają z `purpose`, `client_requirement`, `signature_requirement`, `intended_use` i `has_fields`.
 

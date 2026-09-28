@@ -1,6 +1,7 @@
 import { clearActiveDraft } from "../commits/draftStore";
 import { stampLastCheckedAt } from "../commits/lastChecked";
 import {
+  migrateFileMetadataInference,
   migrateFundingRefundRanges,
   migrateMultiOperatorAssignments,
   migratePlannedRecruitmentRanges,
@@ -40,6 +41,7 @@ function assertLegacyState(value: unknown): asserts value is LegacyStorageState 
   }
   migrateFundingRefundRanges(state);
   migratePlannedRecruitmentRanges(state);
+  migrateFileMetadataInference(state);
   migrateRecruitmentStatusesAndOperatorContacts(state);
   migrateMultiOperatorAssignments(state);
 }
