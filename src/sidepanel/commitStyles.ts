@@ -24,7 +24,7 @@ if (!document.querySelector("style[data-burbot-commit-panel]")) {
 .commit-hint,
 .commit-header small {
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
 }
 .commit-primary {
   background: var(--green);
@@ -49,7 +49,7 @@ if (!document.querySelector("style[data-burbot-commit-panel]")) {
 .commit-eyebrow {
   display: block;
   color: var(--muted);
-  font-size: 8px;
+  font-size: 12px;
   letter-spacing: 1px;
   margin-bottom: 2px;
 }
@@ -58,7 +58,7 @@ if (!document.querySelector("style[data-burbot-commit-panel]")) {
 .commit-status {
   border-radius: 999px;
   padding: 2px 6px;
-  font-size: 8px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: .4px;
 }
@@ -86,7 +86,7 @@ if (!document.querySelector("style[data-burbot-commit-panel]")) {
   justify-content: space-between;
   list-style: none;
   padding: 7px 8px;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 650;
 }
 .commit-group > summary::-webkit-details-marker {
@@ -105,7 +105,7 @@ if (!document.querySelector("style[data-burbot-commit-panel]")) {
 }
 .commit-count {
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 500;
 }
 .commit-group-body {
@@ -114,13 +114,13 @@ if (!document.querySelector("style[data-burbot-commit-panel]")) {
 }
 .commit-add-object {
   color: var(--green);
-  font-size: 10px;
+  font-size: 12px;
   padding-left: 0;
   margin: 3px 0;
 }
 .commit-empty {
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
   padding: 4px 1px;
 }
 .commit-object-list {
@@ -149,7 +149,7 @@ if (!document.querySelector("style[data-burbot-commit-panel]")) {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 10px;
+  font-size: 12px;
 }
 .commit-status-new {
   background: #dff1e7;
@@ -182,7 +182,7 @@ if (!document.querySelector("style[data-burbot-commit-panel]")) {
   grid-column: 1 / -1;
   margin-top: 7px;
   color: #a33f3f;
-  font-size: 10px;
+  font-size: 12px;
 }
 /* Compact staged-diff layout. */
 .commit-panel {
@@ -195,10 +195,10 @@ if (!document.querySelector("style[data-burbot-commit-panel]")) {
   border-bottom: 0;
 }
 .commit-header strong {
-  font-size: 11px;
+  font-size: 12px;
 }
 .commit-header small {
-  font-size: 9px;
+  font-size: 12px;
 }
 .commit-create-actions {
   display: flex;
@@ -213,7 +213,7 @@ if (!document.querySelector("style[data-burbot-commit-panel]")) {
   border-radius: 6px;
   background: #f8faf8;
   color: #496457;
-  font-size: 9px;
+  font-size: 12px;
 }
 .commit-create-actions button:hover {
   background: #eef4f0;
@@ -256,13 +256,13 @@ if (!document.querySelector("style[data-burbot-commit-panel]")) {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 10px;
+  font-size: 12px;
 }
 .commit-change-copy small {
   display: block;
   margin-top: 1px;
   color: var(--muted);
-  font-size: 8px;
+  font-size: 12px;
 }
 .commit-chevron {
   flex: none;
@@ -291,7 +291,7 @@ if (!document.querySelector("style[data-burbot-commit-panel]")) {
 }
 .commit-field-name {
   color: #6d7971;
-  font-size: 8px;
+  font-size: 12px;
   font-weight: 650;
 }
 .commit-field-values {
@@ -300,7 +300,7 @@ if (!document.querySelector("style[data-burbot-commit-panel]")) {
   align-items: center;
   gap: 5px;
   overflow-wrap: anywhere;
-  font-size: 9px;
+  font-size: 12px;
 }
 .commit-value-before {
   color: #8a938d;
@@ -335,14 +335,14 @@ if (!document.querySelector("style[data-burbot-commit-panel]")) {
   border-radius: 999px;
   background: #fff;
   color: #647169;
-  font-size: 8px;
+  font-size: 12px;
 }
 .commit-related-counts {
   display: inline-flex;
   gap: 3px;
 }
 .commit-related-counts b {
-  font-size: 8px;
+  font-size: 12px;
 }
 .commit-related-counts .is-added {
   color: #2f7659;
@@ -357,12 +357,12 @@ if (!document.querySelector("style[data-burbot-commit-panel]")) {
   margin-top: 6px;
   padding: 4px 0;
   color: var(--green);
-  font-size: 9px;
+  font-size: 12px;
 }
 .commit-delete-note,
 .commit-empty {
   color: var(--muted);
-  font-size: 9px;
+  font-size: 12px;
 }
 .commit-delete-note {
   margin: 1px 0 5px;
@@ -377,11 +377,11 @@ if (!document.querySelector("style[data-burbot-commit-panel]")) {
 .commit-actions button {
   min-height: 29px;
   padding: 5px 9px;
-  font-size: 10px;
+  font-size: 12px;
 }
 .commit-error {
   margin-top: 6px;
-  font-size: 9px;
+  font-size: 12px;
 }
 
 `;

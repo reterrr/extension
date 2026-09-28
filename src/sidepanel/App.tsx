@@ -6,6 +6,7 @@ import "./commitStyles";
 import "./workspaceRedesignStyles";
 import "./importReviewStyles";
 import "./workflowStyles";
+import "./workspaceLayoutStyles";
 import { CommitPanel } from "./CommitPanel";
 import { ImportReviewPanel } from "./ImportReviewPanel";
 import { WorkflowTabs } from "./WorkflowTabs";
@@ -21,8 +22,12 @@ export function App() {
         initOperatorAssignmentsUi(),
       ),
       import("./geographyUi").then(({ initGeographyUi }) => initGeographyUi()),
-      import("./fileSourcesUi").then(({ initFileSourcesUi }) => initFileSourcesUi()),
-      import("./pdfCaptureUi").then(({ initPdfCaptureUi }) => initPdfCaptureUi()),
+      import("./fileSourcesUi").then(({ initFileSourcesUi }) =>
+        initFileSourcesUi(),
+      ),
+      import("./pdfCaptureUi").then(({ initPdfCaptureUi }) =>
+        initPdfCaptureUi(),
+      ),
       import("./choiceEvidenceUi").then(({ initChoiceEvidenceUi }) =>
         initChoiceEvidenceUi(),
       ),
@@ -40,9 +45,14 @@ export function App() {
 
   return (
     <>
+      <a className="skip-link" href="#workspace-main">
+        Przejdź do danych obiektu
+      </a>
       <header className="brandbar">
-        <span className="brand">Burbot<span className="brand-dot">.</span></span>
-        <span className="local-badge">EXTRACTION WORKSPACE</span>
+        <span className="brand">
+          Burbot<span className="brand-dot">.</span>
+        </span>
+        <span className="local-badge">Przestrzeń robocza</span>
       </header>
       <WorkflowTabs />
       <ViewManagerPanel />
@@ -51,19 +61,34 @@ export function App() {
       <div className="connection-bar">
         <span id="connection">Połącz stronę, aby wydzielać wartości</span>
         <div className="connection-actions">
-          <input id="import-file" type="file" accept="application/json,.json" hidden />
-          <button id="import" className="text-button">Import JSON</button>
-          <button id="connect" className="text-button">Połącz</button>
+          <input
+            id="import-file"
+            type="file"
+            accept="application/json,.json"
+            hidden
+          />
+          <button id="import" className="text-button">
+            Import JSON
+          </button>
+          <button id="connect" className="text-button">
+            Połącz
+          </button>
         </div>
       </div>
-      <main id="workspace-main">
+      <main id="workspace-main" tabIndex={-1}>
         <section id="empty" className="empty-state">
           <span className="eyebrow">ZACZNIJ NA STRONIE</span>
-          <h1>Zaznacz. Zapisz.<br />Uporządkuj dane.</h1>
+          <h1>
+            Zaznacz. Zapisz.
+            <br />
+            Uporządkuj dane.
+          </h1>
           <p>Zaznacz nazwę projektu, naboru albo operatora na stronie.</p>
           <p>
-            <strong>Prawy przycisk → Create Burbot object</strong><br />
-            Wybierz typ obiektu. Otworzymy go tutaj i przeprowadzimy Cię przez kolejne pola.
+            <strong>Prawy przycisk → Create Burbot object</strong>
+            <br />
+            Wybierz typ obiektu. Otworzymy go tutaj i przeprowadzimy Cię przez
+            kolejne pola.
           </p>
         </section>
         <section id="workspace" hidden>
@@ -76,26 +101,61 @@ export function App() {
                 <div className="popover menu">
                   <button id="export-excel">Eksportuj Excel</button>
                   <button id="export">Eksportuj workspace JSON</button>
-                  <button id="delete" className="danger">Usuń obiekt</button>
+                  <button id="delete" className="danger">
+                    Usuń obiekt
+                  </button>
                 </div>
               </details>
             </div>
             <div className="progress-label">
-              <span id="progress" /><span id="rule-count" />
+              <span id="progress" />
+              <span id="rule-count" />
             </div>
-            <progress id="progress-bar" value={0} max={1} aria-label="Uzupełnione pola" />
+            <progress
+              id="progress-bar"
+              value={0}
+              max={1}
+              aria-label="Uzupełnione pola"
+            />
+            <small className="progress-explanation">
+              Uzupełnij pola, dla których masz dane w źródłach.
+            </small>
           </div>
 
+          <nav className="section-navigation" aria-label="Sekcje obiektu">
+            <label htmlFor="section-select">Przejdź do sekcji</label>
+            <div className="section-navigation-controls">
+              <select id="section-select" />
+              <button id="section-go" type="button">
+                Przejdź
+              </button>
+              <button id="sections-toggle" type="button">
+                Rozwiń sekcje
+              </button>
+            </div>
+          </nav>
           <div id="fields" />
 
-          <section id="operator-contacts-section" className="business-section" hidden>
-            <details id="operator-contacts-panel" className="workspace-section-card">
+          <section
+            id="operator-contacts-section"
+            className="business-section"
+            hidden
+          >
+            <details
+              id="operator-contacts-panel"
+              className="workspace-section-card"
+            >
               <summary className="workspace-section-summary">
                 <span className="workspace-section-title">
                   <strong>Kontakty operatora</strong>
                   <small>Wiele adresów email i numerów telefonu</small>
                 </span>
-                <span id="operator-contact-count" className="workspace-section-status">Brak kontaktów</span>
+                <span
+                  id="operator-contact-count"
+                  className="workspace-section-status"
+                >
+                  Brak kontaktów
+                </span>
               </summary>
               <div className="workspace-section-body">
                 <div id="operator-contacts" />
@@ -103,22 +163,37 @@ export function App() {
             </details>
           </section>
 
-          <section id="file-sources-section" className="business-section" hidden>
+          <section
+            id="file-sources-section"
+            className="business-section"
+            hidden
+          >
             <details id="file-sources-panel" className="workspace-section-card">
               <summary className="workspace-section-summary">
                 <span className="workspace-section-title">
                   <strong>Pliki</strong>
-                  <small>Nazwa z pliku · oznaczenia ustawiasz po dodaniu</small>
+                  <small>Dokumenty, wymagania i podpisy</small>
                 </span>
-                <span id="file-source-count" className="workspace-section-status">Brak plików</span>
+                <span
+                  id="file-source-count"
+                  className="workspace-section-status"
+                >
+                  Brak plików
+                </span>
               </summary>
               <div className="workspace-section-body">
                 <p className="muted">
-                  Dodaj plik ze strony (.doc, .docx, .pdf, .xlsx, .png, .jpg, .jpeg). Nazwę pliku Burbot zachowuje technicznie, a Ty uzupełniasz nazwę dokumentu, cel, pola do wypełnienia, przeznaczenie, wymagalność i podpis.
+                  Dodaj dokument i opisz jego wymagania zgodnie z regulaminem.
+                  Obsługiwane pliki: .doc, .docx, .pdf, .xlsx, .png, .jpg,
+                  .jpeg.
                 </p>
                 <div id="file-source-list" className="file-source-list" />
                 <div className="file-source-toolbar">
-                  <button id="read-from-file" className="text-button" type="button">
+                  <button
+                    id="read-from-file"
+                    className="text-button"
+                    type="button"
+                  >
                     + Dodaj plik ze strony
                   </button>
                   <button
@@ -143,23 +218,41 @@ export function App() {
                   className="file-source-inheritance-hint"
                   hidden
                 >
-                  Dziedziczenie tworzy niezależne kopie plików projektu. Późniejsze zmiany projektu nie zmieniają plików tego naboru.
+                  Dziedziczenie tworzy niezależne kopie plików projektu.
+                  Późniejsze zmiany projektu nie zmieniają plików tego naboru.
                 </p>
-                <p id="file-source-mode-hint" className="file-source-mode-hint" hidden>
-                  Kliknij link do pliku .doc, .docx, .pdf, .xlsx, .png, .jpg lub .jpeg. Esc anuluje tryb.
+                <p
+                  id="file-source-mode-hint"
+                  className="file-source-mode-hint"
+                  hidden
+                >
+                  Kliknij link do pliku .doc, .docx, .pdf, .xlsx, .png, .jpg lub
+                  .jpeg. Esc anuluje tryb.
                 </p>
               </div>
             </details>
           </section>
 
-          <section id="operator-assignments-section" className="business-section" hidden>
-            <details id="operator-assignments-panel" className="workspace-section-card">
+          <section
+            id="operator-assignments-section"
+            className="business-section"
+            hidden
+          >
+            <details
+              id="operator-assignments-panel"
+              className="workspace-section-card"
+            >
               <summary className="workspace-section-summary">
                 <span className="workspace-section-title">
                   <strong>Operatorzy</strong>
                   <small>Projekt lub nabór może mieć kilku operatorów</small>
                 </span>
-                <span id="operator-assignment-count" className="workspace-section-status">Brak operatorów</span>
+                <span
+                  id="operator-assignment-count"
+                  className="workspace-section-status"
+                >
+                  Brak operatorów
+                </span>
               </summary>
               <div className="workspace-section-body">
                 <div id="operator-assignment-list" />
@@ -183,7 +276,10 @@ export function App() {
                   </label>
                   <label htmlFor="operator-assignment-role">
                     Rola
-                    <select id="operator-assignment-role" defaultValue="DODATKOWY">
+                    <select
+                      id="operator-assignment-role"
+                      defaultValue="DODATKOWY"
+                    >
                       <option value="GLOWNY">Główny</option>
                       <option value="DODATKOWY">Dodatkowy</option>
                     </select>
@@ -201,16 +297,26 @@ export function App() {
               <summary className="workspace-section-summary">
                 <span className="workspace-section-title">
                   <strong>Geografia</strong>
-                  <small id="geography-subtitle">Zakres terytorialny projektu lub naboru</small>
+                  <small id="geography-subtitle">
+                    Zakres terytorialny projektu lub naboru
+                  </small>
                 </span>
-                <span id="geography-count" className="workspace-section-status">Brak zakresu</span>
+                <span id="geography-count" className="workspace-section-status">
+                  Brak zakresu
+                </span>
               </summary>
               <div className="workspace-section-body">
                 <div id="geography-list" />
                 <details id="geography-add" className="geography-add">
                   <summary className="text-button">+ Dodaj geografię</summary>
                   <div className="geography-form">
-                    <label id="geography-operator-label" htmlFor="geography-operator" hidden>Operator naboru</label>
+                    <label
+                      id="geography-operator-label"
+                      htmlFor="geography-operator"
+                      hidden
+                    >
+                      Operator naboru
+                    </label>
                     <select id="geography-operator" hidden />
 
                     <label htmlFor="geography-role">Rola</label>
@@ -239,9 +345,14 @@ export function App() {
               <summary className="workspace-section-summary">
                 <span className="workspace-section-title">
                   <strong>Warianty dofinansowania</strong>
-                  <small>Przełączaj wielkość firmy bez przewijania powtarzalnych bloków</small>
+                  <small>
+                    Przełączaj wielkość firmy bez przewijania powtarzalnych
+                    bloków
+                  </small>
                 </span>
-                <span id="funding-status" className="workspace-section-status">Nie skonfigurowano</span>
+                <span id="funding-status" className="workspace-section-status">
+                  Nie skonfigurowano
+                </span>
               </summary>
               <div className="workspace-section-body">
                 <div id="funding" />
@@ -250,22 +361,32 @@ export function App() {
           </section>
 
           <section className="review-section">
-            <button id="preview" className="text-button" disabled>↻ Sprawdź ponowne wydzielenie</button>
+            <button id="preview" className="text-button" disabled>
+              ↻ Sprawdź ponowne wydzielenie
+            </button>
             <div id="results" hidden>
               <div id="result-list" />
-              <button id="apply" className="primary" disabled>Zastosuj poprawne wyniki</button>
+              <button id="apply" className="primary" disabled>
+                Zastosuj poprawne wyniki
+              </button>
             </div>
           </section>
         </section>
       </main>
       <p id="notice" role="status" aria-live="polite" />
       <div id="capture-hint" className="capture-hint" hidden>
-        Wybierz pole, aby wydzielić wartość z aktywnej strony.
+        Wybierz pole, aby wpisać wartość lub pobrać ją ze strony.
       </div>
-      <section id="capture-area" className="capture-area" hidden aria-label="Aktywne wydzielanie pola">
+      <section
+        id="capture-area"
+        className="capture-area"
+        hidden
+        aria-label="Aktywne wydzielanie pola"
+      >
         <div className="capture-heading">
           <span>
-            <small>WYDZIELANIE</small><strong id="active-label" />
+            <small>EDYCJA POLA</small>
+            <strong id="active-label" />
             <span id="active-context" className="muted" />
           </span>
           <span className="capture-heading-actions">
@@ -273,28 +394,44 @@ export function App() {
               id="capture-collapse"
               className="icon-button"
               type="button"
-              aria-label="Zwiń panel wydzielania"
+              aria-label="Zwiń edytor pola"
               aria-expanded="true"
             >
               ⌄
             </button>
-            <button id="deselect" className="icon-button" aria-label="Zamknij wydzielanie">×</button>
+            <button
+              id="deselect"
+              className="icon-button"
+              aria-label="Zamknij wydzielanie"
+            >
+              ×
+            </button>
           </span>
         </div>
-        <div className="capture-tools">
-          <button id="pick">Wybierz element</button>
-          <button id="selected-text">Użyj zaznaczenia</button>
-          <button id="page-url">Użyj URL strony</button>
-        </div>
-        <div id="capture-source" hidden>
-          <label htmlFor="method">Odczytaj ze strony</label>
-          <select id="method" />
-          <div id="sample" className="source-sample" />
-        </div>
-        <label id="value-label" htmlFor="edit-value">Wartość</label>
+        <label id="value-label" htmlFor="edit-value">
+          Wartość
+        </label>
         <div id="value-control" />
-        <p id="converted" className="hint" />
-        <button id="save" className="primary">Zapisz i przejdź dalej</button>
+        <details id="capture-acquire" className="capture-acquire">
+          <summary>Pobierz wartość ze strony</summary>
+          <div className="capture-tools">
+            <button id="pick">Wybierz element</button>
+            <button id="selected-text">Użyj zaznaczenia</button>
+            <button id="page-url">Użyj URL strony</button>
+          </div>
+          <div id="capture-source" hidden>
+            <label htmlFor="method">Odczytaj ze strony</label>
+            <select id="method" />
+            <div id="sample" className="source-sample" />
+          </div>
+        </details>
+        <div id="field-evidence" />
+        <div className="capture-save">
+          <p id="converted" className="hint" role="status" aria-live="polite" />
+          <button id="save" className="primary">
+            Zapisz i przejdź dalej
+          </button>
+        </div>
         <details id="rule-details">
           <summary>Szczegóły reguły</summary>
           <pre id="rule" />

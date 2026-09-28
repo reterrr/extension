@@ -346,6 +346,19 @@ npm run start
 
 `npm run build` creates a loadable extension in `dist/`.
 
+To check workspace interactions and responsive layout in a browser:
+
+```bash
+npx playwright install chromium
+npm run test:ui
+```
+
+This test uses the built sidepanel with a deterministic WebExtension API fixture.
+It checks editing and validation, keyboard navigation, section controls, active
+objects, and layouts from 320 to 1440 px. It does not write to SQLite or replace
+testing the installed extension in Firefox. Set `BURBOT_CHROMIUM` to use an
+existing Chromium executable, and `BURBOT_UI_SCREENSHOTS` to save screenshots.
+
 For manual loading:
 
 1. Open `about:debugging#/runtime/this-firefox`.

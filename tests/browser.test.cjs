@@ -47,7 +47,7 @@ test(
     await until(
       () =>
         f.ui(
-          `document.querySelector('#object-title').textContent==='Generator Kompetencji 3.0' && document.querySelector('#connection').textContent.includes('connected')`,
+          `document.querySelector('#object-title').textContent==='Generator Kompetencji 3.0' && document.querySelector('#connection').dataset.connected==='true'`,
         ),
       "new object focus",
     );
@@ -117,6 +117,7 @@ test(
       "saved date",
     );
     await f.click('[data-field="announcements_site_url"]');
+    await f.click("#capture-acquire > summary");
     await f.click("#page-url");
     await until(
       () =>

@@ -47,8 +47,8 @@ async function activeTab(): Promise<browser.tabs.Tab | undefined> {
 }
 
 function workspacePageUrl(): string {
-  const connection = document.getElementById("connection")?.textContent ?? "";
-  return connection.includes("· connected") ? activePageUrl : "";
+  const connected = document.getElementById("connection")?.dataset.connected === "true";
+  return connected ? activePageUrl : "";
 }
 
 function comparablePageUrl(value: string): string {

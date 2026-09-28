@@ -123,8 +123,8 @@ async function refreshActivePage(): Promise<void> {
 }
 
 function workspacePageUrl(): string {
-  const connection = document.getElementById("connection")?.textContent ?? "";
-  return connection.includes("· connected") ? activePageUrl : "";
+  const connected = document.getElementById("connection")?.dataset.connected === "true";
+  return connected ? activePageUrl : "";
 }
 
 function isLocal(object: LegacyStoredObject, pageUrl: string): boolean {

@@ -25,7 +25,7 @@ if (!document.querySelector("style[data-burbot-workflow-tabs]")) {
   border-radius: 8px;
   background: #f8faf8;
   color: #65736a;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 650;
 }
 .workflow-tabs button.active {
@@ -38,7 +38,7 @@ if (!document.querySelector("style[data-burbot-workflow-tabs]")) {
   padding: 1px 5px;
   border-radius: 999px;
   background: #dfece3;
-  font-size: 8px;
+  font-size: 12px;
   font-weight: 800;
 }
 
@@ -66,7 +66,7 @@ html[data-workflow-mode="view"] .view-manager {
 .view-manager-header strong {
   display: block;
   margin-top: 1px;
-  font-size: 11px;
+  font-size: 12px;
 }
 .view-manager-header small {
   display: block;
@@ -74,7 +74,7 @@ html[data-workflow-mode="view"] .view-manager {
   margin-top: 1px;
   overflow: hidden;
   color: #748078;
-  font-size: 8px;
+  font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -107,7 +107,7 @@ html[data-workflow-mode="view"] .view-manager {
   display: block;
   overflow: hidden;
   color: #2c3c33;
-  font-size: 9px;
+  font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -116,7 +116,7 @@ html[data-workflow-mode="view"] .view-manager {
   display: block;
   margin-top: 1px;
   color: #849087;
-  font-size: 7px;
+  font-size: 12px;
 }
 .view-member-remove,
 .view-search-toggle {
@@ -145,7 +145,7 @@ html[data-workflow-mode="view"] .view-manager {
   border: 1px solid #ccd8cf;
   border-radius: 7px;
   background: #fbfcfb;
-  font-size: 9px;
+  font-size: 12px;
 }
 .view-search > button {
   min-height: 31px;
@@ -154,7 +154,7 @@ html[data-workflow-mode="view"] .view-manager {
   border-radius: 7px;
   background: #edf5f0;
   color: #315e47;
-  font-size: 9px;
+  font-size: 12px;
   font-weight: 700;
 }
 .view-search > button:disabled {
@@ -172,7 +172,7 @@ html[data-workflow-mode="view"] .view-manager {
   display: block;
   margin: 6px 2px 2px;
   color: #7f8a83;
-  font-size: 8px;
+  font-size: 12px;
 }
 .view-manager-error {
   color: #a34949;
@@ -219,7 +219,7 @@ html[data-workflow-mode="import"] #capture-area {
 .object-workflow-actions button {
   min-height: 28px;
   padding: 5px 8px;
-  font-size: 9px;
+  font-size: 12px;
 }
 .object-workflow-actions #stage-object {
   flex: 1;
@@ -267,7 +267,7 @@ html[data-workflow-mode="import"] #capture-area {
   padding: 6px 7px;
   list-style: none;
   color: #68766d;
-  font-size: 9px;
+  font-size: 12px;
   font-weight: 700;
   cursor: pointer;
 }
@@ -288,7 +288,7 @@ html[data-workflow-mode="import"] #capture-area {
   border-radius: 999px;
   background: #edf1ee;
   text-align: center;
-  font-size: 8px;
+  font-size: 12px;
 }
 .commit-pending-list {
   padding: 0 6px 6px;
@@ -309,14 +309,14 @@ html[data-workflow-mode="import"] #capture-area {
 }
 .commit-pending-copy strong {
   overflow: hidden;
-  font-size: 9px;
+  font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .commit-pending-copy small {
   display: block;
   color: #849087;
-  font-size: 7px;
+  font-size: 12px;
 }
 .commit-stage-pending {
   min-height: 25px;
@@ -325,7 +325,7 @@ html[data-workflow-mode="import"] #capture-area {
   border-radius: 6px;
   background: #edf5f0;
   color: #315e47;
-  font-size: 8px;
+  font-size: 12px;
   font-weight: 700;
 }
 .commit-discard-pending {
@@ -346,7 +346,7 @@ html[data-workflow-mode="import"] #capture-area {
 .commit-object-actions button {
   min-height: 26px;
   padding: 4px 7px;
-  font-size: 8px;
+  font-size: 12px;
 }
 .commit-unstage {
   color: #536b5d;
@@ -387,7 +387,7 @@ html[data-workflow-mode="import"] #capture-area {
   margin: 0 auto 14px;
   max-width: 390px;
   color: #728078;
-  font-size: 10px;
+  font-size: 12px;
   line-height: 1.45;
 }
 
@@ -417,7 +417,7 @@ html[data-workflow-mode="view"] .commit-panel {
   border-radius: 7px;
   background: #edf5f0;
   color: #315e47;
-  font-size: 9px;
+  font-size: 12px;
   font-weight: 700;
 }
 .view-members {
@@ -440,7 +440,7 @@ html[data-workflow-mode="view"] .commit-panel {
   border: 1px solid #dce5de;
   border-radius: 6px;
   background: #f8faf8;
-  font-size: 8px;
+  font-size: 12px;
 }
 .view-member-stage {
   padding: 4px 7px;
@@ -472,11 +472,11 @@ html[data-workflow-mode="view"] .commit-panel {
 }
 .view-catalog-head strong {
   color: #45564c;
-  font-size: 9px;
+  font-size: 12px;
 }
 .view-catalog-head small {
   color: #849087;
-  font-size: 8px;
+  font-size: 12px;
 }
 .view-search-results {
   max-height: 220px;
@@ -502,7 +502,7 @@ html[data-workflow-mode="view"] .commit-panel {
   white-space: nowrap;
 }
 .import-review-header small {
-  font-size: 8px;
+  font-size: 12px;
 }
 .import-review-layout {
   grid-template-columns: minmax(190px, 26%) minmax(0, 1fr);
@@ -517,7 +517,7 @@ html[data-workflow-mode="view"] .commit-panel {
   margin-top: 5px;
 }
 .import-review-list summary {
-  font-size: 9px;
+  font-size: 12px;
 }
 .import-review-list button {
   margin-top: 3px;
@@ -525,10 +525,10 @@ html[data-workflow-mode="view"] .commit-panel {
   border-radius: 6px;
 }
 .import-review-list button > span {
-  font-size: 9px;
+  font-size: 12px;
 }
 .import-review-list button small {
-  font-size: 7px;
+  font-size: 12px;
 }
 .import-review-detail {
   padding: 9px 10px 76px;
@@ -542,7 +542,7 @@ html[data-workflow-mode="view"] .commit-panel {
 }
 .import-review-edit-badge {
   padding: 2px 6px;
-  font-size: 7px;
+  font-size: 12px;
 }
 .import-review-sources {
   gap: 5px;
@@ -551,7 +551,7 @@ html[data-workflow-mode="view"] .commit-panel {
 .import-review-sources button {
   min-height: 24px;
   padding: 3px 5px;
-  font-size: 8px;
+  font-size: 12px;
 }
 .import-review-section {
   gap: 5px;
@@ -561,10 +561,10 @@ html[data-workflow-mode="view"] .commit-panel {
   padding-top: 8px;
 }
 .import-review-section-heading strong {
-  font-size: 10px;
+  font-size: 12px;
 }
 .import-review-section-heading > small {
-  font-size: 8px;
+  font-size: 12px;
 }
 .import-review-fields {
   grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
@@ -577,21 +577,21 @@ html[data-workflow-mode="view"] .commit-panel {
 }
 .import-review-field-head small,
 .import-review-field-meta span {
-  font-size: 8px;
+  font-size: 12px;
 }
 .import-review-workspace-value {
-  font-size: 10px;
+  font-size: 12px;
   line-height: 1.3;
 }
 .import-review-field-meta {
   gap: 5px;
 }
 .import-review-source-button {
-  font-size: 8px;
+  font-size: 12px;
 }
 .import-review-finance-card > summary {
   padding: 6px 7px;
-  font-size: 9px;
+  font-size: 12px;
 }
 .import-review-finance-fields {
   gap: 4px;
@@ -603,7 +603,7 @@ html[data-workflow-mode="view"] .commit-panel {
 }
 .import-review-hint {
   margin: 8px 0;
-  font-size: 9px;
+  font-size: 12px;
 }
 .import-review-update-existing {
   margin: 7px 0;
@@ -621,7 +621,7 @@ html[data-workflow-mode="view"] .commit-panel {
 }
 .import-review-actions button {
   min-height: 30px;
-  font-size: 9px;
+  font-size: 12px;
 }
 
 @media (max-width: 640px) {
@@ -669,7 +669,7 @@ html[data-workflow-mode="view"] #switcher {
   content: "▸";
   flex: none;
   color: #8a968e;
-  font-size: 9px;
+  font-size: 12px;
 }
 .view-manager-catalog[open] > summary::before {
   content: "▾";
@@ -680,13 +680,13 @@ html[data-workflow-mode="view"] #switcher {
 }
 .view-manager-catalog > summary strong {
   display: block;
-  font-size: 9px;
+  font-size: 12px;
 }
 .view-manager-catalog > summary small {
   display: block;
   margin-top: 1px;
   color: #849087;
-  font-size: 7px;
+  font-size: 12px;
 }
 .view-manager-catalog-count {
   min-width: 22px;
@@ -695,7 +695,7 @@ html[data-workflow-mode="view"] #switcher {
   background: #edf2ee;
   color: #66746b;
   text-align: center;
-  font-size: 8px;
+  font-size: 12px;
   font-weight: 750;
 }
 .view-manager-catalog-body {
@@ -739,10 +739,10 @@ html[data-workflow-mode="view"] #switcher {
   background: #f2f7f3;
 }
 .view-member-open strong {
-  font-size: 9.5px;
+  font-size: 12px;
 }
 .view-member-open small {
-  font-size: 7.5px;
+  font-size: 12px;
 }
 
 `;

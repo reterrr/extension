@@ -76,7 +76,7 @@ async function writeStaticFiles() {
   for (const [name, [title, stylesheet]] of Object.entries(pages)) {
     await writeFile(
       resolve(dist, `${name}.html`),
-      `<!doctype html>\n<html lang="en">\n<head>\n  <meta charset="utf-8" />\n  <meta name="viewport" content="width=device-width,initial-scale=1" />\n  <title>${title}</title>\n  <link rel="stylesheet" href="${stylesheet}" />\n</head>\n<body>\n  <div id="root"></div>\n  <script defer src="${name}.js"></script>\n</body>\n</html>\n`,
+      `<!doctype html>\n<html lang="${name === "sidepanel" ? "pl" : "en"}">\n<head>\n  <meta charset="utf-8" />\n  <meta name="viewport" content="width=device-width,initial-scale=1" />\n  <title>${title}</title>\n  <link rel="stylesheet" href="${stylesheet}" />\n</head>\n<body>\n  <div id="root"></div>\n  <script defer src="${name}.js"></script>\n</body>\n</html>\n`,
       "utf8",
     );
   }

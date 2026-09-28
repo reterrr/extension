@@ -211,6 +211,8 @@ function presentPdfCapture(
   pending = { objectId: object.id, field, target, candidate };
 
   const source = $("capture-source");
+  const acquire = document.getElementById("capture-acquire");
+  if (acquire instanceof HTMLDetailsElement) acquire.open = true;
   source.hidden = false;
   const method = $("method") as HTMLSelectElement;
   method.replaceChildren(
@@ -325,6 +327,7 @@ async function syncReaderMode(): Promise<void> {
   if (!isReader) return;
 
   $("connection").textContent = "Burbot PDF Reader · zaznacz tekst w dokumencie";
+  $("connection").dataset.connected = "false";
   const connect = $("connect") as HTMLButtonElement;
   connect.disabled = true;
   const hint = $("capture-hint");

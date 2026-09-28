@@ -4,7 +4,7 @@ if (!document.querySelector("style[data-burbot-operator-assignments]")) {
   style.textContent = `
 .operator-assignment-empty {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
   padding: 8px 2px;
 }
 .operator-assignment-row {
@@ -47,7 +47,7 @@ if (!document.querySelector("style[data-burbot-operator-assignments]")) {
 .operator-assignment-add label {
   display: grid;
   gap: 3px;
-  font-size: 10px;
+  font-size: 12px;
   color: var(--muted);
 }
 #operator-assignment-search {
@@ -60,7 +60,7 @@ if (!document.querySelector("style[data-burbot-operator-assignments]")) {
 .operator-assignment-search-feedback {
   min-height: 14px;
   color: var(--muted);
-  font-size: 9px;
+  font-size: 12px;
   line-height: 1.2;
 }
 @media (max-width: 520px) {

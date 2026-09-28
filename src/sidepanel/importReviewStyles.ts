@@ -30,7 +30,7 @@ style.textContent = `
     padding: 1px 5px;
     border-radius: 999px;
     background: #e5eee7;
-    font-size: 11px;
+    font-size: 12px;
   }
   .import-review-panel {
     margin: 8px 12px 12px;
@@ -79,7 +79,7 @@ style.textContent = `
     justify-content: space-between;
     gap: 8px;
     color: #68756c;
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 700;
     text-transform: uppercase;
     cursor: pointer;
@@ -117,7 +117,7 @@ style.textContent = `
   .import-review-list button small {
     white-space: nowrap;
     color: #7b8b81;
-    font-size: 9px;
+    font-size: 12px;
   }
   .import-review-detail {
     padding: 14px;
@@ -142,7 +142,7 @@ style.textContent = `
     background: #f1f8f2;
     color: #41634c;
     padding: 3px 7px;
-    font-size: 9px;
+    font-size: 12px;
     font-weight: 700;
   }
   .import-review-sources {
@@ -176,7 +176,7 @@ style.textContent = `
   .import-review-section-heading > small {
     max-width: 48%;
     color: #849088;
-    font-size: 9px;
+    font-size: 12px;
     text-align: right;
   }
   .import-review-fields {
@@ -204,7 +204,7 @@ style.textContent = `
   }
   .import-review-field-head small { color: #78867c; }
   .import-review-field-head span {
-    font-size: 9px;
+    font-size: 12px;
     font-weight: 700;
     white-space: nowrap;
   }
@@ -242,7 +242,7 @@ style.textContent = `
     overflow: hidden;
     text-overflow: ellipsis;
     color: #7d8981;
-    font-size: 9px;
+    font-size: 12px;
     white-space: nowrap;
   }
   .import-review-source-button {
@@ -250,7 +250,7 @@ style.textContent = `
     background: transparent;
     padding: 2px 0;
     font: inherit;
-    font-size: 10px;
+    font-size: 12px;
     font-weight: 650;
     cursor: pointer;
     white-space: nowrap;
@@ -278,7 +278,7 @@ style.textContent = `
   }
   .import-review-file-card a {
     color: #607369;
-    font-size: 9px;
+    font-size: 12px;
     overflow-wrap: anywhere;
   }
   .import-review-file-metadata {
@@ -294,12 +294,12 @@ style.textContent = `
   }
   .import-review-file-metadata small {
     color: #829087;
-    font-size: 8px;
+    font-size: 12px;
     font-weight: 650;
   }
   .import-review-file-metadata strong {
     color: #31443a;
-    font-size: 10px;
+    font-size: 12px;
     font-weight: 600;
     line-height: 1.3;
     overflow-wrap: anywhere;
@@ -315,12 +315,12 @@ style.textContent = `
     gap: 10px;
     padding: 9px 10px;
     cursor: pointer;
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 700;
   }
   .import-review-finance-card > summary small {
     color: #859188;
-    font-size: 9px;
+    font-size: 12px;
     font-weight: 500;
   }
   .import-review-finance-fields {
@@ -336,7 +336,7 @@ style.textContent = `
   }
   .import-review-finance-fields label > small {
     color: #7a887f;
-    font-size: 9px;
+    font-size: 12px;
   }
   .import-review-remove-finance {
     margin: 0 9px 9px;
@@ -347,7 +347,7 @@ style.textContent = `
   .import-review-hint {
     margin: 12px 0;
     color: #748178;
-    font-size: 11px;
+    font-size: 12px;
   }
   .import-review-update-existing {
     display: grid;
@@ -360,7 +360,7 @@ style.textContent = `
     color: #365743;
   }
   .import-review-update-existing strong {
-    font-size: 11px;
+    font-size: 12px;
   }
   .import-review-update-existing span {
     color: #253a2e;
@@ -370,7 +370,7 @@ style.textContent = `
   }
   .import-review-update-existing small {
     color: #65776c;
-    font-size: 9px;
+    font-size: 12px;
     line-height: 1.35;
   }
   .import-review-approve { width: 100%; }

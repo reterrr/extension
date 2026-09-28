@@ -22,7 +22,7 @@ if (!document.querySelector("style[data-burbot-geography]")) {
 }
 .geography-empty {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
   padding: 8px 2px;
 }
 .geography-operator-group {
@@ -48,7 +48,7 @@ if (!document.querySelector("style[data-burbot-geography]")) {
 }
 .geography-operator-heading small {
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
 }
 .geography-empty-operator {
   padding: 5px 2px 2px;
@@ -129,7 +129,7 @@ if (!document.querySelector("style[data-burbot-geography]")) {
 }
 .geography-result small {
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
   margin-top: 1px;
 }
 `;

@@ -11,8 +11,8 @@ function updateEvidenceButtonLabel(): void {
   const button = document.getElementById("selected-text");
   if (!(button instanceof HTMLButtonElement)) return;
   button.textContent = currentChoiceControl()
-    ? "Use selected text as evidence"
-    : "Use selected text";
+    ? "Zaznaczenie jako źródło"
+    : "Użyj zaznaczenia";
 }
 
 function rememberChoice(): void {

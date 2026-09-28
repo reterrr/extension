@@ -31,7 +31,7 @@ export function initCaptureFeedbackUi(): void {
   border-radius: 6px;
   background: #edf4eb;
   color: #436349;
-  font-size: 10px;
+  font-size: 12px;
   overflow-wrap: anywhere;
 }
 #capture-notice.error {
