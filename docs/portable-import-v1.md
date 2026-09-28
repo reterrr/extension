@@ -161,7 +161,9 @@ Current file metadata fields are:
   - `Wymagany podpisany plik`
   - `Dowód w systemie operatora`
 
-In the UI, unset values are presented as `Wybierz na podstawie treści`, `Nie ustalono`, or `Do ustalenia z instrukcji`; those are placeholders, not stored enum values.
+In the UI, every unset file-classification value is presented consistently as `Nie ustalono`. It is a UI placeholder/unset state, not a stored enum value. For `has_fields`, the empty value is distinct from both `true` and `false`.
+
+When file metadata is missing, Burbot may apply conservative filename-based defaults for common BUR/PSF document names. Explicit import metadata always wins. Examples: a real `Regulamin...` file defaults to `purpose: "Regulamin"`, `has_fields: false`, `client_requirement: "Informacyjny"`; PUR/formularz/instrukcja/ranking/umowa patterns use their own more specific rules. An attachment whose name merely contains `do_Regulaminu` is not treated as a regulation when a more specific document pattern such as PUR or karta oceny is present.
 
 Older v1 imports may still contain `document_kind` and `delivery_method`. They remain accepted for backward compatibility but are not part of the current file editor/export model.
 
