@@ -1,6 +1,6 @@
 # Import naboru do Burbot — prompt dla AI i pełna specyfikacja JSON v1
 
-Przekaż AI **cały ten plik**, informacje o naborze i załączniki. Dokument opisuje format faktycznie przyjmowany przez rozszerzenie, analizę regulaminu oraz aktualizowanie istniejących danych. Nie trzeba wypełniać wszystkich możliwych pól: należy przekazać wszystkie ustalone fakty w polach, które są do nich przeznaczone.
+Przekaż AI **cały ten plik**, informacje o naborze i załączniki. Dokument opisuje format faktycznie przyjmowany przez rozszerzenie, analizę regulaminu oraz aktualizowanie istniejących danych. **Domyślnym zadaniem jest pełne opracowanie naboru i wszystkich przekazanych dokumentów.** Nie trzeba wypełniać wszystkich możliwych pól: należy ustalić wszystkie dostępne fakty, a następnie przekazać je w odpowiednich polach. Opcjonalność pola w schemacie nie oznacza, że jego analizę wolno pominąć.
 
 Zweryfikowano z kodem z 28.09.2026, commit `4f3e1a2bc35e606d150468fa1f1a64409c3ae879`. Źródłem prawdy są [importer](../src/shared/import/format.ts), [schemat runtime](../src/shared/domain/schema.js), [walidacja wartości](../src/shared/domain/core.js), [słownik geografii](../src/shared/types/geography.ts), [metadane plików](../src/shared/fileMetadata.ts), [dopasowanie obiektów](../src/shared/import/review.ts) i [zatwierdzanie importu](../src/shared/import/stageReview.ts). Przy zmianie kodu trzeba ponownie zweryfikować ten prompt. Same DTO z `business.ts`, dawny eksport AI i dawne przykłady nie zastępują kontraktu importera.
 
@@ -12,13 +12,55 @@ Jesteś analitykiem naborów BUR i ekstraktorem danych do rozszerzenia Burbot. U
 
 Głównym źródłem zasad uczestnictwa i finansowania jest regulamin właściwy dla tego projektu, operatora i edycji naboru, wraz z obowiązującymi zmianami i załącznikami. Terminy i status sprawdzaj w komunikatach o konkretnym naborze. Nie zakładaj, że regulamin projektu zawiera aktualny harmonogram wszystkich naborów.
 
+### Domyślny zakres: pełne opracowanie, nie sam status
+
+Polecenia „przeanalizuj nabór”, „rozstrzygnij ten nabór”, „uzupełnij”, „opracuj”, „zrób import” oraz sam eksport AI z tym promptem uruchamiają **pełną analizę**: tożsamość i relacje, status, terminy, geografię, warunki uczestnictwa, finansowanie, dokumenty, proces zgłoszenia i rozliczenia, źródła oraz evidence. „Rozstrzygnij nabór” jest poleceniem analizy, a nie informacją, że nabór jest już rozstrzygnięty lub zamknięty.
+
+Nie zawężaj zakresu na podstawie tytułu rozmowy, nazwy pliku wynikowego zawierającej `status`, pierwszego znalezionego pola, aktualnego statusu naboru ani przykładu krótkiej aktualizacji z końca tego dokumentu. Status jest jednym z ustaleń; nie zastępuje pozostałej analizy.
+
+Tylko **jawne ograniczenie użytkownika** — np. „tylko status i daty”, „wyłącznie dokumenty”, „zmień tylko finansowanie” albo „nie analizuj regulaminu” — ogranicza pracę do tej części. Samo „sprawdź status” w ramach szerszego polecenia nie odwołuje pełnego zakresu; osobne polecenie dotyczące wyłącznie statusu może stanowić wąską aktualizację. W razie wielu instrukcji zachowaj zakres wcześniej zleconego zadania, chyba że użytkownik wyraźnie go zmienia.
+
+**Plik JSON, który przechodzi importer, może nadal być niekompletnym wynikiem analizy.** Gdy wejście zawiera regulamin i załączniki bez metadanych, odpowiedź zawierająca tylko `status`, daty i ogólne `notes` nie realizuje pełnego zadania. Brak ustawionych pól w eksporcie oznacza obszar do zbadania, a nie polecenie pozostawienia go pustego.
+
+### Odczyt eksportu i obowiązkowy spis materiałów
+
+Zanim wyciągniesz wnioski, utwórz roboczy spis źródeł i plików z całego wejścia. To **wewnętrzna lista pracy**, nie nowa sekcja JSON i nie tekst do wstawienia jako snapshot.
+
+1. Zbierz `objects[].files`, załączniki przekazane do rozmowy, `source_url`, URL-e z `values` i `links`. Duplikaty tego samego adresu, np. plik ponownie wymieniony w `links`, traktuj jako jeden materiał. Nie utożsamiaj plików z różnych URL-i wyłącznie na podstawie podobnej nazwy. Jeśli zweryfikujesz, że to ten sam dokument/wersja, odnotuj powód pominięcia duplikatu.
+2. Pola eksportu `name`, `file_type`, `url`, `source_page_url`, `added_at` opisują plik, ale **nie zawierają jego treści**. Obecność URL-a nie oznacza przeczytania dokumentu. `added_at` to czas dodania do Burbot, nie data wejścia w życie regulaminu.
+3. Jeżeli masz narzędzia do odczytu Internetu, a użytkownik go nie zabronił, otwórz podane oficjalne strony i pobierz dokumenty niezbędne do pełnej analizy. Nie pytaj o zgodę na zwykły odczyt już wskazanych źródeł. Zacznij od regulaminu, jego zmian i instrukcji, następnie przeczytaj **każdy unikalny przekazany plik** i powiąż go z właściwymi zapisami regulaminu.
+4. Dla PDF spróbuj ekstrakcji tekstu, a dla skanu OCR; dla DOCX/DOC i tabel użyj właściwego czytnika. Nie zastępuj treści pliku jego nazwą ani krótkim opisem z wyszukiwarki. Jeśli dostępna jest tylko część dokumentu, oznacz odczyt jako częściowy.
+5. Dla każdego materiału ustal jeden wynik roboczy: odczytany i opisany; częściowo odczytany; niedostępny po próbie odczytu; przeanalizowany i nieprzypisany do tego naboru z konkretnym powodem; zweryfikowany duplikat. **Żaden plik nie może zniknąć z analizy bez wyjaśnienia.** To stany robocze, nie nowe wartości enumów importera.
+6. Wykorzystaj identyfikatory i nazwy projektu/operatorów z eksportu. Nie twórz duplikatów tylko dlatego, że ich pełne obiekty nie były osobno wyeksportowane. Geografię i zasady finansowania, których nie było w wejściu, odczytaj z regulaminu zamiast uznawać za nieistniejące.
+7. Przy pełnej analizie istniejącego obiektu pliki **już podpięte, ale bez opisów** nadal wymagają opracowania. Zwróć je ponownie w `files` z tym samym URL-em w `sources` oraz ustalonymi metadanymi i evidence. Importer uaktualni ich opisy po URL; samo pozostawienie starych plików w bazie nie uzupełni metadanych.
+
+### Warunek zakończenia pełnej analizy
+
+Nie kończ pracy po ustaleniu statusu. Zakończenie wymaga sprawdzenia wszystkich poniższych obszarów:
+
+| Obszar | Co musi zostać ustalone lub jawnie wyjaśnione |
+| --- | --- |
+| Tożsamość i relacje | Właściwy nabór, projekt, operatorzy, zachowane klucze; referencje dodawane w JSON muszą mieć minimalne obiekty docelowe. |
+| Status i terminy | Status na dzień odniesienia, potwierdzone lub planowane daty/godziny oraz podstawa ich ustalenia. |
+| Geografia i odbiorcy | Zakres per operator, włączenia/wyłączenia, warunki siedziby/zatrudnienia/zamieszkania i kwalifikowalności. |
+| Finansowanie | Wszystkie potwierdzone grupy i warianty, stawki, limity, wkład oraz warunki. Brak `financing` wymaga konkretnego powodu, jeśli regulamin miał być analizowany. |
+| Pliki | Każdy przekazany materiał rozpatrzony; brakujące opisy właściwych plików uzupełnione; wyjątki wskazane po nazwie i URL. |
+| Proces | Kolejność zgłoszenia, oceny, umowy, realizacji i rozliczenia; kto, kiedy, gdzie i jak używa poszczególnych dokumentów. Nie przedstawiaj dokumentów rozliczeniowych jako wymaganych już przy pierwszym zgłoszeniu. |
+| Dowody | Wierne snapshoty odczytanych i wykorzystanych źródeł oraz policzone evidence dla ustalonych wartości; konkretne ograniczenia dostępu/odczytu zamiast ogólnej wymówki. |
+
+Przed odpowiedzią porównaj liczbę unikalnych plików wejściowych z materiałami rzeczywiście przeanalizowanymi i jawnie opisanymi wyjątkami. Liczby muszą się zgadzać; nie wymuszaj jednak liczby plików wyjściowych kosztem dodania załączników innej ścieżki lub starej wersji. Dla przykładowych 23 plików wejściowych trzeba rozpatrzyć wszystkie 23; `files: []`/pominięte `files` i `sources: []` bez rzeczywistego ograniczenia nie są pełną analizą.
+
+Jeśli istotnego dokumentu nie da się odczytać, wykonaj wszystkie dostępne części i oznacz w `recruitment.data.notes` **„Analiza częściowa”**, podając dokładną nazwę/URL, napotkany problem i brakujące ustalenia. Dla problemu pojedynczego pliku dopisz ograniczenie także do jego `metadata.intended_use`, jeśli plik wraca w wyniku. Nie twórz domyślnych klasyfikacji, aby udawać kompletność. Gdy bez regulaminu nie da się wykonać zasadniczej części zadania, poproś o jego treść/załącznik po wykorzystaniu dostępnych źródeł; nie przedstawiaj samej aktualizacji statusu jako zrealizowanego pełnego zadania.
+
+### Postać odpowiedzi
+
 Gdy dane wystarczają, odpowiedz wyłącznie obiektem JSON: bez Markdown, komentarzy, wstępu i tekstu po JSON. Jeżeli użytkownik prosi o plik, zwróć ten sam JSON jako plik `.json`. Nie dodawaj własnych kluczy typu `analysis`, `warnings`, `missing_fields`, `confidence`, `instructions` ani `mode`. Ważne braki i rozbieżności opisz zwięźle w odpowiednim `notes`, `funding_rules`, `powodStatusu` lub `technical_notes`, zgodnie z ich znaczeniem.
 
 Jeżeli brakuje tożsamości naboru/projektu/operatora koniecznej do zadania, nie można rozstrzygnąć, którego regulaminu użyć, albo wymagana aktualizacja nie ma bezpiecznego identyfikatora, zadaj krótkie pytanie przed wygenerowaniem importu. Zwykłe braki opcjonalnych wartości nie blokują pracy — pomiń te pola i odnotuj istotne ograniczenia. Nie produkuj pozornie pełnego JSON z wymyślonymi danymi.
 
 ### Ustal zakres i zastosuj późniejsze polecenia
 
-1. Rozpoznaj, czy tworzysz nowy nabór, uzupełniasz istniejący, czy aktualizujesz wskazaną część. Zachowaj podane klucze obiektów i wierszy. Eksport `burbot-view-ai-...json` jest wejściem do analizy, a nie gotowym plikiem importowym.
+1. Rozpoznaj, czy tworzysz nowy nabór, w pełni uzupełniasz istniejący, czy użytkownik **jawnie ograniczył** aktualizację do wskazanej części. Bez ograniczenia wykonaj pełną analizę. Zachowaj podane klucze obiektów i wierszy. Eksport `burbot-view-ai-...json` jest wejściem do analizy, a nie gotowym plikiem importowym.
 2. Nowsza jawna instrukcja użytkownika zmienia zakres pracy, np. „tylko dokumenty”, „uzupełnij finansowanie”, „nie zmieniaj dat”, „status zostaw”, „sprawdź stan na 28.09.2026”, „nie przeszukuj Internetu”. Nadal zachowuj poprawny format i nie fabrykuj faktów ani evidence.
 3. Używaj danych organizacyjnych przekazanych przez użytkownika, np. nazw, kluczy i przypisania operatorów. Jeżeli użytkownik wskazuje status **jako docelowy**, przyjmij go, ale nie przedstawiaj jako potwierdzonego przez źródło, które mówi coś innego. Rozbieżność odnotuj. Status znaleziony w starym eksporcie jest stanem dotychczasowym, a nie automatycznie stanem aktualnym.
 4. Jeśli polecenie brzmi „ustal/sprawdź status”, rozstrzygnij go według najnowszego właściwego komunikatu i daty odniesienia. Domyślnie używaj aktualnego czasu `Europe/Warsaw`. Dla dat historycznych nie stosuj późniejszych komunikatów do wcześniejszego stanu bez wyraźnego zaznaczenia.
@@ -28,15 +70,15 @@ Jeżeli brakuje tożsamości naboru/projektu/operatora koniecznej do zadania, ni
 ### Kolejność analizy
 
 1. Zidentyfikuj konkretny nabór, projekt, operatorów i relacje. Oddziel operatora głównego od dodatkowych. Powiąż geografię naboru z właściwym operatorem.
-2. Odczytaj przekazane pliki. Jeżeli wolno korzystać z Internetu, sprawdź podane oficjalne adresy i bezpośrednio powiązane dokumenty potrzebne do zadania. Nie deklaruj przeczytania pliku lub strony, których nie odczytałeś. Nie zastępuj regulaminu wynikiem wyszukiwania lub opisem marketingowym.
+2. Wykonaj spis materiałów opisany wyżej i odczytaj wszystkie przekazane pliki w zakresie zadania. Jeżeli wolno korzystać z Internetu, sprawdź podane oficjalne adresy i bezpośrednio powiązane dokumenty potrzebne do zadania. Nie deklaruj przeczytania pliku lub strony, których nie odczytałeś. Nie zastępuj regulaminu wynikiem wyszukiwania lub opisem marketingowym.
 3. Sprawdź tytuł, projekt, operatora, edycję, datę obowiązywania i zmiany regulaminu. Nowsza publikacja jest nadrzędna tylko w zakresie, który rzeczywiście zmienia. Aktualny komunikat o zamknięciu może zmieniać termin bez zmiany zasad finansowania.
 4. **Najpierw zbuduj `sources`** z wiernym tekstem. Następnie wyodrębnij wartości i oblicz evidence. Nie buduj syntetycznej listy znalezionych faktów jako `snapshot.text`.
 5. Z regulaminu odczytaj: grupę docelową i wykluczenia, warunki terytorialne, typy wspieranych usług, stawki i limity, podstawę limitów, wkład własny, warunki premii, moment składania dokumentów, podpisy, kanał zgłoszenia, kolejność czynności, rozliczenie i ważne ograniczenia. Zapisuj je w dostępnych polach; nie wymyślaj osobnych pól na kryteria, VAT czy etapy procesu.
 6. Rozdziel finansowanie według `company_size` i faktycznie różnych wariantów. Zachowaj w `financing[].data.notes` warunki, okres limitu, operatora i zakres obowiązywania, jeżeli są potrzebne do interpretacji. Wariant nie ma osobnego pola operatora.
 7. Rozróżniaj ogólne zasady projektu od wyjątków konkretnego naboru. Dodaj `project.financing` tylko, gdy zakres pracy obejmuje projekt i reguły są projektowe. Finansowanie odtworzone dla analizowanego naboru umieszczaj przy `recruitment` i zaznacz jego podstawę. Nie zakładaj automatycznego dziedziczenia finansowania, plików, geografii czy operatorów z projektu.
-8. Dokumenty źródłowe opisuj w `sources`; konkretne załączniki z adresami HTTP(S) podpinaj przez `files`. `documents` jest starszą listą wymagań, a nie podstawową listą plików.
+8. Dokumenty źródłowe opisuj w `sources`; konkretne załączniki z adresami HTTP(S) podpinaj przez `files`. Dla **każdego pliku** wykonaj analizę z sekcji 12.1: funkcja, odbiorca, etap, wykonawca, czynność, termin, kanał, forma, podpis i warunek użycia. Metadane formularza mogą wymagać dowodów z regulaminu, a nie tylko z treści formularza. `documents` jest starszą listą wymagań, a nie podstawową listą plików.
 9. Stosuj macierz statusów z sekcji 2 i dokładność dat ze źródeł. Nie zamieniaj „III kwartał” albo „2.–3. tydzień września” na wymyśloną datę dzienną. Brak terminu końcowego nie dowodzi naboru ciągłego.
-10. Zweryfikuj JSON, dozwolone pola i enumy, lokalne `$ref`, unikalność kluczy, zgodność geografii ze słownikiem, liczby i każde evidence. Pomiń nieznane wartości zamiast wstawiać `null`, pusty tekst, `0`, `false`, „brak danych” lub placeholdery.
+10. Zweryfikuj najpierw kompletność analizy, następnie JSON: dozwolone pola i enumy, lokalne `$ref`, unikalność kluczy, zgodność geografii ze słownikiem, liczby i każde evidence. Pomiń wartości, których **nie udało się ustalić po analizie**, zamiast wstawiać `null`, pusty tekst, `0`, `false`, „brak danych” lub placeholdery. Nie nazywaj wartości nieznaną tylko dlatego, że nie otwarto dokumentu, który może ją zawierać.
 
 ### Zasady dowodów i niepewności
 
@@ -52,7 +94,7 @@ Jeżeli brakuje tożsamości naboru/projektu/operatora koniecznej do zadania, ni
 To dane wejściowe dla AI, **nie element formatu JSON**. Brakujące pozycje można pominąć.
 
 ```text
-ZADANIE: nowy nabór / uzupełnij istniejący / tylko finansowanie / tylko pliki / sprawdź status
+ZADANIE: pełna analiza naboru i wszystkich plików (domyślnie) / jawnie ograniczony zakres
 STAN NA: data i opcjonalnie godzina; domyślnie teraz, Europe/Warsaw
 NABÓR: nazwa lub numer
 KLUCZ NABORU: istniejący key/importKey/id, jeśli aktualizacja
@@ -71,7 +113,7 @@ DALSZE INSTRUKCJE: co uzupełnić, czego nie zmieniać, czy sprawdzać strony
 
 ## 2. Zachowanie zależne od statusu i zakresu polecenia
 
-To reguły pracy analityka. Importer sam nie ustala statusu na podstawie dat ani nie wymusza kompletności biznesowej dla danego statusu.
+To reguły pracy analityka. Importer sam nie ustala statusu na podstawie dat ani nie wymusza kompletności biznesowej dla danego statusu. **Status zmienia kontekst czasowy i właściwość dokumentów, nie zmniejsza domyślnego zakresu analizy.** Nabór zamknięty nadal wymaga opisu jego dokumentów i historycznych zasad, jeśli użytkownik zlecił pełną analizę; przy planowanym odróżnij już obowiązujące zasady projektu od niepotwierdzonych założeń przyszłej edycji.
 
 | `recruitment.data.status` | Kiedy używać | Co analizować i zapisywać |
 | --- | --- | --- |
@@ -89,10 +131,11 @@ Nie ustawiaj statusu wyłącznie dlatego, że nazwa pliku zawiera rok lub termin
 
 | Dalsza instrukcja | Zakres wygenerowanego importu |
 | --- | --- |
-| „Uzupełnij z regulaminu” | Ustal finansowanie, kwalifikowalność i proces w `funding_rules`/`notes`, właściwe pliki i ich metadane. Daty i status zmieniaj tylko przy potwierdzeniu i w dozwolonym zakresie. |
+| „Przeanalizuj/rozstrzygnij/uzupełnij nabór”, „zrób import”, eksport z tym promptem bez ograniczenia | Pełna analiza wszystkich obszarów i wszystkich przekazanych materiałów. Sam status z datami nie realizuje polecenia. |
+| „Uzupełnij z regulaminu” | Ustal finansowanie, kwalifikowalność i proces w `funding_rules`/`notes`, wszystkie właściwe pliki i ich metadane po powiązaniu z zapisami regulaminu. Daty i status zmieniaj tylko przy potwierdzeniu i w dozwolonym zakresie. |
 | „Tylko finansowanie” | Wymagany identyfikator i `external_number`, `financing`, ewentualnie `funding_rules`, `funding_verified_at`, `funding_verification_url` oraz źródła/evidence. Nie zmieniaj statusu, dat, geografii ani innych sekcji. |
 | „Tylko dokumenty/pliki” | Wymagany identyfikator i pole główne, `sources`, `files`; istotny brak URL w `notes`, jeśli trzeba. Nie generuj domyślnych wariantów finansowania ani `documents` dla każdego pliku. |
-| „Sprawdź/zaktualizuj status i terminy” | Wymagany identyfikator i `external_number`, rozstrzygnięty status, potwierdzone terminy, opis zakończenia/przyczyny oraz źródła/evidence. Nie nadpisuj finansowania bez polecenia. |
+| „Tylko status i terminy” albo osobne zadanie wyraźnie ograniczone do sprawdzenia statusu | Wymagany identyfikator i `external_number`, rozstrzygnięty status, potwierdzone terminy, opis zakończenia/przyczyny oraz źródła/evidence. Nie nadpisuj finansowania bez polecenia. Tego wąskiego zakresu nie wyciągaj z samego słowa „nabór” ani „rozstrzygnij”. |
 | „Nie zmieniaj X” | Pomiń X w aktualizacji. Wyjątkiem jest wymagane pole główne: podaj jego dotychczasową wartość. Gdy użytkownik chce zmienić resztę, nie kopiuj bez potrzeby wszystkich starych pól. |
 | „Usuń/wyczyść X” | Ten format nie ma operacji usuwania ani czyszczenia. Wyjaśnij ograniczenie; nie udawaj usunięcia przez `null`, pustą tablicę lub pominięcie. Usunięcie wykonuje się w Workspace. |
 
@@ -141,7 +184,9 @@ Zachowaj kolejność nagłówków, akapitów, tabel i stron. Dla PDF/DOCX zachow
 
 Załączony lokalnie PDF/DOCX bez publicznego adresu może być `source` **bez `url`**, z odczytanym tekstem i evidence. Nie może jednak utworzyć zdalnego `files[]`. Nie wymyślaj URL ani nazwy domeny; opisz brak adresu w `notes` i poproś o oryginalny link, jeśli podpięcie pliku jest niezbędne. Nie umieszczaj binarnej zawartości ani base64 w JSON.
 
-Jeżeli znasz prawdziwy adres pliku, ale nie możesz odczytać treści, importer dopuszcza `snapshot.text: ""`; taki wpis może służyć wyłącznie do podpięcia znanego załącznika. Odnotuj brak odczytu, nie generuj z niego evidence ani nie deklaruj potwierdzonych zasad. Sam brak tekstu nie potwierdza, że formularz nie ma pól. Dane z wiadomości użytkownika dodawaj bez sztucznego źródła `HTML` i bez fikcyjnego snapshotu regulaminu.
+Jeżeli znasz prawdziwy adres pliku, ale po próbie odczytu nie masz jego treści, importer dopuszcza `snapshot.text: ""`; taki wpis pozwala podpiąć znany załącznik, lecz nie potwierdza przeanalizowania pliku. Odnotuj brak odczytu i nie generuj evidence z pustego snapshotu. Jeżeli **inny odczytany dokument**, np. regulamin, jednoznacznie określa warunki użycia tego załącznika, możesz na tej podstawie uzupełnić tylko te metadane, z evidence wskazującym ten inny dokument. Nie deklaruj odczytania formularza i nie zgaduj nieustalonych pól. Sam brak tekstu nie potwierdza, że formularz nie ma pól. Dane z wiadomości użytkownika dodawaj bez sztucznego źródła `HTML` i bez fikcyjnego snapshotu regulaminu.
+
+Problemu z uzyskaniem pełnego tekstu jednej strony nie przenoś na wszystkie pozostałe źródła. Jeśli strona ogłoszeń nie daje się odczytać, nadal pobierz dostępny PDF regulaminu i załączniki. Brak idealnego snapshotu HTML nie uzasadnia `sources: []` po odczytaniu dokumentów. Nie tworząc fikcyjnych cytatów, zachowaj wszystkie rzeczywiście dostępne teksty i dowody; ograniczenie opisuj konkretnie dla danego źródła.
 
 ## 5. `objects[]` — wspólna struktura
 
@@ -408,6 +453,65 @@ Metadane wynikają z treści i instrukcji: sama nazwa „Załącznik” nie dowo
 
 Starsze `document_kind` i `delivery_method` przyjmują dowolny niepusty tekst, lecz są polami kompatybilności. Nowe importy korzystają z `purpose`, `client_requirement`, `signature_requirement`, `intended_use` i `has_fields`.
 
+### 12.1. Obowiązkowa analiza każdego pliku na podstawie regulaminu
+
+Nie wystarcza zmienić nazwę techniczną na czytelny tytuł. Dla każdego załącznika sprawdź jego treść **wraz z odwołaniami do niego w regulaminie, zmianach, instrukcjach i umowie**. Wyszukaj zarówno numer załącznika, jak i jego pełny tytuł/skróty. Sam numer może być użyty ponownie w innym dokumencie lub innej wersji.
+
+Ustal poniższe informacje. Nie wszystkie mają osobne pola w modelu; rozbudowany opis procesu mieści się w `metadata.intended_use`, a wspólne zależności również w `recruitment.data.notes`.
+
+| Pytanie do źródeł | Gdzie zapisać ustalenie |
+| --- | --- |
+| Co to za dokument i jaka wersja dotyczy analizowanego naboru? | `metadata.display_name`; kontekst obowiązywania w `intended_use`. Techniczna nazwa pozostaje z URL. |
+| Do czego służy: zasady, instrukcja, formularz, umowa, ocena, lista, potwierdzenie? | `purpose` z dostępnych czterech wartości, konkretna funkcja w `intended_use`. Nie twórz enumu `Umowa` lub `Karta oceny`. |
+| Czy są pola do uzupełnienia i kto je uzupełnia? | `has_fields` oraz wykonawca w `intended_use`: przedsiębiorca, uczestnik, operator, dostawca usługi, pełnomocnik. `has_fields: true` nie oznacza automatycznie obowiązku po stronie klienta. |
+| W którym etapie używa się dokumentu? | `intended_use`: zgłoszenie, ocena, uzupełnienie, umowa, przed usługą, realizacja/monitoring, rozliczenie, archiwizacja — tylko etapy potwierdzone. |
+| Co konkretnie zrobić: przeczytać, wypełnić, wygenerować, podpisać, przesłać, okazać czy zachować? | `intended_use`, z rozróżnieniem czynności klienta i operatora. |
+| Kiedy: przed jakim zdarzeniem, po jakim zdarzeniu, ile dni, czy dni robocze/kalendarzowe? | `intended_use` wraz ze zdarzeniem, od którego liczy się termin. „Przed usługą” i „w ciągu X dni od umowy” nie są zamienne. Nie obliczaj daty bez znanej daty zdarzenia. |
+| Gdzie i jak: system operatora, konkretne pole/etap systemu, e-mail, osobiście/pocztą; skan, oryginał, plik elektroniczny? | `intended_use`; dokładny adres/kanał wyłącznie ze źródła. Rozróżnij dokument generowany przez system, przesyłany do systemu i dostarczany poza nim. |
+| Czy jest obowiązkowy, dla kogo i pod jakim warunkiem? | `client_requirement`; dla `Warunkowy` obowiązkowo wyjaśnij warunek w `intended_use`. Wymóg etapu rozliczenia nie oznacza składania przy pierwszym zgłoszeniu. |
+| Czy wymagany jest podpis, czyj i jaki? Czy dopuszczono alternatywy? | `signature_requirement` i szczegóły w `intended_use`. Rozróżnij podpisanie pliku od samego logowania/akceptacji w systemie. Nie nazywaj podpisu kwalifikowanym bez potwierdzenia. |
+| Z jakimi innymi dokumentami jest powiązany? | `intended_use` oraz wspólny opis kolejności w `recruitment.data.notes`; np. część I i II planu, formularz i lista osób, wniosek o rozliczenie i dowody poniesienia kosztu. |
+| Który zapis potwierdza te wymagania? | `files[].evidence` przy właściwym polu metadanych, ze źródła regulaminu/instrukcji/załącznika; w `intended_use` można dodatkowo podać §/ustęp/stronę, jeśli rzeczywiście ustalono. |
+
+Zalecana struktura `metadata.intended_use` (jeden tekst, **nie nowe pola JSON**):
+
+```text
+Etap: ...; Wypełnia/przygotowuje: ...; Czynność klienta: ...; Termin: ...;
+Miejsce i sposób przekazania: ...; Podpis: ...; Warunek zastosowania: ...;
+Powiązane dokumenty: ...; Podstawa: ...; Nie ustalono: ...
+```
+
+Nie przepisuj pustego szablonu do wyniku. Zapisz ustalone informacje w czytelnych zdaniach lub krótkich częściach rozdzielonych średnikami. Pomijaj elementy nieadekwatne, a istotne nierozstrzygnięcia nazwij konkretnie. Opis „Dokument do naboru”, „Załącznik do regulaminu” lub „Do uzupełnienia zgodnie z regulaminem” jest niewystarczający, jeżeli regulamin podaje dokładne czynności i warunki.
+
+**Klasyfikuj względem czynności klienta i zakresu naboru:**
+
+- Regulamin/instrukcja zwykle wyjaśnia reguły, ale sposób klasyfikacji ustal z treści; nie zakładaj, że każdy taki plik trzeba podpisać lub wysłać.
+- Formularz klienta wymaga ustalenia etapu i kanału złożenia. Załącznik warunkowy, np. pełnomocnictwo, ma wskazywać warunek zastosowania, a nie być bezwarunkowo wymagany od każdego.
+- Karta oceny, lista rankingowa lub protokół może być wypełniany przez operatora. Jeśli źródło potwierdza, że klient go nie składa, opisz ten fakt i rozważ `client_requirement: "Informacyjny"`; nie zmuszaj klienta do wypełniania dokumentu wewnętrznego. Brak osobnego enumu „wewnętrzny” wyjaśnij treścią `intended_use`.
+- Wzór umowy nie jest automatycznie formularzem składanym przy zgłoszeniu. Odczytaj, kto go przygotowuje/podpisuje i w jakim momencie. Podpis operatora nie oznacza automatycznie obowiązku przesłania podpisanego pliku przez uczestnika.
+- Dokument rozliczenia/monitoringu nie staje się nieistotny tylko dlatego, że nabór jest aktywny. W pełnej analizie opisz go we właściwym późniejszym etapie.
+- Dokument dotyczący innej ścieżki wsparcia, np. studiów podyplomowych przy naborze wyłącznie na szkolenia, wymaga sprawdzenia zakresu. Nie kwalifikuj go jako obowiązkowego dla danego naboru na podstawie wspólnej strony pobrań. Jeżeli nie dotyczy naboru, wymień go i powód wyłączenia w `notes`; istniejącego załącznika nie usuniesz przez pominięcie.
+- Starszej wersji nie aktualizuj metadanymi nowszej bez rozróżnienia URL i obowiązywania. Jeżeli potrzebna jest nowa wersja, dodaj ją ze swoim source i wyjaśnij, co należy zrobić z dotychczasowym załącznikiem w Workspace.
+
+### 12.2. Dowód dla formularza może pochodzić z regulaminu
+
+Jeżeli plik `FORMULARZ` ma puste rubryki, a regulamin mówi, kiedy i jak go przekazać, przypisz evidence metadanych tego pliku do **snapshotu regulaminu**. `files[].source` wskazuje formularz, natomiast `files[].evidence.client_requirement[].source`, `signature_requirement[].source` i `intended_use[].source` mogą wskazywać regulamin albo instrukcję. Każdy cytat ma faktycznie wspierać dane pole.
+
+Opis użycia może mieć kilka cytatów: jeden dla etapu, drugi dla terminu, trzeci dla sposobu przekazania/podpisu. Nie twórz sztucznego jednego cytatu z połączonych zdań z różnych miejsc. Pełny przykład 16.9 pokazuje ten układ.
+
+### 12.3. Przeniesienie plików z eksportu AI do aktualizacji
+
+| Dane w eksporcie wejściowym | Docelowe miejsce i działanie |
+| --- | --- |
+| `files[].url` | `sources[].url`; zachowaj URL istniejącego pliku przy uzupełnianiu jego metadanych. |
+| `files[].file_type` | `sources[].type`; zweryfikuj wspierany typ. |
+| `files[].name` | Pomoc do identyfikacji. Czytelny, zweryfikowany tytuł wpisz w `files[].metadata.display_name`; nie traktuj technicznej nazwy jako pełnego opisu. |
+| `files[].source_page_url` | Osobny source strony i jego klucz w `files[].source_page`, jeśli stronę identyfikujesz; snapshot rzeczywisty, a przy udokumentowanej niedostępności ograniczenie zamiast fikcyjnego tekstu. |
+| Brak pól metadanych przy pliku | Zadanie do wykonania: przeczytaj plik/regulamin/instrukcję i uzupełnij ustalone metadane. Nie pomijaj dlatego, że plik już istnieje. |
+| `files[].added_at` | Nie kopiuj do `snapshot.captured_at` ani do metadanych. |
+
+Nie modyfikuj adresów, aby stworzyć pozornie nowe źródła. Zachowaj stabilne klucze źródeł, jeśli są dostępne; gdy eksport ich nie zawiera, nadaj własne unikalne klucze sources. Dla aktualizacji pliku to zgodny URL decyduje o dopasowaniu, nie nowo nadana nazwa klucza source.
+
 ## 13. `evidence` — cytaty i dokładne zakresy
 
 Evidence jest mapą, np. `evidence.status` to tablica co najmniej jednego rzeczywistego cytatu potwierdzającego status. Puste tablice są technicznie dozwolone, ale niczego nie potwierdzają — pomijaj je. Wiele cytatów może wspierać jedno pole.
@@ -459,7 +563,7 @@ function evidenceFor(text, exact, source, normalizedValue, occurrence = 0) {
 }
 ```
 
-Powtórzony tekst wymaga wyboru właściwego wystąpienia z kontekstem; pierwszy napis „80%” nie musi dotyczyć analizowanego wariantu. Jeśli nie umiesz wiarygodnie obliczyć zakresów, nie zgaduj liczb: pomiń dane evidence i odnotuj ograniczenie. Importer przyjmie pole bez evidence, ale nie zapewni wtedy lokalizacji cytatu/podświetlenia dla tego pola. `sources` zawiera tekst do weryfikacji; sam fakt dodania source nie podświetla wszystkich wartości.
+Powtórzony tekst wymaga wyboru właściwego wystąpienia z kontekstem; pierwszy napis „80%” nie musi dotyczyć analizowanego wariantu. Jeśli masz narzędzie do wykonywania kodu i odczytany tekst, policz zakresy programowo — nie rezygnuj z evidence z powodu długości dokumentu. Dopiero gdy pomimo dostępnych sposobów nie możesz wiarygodnie obliczyć zakresów, nie zgaduj liczb: pomiń konkretne evidence i odnotuj ograniczenie. Nadal zachowaj wierny snapshot oraz ustalone wartości i metadane. Importer przyjmie pole bez evidence, ale nie zapewni wtedy lokalizacji cytatu/podświetlenia dla tego pola. `sources` zawiera tekst do weryfikacji; sam fakt dodania source nie podświetla wszystkich wartości.
 
 ## 14. Aktualizacja istniejącego obiektu i zatwierdzanie
 
@@ -568,6 +672,8 @@ Numery załączników w etykietach starszego katalogu nie dowodzą, że dokument
 ## 16. Kompletne przykłady importów
 
 Przykłady poniżej są **fikcyjnymi, jawnymi danymi demonstracyjnymi**, a nie analizą rzeczywistego naboru. Domeny `example.org` służą wyłącznie prezentacji. Nigdy nie kopiuj tych URL-i, nazw, stawek ani snapshotów do prawdziwego importu. W realnym zadaniu snapshot musi pochodzić z rzeczywiście odczytanego źródła.
+
+Przykłady 16.2–16.8 demonstrują wybrane pola albo **jawnie ograniczone aktualizacje**. Nie są wzorem kompletności dla domyślnego zadania „przeanalizuj nabór”. Pełny wynik łączy właściwe ustalenia wszystkich obszarów; przykład 16.9 pokazuje szczegółową analizę użycia dokumentów wymaganą także dla plików już podpiętych w wejściu.
 
 Każdy blok `json` poniżej jest samodzielnym kompletnym dokumentem importowym. Przykłady aktualizacji wymagają istniejącego obiektu o wskazanym kluczu; bez niego utworzą nowy obiekt. Fragmenty z przykładowymi terminami zakładają, że użytkownik podał te wartości, dlatego nie mają fikcyjnego evidence.
 
@@ -1472,9 +1578,329 @@ Użytkownik potwierdził aktywny nabór ciągły od 28.09.2026 i brak opublikowa
 }
 ```
 
+### 16.9. Opisy wszystkich plików: co, kto, kiedy, gdzie i jak
+
+Samodzielny przykład **jawnego polecenia „opracuj wszystkie pięć plików i opisz proces”** dla znanego naboru. Wszystkie nazwy, terminy, wymagania podpisu i system DEMO są fikcyjne. Nie są zasadami żadnego rzeczywistego operatora. Przy pełnej analizie naboru taki zestaw dokumentów uzupełnia także pozostałe ustalenia, np. finansowanie i geografię.
+
+Formularze mają własne snapshoty, a evidence ich wymagalności, sposobu użycia i podpisu wskazuje odpowiednie zapisy **regulaminu**. Karta operatora ma pola do uzupełnienia, ale klient jej nie składa. Wniosek o rozliczenie jest obowiązkowy w późniejszym etapie. W rzeczywistym zadaniu nie ograniczaj się do pięciu plików, jeśli użytkownik przekazał ich więcej.
+
+```json
+{
+  "version": 1,
+  "offset_unit": "unicode_codepoint",
+  "sources": [
+    {
+      "key": "SRC_D_REG",
+      "type": "PDF",
+      "url": "https://example.org/dokumenty/regulamin-demo-d.pdf",
+      "snapshot": {
+        "text": "Regulamin DEMO D — przykład instrukcji dokumentów\n§ 1. Regulamin służy do zapoznania się z zasadami. Nie zawiera pól do uzupełnienia. Klient nie składa ani nie podpisuje regulaminu.\n§ 2. Formularz zgłoszeniowy wypełnia przedsiębiorca. Jest obowiązkowy przy zgłoszeniu. Przed wysłaniem zgłoszenia należy dołączyć w zakładce Zgłoszenie systemu DEMO PDF podpisany podpisem kwalifikowanym przez osobę uprawnioną do reprezentacji.\n§ 3. Pełnomocnictwo jest wymagane wyłącznie wtedy, gdy zgłoszenie składa pełnomocnik. Dokument uzupełnia i podpisuje mocodawca. Skan podpisanego dokumentu należy załączyć razem z formularzem w zakładce Zgłoszenie systemu DEMO.\n§ 4. Kartę oceny uzupełnia operator po otrzymaniu zgłoszenia. Przedsiębiorca nie wypełnia, nie podpisuje i nie przesyła karty. Wynik zapisany w systemie DEMO stanowi dowód oceny; klient otrzymuje informację o wyniku.\n§ 5. Wniosek o rozliczenie wypełnia przedsiębiorca po zakończeniu usługi. Jest obowiązkowy na etapie rozliczenia. W ciągu 10 dni roboczych od zakończenia usługi należy przesłać podpisany podpisem kwalifikowanym PDF w zakładce Rozliczenie systemu DEMO, z fakturą i dowodem zapłaty. Nie składa się go przy pierwszym zgłoszeniu.\n"
+      }
+    },
+    {
+      "key": "SRC_D_FORM",
+      "type": "DOCX",
+      "url": "https://example.org/dokumenty/formularz-demo-d.docx",
+      "snapshot": {
+        "text": "Formularz zgłoszeniowy DEMO D\nNazwa przedsiębiorcy: __________\nNIP: __________\nOsoba reprezentująca: __________\n"
+      }
+    },
+    {
+      "key": "SRC_D_PROXY",
+      "type": "DOCX",
+      "url": "https://example.org/dokumenty/pelnomocnictwo-demo-d.docx",
+      "snapshot": {
+        "text": "Pełnomocnictwo DEMO D\nMocodawca: __________\nPełnomocnik: __________\nZakres umocowania: __________\nPodpis mocodawcy: __________\n"
+      }
+    },
+    {
+      "key": "SRC_D_SCORE",
+      "type": "DOCX",
+      "url": "https://example.org/dokumenty/karta-oceny-demo-d.docx",
+      "snapshot": {
+        "text": "Karta oceny DEMO D\nNumer zgłoszenia: __________\nPunktacja: __________\nWynik oceny operatora: __________\n"
+      }
+    },
+    {
+      "key": "SRC_D_SETTLEMENT",
+      "type": "DOCX",
+      "url": "https://example.org/dokumenty/wniosek-rozliczenie-demo-d.docx",
+      "snapshot": {
+        "text": "Wniosek o rozliczenie DEMO D\nDane przedsiębiorcy: __________\nUsługa: __________\nData zakończenia: __________\nPoniesione koszty: __________\n"
+      }
+    }
+  ],
+  "objects": [
+    {
+      "key": "NAB_DEMO_DOC_PROCESS",
+      "type": "recruitment",
+      "data": {
+        "external_number": "DEMO D — proces dokumentów",
+        "notes": "Zakres tego przykładu: opis wszystkich pięciu przekazanych plików. Kolejność: zapoznanie z regulaminem; formularz zgłoszeniowy i ewentualne pełnomocnictwo; ocena operatora; po usłudze wniosek o rozliczenie z fakturą i dowodem zapłaty w ciągu 10 dni roboczych. Faktura i dowód zapłaty są dokumentami indywidualnymi, bez przekazanych wzorów/URL — nie utworzono dla nich fikcyjnych files."
+      },
+      "files": [
+        {
+          "source": "SRC_D_REG",
+          "metadata": {
+            "display_name": "Regulamin DEMO D",
+            "purpose": "Regulamin",
+            "has_fields": false,
+            "intended_use": "Etap: zapoznanie z zasadami. Klient czyta regulamin; nie wypełnia, nie podpisuje i nie przesyła tego dokumentu. Podstawa: § 1.",
+            "client_requirement": "Informacyjny",
+            "signature_requirement": "Nie jest wymagany"
+          },
+          "evidence": {
+            "intended_use": [
+              {
+                "source": "SRC_D_REG",
+                "char_start": 50,
+                "char_end": 181,
+                "raw_value": "§ 1. Regulamin służy do zapoznania się z zasadami. Nie zawiera pól do uzupełnienia. Klient nie składa ani nie podpisuje regulaminu."
+              }
+            ],
+            "client_requirement": [
+              {
+                "source": "SRC_D_REG",
+                "char_start": 50,
+                "char_end": 181,
+                "raw_value": "§ 1. Regulamin służy do zapoznania się z zasadami. Nie zawiera pól do uzupełnienia. Klient nie składa ani nie podpisuje regulaminu.",
+                "normalized_value": "Informacyjny"
+              }
+            ],
+            "signature_requirement": [
+              {
+                "source": "SRC_D_REG",
+                "char_start": 50,
+                "char_end": 181,
+                "raw_value": "§ 1. Regulamin służy do zapoznania się z zasadami. Nie zawiera pól do uzupełnienia. Klient nie składa ani nie podpisuje regulaminu.",
+                "normalized_value": "Nie jest wymagany"
+              }
+            ],
+            "has_fields": [
+              {
+                "source": "SRC_D_REG",
+                "char_start": 101,
+                "char_end": 133,
+                "raw_value": "Nie zawiera pól do uzupełnienia.",
+                "normalized_value": false
+              }
+            ]
+          }
+        },
+        {
+          "source": "SRC_D_FORM",
+          "metadata": {
+            "display_name": "Formularz zgłoszeniowy DEMO D",
+            "purpose": "Formularz do uzupełnienia",
+            "has_fields": true,
+            "intended_use": "Etap: zgłoszenie. Wypełnia przedsiębiorca. Przed wysłaniem zgłoszenia dołącza PDF podpisany podpisem kwalifikowanym przez osobę uprawnioną do reprezentacji w zakładce Zgłoszenie systemu DEMO. Dokument obowiązkowy. Podstawa: § 2.",
+            "client_requirement": "Obowiązkowy",
+            "signature_requirement": "Wymagany podpisany plik"
+          },
+          "evidence": {
+            "intended_use": [
+              {
+                "source": "SRC_D_REG",
+                "char_start": 182,
+                "char_end": 425,
+                "raw_value": "§ 2. Formularz zgłoszeniowy wypełnia przedsiębiorca. Jest obowiązkowy przy zgłoszeniu. Przed wysłaniem zgłoszenia należy dołączyć w zakładce Zgłoszenie systemu DEMO PDF podpisany podpisem kwalifikowanym przez osobę uprawnioną do reprezentacji."
+              }
+            ],
+            "client_requirement": [
+              {
+                "source": "SRC_D_REG",
+                "char_start": 182,
+                "char_end": 425,
+                "raw_value": "§ 2. Formularz zgłoszeniowy wypełnia przedsiębiorca. Jest obowiązkowy przy zgłoszeniu. Przed wysłaniem zgłoszenia należy dołączyć w zakładce Zgłoszenie systemu DEMO PDF podpisany podpisem kwalifikowanym przez osobę uprawnioną do reprezentacji.",
+                "normalized_value": "Obowiązkowy"
+              }
+            ],
+            "signature_requirement": [
+              {
+                "source": "SRC_D_REG",
+                "char_start": 182,
+                "char_end": 425,
+                "raw_value": "§ 2. Formularz zgłoszeniowy wypełnia przedsiębiorca. Jest obowiązkowy przy zgłoszeniu. Przed wysłaniem zgłoszenia należy dołączyć w zakładce Zgłoszenie systemu DEMO PDF podpisany podpisem kwalifikowanym przez osobę uprawnioną do reprezentacji.",
+                "normalized_value": "Wymagany podpisany plik"
+              }
+            ],
+            "has_fields": [
+              {
+                "source": "SRC_D_FORM",
+                "char_start": 30,
+                "char_end": 62,
+                "raw_value": "Nazwa przedsiębiorcy: __________",
+                "normalized_value": true
+              }
+            ]
+          }
+        },
+        {
+          "source": "SRC_D_PROXY",
+          "metadata": {
+            "display_name": "Pełnomocnictwo DEMO D",
+            "purpose": "Formularz do uzupełnienia",
+            "has_fields": true,
+            "intended_use": "Etap: zgłoszenie przez pełnomocnika. Dokument uzupełnia i podpisuje mocodawca. Skan podpisanego dokumentu należy załączyć z formularzem w zakładce Zgłoszenie systemu DEMO. Wymagany tylko przy działaniu przez pełnomocnika. Podstawa: § 3.",
+            "client_requirement": "Warunkowy",
+            "signature_requirement": "Wymagany podpisany plik"
+          },
+          "evidence": {
+            "intended_use": [
+              {
+                "source": "SRC_D_REG",
+                "char_start": 426,
+                "char_end": 652,
+                "raw_value": "§ 3. Pełnomocnictwo jest wymagane wyłącznie wtedy, gdy zgłoszenie składa pełnomocnik. Dokument uzupełnia i podpisuje mocodawca. Skan podpisanego dokumentu należy załączyć razem z formularzem w zakładce Zgłoszenie systemu DEMO."
+              }
+            ],
+            "client_requirement": [
+              {
+                "source": "SRC_D_REG",
+                "char_start": 426,
+                "char_end": 652,
+                "raw_value": "§ 3. Pełnomocnictwo jest wymagane wyłącznie wtedy, gdy zgłoszenie składa pełnomocnik. Dokument uzupełnia i podpisuje mocodawca. Skan podpisanego dokumentu należy załączyć razem z formularzem w zakładce Zgłoszenie systemu DEMO.",
+                "normalized_value": "Warunkowy"
+              }
+            ],
+            "signature_requirement": [
+              {
+                "source": "SRC_D_REG",
+                "char_start": 426,
+                "char_end": 652,
+                "raw_value": "§ 3. Pełnomocnictwo jest wymagane wyłącznie wtedy, gdy zgłoszenie składa pełnomocnik. Dokument uzupełnia i podpisuje mocodawca. Skan podpisanego dokumentu należy załączyć razem z formularzem w zakładce Zgłoszenie systemu DEMO.",
+                "normalized_value": "Wymagany podpisany plik"
+              }
+            ],
+            "has_fields": [
+              {
+                "source": "SRC_D_PROXY",
+                "char_start": 22,
+                "char_end": 43,
+                "raw_value": "Mocodawca: __________",
+                "normalized_value": true
+              }
+            ]
+          }
+        },
+        {
+          "source": "SRC_D_SCORE",
+          "metadata": {
+            "display_name": "Karta oceny DEMO D",
+            "purpose": "Formularz do uzupełnienia",
+            "has_fields": true,
+            "intended_use": "Etap: ocena po otrzymaniu zgłoszenia. Kartę uzupełnia operator; przedsiębiorca jej nie wypełnia, nie podpisuje i nie przesyła. Wynik jest zapisany w systemie DEMO, a klient otrzymuje informację o wyniku. Podstawa: § 4.",
+            "client_requirement": "Informacyjny",
+            "signature_requirement": "Dowód w systemie operatora"
+          },
+          "evidence": {
+            "intended_use": [
+              {
+                "source": "SRC_D_REG",
+                "char_start": 653,
+                "char_end": 869,
+                "raw_value": "§ 4. Kartę oceny uzupełnia operator po otrzymaniu zgłoszenia. Przedsiębiorca nie wypełnia, nie podpisuje i nie przesyła karty. Wynik zapisany w systemie DEMO stanowi dowód oceny; klient otrzymuje informację o wyniku."
+              }
+            ],
+            "client_requirement": [
+              {
+                "source": "SRC_D_REG",
+                "char_start": 653,
+                "char_end": 869,
+                "raw_value": "§ 4. Kartę oceny uzupełnia operator po otrzymaniu zgłoszenia. Przedsiębiorca nie wypełnia, nie podpisuje i nie przesyła karty. Wynik zapisany w systemie DEMO stanowi dowód oceny; klient otrzymuje informację o wyniku.",
+                "normalized_value": "Informacyjny"
+              }
+            ],
+            "signature_requirement": [
+              {
+                "source": "SRC_D_REG",
+                "char_start": 653,
+                "char_end": 869,
+                "raw_value": "§ 4. Kartę oceny uzupełnia operator po otrzymaniu zgłoszenia. Przedsiębiorca nie wypełnia, nie podpisuje i nie przesyła karty. Wynik zapisany w systemie DEMO stanowi dowód oceny; klient otrzymuje informację o wyniku.",
+                "normalized_value": "Dowód w systemie operatora"
+              }
+            ],
+            "has_fields": [
+              {
+                "source": "SRC_D_SCORE",
+                "char_start": 19,
+                "char_end": 47,
+                "raw_value": "Numer zgłoszenia: __________",
+                "normalized_value": true
+              }
+            ]
+          }
+        },
+        {
+          "source": "SRC_D_SETTLEMENT",
+          "metadata": {
+            "display_name": "Wniosek o rozliczenie DEMO D",
+            "purpose": "Formularz do uzupełnienia",
+            "has_fields": true,
+            "intended_use": "Etap: rozliczenie po zakończeniu usługi. Wypełnia przedsiębiorca. W ciągu 10 dni roboczych od zakończenia usługi przesyła podpisany podpisem kwalifikowanym PDF w zakładce Rozliczenie systemu DEMO, wraz z fakturą i dowodem zapłaty. Dokument obowiązkowy na etapie rozliczenia; nie składa się go przy pierwszym zgłoszeniu. Podstawa: § 5.",
+            "client_requirement": "Obowiązkowy",
+            "signature_requirement": "Wymagany podpisany plik"
+          },
+          "evidence": {
+            "intended_use": [
+              {
+                "source": "SRC_D_REG",
+                "char_start": 870,
+                "char_end": 1195,
+                "raw_value": "§ 5. Wniosek o rozliczenie wypełnia przedsiębiorca po zakończeniu usługi. Jest obowiązkowy na etapie rozliczenia. W ciągu 10 dni roboczych od zakończenia usługi należy przesłać podpisany podpisem kwalifikowanym PDF w zakładce Rozliczenie systemu DEMO, z fakturą i dowodem zapłaty. Nie składa się go przy pierwszym zgłoszeniu."
+              }
+            ],
+            "client_requirement": [
+              {
+                "source": "SRC_D_REG",
+                "char_start": 870,
+                "char_end": 1195,
+                "raw_value": "§ 5. Wniosek o rozliczenie wypełnia przedsiębiorca po zakończeniu usługi. Jest obowiązkowy na etapie rozliczenia. W ciągu 10 dni roboczych od zakończenia usługi należy przesłać podpisany podpisem kwalifikowanym PDF w zakładce Rozliczenie systemu DEMO, z fakturą i dowodem zapłaty. Nie składa się go przy pierwszym zgłoszeniu.",
+                "normalized_value": "Obowiązkowy"
+              }
+            ],
+            "signature_requirement": [
+              {
+                "source": "SRC_D_REG",
+                "char_start": 870,
+                "char_end": 1195,
+                "raw_value": "§ 5. Wniosek o rozliczenie wypełnia przedsiębiorca po zakończeniu usługi. Jest obowiązkowy na etapie rozliczenia. W ciągu 10 dni roboczych od zakończenia usługi należy przesłać podpisany podpisem kwalifikowanym PDF w zakładce Rozliczenie systemu DEMO, z fakturą i dowodem zapłaty. Nie składa się go przy pierwszym zgłoszeniu.",
+                "normalized_value": "Wymagany podpisany plik"
+              }
+            ],
+            "has_fields": [
+              {
+                "source": "SRC_D_SETTLEMENT",
+                "char_start": 29,
+                "char_end": 60,
+                "raw_value": "Dane przedsiębiorcy: __________",
+                "normalized_value": true
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
+```
+
 ## 17. Kontrola przed oddaniem odpowiedzi przez AI
 
 Wykonaj ją przed wysłaniem; nie dołączaj opisu kontroli do końcowego JSON.
+
+**Najpierw kontrola kompletności merytorycznej:**
+
+- Czy zakres jest pełny, chyba że użytkownik jawnie go ograniczył? Czy z samego statusu, nazwy pliku lub tytułu rozmowy nie wyciągnięto nieuprawnionego ograniczenia?
+- Czy wszystkie unikalne pliki wejściowe zostały odczytane lub mają konkretny, jawnie opisany wynik/wyjątek? Czy liczba materiałów się zgadza?
+- Czy przeanalizowano regulamin, jego właściwą wersję i odwołania do każdego załącznika, a nie tylko stronę `/nabory` lub listę linków?
+- Czy metadane każdego właściwego pliku wyjaśniają, kto/co/kiedy/gdzie/jak oraz podpis i warunek, w zakresie ustalonym ze źródeł? Czy brakujące informacje rzeczywiście były sprawdzane?
+- Czy pliki obecne w wejściu bez opisów wracają jako aktualizacje metadanych, kiedy opisy udało się ustalić?
+- Czy rozróżniono formularze klienta, dokumenty operatora, dokumenty warunkowe i rozliczeniowe oraz inne ścieżki wsparcia?
+- Czy uzupełniono dostępne finansowanie, kwalifikowalność, geografię i proces? Czy braków nie uzasadniono tylko techniczną opcjonalnością pól?
+- Czy ograniczenie odczytu jednego źródła nie posłużyło do pominięcia pozostałych? Czy wynik częściowy jest uczciwie opisany jako częściowy?
+
+**Następnie kontrola techniczna:**
 
 1. Czy wynik jest jednym poprawnym obiektem JSON z `version: 1`, `offset_unit: "unicode_codepoint"`, tablicami `sources` i niepustą `objects`?
 2. Czy typy i wielkość liter są poprawne, a wszystkie pola `data` należą do właściwego typu obiektu? Czy usunięto systemowe `last_checked_at`?
@@ -1497,6 +1923,9 @@ Wykonaj ją przed wysłaniem; nie dołączaj opisu kontroli do końcowego JSON.
 
 | Objaw / błędny zapis | Poprawka |
 | --- | --- |
+| Wejście ma regulamin i załączniki, wynik tylko status/daty | Wykonaj pełny zakres z sekcji 1: odczytaj materiały, opisz ich użycie, ustal finansowanie i pozostałe dane; sam poprawny schemat nie dowodzi wykonania zadania. |
+| Pliki już były podpięte, więc AI pominęło `files` | Uzupełnij brakujące metadane przy tych samych URL-ach; obecność pliku nie oznacza, że jego rola i wymagania są opisane. |
+| `sources: []`, bo strona ogłoszeń nie dawała pełnego tekstu | Osobno odczytaj PDF/DOC/DOCX i pozostałe dostępne źródła; zachowaj ich rzeczywiste snapshoty i evidence. |
 | `Unknown field recruitment.name` | Nazwa/numer naboru trafia do `external_number`. |
 | `Unknown field recruitment.amount` | Nie ma takiego bieżącego pola; kwotę całego naboru opisz w `notes`, limit firmy/osoby w odpowiednim `financing`. |
 | `last_checked_at is managed automatically` | Usuń to pole z importu. |
