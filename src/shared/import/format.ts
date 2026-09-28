@@ -1,3 +1,7 @@
+import {
+  FILE_METADATA_INFERENCE_VERSION,
+  inferFileMetadataFromName,
+} from "../fileMetadata";
 import { isSourceFileType, type SourceFileType } from "../types/source";
 import type {
   ImportSourceType,
@@ -799,6 +803,7 @@ export function importDocumentIntoState(
         }
         const technicalName = fileNameFromUrl(source.url);
         const metadata = {
+          ...inferFileMetadataFromName(technicalName),
           ...(file.metadata ?? {}),
           // Current imports use metadata.display_name. Older imports used
           // files[].name, and very old/minimal imports may provide neither.
@@ -818,6 +823,7 @@ export function importDocumentIntoState(
           name: technicalName,
           sourcePageUrl: pageSource?.url ?? object.sourceUrl ?? source.url,
           addedAt: now,
+          metadataInferenceVersion: FILE_METADATA_INFERENCE_VERSION,
           sourceImportKey: source.importKey,
           ...(pageSource ? { sourcePageImportKey: pageSource.importKey } : {}),
           ...metadata,
