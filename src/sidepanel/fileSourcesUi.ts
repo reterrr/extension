@@ -188,17 +188,16 @@ async function downloadAllRecruitmentFiles(
     );
   }
 
-  const platform = await browser.runtime.getPlatformInfo();
-  const plan = buildRecruitmentDownloadPlan(
-    objectDisplayName(recruitment),
-    objectDisplayName(project),
-    sources.map((source) => ({ name: source.name, url: source.url })),
-    platform.os === "win",
-  );
-
   fileDownloadBusy = true;
   render();
   try {
+    const platform = await browser.runtime.getPlatformInfo();
+    const plan = buildRecruitmentDownloadPlan(
+      objectDisplayName(recruitment),
+      objectDisplayName(project),
+      sources.map((source) => ({ name: source.name, url: source.url })),
+      platform.os === "win",
+    );
     const results = await Promise.allSettled(
       plan.files.map((file) =>
         browser.downloads.download({
@@ -868,13 +867,15 @@ function render(): void {
   }
 
   const downloadAll = $("download-all-files") as HTMLButtonElement;
+  const project =
+    object.type === "recruitment" ? recruitmentProject(object) : undefined;
   downloadAll.hidden = object.type !== "recruitment";
-  downloadAll.disabled = fileDownloadBusy || sources.length === 0;
+  downloadAll.disabled =
+    fileDownloadBusy || sources.length === 0 || !project;
   downloadAll.textContent = fileDownloadBusy
     ? "Pobieranie…"
     : `↓ Pobierz wszystkie (${sources.length})`;
   if (object.type === "recruitment") {
-    const project = recruitmentProject(object);
     downloadAll.title = project
       ? `Pobierz do: ${objectDisplayName(object)}: ${objectDisplayName(project)}`
       : "Przypisz projekt, aby utworzyć katalog naboru.";
