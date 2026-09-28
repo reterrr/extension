@@ -8,13 +8,16 @@ export interface DownloadFilePlan extends DownloadFileInput {
 }
 
 const CONTROL_CHARS = /[\u0000-\u001f\u007f]/g;
-const COMMON_FORBIDDEN = /[<>\\/|?*]/g;
-const WINDOWS_FORBIDDEN = /[<>:"\\/|?*]/g;
+const UNICODE_SPACES = /\p{Z}+/gu;
+const FORMAT_CHARS = /\p{Cf}+/gu;
+const DOWNLOADS_API_FORBIDDEN = /[<>:"\\/|?*%]/g;
 
 function trimPathSegment(value: string): string {
   return value
-    .normalize("NFC")
+    .normalize("NFKC")
     .replace(CONTROL_CHARS, " ")
+    .replace(FORMAT_CHARS, "")
+    .replace(UNICODE_SPACES, " ")
     .replace(/\s+/g, " ")
     .trim()
     .replace(/[. ]+$/g, "");
@@ -26,8 +29,11 @@ export function safeDownloadPathSegment(
   windows = false,
   maxLength = 100,
 ): string {
+  // Firefox's downloads API rejects a broader set of characters than the
+  // underlying filesystem on some versions/platforms. Use one conservative
+  // cross-platform set instead of branching by OS.
   const cleaned = trimPathSegment(
-    value.replace(windows ? WINDOWS_FORBIDDEN : COMMON_FORBIDDEN, " - "),
+    value.replace(DOWNLOADS_API_FORBIDDEN, " - "),
   );
   const normalized =
     !cleaned || cleaned === "." || cleaned === ".." ? fallback : cleaned;
@@ -46,11 +52,9 @@ export function recruitmentDownloadFolderName(
     90,
   );
   const project = safeDownloadPathSegment(projectName, "Projekt", windows, 90);
-  // ':' is the requested separator. Windows cannot use it in a directory name,
-  // so use a visually equivalent filesystem-safe separator there.
-  return windows
-    ? `${recruitment} - ${project}`
-    : `${recruitment}: ${project}`;
+  // Keep the logical "recruitment: project" meaning, but use a filesystem/API
+  // safe separator because Firefox can reject ':' even where the OS accepts it.
+  return `${recruitment} - ${project}`;
 }
 
 function splitExtension(name: string): { stem: string; extension: string } {
