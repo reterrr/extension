@@ -93,6 +93,33 @@ export function uniqueDownloadFileNames(
   });
 }
 
+export function projectDownloadFolderName(
+  projectName: string,
+  windows = false,
+): string {
+  return safeDownloadPathSegment(projectName, "Projekt", windows, 180);
+}
+
+export function buildProjectDownloadPlan(
+  projectName: string,
+  files: readonly DownloadFileInput[],
+  windows = false,
+): { folderName: string; files: DownloadFilePlan[] } {
+  const folderName = projectDownloadFolderName(projectName, windows);
+  const fileNames = uniqueDownloadFileNames(
+    files.map((file) => file.name),
+    windows,
+  );
+
+  return {
+    folderName,
+    files: files.map((file, index) => ({
+      ...file,
+      relativePath: `${folderName}/${fileNames[index]}`,
+    })),
+  };
+}
+
 export function buildRecruitmentDownloadPlan(
   recruitmentName: string,
   projectName: string,
