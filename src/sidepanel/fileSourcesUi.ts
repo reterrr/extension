@@ -209,11 +209,32 @@ async function downloadAllRecruitmentFiles(
       ),
     );
 
-    const failed = results.filter((result) => result.status === "rejected");
+    const failed = results
+      .map((result, index) => ({ result, file: plan.files[index] }))
+      .filter(
+        (
+          entry,
+        ): entry is {
+          result: PromiseRejectedResult;
+          file: (typeof plan.files)[number];
+        } => entry.result.status === "rejected",
+      );
+
     if (failed.length) {
       const downloaded = results.length - failed.length;
+      const details = failed
+        .slice(0, 3)
+        .map(({ result, file }) => {
+          const reason =
+            result.reason instanceof Error
+              ? result.reason.message
+              : String(result.reason);
+          return `${file.name}: ${reason}`;
+        })
+        .join(" | ");
+      console.error("Burbot bulk download failures", failed);
       throw new Error(
-        `Pobrano ${downloaded}/${results.length} plików do katalogu „${plan.folderName}”. ${failed.length} pobrań nie udało się uruchomić.`,
+        `Pobrano ${downloaded}/${results.length} plików do katalogu „${plan.folderName}”. ${failed.length} pobrań nie udało się uruchomić. ${details}`,
       );
     }
 
@@ -877,7 +898,7 @@ function render(): void {
     : `↓ Pobierz wszystkie (${sources.length})`;
   if (object.type === "recruitment") {
     downloadAll.title = project
-      ? `Pobierz do: ${objectDisplayName(object)}: ${objectDisplayName(project)}`
+      ? `Pobierz do: ${objectDisplayName(object)} - ${objectDisplayName(project)}`
       : "Przypisz projekt, aby utworzyć katalog naboru.";
   } else {
     downloadAll.title = "";

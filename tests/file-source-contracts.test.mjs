@@ -163,12 +163,12 @@ test("recruitment download plan puts all files in one recruitment/project folder
     false,
   );
 
-  assert.equal(plan.folderName, "Nabór IX - 2026: Generator Kompetencji 3.0");
+  assert.equal(plan.folderName, "Nabór IX - 2026 - Generator Kompetencji 3.0");
   assert.deepEqual(
     plan.files.map((file) => file.relativePath),
     [
-      "Nabór IX - 2026: Generator Kompetencji 3.0/regulamin.pdf",
-      "Nabór IX - 2026: Generator Kompetencji 3.0/formularz.docx",
+      "Nabór IX - 2026 - Generator Kompetencji 3.0/regulamin.pdf",
+      "Nabór IX - 2026 - Generator Kompetencji 3.0/formularz.docx",
     ],
   );
 });
@@ -188,9 +188,9 @@ test("download plan uniquifies duplicate filenames", () => {
   assert.deepEqual(
     plan.files.map((file) => file.relativePath),
     [
-      "Nabór: Projekt/załącznik.pdf",
-      "Nabór: Projekt/załącznik (2).pdf",
-      "Nabór: Projekt/ZAŁĄCZNIK (3).PDF",
+      "Nabór - Projekt/załącznik.pdf",
+      "Nabór - Projekt/załącznik (2).pdf",
+      "Nabór - Projekt/ZAŁĄCZNIK (3).PDF",
     ],
   );
 });
@@ -202,4 +202,25 @@ test("Windows download folder uses a filesystem-safe separator", () => {
     true,
   );
   assert.equal(folder, "Nabór - IX - Projekt - A");
+});
+
+
+test("download path sanitizer removes Firefox-rejected invisible characters", () => {
+  const plan = fileDownloads.buildRecruitmentDownloadPlan(
+    "Nabór\u00a0IX",
+    "Projekt\u202fŚląski\u200b",
+    [
+      {
+        name: "formularz\u00a0wersja%20finalna.pdf",
+        url: "https://example.test/file.pdf",
+      },
+    ],
+    false,
+  );
+
+  assert.equal(plan.folderName, "Nabór IX - Projekt Śląski");
+  assert.equal(
+    plan.files[0].relativePath,
+    "Nabór IX - Projekt Śląski/formularz wersja - 20finalna.pdf",
+  );
 });
