@@ -167,6 +167,47 @@ if (!document.querySelector("style[data-burbot-file-sources]")) {
 .file-source-actions .danger {
   margin-left: auto;
 }
+.local-file-drop-zone {
+  display: grid;
+  justify-items: center;
+  gap: 3px;
+  margin-top: 9px;
+  padding: 14px 12px;
+  border: 1.5px dashed #9db9aa;
+  border-radius: 8px;
+  background: #f7faf8;
+  color: var(--green);
+  cursor: pointer;
+  text-align: center;
+  transition:
+    border-color .12s ease,
+    background .12s ease,
+    box-shadow .12s ease;
+}
+.local-file-drop-zone strong {
+  font-size: 12px;
+}
+.local-file-drop-zone small {
+  color: var(--muted);
+  font-size: 11px;
+}
+.local-file-drop-zone:hover,
+.local-file-drop-zone:focus-visible,
+.local-file-drop-zone.is-dragging {
+  border-color: var(--green);
+  background: #edf6f1;
+  box-shadow: inset 0 0 0 1px rgba(47, 118, 89, .12);
+  outline: none;
+}
+.local-file-drop-zone[aria-disabled="true"] {
+  opacity: .55;
+  cursor: wait;
+}
+.local-file-drop-zone[aria-disabled="true"]:hover {
+  border-color: #9db9aa;
+  background: #f7faf8;
+  box-shadow: none;
+}
 .file-source-toolbar {
   display: flex;
   align-items: center;

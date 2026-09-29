@@ -45,7 +45,7 @@ export function createRemoteFileSourceCandidate(
 
   if (!fileType) {
     throw new Error(
-      "Choose a .doc, .docx, .pdf, .xlsx, .png, .jpg or .jpeg file link.",
+      "Choose a .doc, .docx, .pdf, .xlsx, .png, .jpg, .jpeg, .zip, .rar, .7z, .tar, .gz or .tgz file link.",
     );
   }
 

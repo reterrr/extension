@@ -185,9 +185,30 @@ export function App() {
                 <p className="muted">
                   Dodaj dokument i opisz jego wymagania zgodnie z regulaminem.
                   Obsługiwane pliki: .doc, .docx, .pdf, .xlsx, .png, .jpg,
-                  .jpeg.
+                  .jpeg, .zip, .rar, .7z, .tar, .gz, .tgz.
                 </p>
                 <div id="file-source-list" className="file-source-list" />
+                <div
+                  id="local-file-drop-zone"
+                  className="local-file-drop-zone"
+                  role="button"
+                  tabIndex={0}
+                  aria-label="Wgraj pliki z komputera"
+                >
+                  <input
+                    id="local-file-input"
+                    type="file"
+                    accept=".doc,.docx,.pdf,.xlsx,.png,.jpg,.jpeg,.zip,.rar,.7z,.tar,.gz,.tgz"
+                    multiple
+                    hidden
+                  />
+                  <strong id="local-file-drop-title">
+                    Upuść pliki tutaj
+                  </strong>
+                  <small id="local-file-drop-hint">
+                    albo kliknij, aby wybrać z komputera
+                  </small>
+                </div>
                 <div className="file-source-toolbar">
                   <button
                     id="read-from-file"
@@ -226,8 +247,8 @@ export function App() {
                   className="file-source-mode-hint"
                   hidden
                 >
-                  Kliknij link do pliku .doc, .docx, .pdf, .xlsx, .png, .jpg lub
-                  .jpeg. Esc anuluje tryb.
+                  Kliknij link do pliku .doc, .docx, .pdf, .xlsx, .png, .jpg,
+                  .jpeg, .zip, .rar, .7z, .tar, .gz lub .tgz. Esc anuluje tryb.
                 </p>
               </div>
             </details>

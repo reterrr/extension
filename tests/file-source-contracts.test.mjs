@@ -121,6 +121,12 @@ test("all configured file extensions are accepted", () => {
     png: "PNG",
     jpg: "JPG",
     jpeg: "JPEG",
+    zip: "ZIP",
+    rar: "RAR",
+    "7z": "7Z",
+    tar: "TAR",
+    gz: "GZ",
+    tgz: "TGZ",
   };
 
   for (const [extension, fileType] of Object.entries(expected)) {
@@ -135,7 +141,7 @@ test("all configured file extensions are accepted", () => {
 });
 
 test("unsupported remote file extensions are rejected", () => {
-  for (const extension of ["html", "zip", "xls", "gif", "webp"]) {
+  for (const extension of ["html", "xls", "gif", "webp", "csv"]) {
     assert.throws(
       () =>
         remoteFile.createRemoteFileSourceCandidate(
@@ -144,6 +150,24 @@ test("unsupported remote file extensions are rejected", () => {
         ),
       /\.doc/,
     );
+  }
+});
+
+test("common archive links can be attached and classified as file sources", () => {
+  for (const [name, type] of [
+    ["pakiet.zip", "ZIP"],
+    ["dokumenty.rar", "RAR"],
+    ["zalaczniki.7z", "7Z"],
+    ["backup.tar", "TAR"],
+    ["backup.tar.gz", "GZ"],
+    ["backup.tgz", "TGZ"],
+  ]) {
+    const file = remoteFile.createRemoteFileSourceCandidate(
+      `https://projekt.test/files/${name}`,
+      "https://projekt.test/nabor",
+    );
+    assert.equal(file.fileType, type);
+    assert.equal(file.name, name);
   }
 });
 

@@ -1,5 +1,9 @@
 import { createPickerClient, type PickerClient } from "./pickerRpc";
 import {
+  localUploadValidationMessage,
+  uploadLocalFile,
+} from "../shared/api/localFiles";
+import {
   FILE_CLIENT_REQUIREMENTS,
   FILE_METADATA_UNSET_LABEL,
   FILE_PURPOSES,
@@ -37,6 +41,8 @@ let fileModeStarting = false;
 let fileCaptureBusy = false;
 let fileDownloadBusy = false;
 let fileInheritanceBusy = false;
+let localUploadBusy = false;
+let localDragDepth = 0;
 let fileModeGeneration = 0;
 let currentWindowId: number | null = null;
 const handledShortcutStamps = new Set<string>();
@@ -144,7 +150,21 @@ function chosenObject(): LegacyStoredObject | undefined {
   return state.objects.find((object) => object.id === activeId);
 }
 
+function isLocalUploadedFileUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return (
+      parsed.hostname === "127.0.0.1" &&
+      parsed.port === "8765" &&
+      parsed.pathname.startsWith("/files/")
+    );
+  } catch {
+    return false;
+  }
+}
+
 function host(url: string): string {
+  if (isLocalUploadedFileUrl(url)) return "plik lokalny";
   try {
     return new URL(url).hostname;
   } catch {
@@ -355,6 +375,7 @@ async function stopPickerConnection(): Promise<void> {
 async function attachFile(
   object: LegacyStoredObject,
   file: RemoteFileSourceCandidate,
+  announce = true,
 ): Promise<void> {
   const button = $("read-from-file");
   const beforeTop = button.getBoundingClientRect().top;
@@ -366,9 +387,56 @@ async function attachFile(
     (source) => source.objectId === object.id && source.url === file.url,
   );
   if (added) expandedFileSources.add(added.id);
-  notice(`Dodano plik: ${file.name}. File Add Mode nadal jest aktywny.`);
+  if (announce) {
+    notice(`Dodano plik: ${file.name}. File Add Mode nadal jest aktywny.`);
+  }
   render();
   keepControlInPlace(button, beforeTop);
+}
+
+async function uploadLocalFiles(files: readonly File[]): Promise<void> {
+  if (!files.length || localUploadBusy) return;
+  const object = chosenObject();
+  if (!object) throw new Error("Wybierz obiekt przed wgraniem pliku.");
+
+  const invalid = files
+    .map((file) => localUploadValidationMessage(file))
+    .filter((message): message is string => Boolean(message));
+  if (invalid.length) {
+    throw new Error(invalid.slice(0, 3).join(" "));
+  }
+
+  localUploadBusy = true;
+  localDragDepth = 0;
+  render();
+
+  let attached = 0;
+  try {
+    for (let index = 0; index < files.length; index++) {
+      const file = files[index];
+      const title = $("local-file-drop-title");
+      const hint = $("local-file-drop-hint");
+      title.textContent = `Wgrywanie ${index + 1}/${files.length}…`;
+      hint.textContent = file.name;
+
+      const candidate = await uploadLocalFile(file);
+      await attachFile(object, candidate, false);
+      attached++;
+    }
+
+    notice(
+      attached === 1
+        ? `Wgrano plik z komputera: ${files[0].name}.`
+        : `Wgrano ${attached} plików z komputera.`,
+    );
+  } finally {
+    localUploadBusy = false;
+    render();
+  }
+}
+
+function setLocalDropDragging(active: boolean): void {
+  $("local-file-drop-zone").classList.toggle("is-dragging", active);
 }
 
 async function connectFileModeToActivePage(): Promise<void> {
@@ -900,7 +968,9 @@ function renderSource(source: LegacyStoredFileSource): HTMLElement {
   open.href = source.url;
   open.target = "_blank";
   open.rel = "noopener noreferrer";
-  open.textContent = "Otwórz źródło ↗";
+  open.textContent = isLocalUploadedFileUrl(source.url)
+    ? "Otwórz plik ↗"
+    : "Otwórz źródło ↗";
 
   const remove = document.createElement("button");
   remove.type = "button";
@@ -923,6 +993,14 @@ function renderSource(source: LegacyStoredFileSource): HTMLElement {
 function renderMode(): void {
   const button = $("read-from-file") as HTMLButtonElement;
   const hint = $("file-source-mode-hint");
+  const dropZone = $("local-file-drop-zone");
+  const dropTitle = $("local-file-drop-title");
+  const dropHint = $("local-file-drop-hint");
+  dropZone.setAttribute("aria-disabled", String(localUploadBusy));
+  if (!localUploadBusy) {
+    dropTitle.textContent = "Upuść pliki tutaj";
+    dropHint.textContent = "albo kliknij, aby wybrać z komputera";
+  }
   button.disabled = fileModeStarting && !fileModeEnabled;
   button.dataset.active = String(fileModeEnabled);
   button.setAttribute("aria-pressed", String(fileModeEnabled));
@@ -931,7 +1009,7 @@ function renderMode(): void {
     ? "Dodawanie pliku…"
     : fileModeEnabled
       ? "✓ File Add Mode ON · Ctrl+Alt+F"
-      : "+ Dodaj pliki · Ctrl+Alt+F";
+      : "+ Dodaj ze strony · Ctrl+Alt+F";
   hint.hidden = !fileModeEnabled;
   if (fileModeEnabled) {
     hint.textContent =
@@ -1030,6 +1108,58 @@ export async function initFileSourcesUi(): Promise<void> {
 
   $("read-from-file").onclick = () => {
     void toggleFileMode().catch((error: unknown) => {
+      notice(error instanceof Error ? error.message : String(error), true);
+    });
+  };
+
+  const localInput = $("local-file-input") as HTMLInputElement;
+  const localDropZone = $("local-file-drop-zone");
+
+  const chooseLocalFiles = () => {
+    if (localUploadBusy) return;
+    localInput.click();
+  };
+
+  localDropZone.onclick = (event: MouseEvent) => {
+    if (event.target === localInput) return;
+    chooseLocalFiles();
+  };
+  localInput.onclick = (event: MouseEvent) => event.stopPropagation();
+  localDropZone.onkeydown = (event: KeyboardEvent) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    chooseLocalFiles();
+  };
+  localInput.onchange = () => {
+    const files = Array.from(localInput.files ?? []);
+    localInput.value = "";
+    void uploadLocalFiles(files).catch((error: unknown) => {
+      notice(error instanceof Error ? error.message : String(error), true);
+    });
+  };
+
+  localDropZone.ondragenter = (event: DragEvent) => {
+    event.preventDefault();
+    if (localUploadBusy) return;
+    localDragDepth++;
+    setLocalDropDragging(true);
+  };
+  localDropZone.ondragover = (event: DragEvent) => {
+    event.preventDefault();
+    if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
+  };
+  localDropZone.ondragleave = (event: DragEvent) => {
+    event.preventDefault();
+    localDragDepth = Math.max(0, localDragDepth - 1);
+    if (!localDragDepth) setLocalDropDragging(false);
+  };
+  localDropZone.ondrop = (event: DragEvent) => {
+    event.preventDefault();
+    localDragDepth = 0;
+    setLocalDropDragging(false);
+    if (localUploadBusy) return;
+    const files = Array.from(event.dataTransfer?.files ?? []);
+    void uploadLocalFiles(files).catch((error: unknown) => {
       notice(error instanceof Error ? error.message : String(error), true);
     });
   };

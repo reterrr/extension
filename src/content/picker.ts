@@ -303,7 +303,7 @@ if (!globalThis.__burbotPickerLoaded) {
         try {
           const link = element?.closest("a[href]");
           if (!(link instanceof HTMLAnchorElement)) {
-            throw new Error("Click a supported file link (.doc, .docx, .pdf, .xlsx, .png, .jpg, .jpeg).");
+            throw new Error("Click a supported file link (.doc, .docx, .pdf, .xlsx, .png, .jpg, .jpeg, .zip, .rar, .7z, .tar, .gz, .tgz).");
           }
           const file = createRemoteFileSourceCandidate(
             link.href,
