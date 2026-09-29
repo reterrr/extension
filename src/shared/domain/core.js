@@ -803,15 +803,13 @@
         if (!assignment) throw Error("Operator assignment not found.");
 
         const removedGeographyIds = new Set(
-          object.type === "recruitment"
-            ? (state.geographies || [])
-                .filter(
-                  (row) =>
-                    row.objectId === object.id &&
-                    row.operatorId === assignment.operatorId,
-                )
-                .map((row) => row.id)
-            : [],
+          (state.geographies || [])
+            .filter(
+              (row) =>
+                row.objectId === object.id &&
+                row.operatorId === assignment.operatorId,
+            )
+            .map((row) => row.id),
         );
 
         state.operatorAssignments = rows.filter(
@@ -871,19 +869,16 @@
         if (!entry || entry.type !== message.geographyType)
           throw Error("Choose a geography value matching the selected type.");
         const rows = (state.geographies ||= []);
-        let operatorId;
-        if (object.type === "recruitment") {
-          operatorId = clean(message.operatorId);
-          if (!operatorId)
-            throw Error("Choose the operator whose recruitment geography this is.");
-          const assigned = (state.operatorAssignments || []).some(
-            (row) =>
-              row.objectId === object.id &&
-              row.operatorId === operatorId,
-          );
-          if (!assigned)
-            throw Error("The selected operator is not assigned to this recruitment.");
-        }
+        const operatorId = clean(message.operatorId);
+        if (!operatorId)
+          throw Error("Choose the operator whose geography this is.");
+        const assigned = (state.operatorAssignments || []).some(
+          (row) =>
+            row.objectId === object.id &&
+            row.operatorId === operatorId,
+        );
+        if (!assigned)
+          throw Error("The selected operator is not assigned to this object.");
 
         if (
           rows.some(
@@ -892,8 +887,7 @@
               row.type === message.geographyType &&
               row.role === message.geographyRole &&
               row.value === entry.value &&
-              (object.type !== "recruitment" ||
-                row.operatorId === operatorId),
+              row.operatorId === operatorId,
           )
         )
           throw Error("This geography condition is already added.");
@@ -903,7 +897,7 @@
           type: message.geographyType,
           role: message.geographyRole,
           value: entry.value,
-          ...(operatorId ? { operatorId } : {}),
+          operatorId,
         });
         object.updatedAt = now;
       } else if (message.op === "REMOVE_GEOGRAPHY") {
