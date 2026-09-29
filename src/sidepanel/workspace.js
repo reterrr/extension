@@ -11,6 +11,7 @@ import {
   aiViewExportFilename,
   createAiViewExport,
 } from "../shared/export/aiViewExport.js";
+import { fundingInheritanceStatus } from "../shared/configurationInheritance";
 import {
   OBJECT_VIEW_STORAGE_KEY,
   addObjectToView,
@@ -1018,6 +1019,49 @@ import {
   function renderFunding(object) {
     const root = $("funding");
     root.replaceChildren();
+
+    const inheritRoot = $("funding-inherit");
+    const inheritButton = $("funding-inherit-button");
+    const inheritStatus = $("funding-inherit-status");
+    if (object.type === "recruitment") {
+      const inheritance = fundingInheritanceStatus(db, object);
+      inheritRoot.hidden = false;
+      if (!inheritance.project) {
+        inheritButton.disabled = true;
+        inheritButton.textContent = "↳ Dziedzicz warianty";
+        inheritStatus.textContent = "Najpierw przypisz projekt do naboru.";
+      } else if (!inheritance.projectVariants.length) {
+        inheritButton.disabled = true;
+        inheritButton.textContent = "Projekt nie ma wariantów";
+        inheritStatus.textContent =
+          "Przypisany projekt nie ma wariantów dofinansowania do skopiowania.";
+      } else if (!inheritance.pendingVariants.length) {
+        inheritButton.disabled = true;
+        inheritButton.textContent =
+          "✓ Warianty projektu skopiowane (" +
+          inheritance.projectVariants.length +
+          ")";
+        inheritStatus.textContent =
+          "Brak nowych wariantów. Istniejące kopie nie synchronizują się z projektem.";
+      } else {
+        inheritButton.disabled = busy;
+        inheritButton.textContent =
+          "↳ Skopiuj warianty z projektu (" +
+          inheritance.pendingVariants.length +
+          ")";
+        inheritStatus.textContent =
+          "Powstaną niezależne kopie. Późniejsze zmiany projektu ich nie zmienią.";
+      }
+      inheritButton.onclick = action(async () => {
+        const id = object.id;
+        await data("INHERIT_PROJECT_FUNDING", { objectId: id });
+      });
+    } else {
+      inheritRoot.hidden = true;
+      inheritButton.disabled = true;
+      inheritButton.onclick = null;
+    }
+
     const rows = (db.financingRules || []).filter(
       (r) => r.objectId === object.id,
     );
@@ -1047,6 +1091,16 @@ import {
           "variant-summary",
           "Wariant " + variant.variant_no,
         );
+        if (variant.copiedFromProjectId) {
+          const inheritedBadge = node(
+            "span",
+            "badge configuration-inherited-badge",
+            "kopia z projektu",
+          );
+          inheritedBadge.title =
+            "Ten wariant jest niezależną kopią. Zmiany wariantu projektu nie aktualizują go automatycznie.";
+          summary.append(inheritedBadge);
+        }
         const parts = [];
         const hasMin = C.hasValue(variant.refund_percent_min),
           hasMax = C.hasValue(variant.refund_percent_max);
