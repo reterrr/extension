@@ -102,10 +102,14 @@ CREATE TABLE IF NOT EXISTS recruitments (
   end_time TEXT,
   planned_start_low_date TEXT,
   planned_start_ceil_date TEXT,
-  planned_start_low_time TEXT,
-  planned_start_ceil_time TEXT,
+  planned_start_time TEXT,
   planned_end_low_date TEXT,
   planned_end_ceil_date TEXT,
+  planned_end_time TEXT,
+
+  -- Legacy planned hour-range columns retained for older stored data.
+  planned_start_low_time TEXT,
+  planned_start_ceil_time TEXT,
   planned_end_low_time TEXT,
   planned_end_ceil_time TEXT,
   planned_start_low_year INTEGER,
@@ -127,9 +131,7 @@ CREATE TABLE IF NOT EXISTS recruitments (
 
   -- Legacy single-value planned columns retained for existing databases.
   planned_start_date TEXT,
-  planned_start_time TEXT,
   planned_end_date TEXT,
-  planned_end_time TEXT,
   planned_start_year INTEGER,
   planned_start_month INTEGER,
   planned_start_week INTEGER,
