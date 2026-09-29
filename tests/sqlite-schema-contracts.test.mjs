@@ -37,6 +37,7 @@ test("SQLite schema creates typed business and provenance tables", () => {
     "geographies",
     "extraction_rules",
     "field_evidence",
+    "local_file_blobs",
     "file_sources",
     "import_sources",
     "financing_rules",
@@ -160,6 +161,20 @@ test("SQLite schema creates typed business and provenance tables", () => {
     );
   }
 
+  const localFileColumns = new Set(
+    db.prepare("PRAGMA table_info(local_file_blobs)").all().map((row) => row.name),
+  );
+  for (const column of [
+    "file_id",
+    "name",
+    "mime_type",
+    "size_bytes",
+    "content",
+    "uploaded_at",
+  ]) {
+    assert.ok(localFileColumns.has(column), `missing local_file_blobs.${column}`);
+  }
+
   const evidenceColumns = new Set(
     db.prepare("PRAGMA table_info(field_evidence)").all().map((row) => row.name),
   );
@@ -179,7 +194,7 @@ test("SQLite schema creates typed business and provenance tables", () => {
     assert.ok(evidenceColumns.has(column), `missing field_evidence.${column}`);
   }
 
-  assert.equal(db.pragma("user_version", { simple: true }), 9);
+  assert.equal(db.pragma("user_version", { simple: true }), 10);
   db.close();
 });
 
