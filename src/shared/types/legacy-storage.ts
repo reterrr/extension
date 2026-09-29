@@ -105,7 +105,10 @@ export interface LegacyStoredGeography {
   type: string;
   role: string;
   value: string;
-  /** Required for Recruitment geography; omitted for Project geography. */
+  /**
+   * Required for Project and Recruitment geography. Geography is always scoped
+   * to one operator assigned to the owning object.
+   */
   operatorId?: string;
 
   /**

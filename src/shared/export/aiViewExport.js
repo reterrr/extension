@@ -237,7 +237,10 @@ function exportObject(
   if (operators.length) result.operators = operators;
   if (geographies.length) result.geography = geographies;
 
-  if (object.type === "recruitment" && geographies.length) {
+  if (
+    (object.type === "project" || object.type === "recruitment") &&
+    geographies.length
+  ) {
     const grouped = {};
     for (const geography of geographies) {
       const key = geography.operator?.key ?? "UNASSIGNED";

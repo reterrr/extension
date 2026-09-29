@@ -1246,7 +1246,10 @@ test("import approval plan preserves nested portable configuration", () => {
       {
         key: "project-full",
         type: "project",
-        data: { name: "Projekt pełny" },
+        data: {
+          name: "Projekt pełny",
+          operator_id: { $ref: "operator-full" },
+        },
         geography: [
           {
             key: "geo-1",
@@ -1269,6 +1272,11 @@ test("import approval plan preserves nested portable configuration", () => {
             data: { requirement: "REQUIRED", auto_fill: false },
           },
         ],
+      },
+      {
+        key: "operator-full",
+        type: "operator",
+        data: { name: "Operator pełny" },
       },
     ],
   };

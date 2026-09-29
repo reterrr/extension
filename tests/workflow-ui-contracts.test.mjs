@@ -494,7 +494,7 @@ test("file metadata uses fixed select vocabularies while keeping name and intend
 });
 
 
-test("project and recruitment workspace expose multiple operators and operator-scoped recruitment geography", () => {
+test("project and recruitment workspace expose multiple operators and operator-scoped geography", () => {
   const app = source("src/sidepanel/App.tsx");
   const operators = source("src/sidepanel/operatorAssignmentsUi.ts");
   const geography = source("src/sidepanel/geographyUi.ts");
@@ -515,12 +515,17 @@ test("project and recruitment workspace expose multiple operators and operator-s
     /object\.type === "project" \|\| object\.type === "recruitment"/,
   );
   assert.match(geography, /— geografia:/);
+  assert.match(geography, /renderGeographyOperatorSelect/);
   assert.match(
     geography,
-    /object\.type === "recruitment"[\s\S]*?operatorId/,
+    /object\.type === "project" \|\| object\.type === "recruitment"/,
   );
   assert.match(
     core,
-    /message\.op === "ADD_GEOGRAPHY"[\s\S]*?object\.type === "recruitment"[\s\S]*?message\.operatorId/,
+    /message\.op === "ADD_GEOGRAPHY"[\s\S]*?const operatorId = clean\(message\.operatorId\)/,
+  );
+  assert.match(
+    core,
+    /row\.operatorId === operatorId/,
   );
 });

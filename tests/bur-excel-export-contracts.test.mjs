@@ -136,6 +136,7 @@ function snapshot() {
         {
           id: "GPR_1",
           objectId: "PR_1",
+          operatorId: "OP_1",
           type: "WOJEWODZTWO",
           role: "OBEJMUJE",
           value: "podkarpackie",
@@ -275,6 +276,10 @@ test("BUR Excel export keeps complete business data and relations", () => {
   const project = asObjects("Projekty")[0];
   assert.equal(project.operator_id, "OP_1");
   assert.equal(project.numer_projektu, "FEPK.01.01-TEST");
+
+  const projectGeography = asObjects("Geografia_Projekty")[0];
+  assert.equal(projectGeography.projekt_id, "PR_1");
+  assert.equal(projectGeography.operator_id, "OP_1");
 
   const recruitmentSheet = byName.get("Nabory");
   assert.equal(

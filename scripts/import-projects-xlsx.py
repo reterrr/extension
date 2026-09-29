@@ -403,6 +403,7 @@ def empty_state() -> dict[str, Any]:
         "objects": [],
         "rules": [],
         "geographies": [],
+        "operatorAssignments": [],
         "operatorContacts": [],
         "fileSources": [],
         "importSources": [],
@@ -497,9 +498,13 @@ def validate_input(
         raise ValueError("Duplicate geo_projekt_id in Geografia_Projekty.")
 
     project_set = set(project_ids)
+    project_main_operator = {
+        row["projekt_id"]: row["operator_id"]
+        for row in projects
+    }
     linked_projects: set[str] = set()
     used_geo_ids: set[str] = set()
-    pairs: set[tuple[str, str]] = set()
+    pairs: set[tuple[str, str, str]] = set()
     for row in geo_projects:
         project_id = row["projekt_id"]
         geo_id = row["geo_id"]
@@ -507,9 +512,16 @@ def validate_input(
             raise ValueError(f"Unknown project in geography link: {project_id}.")
         if geo_id not in geo_by_id:
             raise ValueError(f"Unknown geo_id in geography link: {geo_id}.")
-        pair = (project_id, geo_id)
+        operator_id = (
+            row.get("operator_id", "").strip()
+            or project_main_operator.get(project_id, "")
+        )
+        pair = (project_id, operator_id, geo_id)
         if pair in pairs:
-            raise ValueError(f"Duplicate project/geography pair: {project_id} / {geo_id}.")
+            raise ValueError(
+                "Duplicate project/operator/geography assignment: "
+                f"{project_id} / {operator_id} -> {geo_id}."
+            )
         pairs.add(pair)
         linked_projects.add(project_id)
         used_geo_ids.add(geo_id)
@@ -536,6 +548,7 @@ def merge_projects(
 ) -> dict[str, int]:
     objects = state.setdefault("objects", [])
     geographies = state.setdefault("geographies", [])
+    operator_assignments = state.setdefault("operatorAssignments", [])
     now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
     project_objects: dict[str, dict[str, Any]] = {}
@@ -547,6 +560,14 @@ def merge_projects(
     operator_ids = {
         row["projekt_id"]: resolve_operator(objects, row["operator_id"])
         for row in projects
+    }
+    geography_operator_ids = {
+        row["geo_projekt_id"]: (
+            resolve_operator(objects, row.get("operator_id", ""))
+            if row.get("operator_id", "").strip()
+            else operator_ids[row["projekt_id"]]
+        )
+        for row in geo_projects
     }
 
     for row in projects:
@@ -578,7 +599,36 @@ def merge_projects(
 
         values = project.setdefault("values", {})
         values["name"] = row["nazwa_projektu"]
-        values["operator_id"] = operator_ids[project_key]
+        values.pop("operator_id", None)
+        operator_id = operator_ids[project_key]
+        for assignment in operator_assignments:
+            if (
+                str(assignment.get("objectId", "")) == str(project["id"])
+                and assignment.get("operatorType") == "GLOWNY"
+                and str(assignment.get("operatorId", "")) != operator_id
+            ):
+                assignment["operatorType"] = "DODATKOWY"
+        assignment = next(
+            (
+                item
+                for item in operator_assignments
+                if str(item.get("objectId", "")) == str(project["id"])
+                and str(item.get("operatorId", "")) == operator_id
+            ),
+            None,
+        )
+        if assignment is None:
+            operator_assignments.append(
+                {
+                    "id": f"xlsx:{project_key}:operator:{operator_id}",
+                    "objectId": str(project["id"]),
+                    "operatorId": operator_id,
+                    "operatorType": "GLOWNY",
+                }
+            )
+        else:
+            assignment["operatorType"] = "GLOWNY"
+
         values["type"] = type_value
         values["status"] = STATUS_MAP[status_key]
         values["start_date"] = excel_date(row["data_start"], "data_start", project_key)
@@ -648,10 +698,37 @@ def merge_projects(
     for row in geo_projects:
         project = project_objects[row["projekt_id"]]
         geo_type, geo_value = canonical_geo[row["geo_id"]]
+        geography_operator_id = geography_operator_ids[row["geo_projekt_id"]]
+        project_main_operator_id = operator_ids[row["projekt_id"]]
+
+        assignment = next(
+            (
+                item
+                for item in operator_assignments
+                if str(item.get("objectId", "")) == str(project["id"])
+                and str(item.get("operatorId", "")) == geography_operator_id
+            ),
+            None,
+        )
+        if assignment is None:
+            operator_assignments.append(
+                {
+                    "id": f"xlsx:{row['projekt_id']}:operator:{geography_operator_id}",
+                    "objectId": str(project["id"]),
+                    "operatorId": geography_operator_id,
+                    "operatorType": (
+                        "GLOWNY"
+                        if geography_operator_id == project_main_operator_id
+                        else "DODATKOWY"
+                    ),
+                }
+            )
+
         imported_geographies.append(
             {
                 "id": row["geo_projekt_id"],
                 "objectId": str(project["id"]),
+                "operatorId": geography_operator_id,
                 "type": geo_type,
                 "role": "OBEJMUJE",
                 "value": geo_value,

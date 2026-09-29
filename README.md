@@ -171,7 +171,7 @@ References between objects use portable import keys instead of database/storage 
 }
 ```
 
-Projects and recruitments can have multiple operators through `objects[].operators[]`. Recruitment geography is scoped to an assigned operator through `geography[].operator`:
+Projects and recruitments can have multiple operators through `objects[].operators[]`. Geography for both Projects and Recruitments is scoped to an assigned operator through `geography[].operator`:
 
 ```json
 {
@@ -275,7 +275,7 @@ uwagi_techniczne              -> project.technical_notes
 import time                   -> project.last_checked_at
 ```
 
-Geography is normalized against `src/shared/types/geography.ts` before any database write. Powiaty, cities with powiat rights and gminas therefore use the same canonical values as the Workspace geography picker. All imported geography rows use role `OBEJMUJE`.
+Geography is normalized against `src/shared/types/geography.ts` before any database write. Powiaty, cities with powiat rights and gminas therefore use the same canonical values as the Workspace geography picker. All imported project geography rows use role `OBEJMUJE` and are assigned to the project's operator from the workbook.
 
 ## Recruitment + geography + financing XLSX import
 

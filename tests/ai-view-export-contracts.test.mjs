@@ -132,6 +132,7 @@ function state() {
       {
         id: "geo-1",
         objectId: "project-1",
+        operatorId: "operator-1",
         type: "MIASTO_NA_PRAWACH_POWIATU",
         role: "OBEJMUJE",
         value: "śląskie|miasto|Katowice",
@@ -283,7 +284,16 @@ test("AI View export includes readable related business data", () => {
     label: "Katowice",
     context: "śląskie",
     value: "śląskie|miasto|Katowice",
+    operator: {
+      id: "operator-1",
+      key: "operator-1",
+      name: "Human Power Sp. z o.o.",
+    },
   });
+  assert.equal(
+    project.geography_by_operator["operator-1"][0].label,
+    "Katowice",
+  );
   assert.equal(project.financing[0].company_size, "SMALL");
   assert.equal(project.financing[0].refund_percent_avg, 75);
   assert.equal(project.financing[0].id, undefined);

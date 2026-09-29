@@ -868,7 +868,7 @@ export function importDocumentIntoState(
           );
         }
         let operatorId: string | undefined;
-        if (item.type === "recruitment") {
+        if (item.type === "project" || item.type === "recruitment") {
           const assigned = (state.operatorAssignments ?? []).filter(
             (assignment) => assignment.objectId === object.id,
           );
@@ -885,7 +885,7 @@ export function importDocumentIntoState(
             }
             if (!assigned.some((assignment) => assignment.operatorId === targetId)) {
               throw new Error(
-                `${item.key}.geography[${geographyIndex}] references an operator that is not assigned to the recruitment.`,
+                `${item.key}.geography[${geographyIndex}] references an operator that is not assigned to the ${item.type}.`,
               );
             }
             operatorId = targetId;
@@ -893,13 +893,9 @@ export function importDocumentIntoState(
             operatorId = assigned[0].operatorId;
           } else {
             throw new Error(
-              `${item.key}.geography[${geographyIndex}].operator is required when the recruitment has ${assigned.length} operators.`,
+              `${item.key}.geography[${geographyIndex}].operator is required when the ${item.type} has ${assigned.length} operators.`,
             );
           }
-        } else if (geography.operator) {
-          throw new Error(
-            `${item.key}.geography[${geographyIndex}].operator is supported only for recruitment geography.`,
-          );
         }
 
         const row = {
