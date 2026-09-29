@@ -430,7 +430,7 @@ Dla jednoznacznej stałej refundacji 60% można podać `refund_percent_min = ref
 
 | Pole | Typ / wymagalność | Znaczenie |
 | --- | --- | --- |
-| `source` | niepusty tekst, wymagane | Klucz źródła z `sources`. Musi wskazywać `DOC`, `DOCX`, `PDF`, `XLSX`, `PNG`, `JPG` lub `JPEG` z prawdziwym URL HTTP(S). `HTML` nie jest plikiem załącznika. |
+| `source` | niepusty tekst, wymagane | Klucz źródła z `sources`. Musi wskazywać `DOC`, `DOCX`, `PDF`, `XLSX`, `PNG`, `JPG`, `JPEG`, `ZIP`, `RAR`, `7Z`, `TAR`, `GZ` lub `TGZ` z prawdziwym URL HTTP(S). `HTML` nie jest plikiem załącznika. Archiwa można oznaczać tymi samymi metadanymi co pozostałe pliki. |
 | `source_page` | niepusty tekst, opcjonalne | Klucz źródła strony, na której znaleziono plik. Wskazane źródło musi mieć URL; importer nie wymusza typu HTML, ale semantycznie wskazuj właściwą stronę pochodzenia. |
 | `metadata` | obiekt, opcjonalne | Opis konkretnego pliku, pola niżej. |
 | `evidence` | mapa, opcjonalne | Pola metadanych → tablice cytatów z pliku lub instrukcji, która określa ich wymaganie. Wskazane pole musi być obecne w metadanych (nazwa wyświetlana może mieć fallback systemowy). |
