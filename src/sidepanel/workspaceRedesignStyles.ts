@@ -916,6 +916,42 @@ progress {
   margin-top: 8px;
 }
 
+.configuration-inherit {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 0 0 10px;
+  padding: 9px;
+  border: 1px solid #cfe0d3;
+  border-radius: 9px;
+  background: #f5faf6;
+}
+.configuration-inherit[hidden] {
+  display: none;
+}
+.configuration-inherit > div {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+.configuration-inherit strong {
+  font-size: 12px;
+}
+.configuration-inherit small {
+  color: var(--text-soft);
+  font-size: 11px;
+  line-height: 1.35;
+}
+.configuration-inherit > button {
+  flex: 0 0 auto;
+}
+.configuration-inherited-badge {
+  margin-left: 6px;
+  background: var(--success-soft);
+  color: var(--success);
+}
+
 .funding-tabs {
   display: flex;
   gap: 2px;
