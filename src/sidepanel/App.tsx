@@ -389,7 +389,7 @@ export function App() {
                 >
                   <div>
                     <strong>Dziedzicz warianty z projektu</strong>
-                    <small>
+                    <small id="funding-inherit-status">
                       Tworzy niezależne kopie wariantów dofinansowania.
                     </small>
                   </div>
