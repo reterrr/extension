@@ -550,6 +550,14 @@ def merge_projects(
         row["projekt_id"]: resolve_operator(objects, row["operator_id"])
         for row in projects
     }
+    geography_operator_ids = {
+        row["geo_projekt_id"]: (
+            resolve_operator(objects, row.get("operator_id", ""))
+            if row.get("operator_id", "").strip()
+            else operator_ids[row["projekt_id"]]
+        )
+        for row in geo_projects
+    }
 
     for row in projects:
         project_key = row["projekt_id"]
@@ -679,11 +687,37 @@ def merge_projects(
     for row in geo_projects:
         project = project_objects[row["projekt_id"]]
         geo_type, geo_value = canonical_geo[row["geo_id"]]
+        geography_operator_id = geography_operator_ids[row["geo_projekt_id"]]
+        project_main_operator_id = operator_ids[row["projekt_id"]]
+
+        assignment = next(
+            (
+                item
+                for item in operator_assignments
+                if str(item.get("objectId", "")) == str(project["id"])
+                and str(item.get("operatorId", "")) == geography_operator_id
+            ),
+            None,
+        )
+        if assignment is None:
+            operator_assignments.append(
+                {
+                    "id": f"xlsx:{row['projekt_id']}:operator:{geography_operator_id}",
+                    "objectId": str(project["id"]),
+                    "operatorId": geography_operator_id,
+                    "operatorType": (
+                        "GLOWNY"
+                        if geography_operator_id == project_main_operator_id
+                        else "DODATKOWY"
+                    ),
+                }
+            )
+
         imported_geographies.append(
             {
                 "id": row["geo_projekt_id"],
                 "objectId": str(project["id"]),
-                "operatorId": operator_ids[row["projekt_id"]],
+                "operatorId": geography_operator_id,
                 "type": geo_type,
                 "role": "OBEJMUJE",
                 "value": geo_value,
