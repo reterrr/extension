@@ -20,6 +20,48 @@ if (!document.querySelector("style[data-burbot-geography]")) {
   margin-top: 3px;
   line-height: 1.35;
 }
+.geography-inherit {
+  display: grid;
+  gap: 8px;
+  margin: 0 0 10px;
+  padding: 9px;
+  border: 1px solid #cfe0d3;
+  border-radius: 9px;
+  background: #f5faf6;
+}
+.geography-inherit[hidden] {
+  display: none;
+}
+.geography-inherit-copy {
+  display: grid;
+  gap: 2px;
+}
+.geography-inherit-copy strong {
+  font-size: 12px;
+}
+.geography-inherit-copy small {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.35;
+}
+.geography-inherit-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.geography-inherit-controls select {
+  min-width: 180px;
+  flex: 1 1 210px;
+}
+.geography-inherit-controls button {
+  flex: 0 0 auto;
+}
+.geography-inherited-badge {
+  background: #eef5eb;
+  color: var(--green);
+}
+
 .geography-empty {
   color: var(--muted);
   font-size: 12px;
