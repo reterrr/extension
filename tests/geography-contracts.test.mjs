@@ -233,6 +233,46 @@ test("legacy planned hour ranges migrate to one start and one end hour", () => {
   assert.ok(state.rules.some((rule) => rule.field === "planned_end_time"));
 });
 
+test("legacy project geography is scoped automatically when the project has exactly one operator", () => {
+  const state = {
+    version: 1,
+    revision: 1,
+    objects: [
+      {
+        id: "project-legacy",
+        type: "project",
+        values: { name: "Projekt legacy" },
+      },
+      {
+        id: "operator-legacy",
+        type: "operator",
+        values: { name: "Operator legacy" },
+      },
+    ],
+    rules: [],
+    operatorAssignments: [
+      {
+        id: "assignment-legacy",
+        objectId: "project-legacy",
+        operatorId: "operator-legacy",
+        operatorType: "GLOWNY",
+      },
+    ],
+    geographies: [
+      {
+        id: "geo-legacy",
+        objectId: "project-legacy",
+        type: "WOJEWODZTWO",
+        role: "OBEJMUJE",
+        value: "podkarpackie",
+      },
+    ],
+  };
+
+  assert.equal(migrations.migrateMultiOperatorAssignments(state), true);
+  assert.equal(state.geographies[0].operatorId, "operator-legacy");
+});
+
 test("geography is selected first and page text is stored as supporting evidence rule", () => {
   const { state: initial, uuid, object } = createProject();
 
