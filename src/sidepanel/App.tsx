@@ -342,7 +342,7 @@ export function App() {
                       htmlFor="geography-operator"
                       hidden
                     >
-                      Operator naboru
+                      Operator
                     </label>
                     <select id="geography-operator" hidden />
 
