@@ -1,4 +1,5 @@
 import { createCapturedExtractionInput } from "../shared/extraction/rules";
+import { geographyInheritanceStatus } from "../shared/configurationInheritance";
 import { isPickerSelectionResponse } from "../shared/messaging/picker";
 import {
   patchSidepanelUiState,
@@ -295,6 +296,14 @@ function geographyRowCard(
     badge.textContent = "potwierdzone ze strony";
     badges.append(badge);
   }
+  if (row.copiedFromProjectId) {
+    const badge = document.createElement("span");
+    badge.className = "badge geography-inherited-badge";
+    badge.textContent = "kopia z projektu";
+    badge.title =
+      "Ta geografia jest niezależną kopią. Zmiany geografii projektu nie aktualizują jej automatycznie.";
+    badges.append(badge);
+  }
 
   copy.append(title, meta, badges);
 
@@ -340,6 +349,77 @@ function geographyRowCard(
   actions.append(confirm, remove);
   card.append(copy, actions);
   return card;
+}
+
+function renderInheritance(object: LegacyStoredObject): void {
+  const root = $("geography-inherit");
+  const select = $("geography-inherit-operator") as HTMLSelectElement;
+  const button = $("geography-inherit-button") as HTMLButtonElement;
+  const statusElement = $("geography-inherit-status");
+
+  root.hidden = object.type !== "recruitment";
+  if (object.type !== "recruitment") {
+    select.replaceChildren();
+    button.disabled = true;
+    statusElement.textContent = "";
+    return;
+  }
+
+  const assignments = operatorAssignments(object.id);
+  const previous = select.value;
+  select.replaceChildren(new Option("Wybierz operatora…", ""));
+  for (const assignment of assignments) {
+    const key = operatorKey(assignment.operatorId);
+    const name = operatorName(assignment.operatorId);
+    select.append(
+      new Option(name ? `${key} — ${name}` : key, assignment.operatorId),
+    );
+  }
+  select.value = assignments.some((row) => row.operatorId === previous)
+    ? previous
+    : "";
+
+  const inheritance = geographyInheritanceStatus(
+    state,
+    object,
+    select.value,
+  );
+
+  if (!inheritance.project) {
+    button.disabled = true;
+    button.textContent = "↳ Dziedzicz geografię";
+    statusElement.textContent = "Najpierw przypisz projekt do naboru.";
+    return;
+  }
+  if (!assignments.length) {
+    button.disabled = true;
+    button.textContent = "↳ Dziedzicz geografię";
+    statusElement.textContent = "Najpierw przypisz operatora do naboru.";
+    return;
+  }
+  if (!select.value) {
+    button.disabled = true;
+    button.textContent = "↳ Dziedzicz geografię";
+    statusElement.textContent =
+      "Najpierw wybierz operatora, dla którego ma zostać skopiowana geografia projektu.";
+    return;
+  }
+  if (!inheritance.projectGeographies.length) {
+    button.disabled = true;
+    button.textContent = "Projekt nie ma geografii";
+    statusElement.textContent =
+      "Przypisany projekt nie ma geografii do odziedziczenia.";
+    return;
+  }
+
+  const pending = inheritance.pendingGeographies.length;
+  button.disabled = pending === 0;
+  button.textContent = pending
+    ? `↳ Skopiuj geografię z projektu (${pending})`
+    : `✓ Geografia projektu skopiowana (${inheritance.projectGeographies.length})`;
+  statusElement.textContent = pending
+    ? "Powstaną niezależne kopie przypisane do wybranego operatora."
+    : "Brak nowych elementów. Istniejące kopie nie synchronizują się z projektem.";
 }
 
 function renderRows(object: LegacyStoredObject): void {
@@ -507,6 +587,7 @@ function render(): void {
     ? `${count} ${count === 1 ? "warunek" : "warunków"}`
     : "Brak zakresu";
 
+  renderInheritance(object);
   renderRows(object);
   renderSearch(object);
 }
@@ -548,6 +629,37 @@ function populateSelectors(): void {
   };
   ($("geography-operator") as HTMLSelectElement).onchange = () => {
     queueRender();
+  };
+  ($("geography-inherit-operator") as HTMLSelectElement).onchange = () => {
+    queueRender();
+  };
+  ($("geography-inherit-button") as HTMLButtonElement).onclick = () => {
+    const object = chosenObject();
+    const operatorId = (
+      $("geography-inherit-operator") as HTMLSelectElement
+    ).value;
+    if (!object || object.type !== "recruitment") {
+      notice("Wybierz nabór.", true);
+      return;
+    }
+    if (!operatorId) {
+      notice("Najpierw wybierz operatora.", true);
+      return;
+    }
+
+    void data("INHERIT_PROJECT_GEOGRAPHY", {
+      objectId: object.id,
+      operatorId,
+    })
+      .then(() => {
+        notice(
+          "Skopiowano geografię projektu do naboru. Kopie są niezależne od projektu.",
+        );
+        render();
+      })
+      .catch((error: unknown) =>
+        notice(error instanceof Error ? error.message : String(error), true),
+      );
   };
 }
 
