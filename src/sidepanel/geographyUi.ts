@@ -133,22 +133,31 @@ function operatorName(operatorId: string): string {
   return String(operator?.values?.name ?? operator?.label ?? "");
 }
 
-function renderRecruitmentOperatorSelect(object: LegacyStoredObject): string {
+function renderGeographyOperatorSelect(object: LegacyStoredObject): string {
   const select = $("geography-operator") as HTMLSelectElement;
   const label = $("geography-operator-label");
   const assignments = operatorAssignments(object.id);
   const previous = select.value;
 
-  label.hidden = object.type !== "recruitment";
-  select.hidden = object.type !== "recruitment";
-  if (object.type !== "recruitment") {
+  const supportsOperatorScopedGeography =
+    object.type === "project" || object.type === "recruitment";
+  label.hidden = !supportsOperatorScopedGeography;
+  select.hidden = !supportsOperatorScopedGeography;
+  if (!supportsOperatorScopedGeography) {
     select.replaceChildren();
     return "";
   }
 
   select.replaceChildren();
   if (!assignments.length) {
-    select.append(new Option("Najpierw dodaj operatora do naboru", ""));
+    select.append(
+      new Option(
+        object.type === "project"
+          ? "Najpierw dodaj operatora do projektu"
+          : "Najpierw dodaj operatora do naboru",
+        "",
+      ),
+    );
     select.disabled = true;
     return "";
   }
@@ -430,24 +439,14 @@ function renderRows(object: LegacyStoredObject): void {
     (row) => row.objectId === object.id,
   );
 
-  if (object.type !== "recruitment") {
-    if (!rows.length) {
-      const empty = document.createElement("p");
-      empty.className = "geography-empty";
-      empty.textContent = "Brak ograniczeń geograficznych.";
-      root.append(empty);
-      return;
-    }
-    for (const row of rows) root.append(geographyRowCard(object, row));
-    return;
-  }
-
   const assignments = operatorAssignments(object.id);
   if (!assignments.length) {
     const empty = document.createElement("p");
     empty.className = "geography-empty";
     empty.textContent =
-      "Najpierw dodaj operatora do naboru. Geografia naboru jest przypisana do operatora.";
+      object.type === "project"
+        ? "Najpierw dodaj operatora do projektu. Geografia projektu jest przypisana do operatora."
+        : "Najpierw dodaj operatora do naboru. Geografia naboru jest przypisana do operatora.";
     root.append(empty);
     return;
   }
@@ -506,7 +505,7 @@ function renderRows(object: LegacyStoredObject): void {
 }
 
 function renderSearch(object: LegacyStoredObject): void {
-  const operatorId = renderRecruitmentOperatorSelect(object);
+  const operatorId = renderGeographyOperatorSelect(object);
   const type = $("geography-type") as HTMLSelectElement;
   const role = $("geography-role") as HTMLSelectElement;
   const search = $("geography-search") as HTMLInputElement;
@@ -515,8 +514,11 @@ function renderSearch(object: LegacyStoredObject): void {
   const matches = matchingCatalog(type.value, search.value);
 
   results.replaceChildren();
-  if (object.type === "recruitment" && !operatorId) {
-    help.textContent = "Najpierw przypisz co najmniej jednego operatora do naboru.";
+  if (!operatorId) {
+    help.textContent =
+      object.type === "project"
+        ? "Najpierw przypisz co najmniej jednego operatora do projektu."
+        : "Najpierw przypisz co najmniej jednego operatora do naboru.";
     results.replaceChildren();
     return;
   }
@@ -548,7 +550,7 @@ function renderSearch(object: LegacyStoredObject): void {
         geographyType: entry.type,
         geographyRole: role.value,
         value: entry.value,
-        ...(object.type === "recruitment" ? { operatorId } : {}),
+        operatorId,
       })
         .then(() => {
           search.value = "";
@@ -578,7 +580,7 @@ function render(): void {
   subtitle.textContent =
     object.type === "recruitment"
       ? "Zakres terytorialny naboru osobno dla każdego operatora"
-      : "Zakres terytorialny projektu";
+      : "Zakres terytorialny projektu osobno dla każdego operatora";
 
   const count = (state.geographies ?? []).filter(
     (row) => row.objectId === object.id,
