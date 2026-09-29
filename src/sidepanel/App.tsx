@@ -185,7 +185,7 @@ export function App() {
                 <p className="muted">
                   Dodaj dokument i opisz jego wymagania zgodnie z regulaminem.
                   Obsługiwane pliki: .doc, .docx, .pdf, .xlsx, .png, .jpg,
-                  .jpeg.
+                  .jpeg, .zip, .rar, .7z, .tar, .gz, .tgz.
                 </p>
                 <div id="file-source-list" className="file-source-list" />
                 <div
@@ -198,7 +198,7 @@ export function App() {
                   <input
                     id="local-file-input"
                     type="file"
-                    accept=".doc,.docx,.pdf,.xlsx,.png,.jpg,.jpeg"
+                    accept=".doc,.docx,.pdf,.xlsx,.png,.jpg,.jpeg,.zip,.rar,.7z,.tar,.gz,.tgz"
                     multiple
                     hidden
                   />
