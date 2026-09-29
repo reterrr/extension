@@ -32,6 +32,10 @@ import {
   isFileSignatureRequirement,
 } from "../shared/fileMetadata";
 import { inheritProjectFilesAsCopies } from "../shared/fileInheritance";
+import {
+  copyProjectFundingToRecruitment,
+  copyProjectGeographiesToRecruitment,
+} from "../shared/configurationInheritance";
 import { discardStaleImportedEvidence } from "../shared/import/evidence";
 import { importDocumentIntoState } from "../shared/import/format";
 import { isPickerSelectionResponse } from "../shared/messaging/picker";
@@ -68,6 +72,7 @@ const ALLOWED_WRITES = new Set<string>([
   "ADD_OPERATOR_ASSIGNMENT",
   "REMOVE_OPERATOR_ASSIGNMENT",
   "ADD_GEOGRAPHY",
+  "INHERIT_PROJECT_GEOGRAPHY",
   "REMOVE_GEOGRAPHY",
   "ADD_FILE_SOURCE",
   "UPDATE_FILE_SOURCE",
@@ -76,6 +81,7 @@ const ALLOWED_WRITES = new Set<string>([
   "ADD_OPERATOR_CONTACT",
   "REMOVE_OPERATOR_CONTACT",
   "ADD_FUNDING",
+  "INHERIT_PROJECT_FUNDING",
   "REMOVE_FUNDING",
   "ADD_FIELD_EVIDENCE",
   "REMOVE_FIELD_EVIDENCE",
@@ -642,6 +648,55 @@ function mutateFileSource(
   return state;
 }
 
+function mutateProjectConfigurationInheritance(
+  original: LegacyStorageState,
+  message: Record<string, unknown>,
+  now: string,
+): LegacyStorageState {
+  if (message.expectedRevision !== original.revision) {
+    throw new Error(
+      "Data changed in another panel. Review the refreshed values and retry.",
+    );
+  }
+  if (typeof message.objectId !== "string") {
+    throw new Error("Wybierz nabór.");
+  }
+
+  const state = cloneState(original);
+  const recruitment = state.objects.find(
+    (object) => object.id === message.objectId,
+  );
+  if (!recruitment || recruitment.type !== "recruitment") {
+    throw new Error("Dziedziczenie konfiguracji projektu jest dostępne dla naboru.");
+  }
+
+  if (message.op === "INHERIT_PROJECT_GEOGRAPHY") {
+    if (typeof message.operatorId !== "string" || !message.operatorId) {
+      throw new Error("Najpierw wybierz operatora.");
+    }
+    copyProjectGeographiesToRecruitment(
+      state,
+      recruitment.id,
+      message.operatorId,
+      () => crypto.randomUUID(),
+      now,
+    );
+  } else if (message.op === "INHERIT_PROJECT_FUNDING") {
+    copyProjectFundingToRecruitment(
+      state,
+      recruitment.id,
+      () => crypto.randomUUID(),
+      now,
+    );
+  } else {
+    throw new Error("Unknown project configuration inheritance operation.");
+  }
+
+  recruitment.updatedAt = now;
+  state.revision++;
+  return state;
+}
+
 async function registerMenus(): Promise<void> {
   await browser.contextMenus.removeAll();
   browser.contextMenus.create({
@@ -1101,6 +1156,11 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
       message.op === "INHERIT_PROJECT_FILES"
     ) {
       next = mutateFileSource(state, message, now);
+    } else if (
+      message.op === "INHERIT_PROJECT_GEOGRAPHY" ||
+      message.op === "INHERIT_PROJECT_FUNDING"
+    ) {
+      next = mutateProjectConfigurationInheritance(state, message, now);
     } else if (message.op === "ASSIGN_PDF") {
       next = assignPdfRuleIntoState(
         state,
