@@ -239,9 +239,37 @@ test("geography is selected first and page text is stored as supporting evidence
   let state = BurbotCore.mutate(
     initial,
     {
-      op: "ADD_GEOGRAPHY",
+      op: "CREATE_FROM_SELECTION",
       expectedRevision: initial.revision,
+      objectType: "operator",
+      initialValue: "Operator Demo",
+      sourceUrl: "https://example.test/operator",
+    },
+    uuid,
+    "2026-09-16T10:00:30.000Z",
+  );
+  const operator = state.objects.at(-1);
+
+  state = BurbotCore.mutate(
+    state,
+    {
+      op: "ADD_OPERATOR_ASSIGNMENT",
+      expectedRevision: state.revision,
       objectId: object.id,
+      operatorId: operator.id,
+      operatorType: "GLOWNY",
+    },
+    uuid,
+    "2026-09-16T10:00:45.000Z",
+  );
+
+  state = BurbotCore.mutate(
+    state,
+    {
+      op: "ADD_GEOGRAPHY",
+      expectedRevision: state.revision,
+      objectId: object.id,
+      operatorId: operator.id,
       geographyType: "WOJEWODZTWO",
       geographyRole: "OBEJMUJE",
       value: "podkarpackie",
@@ -255,12 +283,14 @@ test("geography is selected first and page text is stored as supporting evidence
   assert.deepEqual(
     {
       objectId: geography.objectId,
+      operatorId: geography.operatorId,
       type: geography.type,
       role: geography.role,
       value: geography.value,
     },
     {
       objectId: object.id,
+      operatorId: operator.id,
       type: "WOJEWODZTWO",
       role: "OBEJMUJE",
       value: "podkarpackie",
@@ -314,7 +344,7 @@ test("geography is selected first and page text is stored as supporting evidence
 });
 
 
-test("projects and recruitments support multiple operators and recruitment geography is operator-scoped", () => {
+test("projects and recruitments support multiple operators and geography is operator-scoped", () => {
   const uuid = ids();
   let state = BurbotCore.empty();
 
@@ -402,6 +432,45 @@ test("projects and recruitments support multiple operators and recruitment geogr
         {
           op: "ADD_GEOGRAPHY",
           expectedRevision: state.revision,
+          objectId: project.id,
+          geographyType: "WOJEWODZTWO",
+          geographyRole: "OBEJMUJE",
+          value: "podkarpackie",
+        },
+        uuid,
+        "2026-09-25T14:02:30.000Z",
+      ),
+    /Choose the operator/,
+  );
+
+  state = BurbotCore.mutate(
+    state,
+    {
+      op: "ADD_GEOGRAPHY",
+      expectedRevision: state.revision,
+      objectId: project.id,
+      operatorId: operatorA.id,
+      geographyType: "WOJEWODZTWO",
+      geographyRole: "OBEJMUJE",
+      value: "podkarpackie",
+    },
+    uuid,
+    "2026-09-25T14:02:40.000Z",
+  );
+  assert.equal(
+    state.geographies.find(
+      (row) => row.objectId === project.id && row.operatorId === operatorA.id,
+    )?.value,
+    "podkarpackie",
+  );
+
+  assert.throws(
+    () =>
+      BurbotCore.mutate(
+        state,
+        {
+          op: "ADD_GEOGRAPHY",
+          expectedRevision: state.revision,
           objectId: recruitment.id,
           geographyType: "WOJEWODZTWO",
           geographyRole: "OBEJMUJE",
@@ -449,6 +518,29 @@ test("projects and recruitments support multiple operators and recruitment geogr
   assert.deepEqual(
     new Set(recruitmentGeo.map((row) => row.operatorId)),
     new Set([operatorA.id, operatorB.id]),
+  );
+
+  const projectAssignmentA = state.operatorAssignments.find(
+    (row) =>
+      row.objectId === project.id &&
+      row.operatorId === operatorA.id,
+  );
+  state = BurbotCore.mutate(
+    state,
+    {
+      op: "REMOVE_OPERATOR_ASSIGNMENT",
+      expectedRevision: state.revision,
+      objectId: project.id,
+      assignmentId: projectAssignmentA.id,
+    },
+    uuid,
+    "2026-09-25T14:05:30.000Z",
+  );
+  assert.equal(
+    state.geographies.some(
+      (row) => row.objectId === project.id && row.operatorId === operatorA.id,
+    ),
+    false,
   );
 
   const assignmentA = state.operatorAssignments.find(
