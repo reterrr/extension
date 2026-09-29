@@ -17,7 +17,22 @@ const IMPORTABLE_OBJECT_TYPES = new Set<LegacyObjectType>([
   "recruitment",
   "operator",
 ]);
-const IMPORT_SOURCE_TYPES = new Set<ImportSourceType>(["HTML", "DOC", "DOCX", "PDF", "XLSX", "PNG", "JPG", "JPEG"]);
+const IMPORT_SOURCE_TYPES = new Set<ImportSourceType>([
+  "HTML",
+  "DOC",
+  "DOCX",
+  "PDF",
+  "XLSX",
+  "PNG",
+  "JPG",
+  "JPEG",
+  "ZIP",
+  "RAR",
+  "7Z",
+  "TAR",
+  "GZ",
+  "TGZ",
+]);
 const FUNDING_SIZES = new Set(["MICRO", "SMALL", "MEDIUM", "LARGE", "B2C"]);
 const GEOGRAPHY_TYPES = new Set([
   "POLSKA",
@@ -261,7 +276,7 @@ function parseDocument(input: unknown): BurbotImportV1 {
     const key = requiredString(raw.key, `${path}.key`);
     const type = raw.type as ImportSourceType;
     if (!IMPORT_SOURCE_TYPES.has(type)) {
-      throw new Error(`${path}.type must be HTML, DOC, DOCX, PDF, XLSX, PNG, JPG or JPEG.`);
+      throw new Error(`${path}.type must be HTML, DOC, DOCX, PDF, XLSX, PNG, JPG, JPEG, ZIP, RAR, 7Z, TAR, GZ or TGZ.`);
     }
     const url = optionalString(raw.url, `${path}.url`);
     if (url !== undefined) BurbotCore.coerce(url, "url");
