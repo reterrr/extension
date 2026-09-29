@@ -1635,6 +1635,55 @@ test("Import Review plan round-trips nested evidence", () => {
 });
 
 
+test("portable import accepts common archives as classifiable attachments", () => {
+  const uuid = ids();
+  const state = formatModule.importDocumentIntoState(
+    BurbotCore.empty(),
+    {
+      version: 1,
+      offset_unit: "unicode_codepoint",
+      sources: [
+        {
+          key: "archive",
+          type: "ZIP",
+          url: "https://example.test/files/dokumenty.zip",
+          snapshot: { text: "" },
+        },
+      ],
+      objects: [
+        {
+          key: "project-archive",
+          type: "project",
+          data: { name: "Projekt z archiwum" },
+          files: [
+            {
+              source: "archive",
+              metadata: {
+                display_name: "Pakiet dokumentów",
+                purpose: "Inny dokument",
+                has_fields: false,
+                intended_use: "Komplet załączników operatora.",
+                client_requirement: "Informacyjny",
+                signature_requirement: "Nie jest wymagany",
+              },
+            },
+          ],
+        },
+      ],
+    },
+    0,
+    uuid,
+    "2026-09-29T14:10:00.000Z",
+  );
+
+  assert.equal(state.fileSources.length, 1);
+  assert.equal(state.fileSources[0].fileType, "ZIP");
+  assert.equal(state.fileSources[0].name, "dokumenty.zip");
+  assert.equal(state.fileSources[0].display_name, "Pakiet dokumentów");
+  assert.equal(state.fileSources[0].purpose, "Inny dokument");
+  assert.equal(state.fileSources[0].client_requirement, "Informacyjny");
+});
+
 test("portable files are dynamic records with filename-derived names and free-form classification", () => {
   const uuid = ids();
   const sourceText =
