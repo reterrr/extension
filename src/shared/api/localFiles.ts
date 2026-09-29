@@ -14,6 +14,12 @@ const SUPPORTED_EXTENSIONS = new Set([
   "png",
   "jpg",
   "jpeg",
+  "zip",
+  "rar",
+  "7z",
+  "tar",
+  "gz",
+  "tgz",
 ]);
 
 interface LocalFileUploadResponse {
@@ -42,7 +48,7 @@ export function localUploadValidationMessage(file: File): string | null {
     return `${file.name}: maksymalny rozmiar pliku to 100 MB.`;
   }
   if (!SUPPORTED_EXTENSIONS.has(extension(file.name))) {
-    return `${file.name}: obsługiwane są .doc, .docx, .pdf, .xlsx, .png, .jpg i .jpeg.`;
+    return `${file.name}: obsługiwane są .doc, .docx, .pdf, .xlsx, .png, .jpg, .jpeg, .zip, .rar, .7z, .tar, .gz i .tgz.`;
   }
   return null;
 }
