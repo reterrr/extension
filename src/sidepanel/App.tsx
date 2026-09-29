@@ -247,8 +247,8 @@ export function App() {
                   className="file-source-mode-hint"
                   hidden
                 >
-                  Kliknij link do pliku .doc, .docx, .pdf, .xlsx, .png, .jpg lub
-                  .jpeg. Esc anuluje tryb.
+                  Kliknij link do pliku .doc, .docx, .pdf, .xlsx, .png, .jpg,
+                  .jpeg, .zip, .rar, .7z, .tar, .gz lub .tgz. Esc anuluje tryb.
                 </p>
               </div>
             </details>
