@@ -81,12 +81,10 @@ test("typed recruitment fields are exposed with choice controls where appropriat
     "godzinaZakonczenia",
     "planned_start_low_date",
     "planned_start_ceil_date",
-    "planned_start_low_time",
-    "planned_start_ceil_time",
+    "planned_start_time",
     "planned_end_low_date",
     "planned_end_ceil_date",
-    "planned_end_low_time",
-    "planned_end_ceil_time",
+    "planned_end_time",
     "planned_start_low_year",
     "planned_start_ceil_year",
     "planned_start_low_month",
@@ -117,8 +115,12 @@ test("typed recruitment fields are exposed with choice controls where appropriat
   assert.equal(fields.planned_end_ceil_month.type, "enum");
   assert.equal(fields.godzinaRozpoczecia.type, "time");
   assert.equal(fields.godzinaZakonczenia.type, "time");
-  assert.equal(fields.planned_start_low_time.type, "time");
-  assert.equal(fields.planned_start_ceil_time.type, "time");
+  assert.equal(fields.planned_start_time.type, "time");
+  assert.equal(fields.planned_end_time.type, "time");
+  assert.equal(fields.planned_start_low_time.hidden, true);
+  assert.equal(fields.planned_start_ceil_time.hidden, true);
+  assert.equal(fields.planned_end_low_time.hidden, true);
+  assert.equal(fields.planned_end_ceil_time.hidden, true);
   assert.equal(fields.planned_start_low_week.type, "enum");
   assert.equal(fields.planned_start_ceil_week.type, "enum");
   assert.equal(fields.planned_end_low_week.type, "enum");
@@ -133,7 +135,7 @@ test("typed recruitment fields are exposed with choice controls where appropriat
   assert.equal(fields.planowanyStartTydzien.hidden, true);
 });
 
-test("legacy scalar planned recruitment values migrate to collapsed floor/ceil ranges", () => {
+test("legacy scalar planned dates migrate to ranges while scalar hours stay canonical", () => {
   const state = {
     version: 1,
     revision: 1,
@@ -176,10 +178,59 @@ test("legacy scalar planned recruitment values migrate to collapsed floor/ceil r
   assert.equal(values.planned_start_ceil_date, "2028-01-10");
   assert.equal(values.planned_end_low_date, "2028-01-14");
   assert.equal(values.planned_end_ceil_date, "2028-01-14");
+  assert.equal(values.planned_start_time, "09:00");
+  assert.equal(values.planned_end_time, "15:00");
+  assert.equal(values.planned_start_low_time, undefined);
+  assert.equal(values.planned_end_ceil_time, undefined);
   assert.equal(values.planned_start_low_week, 2);
   assert.equal(values.planned_start_ceil_week, 2);
   assert.ok(state.rules.some((rule) => rule.field === "planned_start_low_date"));
   assert.ok(state.rules.some((rule) => rule.field === "planned_start_ceil_date"));
+});
+
+test("legacy planned hour ranges migrate to one start and one end hour", () => {
+  const state = {
+    version: 1,
+    revision: 1,
+    objects: [
+      {
+        id: "nab-time",
+        type: "recruitment",
+        values: {
+          planned_start_low_time: "08:00",
+          planned_start_ceil_time: "09:00",
+          planned_end_low_time: "15:00",
+          planned_end_ceil_time: "17:00",
+        },
+      },
+    ],
+    rules: [
+      {
+        id: "rule-start-time",
+        objectId: "nab-time",
+        field: "planned_start_low_time",
+        pageUrl: "https://example.test/nabor",
+        selector: "#start-time",
+        extraction: { type: "text" },
+        sampleValue: "08:00",
+      },
+      {
+        id: "rule-end-time",
+        objectId: "nab-time",
+        field: "planned_end_ceil_time",
+        pageUrl: "https://example.test/nabor",
+        selector: "#end-time",
+        extraction: { type: "text" },
+        sampleValue: "17:00",
+      },
+    ],
+  };
+
+  assert.equal(migrations.migratePlannedRecruitmentRanges(state), true);
+  assert.equal(state.objects[0].values.planned_start_time, "08:00");
+  assert.equal(state.objects[0].values.planned_end_time, "17:00");
+  assert.ok(state.rules.some((rule) => rule.field === "planned_start_time"));
+  assert.ok(state.rules.some((rule) => rule.field === "planned_end_time"));
 });
 
 test("geography is selected first and page text is stored as supporting evidence rule", () => {
