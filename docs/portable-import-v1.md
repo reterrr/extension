@@ -101,11 +101,9 @@ Example:
 
 At most one operator can be `GLOWNY`. If an import supplies operators but none is marked `GLOWNY`, Burbot promotes the first row to `GLOWNY`.
 
-### Recruitment geography per operator
+### Project and recruitment geography per operator
 
-Project geography remains attached to the Project itself.
-
-Recruitment geography belongs to a concrete assigned operator. Use an `operator` reference on each recruitment geography row:
+Geography on both a Project and a Recruitment belongs to a concrete operator assigned to that object. Use an `operator` reference on each geography row:
 
 ```json
 "geography": [
@@ -126,7 +124,7 @@ Recruitment geography belongs to a concrete assigned operator. Use an `operator`
 ]
 ```
 
-If a recruitment has exactly one assigned operator, old imports without `geography[].operator` are automatically scoped to that operator. With zero or multiple operators, `geography[].operator` is required.
+If a Project or Recruitment has exactly one assigned operator, old imports without `geography[].operator` are automatically scoped to that operator. With zero or multiple operators, `geography[].operator` is required. A geography row may reference only an operator assigned to the same owning object.
 
 ## `objects[].files[]`
 
