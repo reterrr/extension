@@ -86,12 +86,10 @@ function snapshot() {
             status: "PLANOWANY",
             planned_start_low_date: "2026-06-22",
             planned_start_ceil_date: "2026-06-23",
-            planned_start_low_time: "08:00",
-            planned_start_ceil_time: "10:00",
+            planned_start_time: "08:30",
             planned_end_low_date: "2026-06-25",
             planned_end_ceil_date: "2026-06-27",
-            planned_end_low_time: "15:00",
-            planned_end_ceil_time: "17:00",
+            planned_end_time: "16:30",
             planned_start_low_year: 2026,
             planned_start_ceil_year: 2026,
             planned_start_low_month: 6,
@@ -295,10 +293,12 @@ test("BUR Excel export keeps complete business data and relations", () => {
   assert.equal(recruitment.nabor_ciagly, "nie");
   assert.ok(recruitment.nabor_od);
   assert.ok(recruitment.nabor_do);
-  assert.equal(recruitment.planowany_start_godzina_od, "08:00");
-  assert.equal(recruitment.planowany_start_godzina_do, "10:00");
-  assert.equal(recruitment.planowany_koniec_godzina_od, "15:00");
-  assert.equal(recruitment.planowany_koniec_godzina_do, "17:00");
+  assert.equal(recruitment.planowana_godzina_rozpoczecia, "08:30");
+  assert.equal(recruitment.planowana_godzina_zakonczenia, "16:30");
+  assert.equal(recruitment.planowany_start_godzina_od, "08:30");
+  assert.equal(recruitment.planowany_start_godzina_do, "08:30");
+  assert.equal(recruitment.planowany_koniec_godzina_od, "16:30");
+  assert.equal(recruitment.planowany_koniec_godzina_do, "16:30");
   assert.equal(recruitment.planowany_start_rok_od, 2026);
   assert.equal(recruitment.planowany_start_rok_do, 2026);
   assert.equal(recruitment.planowany_start_miesiac_od, 6);
@@ -307,8 +307,6 @@ test("BUR Excel export keeps complete business data and relations", () => {
   assert.equal(recruitment.planowany_start_tydzien_do, 4);
   assert.equal(recruitment.planowany_koniec_tydzien_od, 4);
   assert.equal(recruitment.planowany_koniec_tydzien_do, 4);
-  assert.equal(recruitment.planowana_godzina_rozpoczecia, null);
-  assert.equal(recruitment.planowana_godzina_zakonczenia, null);
   assert.equal(recruitment.status_zakonczenia, "ZAKONCZONY");
   assert.equal(recruitment.ostatnia_zmiana, "2026-09-21T14:22:33.000Z");
 
