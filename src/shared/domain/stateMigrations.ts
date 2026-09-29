@@ -94,9 +94,7 @@ export function migrateFundingRefundRanges(state: LegacyStorageState): boolean {
 
 const PLANNED_RECRUITMENT_RANGE_FIELDS = [
   ["planned_start_date", "planned_start_low_date", "planned_start_ceil_date"],
-  ["planned_start_time", "planned_start_low_time", "planned_start_ceil_time"],
   ["planned_end_date", "planned_end_low_date", "planned_end_ceil_date"],
-  ["planned_end_time", "planned_end_low_time", "planned_end_ceil_time"],
   ["planowanyStartRok", "planned_start_low_year", "planned_start_ceil_year"],
   ["planowanyStartMiesiac", "planned_start_low_month", "planned_start_ceil_month"],
   ["planowanyStartTydzien", "planned_start_low_week", "planned_start_ceil_week"],
@@ -105,6 +103,17 @@ const PLANNED_RECRUITMENT_RANGE_FIELDS = [
   ["planowanyKoniecMiesiac", "planned_end_low_month", "planned_end_ceil_month"],
   ["planowanyKoniecTydzien", "planned_end_low_week", "planned_end_ceil_week"],
   ["planowanyKoniecKwartal", "planned_end_low_quarter", "planned_end_ceil_quarter"],
+] as const;
+
+const PLANNED_RECRUITMENT_SCALAR_TIME_FIELDS = [
+  {
+    scalar: "planned_start_time",
+    fallbacks: ["planned_start_low_time", "planned_start_ceil_time"],
+  },
+  {
+    scalar: "planned_end_time",
+    fallbacks: ["planned_end_ceil_time", "planned_end_low_time"],
+  },
 ] as const;
 
 function uniqueMigrationRuleId(base: string, used: Set<string>): string {
@@ -138,6 +147,19 @@ export function migratePlannedRecruitmentRanges(
       }
       if (!own(values, ceil)) {
         values[ceil] = value;
+        changed = true;
+      }
+    }
+
+    for (const { scalar, fallbacks } of PLANNED_RECRUITMENT_SCALAR_TIME_FIELDS) {
+      const current = values[scalar];
+      if (current !== undefined && current !== null && current !== "") continue;
+
+      const fallback = fallbacks
+        .map((field) => values[field])
+        .find((value) => value !== undefined && value !== null && value !== "");
+      if (fallback !== undefined) {
+        values[scalar] = fallback;
         changed = true;
       }
     }
@@ -179,6 +201,48 @@ export function migratePlannedRecruitmentRanges(
         usedRuleIds,
       );
       copy.field = field;
+      addedRules.push(copy);
+      changed = true;
+    }
+  }
+
+  for (const object of state.objects) {
+    if (object.type !== "recruitment") continue;
+
+    for (const { scalar, fallbacks } of PLANNED_RECRUITMENT_SCALAR_TIME_FIELDS) {
+      const scalarExists =
+        state.rules.some(
+          (candidate) =>
+            candidate.objectId === object.id &&
+            !candidate.target &&
+            candidate.field === scalar,
+        ) ||
+        addedRules.some(
+          (candidate) =>
+            candidate.objectId === object.id &&
+            !candidate.target &&
+            candidate.field === scalar,
+        );
+      if (scalarExists) continue;
+
+      const sourceRule = fallbacks
+        .map((field) =>
+          state.rules.find(
+            (candidate) =>
+              candidate.objectId === object.id &&
+              !candidate.target &&
+              candidate.field === field,
+          ),
+        )
+        .find((candidate): candidate is LegacyStoredRule => Boolean(candidate));
+      if (!sourceRule) continue;
+
+      const copy = cloneRule(sourceRule);
+      copy.id = uniqueMigrationRuleId(
+        `${sourceRule.id}:planned-scalar:${scalar}`,
+        usedRuleIds,
+      );
+      copy.field = scalar;
       addedRules.push(copy);
       changed = true;
     }
