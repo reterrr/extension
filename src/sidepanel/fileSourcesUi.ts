@@ -150,7 +150,21 @@ function chosenObject(): LegacyStoredObject | undefined {
   return state.objects.find((object) => object.id === activeId);
 }
 
+function isLocalUploadedFileUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return (
+      parsed.hostname === "127.0.0.1" &&
+      parsed.port === "8765" &&
+      parsed.pathname.startsWith("/files/")
+    );
+  } catch {
+    return false;
+  }
+}
+
 function host(url: string): string {
+  if (isLocalUploadedFileUrl(url)) return "plik lokalny";
   try {
     return new URL(url).hostname;
   } catch {
@@ -954,7 +968,9 @@ function renderSource(source: LegacyStoredFileSource): HTMLElement {
   open.href = source.url;
   open.target = "_blank";
   open.rel = "noopener noreferrer";
-  open.textContent = "Otwórz źródło ↗";
+  open.textContent = isLocalUploadedFileUrl(source.url)
+    ? "Otwórz plik ↗"
+    : "Otwórz źródło ↗";
 
   const remove = document.createElement("button");
   remove.type = "button";
@@ -1104,7 +1120,11 @@ export async function initFileSourcesUi(): Promise<void> {
     localInput.click();
   };
 
-  localDropZone.onclick = chooseLocalFiles;
+  localDropZone.onclick = (event: MouseEvent) => {
+    if (event.target === localInput) return;
+    chooseLocalFiles();
+  };
+  localInput.onclick = (event: MouseEvent) => event.stopPropagation();
   localDropZone.onkeydown = (event: KeyboardEvent) => {
     if (event.key !== "Enter" && event.key !== " ") return;
     event.preventDefault();
