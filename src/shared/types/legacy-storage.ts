@@ -121,8 +121,10 @@ export interface LegacyStoredGeography {
 }
 
 /**
- * Compatibility shape for an object-level remote file source.
- * The URL is intentionally remote-only: never `file:`, `blob:` or a filesystem path.
+ * Compatibility shape for an object-level file source.
+ * Files picked from the web keep their original HTTP(S) URL. Files uploaded from
+ * disk are copied into the local Burbot DB and exposed through a stable loopback
+ * HTTP URL. Raw `file:`, `blob:` URLs and filesystem paths are never stored.
  */
 export interface LegacyStoredFileSource {
   id: string;
