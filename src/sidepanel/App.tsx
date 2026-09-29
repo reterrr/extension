@@ -188,6 +188,27 @@ export function App() {
                   .jpeg.
                 </p>
                 <div id="file-source-list" className="file-source-list" />
+                <div
+                  id="local-file-drop-zone"
+                  className="local-file-drop-zone"
+                  role="button"
+                  tabIndex={0}
+                  aria-label="Wgraj pliki z komputera"
+                >
+                  <input
+                    id="local-file-input"
+                    type="file"
+                    accept=".doc,.docx,.pdf,.xlsx,.png,.jpg,.jpeg"
+                    multiple
+                    hidden
+                  />
+                  <strong id="local-file-drop-title">
+                    Upuść pliki tutaj
+                  </strong>
+                  <small id="local-file-drop-hint">
+                    albo kliknij, aby wybrać z komputera
+                  </small>
+                </div>
                 <div className="file-source-toolbar">
                   <button
                     id="read-from-file"
