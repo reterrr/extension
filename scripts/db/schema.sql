@@ -285,6 +285,15 @@ ON field_evidence(object_id, field);
 CREATE INDEX IF NOT EXISTS ix_field_evidence_target
 ON field_evidence(target_kind, target_id);
 
+CREATE TABLE IF NOT EXISTS local_file_blobs (
+  file_id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  mime_type TEXT,
+  size_bytes INTEGER NOT NULL CHECK (size_bytes >= 0),
+  content BLOB NOT NULL,
+  uploaded_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS file_sources (
   source_id TEXT PRIMARY KEY,
   object_id TEXT NOT NULL,
@@ -322,4 +331,4 @@ CREATE TABLE IF NOT EXISTS document_requirements (
   FOREIGN KEY (object_id) REFERENCES workspace_objects(object_id) ON DELETE CASCADE
 );
 
-PRAGMA user_version = 9;
+PRAGMA user_version = 10;
