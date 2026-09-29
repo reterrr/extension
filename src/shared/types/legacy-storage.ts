@@ -107,6 +107,14 @@ export interface LegacyStoredGeography {
   value: string;
   /** Required for Recruitment geography; omitted for Project geography. */
   operatorId?: string;
+
+  /**
+   * Snapshot provenance only. Inherited recruitment geography is an independent
+   * copy and does not update when the project geography changes later.
+   */
+  copiedFromProjectId?: string;
+  copiedFromGeographyId?: string;
+  copiedAt?: string;
 }
 
 /**
