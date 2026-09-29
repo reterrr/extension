@@ -403,6 +403,7 @@ def empty_state() -> dict[str, Any]:
         "objects": [],
         "rules": [],
         "geographies": [],
+        "operatorAssignments": [],
         "operatorContacts": [],
         "fileSources": [],
         "importSources": [],
@@ -536,6 +537,7 @@ def merge_projects(
 ) -> dict[str, int]:
     objects = state.setdefault("objects", [])
     geographies = state.setdefault("geographies", [])
+    operator_assignments = state.setdefault("operatorAssignments", [])
     now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
     project_objects: dict[str, dict[str, Any]] = {}
@@ -578,7 +580,36 @@ def merge_projects(
 
         values = project.setdefault("values", {})
         values["name"] = row["nazwa_projektu"]
-        values["operator_id"] = operator_ids[project_key]
+        values.pop("operator_id", None)
+        operator_id = operator_ids[project_key]
+        for assignment in operator_assignments:
+            if (
+                str(assignment.get("objectId", "")) == str(project["id"])
+                and assignment.get("operatorType") == "GLOWNY"
+                and str(assignment.get("operatorId", "")) != operator_id
+            ):
+                assignment["operatorType"] = "DODATKOWY"
+        assignment = next(
+            (
+                item
+                for item in operator_assignments
+                if str(item.get("objectId", "")) == str(project["id"])
+                and str(item.get("operatorId", "")) == operator_id
+            ),
+            None,
+        )
+        if assignment is None:
+            operator_assignments.append(
+                {
+                    "id": f"xlsx:{project_key}:operator:{operator_id}",
+                    "objectId": str(project["id"]),
+                    "operatorId": operator_id,
+                    "operatorType": "GLOWNY",
+                }
+            )
+        else:
+            assignment["operatorType"] = "GLOWNY"
+
         values["type"] = type_value
         values["status"] = STATUS_MAP[status_key]
         values["start_date"] = excel_date(row["data_start"], "data_start", project_key)
@@ -652,6 +683,7 @@ def merge_projects(
             {
                 "id": row["geo_projekt_id"],
                 "objectId": str(project["id"]),
+                "operatorId": operator_ids[row["projekt_id"]],
                 "type": geo_type,
                 "role": "OBEJMUJE",
                 "value": geo_value,
