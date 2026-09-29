@@ -400,8 +400,8 @@ function migratedAssignmentId(
  * Migrates the legacy single `values.operator_id` reference into first-class
  * many-to-many operator assignments.
  *
- * Recruitment geography is operator-scoped. Legacy recruitment geography can
- * be assigned automatically only when that recruitment resolves to exactly one
+ * Project and Recruitment geography are operator-scoped. Legacy geography can
+ * be assigned automatically only when its owner resolves to exactly one
  * operator; otherwise it remains unscoped and the UI asks the user to classify it.
  */
 export function migrateMultiOperatorAssignments(
@@ -453,7 +453,8 @@ export function migrateMultiOperatorAssignments(
     state.objects.map((object) => [object.id, object.type]),
   );
   for (const row of state.geographies ?? []) {
-    if (objectTypeById.get(row.objectId) !== "recruitment") continue;
+    const ownerType = objectTypeById.get(row.objectId);
+    if (ownerType !== "project" && ownerType !== "recruitment") continue;
     if (row.operatorId) continue;
     const operators = assignmentOperatorsByObject.get(row.objectId) ?? [];
     if (operators.length === 1) {
