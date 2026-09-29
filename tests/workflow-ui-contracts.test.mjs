@@ -328,6 +328,23 @@ test("workspace advertises supported file extensions and keeps value extraction 
 });
 
 
+test("recruitment can inherit project geography per operator and funding as copies", () => {
+  const app = source("src/sidepanel/App.tsx");
+  const geography = source("src/sidepanel/geographyUi.ts");
+  const workspace = source("src/sidepanel/workspace.js");
+  const background = source("src/background/index.ts");
+
+  assert.match(app, /id="geography-inherit-operator"/);
+  assert.match(app, /id="geography-inherit-button"/);
+  assert.match(app, /id="funding-inherit-button"/);
+  assert.match(geography, /INHERIT_PROJECT_GEOGRAPHY/);
+  assert.match(geography, /Najpierw wybierz operatora/);
+  assert.match(workspace, /INHERIT_PROJECT_FUNDING/);
+  assert.match(workspace, /kopia z projektu/);
+  assert.match(background, /copyProjectGeographiesToRecruitment/);
+  assert.match(background, /copyProjectFundingToRecruitment/);
+});
+
 test("bulk file download is available for projects and recruitments", () => {
   const files = source("src/sidepanel/fileSourcesUi.ts");
   const downloads = source("src/shared/fileDownloads.ts");

@@ -306,6 +306,33 @@ export function App() {
                 </span>
               </summary>
               <div className="workspace-section-body">
+                <div
+                  id="geography-inherit"
+                  className="geography-inherit"
+                  hidden
+                >
+                  <div className="geography-inherit-copy">
+                    <strong>Dziedzicz geografię z projektu</strong>
+                    <small>
+                      Wybierz operatora. Geografia zostanie skopiowana do naboru
+                      jako niezależny snapshot.
+                    </small>
+                  </div>
+                  <div className="geography-inherit-controls">
+                    <select
+                      id="geography-inherit-operator"
+                      aria-label="Operator dla dziedziczonej geografii"
+                    />
+                    <button
+                      id="geography-inherit-button"
+                      className="text-button"
+                      type="button"
+                    >
+                      ↳ Dziedzicz geografię
+                    </button>
+                  </div>
+                  <p id="geography-inherit-status" className="hint" />
+                </div>
                 <div id="geography-list" />
                 <details id="geography-add" className="geography-add">
                   <summary className="text-button">+ Dodaj geografię</summary>
@@ -355,6 +382,25 @@ export function App() {
                 </span>
               </summary>
               <div className="workspace-section-body">
+                <div
+                  id="funding-inherit"
+                  className="configuration-inherit"
+                  hidden
+                >
+                  <div>
+                    <strong>Dziedzicz warianty z projektu</strong>
+                    <small id="funding-inherit-status">
+                      Tworzy niezależne kopie wariantów dofinansowania.
+                    </small>
+                  </div>
+                  <button
+                    id="funding-inherit-button"
+                    className="text-button"
+                    type="button"
+                  >
+                    ↳ Dziedzicz warianty
+                  </button>
+                </div>
                 <div id="funding" />
               </div>
             </details>
