@@ -66,6 +66,12 @@ function baseState() {
     rules: [],
     operatorAssignments: [
       {
+        id: "A_PROJECT_1",
+        objectId: "PR_1",
+        operatorId: "OP_1",
+        operatorType: "GLOWNY",
+      },
+      {
         id: "A_1",
         objectId: "NAB_1",
         operatorId: "OP_1",
@@ -76,6 +82,7 @@ function baseState() {
       {
         id: "G_1",
         objectId: "PR_1",
+        operatorId: "OP_1",
         type: "WOJEWODZTWO",
         role: "OBEJMUJE",
         value: "śląskie",
@@ -83,6 +90,7 @@ function baseState() {
       {
         id: "G_2",
         objectId: "PR_1",
+        operatorId: "OP_1",
         type: "POWIAT",
         role: "OBEJMUJE",
         value: "śląskie|powiat|katowicki",
@@ -171,6 +179,7 @@ test("re-inheriting geography copies only newly added project geography", () => 
   state.geographies.push({
     id: "G_3",
     objectId: "PR_1",
+    operatorId: "OP_1",
     type: "GMINA",
     role: "WYKLUCZA",
     value: "2469011",
