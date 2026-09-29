@@ -130,11 +130,16 @@ If a Project or Recruitment has exactly one assigned operator, old imports witho
 
 A file attachment references an existing entry from `sources[]`; the URL is not duplicated.
 
-Supported remote file source types are:
+Supported file source types are:
 
-`DOC`, `DOCX`, `PDF`, `XLSX`, `PNG`, `JPG`, `JPEG`.
+`DOC`, `DOCX`, `PDF`, `XLSX`, `PNG`, `JPG`, `JPEG`, `ZIP`, `RAR`,
+`7Z`, `TAR`, `GZ`, `TGZ`.
 
-- `source` — required source key. It must point to one of the supported file source types with an HTTP(S) `url`.
+Archive attachments use the same business metadata fields as other files.
+Burbot does not extract field values from inside archives; the dedicated
+value-extraction workflow remains PDF-only.
+
+- `source` — required source key. It must point to one of the supported file source types with an HTTP(S) `url`. ZIP/RAR/7Z/TAR/GZ/TGZ sources are valid attachments and can be classified normally.
 - `source_page` — optional source key for the page where the file link was found. If supplied, that source must have a URL.
 - `name` — legacy-only input. The stored technical filename is always derived from the remote file URL; when `metadata.display_name` is absent, legacy `name` is used as the business display-name fallback.
 - `metadata` — optional business classification of the concrete file.
