@@ -22,7 +22,21 @@ const DATABASE_PATH = resolve(
 const SCHEMA_PATH = resolve(ROOT, "scripts/db/schema.sql");
 const MAX_BODY_BYTES = 32 * 1024 * 1024;
 const MAX_LOCAL_FILE_BYTES = 100 * 1024 * 1024;
-const LOCAL_FILE_TYPES = new Set(["DOC", "DOCX", "PDF", "XLSX", "PNG", "JPG", "JPEG"]);
+const LOCAL_FILE_TYPES = new Set([
+  "DOC",
+  "DOCX",
+  "PDF",
+  "XLSX",
+  "PNG",
+  "JPG",
+  "JPEG",
+  "ZIP",
+  "RAR",
+  "7Z",
+  "TAR",
+  "GZ",
+  "TGZ",
+]);
 
 if (!Number.isInteger(PORT) || PORT < 1 || PORT > 65535) {
   throw new Error("BURBOT_DB_PORT must be a valid TCP port.");
@@ -836,7 +850,7 @@ function safeLocalFileName(value) {
     .slice(0, 500);
   if (!name || !localFileType(name)) {
     throw new Error(
-      "Choose a .doc, .docx, .pdf, .xlsx, .png, .jpg or .jpeg file.",
+      "Choose a .doc, .docx, .pdf, .xlsx, .png, .jpg, .jpeg, .zip, .rar, .7z, .tar, .gz or .tgz file.",
     );
   }
   return name;
