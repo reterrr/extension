@@ -413,11 +413,18 @@ function renderInheritance(object: LegacyStoredObject): void {
       "Najpierw wybierz operatora, dla którego ma zostać skopiowana geografia projektu.";
     return;
   }
+  if (!inheritance.projectOperatorAssigned) {
+    button.disabled = true;
+    button.textContent = "Operator nie jest w projekcie";
+    statusElement.textContent =
+      "Wybrany operator musi być przypisany również do projektu, ponieważ geografia projektu jest przypisana do operatora.";
+    return;
+  }
   if (!inheritance.projectGeographies.length) {
     button.disabled = true;
-    button.textContent = "Projekt nie ma geografii";
+    button.textContent = "Brak geografii operatora";
     statusElement.textContent =
-      "Przypisany projekt nie ma geografii do odziedziczenia.";
+      "Projekt nie ma geografii przypisanej do wybranego operatora.";
     return;
   }
 
