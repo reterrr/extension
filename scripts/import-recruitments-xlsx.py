@@ -716,12 +716,10 @@ def merge_recruitments(
         planned_fields = (
             "planned_start_low_date",
             "planned_start_ceil_date",
-            "planned_start_low_time",
-            "planned_start_ceil_time",
+            "planned_start_time",
             "planned_end_low_date",
             "planned_end_ceil_date",
-            "planned_end_low_time",
-            "planned_end_ceil_time",
+            "planned_end_time",
             "planned_start_low_year",
             "planned_start_ceil_year",
             "planned_start_low_month",
@@ -741,9 +739,11 @@ def merge_recruitments(
         )
         legacy_planned_fields = (
             "planned_start_date",
-            "planned_start_time",
             "planned_end_date",
-            "planned_end_time",
+            "planned_start_low_time",
+            "planned_start_ceil_time",
+            "planned_end_low_time",
+            "planned_end_ceil_time",
             "planowanyStartRok",
             "planowanyStartMiesiac",
             "planowanyStartTydzien",
@@ -791,47 +791,34 @@ def merge_recruitments(
             set_or_remove(values, "planned_start_ceil_date", start_ceil_date)
             set_or_remove(values, "planned_end_low_date", end_low_date)
             set_or_remove(values, "planned_end_ceil_date", end_ceil_date)
-            legacy_start_time = optional_time(
+            planned_start_time = optional_time(
                 row.get("planowana_godzina_rozpoczecia", ""),
                 "planowana_godzina_rozpoczecia",
                 recruitment_key,
             )
-            legacy_end_time = optional_time(
+            if planned_start_time is None:
+                planned_start_time = optional_time(
+                    row.get("planowany_start_godzina_od", "")
+                    or row.get("planowany_start_godzina_do", ""),
+                    "planowany_start_godzina_od",
+                    recruitment_key,
+                )
+
+            planned_end_time = optional_time(
                 row.get("planowana_godzina_zakonczenia", ""),
                 "planowana_godzina_zakonczenia",
                 recruitment_key,
             )
-            start_low_time = optional_time(
-                row.get("planowany_start_godzina_od", ""),
-                "planowany_start_godzina_od",
-                recruitment_key,
-            )
-            start_ceil_time = optional_time(
-                row.get("planowany_start_godzina_do", ""),
-                "planowany_start_godzina_do",
-                recruitment_key,
-            )
-            end_low_time = optional_time(
-                row.get("planowany_koniec_godzina_od", ""),
-                "planowany_koniec_godzina_od",
-                recruitment_key,
-            )
-            end_ceil_time = optional_time(
-                row.get("planowany_koniec_godzina_do", ""),
-                "planowany_koniec_godzina_do",
-                recruitment_key,
-            )
-            if legacy_start_time and not start_low_time and not start_ceil_time:
-                start_low_time = legacy_start_time
-                start_ceil_time = legacy_start_time
-            if legacy_end_time and not end_low_time and not end_ceil_time:
-                end_low_time = legacy_end_time
-                end_ceil_time = legacy_end_time
+            if planned_end_time is None:
+                planned_end_time = optional_time(
+                    row.get("planowany_koniec_godzina_do", "")
+                    or row.get("planowany_koniec_godzina_od", ""),
+                    "planowany_koniec_godzina_do",
+                    recruitment_key,
+                )
 
-            set_or_remove(values, "planned_start_low_time", start_low_time)
-            set_or_remove(values, "planned_start_ceil_time", start_ceil_time)
-            set_or_remove(values, "planned_end_low_time", end_low_time)
-            set_or_remove(values, "planned_end_ceil_time", end_ceil_time)
+            set_or_remove(values, "planned_start_time", planned_start_time)
+            set_or_remove(values, "planned_end_time", planned_end_time)
 
             components = planned_range_components(
                 start_low_date,

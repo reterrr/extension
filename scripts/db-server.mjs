@@ -371,9 +371,9 @@ function syncBusinessTables(state, groupByObject) {
       continuous, refund_percent_min, refund_percent_max,
       start_low_date, start_ceil_date, end_low_date, end_ceil_date,
       start_time, end_time,
-      planned_start_low_date, planned_start_ceil_date,
+      planned_start_low_date, planned_start_ceil_date, planned_start_time,
+      planned_end_low_date, planned_end_ceil_date, planned_end_time,
       planned_start_low_time, planned_start_ceil_time,
-      planned_end_low_date, planned_end_ceil_date,
       planned_end_low_time, planned_end_ceil_time,
       planned_start_low_year, planned_start_ceil_year,
       planned_start_low_month, planned_start_ceil_month,
@@ -394,7 +394,7 @@ function syncBusinessTables(state, groupByObject) {
       ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
       ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
       ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-      ?, ?, ?, ?, ?, ?, ?
+      ?, ?, ?, ?, ?, ?, ?, ?, ?
     )
   `);
 
@@ -488,10 +488,12 @@ function syncBusinessTables(state, groupByObject) {
       nullableText(values.godzinaZakonczenia),
       nullableText(values.planned_start_low_date),
       nullableText(values.planned_start_ceil_date),
-      nullableText(values.planned_start_low_time),
-      nullableText(values.planned_start_ceil_time),
+      nullableText(values.planned_start_time),
       nullableText(values.planned_end_low_date),
       nullableText(values.planned_end_ceil_date),
+      nullableText(values.planned_end_time),
+      nullableText(values.planned_start_low_time),
+      nullableText(values.planned_start_ceil_time),
       nullableText(values.planned_end_low_time),
       nullableText(values.planned_end_ceil_time),
       nullableInt(values.planned_start_low_year),

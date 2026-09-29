@@ -359,8 +359,14 @@ test("refund range belongs to financing variants, not normal project/recruitment
   assert.ok(recruitmentFields.has("godzinaZakonczenia"));
   assert.ok(recruitmentFields.has("planned_start_low_date"));
   assert.ok(recruitmentFields.has("planned_start_ceil_date"));
+  assert.ok(recruitmentFields.has("planned_start_time"));
   assert.ok(recruitmentFields.has("planned_end_low_date"));
   assert.ok(recruitmentFields.has("planned_end_ceil_date"));
+  assert.ok(recruitmentFields.has("planned_end_time"));
+  assert.equal(recruitmentFields.has("planned_start_low_time"), false);
+  assert.equal(recruitmentFields.has("planned_start_ceil_time"), false);
+  assert.equal(recruitmentFields.has("planned_end_low_time"), false);
+  assert.equal(recruitmentFields.has("planned_end_ceil_time"), false);
   assert.ok(recruitmentFields.has("planned_start_low_week"));
   assert.ok(recruitmentFields.has("planned_start_ceil_week"));
   assert.ok(recruitmentFields.has("planned_end_low_week"));

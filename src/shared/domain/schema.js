@@ -190,9 +190,9 @@
     // Rzeczywisty termin jest konkretnym początkiem i końcem.
     // Dawne pola zakresowe zostają ukryte wyłącznie dla kompatybilności danych.
     dataRozpoczeciaOd: date("Data rozpoczęcia", "Termin rzeczywisty"),
-    godzinaRozpoczecia: time("Godzina rozpoczęcia", "Termin rzeczywisty"),
+    godzinaRozpoczecia: time("Godzina start", "Termin rzeczywisty"),
     dataZakonczeniaDo: date("Data zakończenia", "Termin rzeczywisty"),
-    godzinaZakonczenia: time("Godzina zakończenia", "Termin rzeczywisty"),
+    godzinaZakonczenia: time("Godzina koniec", "Termin rzeczywisty"),
     dataRozpoczeciaDo: {
       ...date("Data rozpoczęcia — do (legacy)", "Earlier captures"),
       legacy: true,
@@ -206,16 +206,41 @@
       reviewHidden: true,
     },
 
-    // Planowany termin jest zakresem. Każdy wymiar ma floor/ceil,
+    // Planowane daty i okresy są zakresami floor/ceil,
     // np. start 22–23 czerwca albo 2.–3. tydzień września 2026.
+    // Godzina pozostaje pojedyncza: jedna dla startu i jedna dla końca.
     planned_start_low_date: date("Planowany start — data od", "Termin planowany"),
     planned_start_ceil_date: date("Planowany start — data do", "Termin planowany"),
-    planned_start_low_time: time("Planowany start — godzina od", "Termin planowany"),
-    planned_start_ceil_time: time("Planowany start — godzina do", "Termin planowany"),
+    planned_start_time: time("Planowany start — godzina", "Termin planowany"),
     planned_end_low_date: date("Planowany koniec — data od", "Termin planowany"),
     planned_end_ceil_date: date("Planowany koniec — data do", "Termin planowany"),
-    planned_end_low_time: time("Planowany koniec — godzina od", "Termin planowany"),
-    planned_end_ceil_time: time("Planowany koniec — godzina do", "Termin planowany"),
+    planned_end_time: time("Planowany koniec — godzina", "Termin planowany"),
+
+    // Dawny model zakresowy godzin zostaje tylko dla kompatybilności danych.
+    planned_start_low_time: {
+      ...time("Planowany start — godzina od (legacy)", "Earlier captures"),
+      legacy: true,
+      hidden: true,
+      reviewHidden: true,
+    },
+    planned_start_ceil_time: {
+      ...time("Planowany start — godzina do (legacy)", "Earlier captures"),
+      legacy: true,
+      hidden: true,
+      reviewHidden: true,
+    },
+    planned_end_low_time: {
+      ...time("Planowany koniec — godzina od (legacy)", "Earlier captures"),
+      legacy: true,
+      hidden: true,
+      reviewHidden: true,
+    },
+    planned_end_ceil_time: {
+      ...time("Planowany koniec — godzina do (legacy)", "Earlier captures"),
+      legacy: true,
+      hidden: true,
+      reviewHidden: true,
+    },
 
     planned_start_low_year: integer("Planowany start — rok od", "Termin planowany", {
       min: 1000,
@@ -323,9 +348,7 @@
 
     // Poprzedni model jednowartościowy zostaje tylko dla migracji starych danych.
     planned_start_date: { ...date("Planowana data rozpoczęcia (legacy)", "Earlier captures"), legacy: true, hidden: true, reviewHidden: true },
-    planned_start_time: { ...time("Planowana godzina rozpoczęcia (legacy)", "Earlier captures"), legacy: true, hidden: true, reviewHidden: true },
     planned_end_date: { ...date("Planowana data zakończenia (legacy)", "Earlier captures"), legacy: true, hidden: true, reviewHidden: true },
-    planned_end_time: { ...time("Planowana godzina zakończenia (legacy)", "Earlier captures"), legacy: true, hidden: true, reviewHidden: true },
     planowanyStartRok: { ...integer("Planowany start — rok (legacy)", "Earlier captures", { min: 1000, max: 9999 }), legacy: true, hidden: true, reviewHidden: true },
     planowanyStartMiesiac: { ...choice("Planowany start — miesiąc (legacy)", months, { numeric: true, group: "Earlier captures" }), legacy: true, hidden: true, reviewHidden: true },
     planowanyStartTydzien: { ...choice("Planowany start — tydzień (legacy)", {

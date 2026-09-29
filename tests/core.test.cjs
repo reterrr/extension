@@ -183,15 +183,15 @@ test("formats business values, validates enums, dates, NIP, percentages and refe
     "09:30",
   );
   assert.equal(
-    s.C.coerceField("10", recruitment.planned_start_low_time, s.state),
+    s.C.coerceField("10", recruitment.planned_start_time, s.state),
     "10:00",
   );
   assert.equal(
-    s.C.coerceField("11:30", recruitment.planned_start_ceil_time, s.state),
+    s.C.coerceField("11:30", recruitment.planned_end_time, s.state),
     "11:30",
   );
   assert.throws(() =>
-    s.C.coerceField("24:15", recruitment.planned_end_ceil_time, s.state),
+    s.C.coerceField("24:15", recruitment.planned_end_time, s.state),
   );
   assert.equal(
     s.C.coerceField("2", recruitment.planned_start_low_week, s.state),

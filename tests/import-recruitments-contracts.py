@@ -136,6 +136,18 @@ class RecruitmentImporterContracts(unittest.TestCase):
         self.assertEqual(quarter["planned_start_low_quarter"], 4)
         self.assertEqual(quarter["planned_start_ceil_quarter"], 4)
 
+    def test_time_parser_supports_scalar_start_and_end_hours(self) -> None:
+        self.assertEqual(
+            importer.optional_time("9.30", "planowana_godzina_rozpoczecia", "NAB_TIME"),
+            "09:30",
+        )
+        self.assertEqual(
+            importer.optional_time("16:05", "planowana_godzina_zakonczenia", "NAB_TIME"),
+            "16:05",
+        )
+        with self.assertRaises(ValueError):
+            importer.optional_time("24:15", "planowana_godzina_zakonczenia", "NAB_TIME")
+
     def test_multiple_source_urls_are_normalized_without_loss(self) -> None:
         value = (
             "https://example.test/a ; "

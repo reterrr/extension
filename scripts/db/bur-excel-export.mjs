@@ -511,12 +511,12 @@ export function buildBurSheets(snapshot, geographySource) {
       godzina_zakonczenia: values.godzinaZakonczenia,
       planowany_start_data_od: dateCell(values.planned_start_low_date ?? values.planned_start_date),
       planowany_start_data_do: dateCell(values.planned_start_ceil_date ?? values.planned_start_date),
-      planowany_start_godzina_od: values.planned_start_low_time ?? values.planned_start_time,
-      planowany_start_godzina_do: values.planned_start_ceil_time ?? values.planned_start_time,
+      planowany_start_godzina_od: values.planned_start_time ?? values.planned_start_low_time,
+      planowany_start_godzina_do: values.planned_start_time ?? values.planned_start_ceil_time,
       planowany_koniec_data_od: dateCell(values.planned_end_low_date ?? values.planned_end_date),
       planowany_koniec_data_do: dateCell(values.planned_end_ceil_date ?? values.planned_end_date),
-      planowany_koniec_godzina_od: values.planned_end_low_time ?? values.planned_end_time,
-      planowany_koniec_godzina_do: values.planned_end_ceil_time ?? values.planned_end_time,
+      planowany_koniec_godzina_od: values.planned_end_time ?? values.planned_end_low_time,
+      planowany_koniec_godzina_do: values.planned_end_time ?? values.planned_end_ceil_time,
       planowany_start_rok_od: values.planned_start_low_year ?? values.planowanyStartRok,
       planowany_start_rok_do: values.planned_start_ceil_year ?? values.planowanyStartRok,
       planowany_start_miesiac_od: values.planned_start_low_month ?? values.planowanyStartMiesiac,
@@ -541,20 +541,20 @@ export function buildBurSheets(snapshot, geographySource) {
           values.planned_start_ceil_date ?? values.planned_start_date,
         ),
       ),
-      planowana_godzina_rozpoczecia: collapsedRange(
-        values.planned_start_low_time ?? values.planned_start_time,
-        values.planned_start_ceil_time ?? values.planned_start_time,
-      ),
+      planowana_godzina_rozpoczecia:
+        values.planned_start_time ??
+        values.planned_start_low_time ??
+        values.planned_start_ceil_time,
       planowana_data_zakonczenia: dateCell(
         collapsedRange(
           values.planned_end_low_date ?? values.planned_end_date,
           values.planned_end_ceil_date ?? values.planned_end_date,
         ),
       ),
-      planowana_godzina_zakonczenia: collapsedRange(
-        values.planned_end_low_time ?? values.planned_end_time,
-        values.planned_end_ceil_time ?? values.planned_end_time,
-      ),
+      planowana_godzina_zakonczenia:
+        values.planned_end_time ??
+        values.planned_end_ceil_time ??
+        values.planned_end_low_time,
       planowany_start_rok: collapsedRange(
         values.planned_start_low_year ?? values.planowanyStartRok,
         values.planned_start_ceil_year ?? values.planowanyStartRok,
