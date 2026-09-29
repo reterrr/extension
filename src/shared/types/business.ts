@@ -105,6 +105,8 @@ export interface Nabor {
   godzinaRozpoczecia: string | null;
   dataZakonczeniaDo: string | null;
   godzinaZakonczenia: string | null;
+  plannedStartTime: string | null;
+  plannedEndTime: string | null;
 
   /** Legacy range-boundary fields kept only for older stored data. */
   dataRozpoczeciaDo: string | null;
@@ -112,10 +114,14 @@ export interface Nabor {
 
   plannedStartLowDate: string | null;
   plannedStartCeilDate: string | null;
-  plannedStartLowTime: string | null;
-  plannedStartCeilTime: string | null;
+  plannedStartTime: string | null;
   plannedEndLowDate: string | null;
   plannedEndCeilDate: string | null;
+  plannedEndTime: string | null;
+
+  /** Legacy planned hour-range fields kept only for older stored data. */
+  plannedStartLowTime: string | null;
+  plannedStartCeilTime: string | null;
   plannedEndLowTime: string | null;
   plannedEndCeilTime: string | null;
 
