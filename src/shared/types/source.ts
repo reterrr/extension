@@ -29,8 +29,9 @@ export function isSourceFileType(value: unknown): value is SourceFileType {
  * A supported file selected from a webpage, attached from the current tab or
  * exposed by the local Burbot DB after a drag-and-drop upload.
  *
- * `url` is always the original HTTP(S) resource URL. Local `file:` paths,
- * browser blob URLs and downloaded filesystem paths are intentionally excluded.
+ * `url` is always an HTTP(S) URL: either the original remote resource or a
+ * loopback URL served by the local Burbot DB for an uploaded copy. Raw `file:`
+ * paths, browser blob URLs and filesystem paths are intentionally excluded.
  */
 export interface RemoteFileSourceCandidate {
   fileType: SourceFileType;
