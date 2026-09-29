@@ -1,6 +1,7 @@
 import "dotenv/config";
 
 import Database from "better-sqlite3";
+import { randomUUID } from "node:crypto";
 import { createServer } from "node:http";
 import {
   existsSync,
@@ -20,6 +21,8 @@ const DATABASE_PATH = resolve(
 );
 const SCHEMA_PATH = resolve(ROOT, "scripts/db/schema.sql");
 const MAX_BODY_BYTES = 32 * 1024 * 1024;
+const MAX_LOCAL_FILE_BYTES = 100 * 1024 * 1024;
+const LOCAL_FILE_TYPES = new Set(["DOC", "DOCX", "PDF", "XLSX", "PNG", "JPG", "JPEG"]);
 
 if (!Number.isInteger(PORT) || PORT < 1 || PORT > 65535) {
   throw new Error("BURBOT_DB_PORT must be a valid TCP port.");
@@ -116,10 +119,10 @@ ensureColumn("recruitments", "funding_rules", "TEXT");
 ensureColumn("recruitments", "funding_verified_at", "TEXT");
 ensureColumn("recruitments", "funding_verification_url", "TEXT");
 ensureColumn("geographies", "operator_object_id", "TEXT");
-db.pragma("user_version = 9");
+db.pragma("user_version = 10");
 
 db.prepare(
-  `INSERT INTO app_meta(key, value) VALUES ('schema_version', '9')
+  `INSERT INTO app_meta(key, value) VALUES ('schema_version', '10')
    ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
 ).run();
 
@@ -736,6 +739,7 @@ const resetTransaction = db.transaction(() => {
     DELETE FROM powiat_objects;
     DELETE FROM gmina_objects;
     DELETE FROM miasto_na_prawach_powiatu_objects;
+    DELETE FROM local_file_blobs;
   `);
 });
 
@@ -779,7 +783,7 @@ function setCors(req, res) {
   }
 
   if (origin) res.setHeader("Access-Control-Allow-Origin", origin);
-  res.setHeader("Access-Control-Allow-Methods", "GET,PUT,DELETE,OPTIONS");
+  res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
   res.setHeader("Vary", "Origin");
   return true;
@@ -804,6 +808,44 @@ async function readJsonBody(req) {
   return JSON.parse(Buffer.concat(chunks).toString("utf8"));
 }
 
+async function readRawBody(req, maxBytes = MAX_LOCAL_FILE_BYTES) {
+  const chunks = [];
+  let size = 0;
+  for await (const chunk of req) {
+    size += chunk.length;
+    if (size > maxBytes) {
+      throw new Error("Local file is too large. Maximum size is 100 MB.");
+    }
+    chunks.push(chunk);
+  }
+  if (!chunks.length) throw new Error("Local file is empty.");
+  return Buffer.concat(chunks);
+}
+
+function localFileType(name) {
+  const match = /\.([^.\/]+)$/.exec(String(name));
+  const type = match?.[1]?.toUpperCase() ?? "";
+  return LOCAL_FILE_TYPES.has(type) ? type : null;
+}
+
+function safeLocalFileName(value) {
+  const name = String(value ?? "")
+    .replace(/[\u0000-\u001f\u007f]/g, "")
+    .replace(/[\\/]/g, "_")
+    .trim()
+    .slice(0, 500);
+  if (!name || !localFileType(name)) {
+    throw new Error(
+      "Choose a .doc, .docx, .pdf, .xlsx, .png, .jpg or .jpeg file.",
+    );
+  }
+  return name;
+}
+
+function localFileUrl(fileId, name) {
+  return `http://${HOST}:${PORT}/files/${fileId}/${encodeURIComponent(name)}`;
+}
+
 const server = createServer(async (req, res) => {
   try {
     if (!setCors(req, res)) return;
@@ -813,7 +855,55 @@ const server = createServer(async (req, res) => {
       return;
     }
 
-    const pathname = new URL(req.url || "/", `http://${HOST}:${PORT}`).pathname;
+    const requestUrl = new URL(req.url || "/", `http://${HOST}:${PORT}`);
+    const pathname = requestUrl.pathname;
+
+    if (req.method === "POST" && pathname === "/files") {
+      const name = safeLocalFileName(requestUrl.searchParams.get("name"));
+      const content = await readRawBody(req);
+      const fileId = randomUUID();
+      const mimeType =
+        typeof req.headers["content-type"] === "string"
+          ? req.headers["content-type"].split(";", 1)[0].trim()
+          : "";
+      const uploadedAt = new Date().toISOString();
+
+      db.prepare(
+        `INSERT INTO local_file_blobs(
+          file_id, name, mime_type, size_bytes, content, uploaded_at
+        ) VALUES (?, ?, ?, ?, ?, ?)`,
+      ).run(fileId, name, mimeType || null, content.length, content, uploadedAt);
+
+      sendJson(res, 201, {
+        id: fileId,
+        name,
+        size: content.length,
+        url: localFileUrl(fileId, name),
+      });
+      return;
+    }
+
+    const localFileMatch = /^\/files\/([0-9a-f-]{36})(?:\/.*)?$/i.exec(pathname);
+    if (req.method === "GET" && localFileMatch) {
+      const row = db
+        .prepare(
+          "SELECT name, mime_type, size_bytes, content FROM local_file_blobs WHERE file_id = ?",
+        )
+        .get(localFileMatch[1]);
+      if (!row) {
+        sendJson(res, 404, { error: "Local file not found." });
+        return;
+      }
+
+      res.writeHead(200, {
+        "Content-Type": row.mime_type || "application/octet-stream",
+        "Content-Length": String(row.size_bytes),
+        "Content-Disposition": `inline; filename*=UTF-8''${encodeURIComponent(row.name)}`,
+        "Cache-Control": "private, max-age=3600",
+      });
+      res.end(row.content);
+      return;
+    }
 
     if (req.method === "GET" && pathname === "/health") {
       sendJson(res, 200, { ok: true, ...info() });
