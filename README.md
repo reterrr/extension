@@ -338,7 +338,9 @@ The **Export Excel** action exports the committed SQLite state as a business wor
 
 The **Pliki** section also accepts local files by drag and drop or by clicking the
 drop zone. Supported types are `.doc`, `.docx`, `.pdf`, `.xlsx`, `.png`,
-`.jpg` and `.jpeg`, up to 100 MB per file.
+`.jpg`, `.jpeg`, `.zip`, `.rar`, `.7z`, `.tar`, `.gz` and `.tgz`,
+up to 100 MB per file. Archive files can be classified with the same document
+metadata as other attachments; value extraction remains PDF-only.
 
 Uploaded files are copied into the local SQLite database as BLOBs and exposed to
 the extension through the local DB service. Burbot never stores the original
