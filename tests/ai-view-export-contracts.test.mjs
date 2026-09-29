@@ -287,7 +287,7 @@ test("AI View export includes readable related business data", () => {
     operator: {
       id: "operator-1",
       key: "operator-1",
-      name: "Operator Jeden",
+      name: "Human Power Sp. z o.o.",
     },
   });
   assert.equal(
