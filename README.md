@@ -334,6 +334,17 @@ The **Export Excel** action exports the committed SQLite state as a business wor
 
 `Operatorzy` exports address, email, phone, website and notes. `Nabory` includes all current recruitment date/planning/status/source fields. The final `Nabory` column is `ostatnia_zmiana`, sourced from the recruitment object's `updatedAt` timestamp. `ostatnio_sprawdzono` remains a separate system timestamp.
 
+## Local file uploads
+
+The **Pliki** section also accepts local files by drag and drop or by clicking the
+drop zone. Supported types are `.doc`, `.docx`, `.pdf`, `.xlsx`, `.png`,
+`.jpg` and `.jpeg`, up to 100 MB per file.
+
+Uploaded files are copied into the local SQLite database as BLOBs and exposed to
+the extension through the local DB service. Burbot never stores the original
+filesystem path, so moving or deleting the original file does not break the
+attachment.
+
 ## Development
 
 ```bash
