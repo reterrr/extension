@@ -360,6 +360,25 @@ test("bulk file download is available for projects and recruitments", () => {
   assert.match(downloads, /export function buildProjectDownloadPlan/);
 });
 
+test("files can be uploaded from the computer by click or drag and drop", () => {
+  const app = source("src/sidepanel/App.tsx");
+  const files = source("src/sidepanel/fileSourcesUi.ts");
+  const localFiles = source("src/shared/api/localFiles.ts");
+  const server = source("scripts/db-server.mjs");
+
+  assert.match(app, /id="local-file-drop-zone"/);
+  assert.match(app, /id="local-file-input"[sS]*?multiple/);
+  assert.match(app, /Upuść pliki tutaj/);
+  assert.match(files, /localDropZone\.ondrop/);
+  assert.match(files, /localDropZone\.ondragover/);
+  assert.match(files, /localInput\.onchange/);
+  assert.match(files, /uploadLocalFiles/);
+  assert.match(localFiles, /method: "POST"/);
+  assert.match(localFiles, /MAX_LOCAL_FILE_BYTES = 100 \* 1024 \* 1024/);
+  assert.match(server, /pathname === "\/files"/);
+  assert.match(server, /local_file_blobs/);
+});
+
 test("File Add Mode is persistent and has Ctrl+Alt+F toggle", () => {
   const files = source("src/sidepanel/fileSourcesUi.ts");
   const picker = source("src/content/picker.ts");
