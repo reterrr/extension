@@ -87,6 +87,42 @@ class ImportProjectsContracts(unittest.TestCase):
         )
         self.assertNotIn("operator_id", project["values"])
 
+    def test_same_geography_is_allowed_for_different_project_operators(self):
+        class Catalog:
+            def validate(self, type_name, value, label):
+                return type_name, value
+
+        canonical = importer.validate_input(
+            [self.project_row()],
+            [
+                {
+                    "geo_id": "GEO_1",
+                    "parent_geo_id": "",
+                    "poziom": "1",
+                    "geo_typ": "wojewodztwo",
+                    "nazwa": "śląskie",
+                    "canonical_geo_id": "",
+                }
+            ],
+            [
+                {
+                    "geo_projekt_id": "GPR_1",
+                    "projekt_id": "PR_1",
+                    "operator_id": "OP_1",
+                    "geo_id": "GEO_1",
+                },
+                {
+                    "geo_projekt_id": "GPR_2",
+                    "projekt_id": "PR_1",
+                    "operator_id": "OP_2",
+                    "geo_id": "GEO_1",
+                },
+            ],
+            Catalog(),
+        )
+
+        self.assertEqual(canonical["GEO_1"], ("WOJEWODZTWO", "śląskie"))
+
     def test_exported_project_geography_can_name_additional_operator(self):
         state = self.state()
         importer.merge_projects(
