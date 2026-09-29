@@ -197,7 +197,7 @@ Problemu z uzyskaniem pełnego tekstu jednej strony nie przenoś na wszystkie po
 | `data` | obiekt, wymagane | Tylko pola tabel dla danego typu. Zawsze wymagane pole główne: `name` dla operatora/projektu, `external_number` dla naboru. |
 | `evidence` | mapa, opcjonalne | Pole z `data` → tablica cytatów. Każde wskazane pole musi być też jawnie obecne w `data`. |
 | `operators` | tablica, opcjonalne | Tylko projekt i nabór; przypisania operatorów. |
-| `geography` | tablica, opcjonalne | Tylko projekt i nabór; dla naboru zakres przypisany do operatora. |
+| `geography` | tablica, opcjonalne | Tylko projekt i nabór; zakres zawsze przypisany do operatora tego obiektu. |
 | `contacts` | tablica, opcjonalne | Tylko operator; oddzielne adresy e-mail i telefony. |
 | `files` | tablica, opcjonalne | Zdalne pliki przy dowolnym z trzech typów obiektu. |
 | `financing` | tablica, opcjonalne | Tylko projekt i nabór; warianty finansowania. |
@@ -345,10 +345,10 @@ Operatorzy projektu i naboru są osobnymi przypisaniami. Nie wystarczy podać ic
 | `type` | enum, wymagane | `POLSKA`, `WOJEWODZTWO`, `PODREGION`, `POWIAT`, `GMINA`, `MIASTO_NA_PRAWACH_POWIATU`. |
 | `role` | enum, wymagane | `OBEJMUJE` albo `WYKLUCZA`. |
 | `value` | tekst, wymagane | Dokładna wartość z katalogu dla danego typu — opis poniżej. |
-| `operator` | reference, zależne od typu obiektu | Dla naboru wskazuje jednego z operatorów przypisanych **do tego naboru**. Przy wielu operatorach wymagane. Dla projektu niedozwolone. |
+| `operator` | reference, zależne od liczby operatorów | Dla projektu i naboru wskazuje jednego z operatorów przypisanych **do tego samego obiektu**. Przy wielu operatorach wymagane. |
 | `evidence` | mapa, opcjonalne | Wyłącznie `value` → tablica cytatów. Nie dodawaj osobnych kluczy `type`, `role` lub `operator` w evidence geografii. Cytat powinien obejmować także kontekst włączenia/wyłączenia. |
 
-Nabór z dokładnie jednym przypisanym operatorem pozwala pominąć `geography[].operator` — importer przypisze go automatycznie. W nowych importach podawaj go jawnie. Przy zeru operatorów dodanie geografii naboru się nie powiedzie: najpierw potrzebne jest poprawne przypisanie operatora. Nie przypisuj całego zakresu projektu każdemu operatorowi bez potwierdzenia.
+Projekt lub nabór z dokładnie jednym przypisanym operatorem pozwala pominąć `geography[].operator` — importer przypisze go automatycznie. W nowych importach podawaj go jawnie. Przy zeru operatorów dodanie geografii się nie powiedzie: najpierw potrzebne jest poprawne przypisanie operatora. Nie przypisuj całego zakresu projektu każdemu operatorowi bez potwierdzenia.
 
 ### Dozwolone wartości `value`
 
@@ -1908,7 +1908,7 @@ Wykonaj ją przed wysłaniem; nie dołączaj opisu kontroli do końcowego JSON.
 2. Czy typy i wielkość liter są poprawne, a wszystkie pola `data` należą do właściwego typu obiektu? Czy usunięto systemowe `last_checked_at`?
 3. Czy każdy obiekt ma unikalny, stabilny klucz i wymagane `name`/`external_number`? Czy aktualizowany nabór zachowuje istniejący klucz zamiast polegać na nazwie?
 4. Czy każda referencja ma dokładnie `{"$ref":"..."}`, cel w tym samym pliku i prawidłowy typ? Czy nie pominięto minimalnych obiektów zależnych?
-5. Czy listy operatorów nie mają duplikatów i więcej niż jednego głównego operatora? Czy geografia naboru wskazuje operatora przypisanego do tego naboru?
+5. Czy listy operatorów nie mają duplikatów i więcej niż jednego głównego operatora? Czy geografia projektu i naboru wskazuje operatora przypisanego do tego samego obiektu?
 6. Czy wszystkie pary `geography.type/value` pochodzą z aktualnego katalogu? Czy nie pomylono powiatu z miastem na prawach powiatu, kodu gminy z nazwą ani zasięgu z adresem operatora?
 7. Czy zakres dat ma właściwą precyzję, spójne granice i godzinę tylko przy potwierdzeniu? Czy planowanego miesiąca/tygodnia nie zamieniono na wymyśloną datę? Czy status odpowiada zakresowi polecenia i dacie odniesienia?
 8. Czy każdy wariant finansowania ma właściwe `company_size`, stabilny klucz, procenty w skali 0–100, kwoty w PLN, właściwą podstawę limitu i warunki w `notes`? Czy nie wymyślono średniej albo stawki minimalnej z „do X%”?
@@ -1934,7 +1934,7 @@ Wykonaj ją przed wysłaniem; nie dołączaj opisu kontroli do końcowego JSON.
 | `Unknown object reference` | Dołącz minimalny obiekt docelowy do `objects`, sprawdź jego `key` i `$ref`. |
 | Nowy duplikat naboru po aktualizacji | Użyj istniejącego `key`/`importKey`/ID jako `key`; sama nazwa nie dopasowuje naboru. |
 | `Unknown geography value` | Skopiuj dokładną wartość odpowiedniego enumu z katalogu, nie etykietę ani samodzielnie odgadnięty kod. |
-| `geography.operator is required` | Dodaj przypisania operatorów i wskaż właściwego operatora w każdym wierszu geografii naboru. |
+| `geography.operator is required` | Dodaj przypisania operatorów i wskaż właściwego operatora w każdym wierszu geografii projektu lub naboru. |
 | `Duplicate ... document_type_key: other` | Konkretne pliki przenieś do `files`; w starszym `documents` każdy typ może wystąpić tylko raz. |
 | `Evidence mismatch` / zakres poza źródłem | Oblicz offsety od nowa na finalnym snapshotcie w punktach kodowych Unicode i sprawdź dokładną zgodność cytatu. |
 | Wartość widać, ale brak lokalizacji/podświetlenia | Sprawdź evidence dla tego pola, jego źródło i dostępność strony/pliku; samo pole `data` lub sam URL nie wystarczą. |
