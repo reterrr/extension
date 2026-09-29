@@ -75,10 +75,12 @@ test("SQLite schema creates typed business and provenance tables", () => {
   for (const column of [
     "planned_start_low_date",
     "planned_start_ceil_date",
+    "planned_start_time",
     "planned_start_low_time",
     "planned_start_ceil_time",
     "planned_end_low_date",
     "planned_end_ceil_date",
+    "planned_end_time",
     "planned_end_low_time",
     "planned_end_ceil_time",
     "planned_start_low_year",
