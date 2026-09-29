@@ -84,7 +84,7 @@ export const SHEET_HEADERS = Object.freeze({
   Projekty_Operatorzy: ["id", "projekt_id", "operator_id", "typ"],
   Nabory_Operatorzy: ["id", "nabor_id", "operator_id", "typ"],
   Geografia_Slownik: ["geo_id", "parent_geo_id", "poziom", "geo_typ", "nazwa", "canonical_geo_id"],
-  Geografia_Projekty: ["geo_projekt_id", "projekt_id", "geo_id"],
+  Geografia_Projekty: ["geo_projekt_id", "projekt_id", "operator_id", "geo_id"],
   Geografia_Nabory: ["id", "nabor_id", "operator_id", "miejscowosc_id", "typ"],
 });
 
@@ -699,7 +699,17 @@ export function buildBurSheets(snapshot, geographySource) {
     const mapped = ensureGeo(String(geo.type), String(geo.value));
     if (projectIds.has(String(geo.objectId)) && geo.role !== "WYKLUCZA") {
       gp += 1;
-      projectGeoRows.push(row(SHEET_HEADERS.Geografia_Projekty, { geo_projekt_id: geo.id || `GPR_${String(gp).padStart(6, "0")}`, projekt_id: keyOf(byId.get(String(geo.objectId))), geo_id: mapped }));
+      projectGeoRows.push(
+        row(SHEET_HEADERS.Geografia_Projekty, {
+          geo_projekt_id:
+            geo.id || `GPR_${String(gp).padStart(6, "0")}`,
+          projekt_id: keyOf(byId.get(String(geo.objectId))),
+          operator_id: geo.operatorId
+            ? keyOf(byId.get(String(geo.operatorId)))
+            : null,
+          geo_id: mapped,
+        }),
+      );
     }
     if (recruitmentIds.has(String(geo.objectId))) {
       gn += 1;
