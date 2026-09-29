@@ -206,8 +206,9 @@
       reviewHidden: true,
     },
 
-    // Planowany termin jest zakresem. Każdy wymiar ma floor/ceil,
+    // Planowane daty i okresy są zakresami floor/ceil,
     // np. start 22–23 czerwca albo 2.–3. tydzień września 2026.
+    // Godzina pozostaje pojedyncza: jedna dla startu i jedna dla końca.
     planned_start_low_date: date("Planowany start — data od", "Termin planowany"),
     planned_start_ceil_date: date("Planowany start — data do", "Termin planowany"),
     planned_start_time: time("Planowany start — godzina", "Termin planowany"),
