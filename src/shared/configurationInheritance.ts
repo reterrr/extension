@@ -7,6 +7,7 @@ import type {
 export interface GeographyInheritanceStatus {
   project?: LegacyStoredObject;
   operatorAssigned: boolean;
+  projectOperatorAssigned: boolean;
   projectGeographies: LegacyStoredGeography[];
   inheritedGeographies: LegacyStoredGeography[];
   pendingGeographies: LegacyStoredGeography[];
@@ -50,11 +51,20 @@ export function geographyInheritanceStatus(
         row.objectId === recruitment.id &&
         row.operatorId === operatorId,
     );
+  const projectOperatorAssigned =
+    !!project &&
+    !!operatorId &&
+    (state.operatorAssignments ?? []).some(
+      (row) =>
+        row.objectId === project.id &&
+        row.operatorId === operatorId,
+    );
 
-  if (!project || !operatorAssigned) {
+  if (!project || !operatorAssigned || !projectOperatorAssigned) {
     return {
       project,
       operatorAssigned,
+      projectOperatorAssigned,
       projectGeographies: [],
       inheritedGeographies: [],
       pendingGeographies: [],
@@ -63,7 +73,9 @@ export function geographyInheritanceStatus(
 
   const allGeographies = state.geographies ?? [];
   const projectGeographies = allGeographies.filter(
-    (row) => row.objectId === project.id,
+    (row) =>
+      row.objectId === project.id &&
+      row.operatorId === operatorId,
   );
   const recruitmentGeographies = allGeographies.filter(
     (row) =>
@@ -89,6 +101,7 @@ export function geographyInheritanceStatus(
   return {
     project,
     operatorAssigned,
+    projectOperatorAssigned,
     projectGeographies,
     inheritedGeographies,
     pendingGeographies,
@@ -160,8 +173,15 @@ export function copyProjectGeographiesToRecruitment(
   if (!status.operatorAssigned) {
     throw new Error("Wybrany operator nie jest przypisany do tego naboru.");
   }
+  if (!status.projectOperatorAssigned) {
+    throw new Error(
+      "Wybrany operator nie jest przypisany do projektu. Geografia projektu jest teraz operatorowa.",
+    );
+  }
   if (!status.projectGeographies.length) {
-    throw new Error("Przypisany projekt nie ma geografii do skopiowania.");
+    throw new Error(
+      "Przypisany projekt nie ma geografii dla wybranego operatora.",
+    );
   }
   if (!status.pendingGeographies.length) {
     throw new Error(
