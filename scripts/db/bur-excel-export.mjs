@@ -541,20 +541,20 @@ export function buildBurSheets(snapshot, geographySource) {
           values.planned_start_ceil_date ?? values.planned_start_date,
         ),
       ),
-      planowana_godzina_rozpoczecia: collapsedRange(
-        values.planned_start_low_time ?? values.planned_start_time,
-        values.planned_start_ceil_time ?? values.planned_start_time,
-      ),
+      planowana_godzina_rozpoczecia:
+        values.planned_start_time ??
+        values.planned_start_low_time ??
+        values.planned_start_ceil_time,
       planowana_data_zakonczenia: dateCell(
         collapsedRange(
           values.planned_end_low_date ?? values.planned_end_date,
           values.planned_end_ceil_date ?? values.planned_end_date,
         ),
       ),
-      planowana_godzina_zakonczenia: collapsedRange(
-        values.planned_end_low_time ?? values.planned_end_time,
-        values.planned_end_ceil_time ?? values.planned_end_time,
-      ),
+      planowana_godzina_zakonczenia:
+        values.planned_end_time ??
+        values.planned_end_ceil_time ??
+        values.planned_end_low_time,
       planowany_start_rok: collapsedRange(
         values.planned_start_low_year ?? values.planowanyStartRok,
         values.planned_start_ceil_year ?? values.planowanyStartRok,
