@@ -498,9 +498,13 @@ def validate_input(
         raise ValueError("Duplicate geo_projekt_id in Geografia_Projekty.")
 
     project_set = set(project_ids)
+    project_main_operator = {
+        row["projekt_id"]: row["operator_id"]
+        for row in projects
+    }
     linked_projects: set[str] = set()
     used_geo_ids: set[str] = set()
-    pairs: set[tuple[str, str]] = set()
+    pairs: set[tuple[str, str, str]] = set()
     for row in geo_projects:
         project_id = row["projekt_id"]
         geo_id = row["geo_id"]
@@ -508,9 +512,16 @@ def validate_input(
             raise ValueError(f"Unknown project in geography link: {project_id}.")
         if geo_id not in geo_by_id:
             raise ValueError(f"Unknown geo_id in geography link: {geo_id}.")
-        pair = (project_id, geo_id)
+        operator_id = (
+            row.get("operator_id", "").strip()
+            or project_main_operator.get(project_id, "")
+        )
+        pair = (project_id, operator_id, geo_id)
         if pair in pairs:
-            raise ValueError(f"Duplicate project/geography pair: {project_id} / {geo_id}.")
+            raise ValueError(
+                "Duplicate project/operator/geography assignment: "
+                f"{project_id} / {operator_id} -> {geo_id}."
+            )
         pairs.add(pair)
         linked_projects.add(project_id)
         used_geo_ids.add(geo_id)
