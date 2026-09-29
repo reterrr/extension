@@ -164,6 +164,103 @@ test("geography inheritance requires an assigned operator and creates independen
   );
 });
 
+test("geography inheritance uses only the selected operator's project geography", () => {
+  const state = baseState();
+  state.objects.push({
+    id: "OP_2",
+    importKey: "OP_2",
+    type: "operator",
+    label: "Operator 2",
+    values: { name: "Operator 2" },
+  });
+  state.operatorAssignments.push(
+    {
+      id: "A_PROJECT_2",
+      objectId: "PR_1",
+      operatorId: "OP_2",
+      operatorType: "DODATKOWY",
+    },
+    {
+      id: "A_RECRUITMENT_2",
+      objectId: "NAB_1",
+      operatorId: "OP_2",
+      operatorType: "DODATKOWY",
+    },
+  );
+  state.geographies.push({
+    id: "G_OP_2",
+    objectId: "PR_1",
+    operatorId: "OP_2",
+    type: "WOJEWODZTWO",
+    role: "OBEJMUJE",
+    value: "mazowieckie",
+  });
+
+  const recruitment = state.objects.find((object) => object.id === "NAB_1");
+  const status = inheritance.geographyInheritanceStatus(
+    state,
+    recruitment,
+    "OP_1",
+  );
+  assert.deepEqual(
+    status.projectGeographies.map((row) => row.id),
+    ["G_1", "G_2"],
+  );
+
+  let sequence = 0;
+  const result = inheritance.copyProjectGeographiesToRecruitment(
+    state,
+    "NAB_1",
+    "OP_1",
+    () => `copy-g-${++sequence}`,
+    "2026-09-29T12:45:00.000Z",
+  );
+  assert.equal(result.copied.length, 2);
+  assert.equal(
+    result.copied.some((row) => row.copiedFromGeographyId === "G_OP_2"),
+    false,
+  );
+});
+
+test("geography inheritance rejects an operator that is not assigned to the project", () => {
+  const state = baseState();
+  state.objects.push({
+    id: "OP_2",
+    importKey: "OP_2",
+    type: "operator",
+    label: "Operator 2",
+    values: { name: "Operator 2" },
+  });
+  state.operatorAssignments.push({
+    id: "A_RECRUITMENT_2",
+    objectId: "NAB_1",
+    operatorId: "OP_2",
+    operatorType: "DODATKOWY",
+  });
+
+  const recruitment = state.objects.find((object) => object.id === "NAB_1");
+  const status = inheritance.geographyInheritanceStatus(
+    state,
+    recruitment,
+    "OP_2",
+  );
+  assert.equal(status.operatorAssigned, true);
+  assert.equal(status.projectOperatorAssigned, false);
+  assert.equal(status.projectGeographies.length, 0);
+
+  assert.throws(
+    () =>
+      inheritance.copyProjectGeographiesToRecruitment(
+        state,
+        "NAB_1",
+        "OP_2",
+        () => "copy-g",
+        "2026-09-29T12:50:00.000Z",
+      ),
+    /nie jest przypisany do projektu/,
+  );
+});
+
 test("re-inheriting geography copies only newly added project geography", () => {
   const state = baseState();
   let sequence = 0;
