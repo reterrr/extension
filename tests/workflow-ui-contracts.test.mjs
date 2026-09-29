@@ -321,7 +321,21 @@ test("workspace advertises supported file extensions and keeps value extraction 
   const app = source("src/sidepanel/App.tsx");
   const files = source("src/sidepanel/fileSourcesUi.ts");
 
-  for (const extension of [".doc", ".docx", ".pdf", ".xlsx", ".png", ".jpg", ".jpeg"]) {
+  for (const extension of [
+    ".doc",
+    ".docx",
+    ".pdf",
+    ".xlsx",
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".zip",
+    ".rar",
+    ".7z",
+    ".tar",
+    ".gz",
+    ".tgz",
+  ]) {
     assert.ok(app.includes(extension), `missing supported file extension: ${extension}`);
   }
   assert.match(files, /source\.fileType === "PDF"[\s\S]*?Wydziel wartości/);
@@ -358,6 +372,27 @@ test("bulk file download is available for projects and recruitments", () => {
   assert.match(files, /buildProjectDownloadPlan/);
   assert.match(files, /buildRecruitmentDownloadPlan/);
   assert.match(downloads, /export function buildProjectDownloadPlan/);
+});
+
+test("common archives use the normal file classification UI", () => {
+  const sourceTypes = source("src/shared/types/source.ts");
+  const files = source("src/sidepanel/fileSourcesUi.ts");
+  const localFiles = source("src/shared/api/localFiles.ts");
+
+  for (const archiveType of ["ZIP", "RAR", "7Z", "TAR", "GZ", "TGZ"]) {
+    assert.ok(sourceTypes.includes(`"${archiveType}"`));
+  }
+  for (const extension of [".zip", ".rar", ".7z", ".tar", ".gz", ".tgz"]) {
+    assert.ok(localFiles.includes(`"${extension.slice(1)}"`));
+  }
+
+  assert.match(files, /renderSource\(source: LegacyStoredFileSource\)/);
+  assert.match(files, /purposeCaption\.textContent = "Cel dokumentu"/);
+  assert.match(files, /requirementCaption\.textContent = "Wymagalność"/);
+  assert.match(
+    files,
+    /source\.fileType === "PDF" \? document\.createElement\("button"\) : null/,
+  );
 });
 
 test("files can be uploaded from the computer by click or drag and drop", () => {
