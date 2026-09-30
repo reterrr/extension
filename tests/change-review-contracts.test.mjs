@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { build } from "esbuild";
+import { createAiViewExport } from "../src/shared/export/aiViewExport.js";
 let directory, review, session;
 before(async () => {
   directory = await mkdtemp(join(tmpdir(), "burbot-review-"));
@@ -341,7 +342,7 @@ test("final save rejects a changed selection from another panel", () => {
   );
 });
 
-test("document evidence follows its business key and role changes cannot leave two main operators", () => {
+test("document evidence follows its business key", () => {
   const d = draft();
   d.workingState.documentRequirements = [
     {
@@ -373,18 +374,313 @@ test("document evidence follows its business key and role changes cannot leave t
   assert.equal(saved.importSources[0].id, "doc-source");
   choose(d, "form", "later");
   assert.equal(review.applyReviewedChanges(d).importTargetEvidence.length, 0);
+});
+
+function operatorDraft(type = "project") {
+  const d = draft();
+  d.baseState.objects[0].type = type;
+  if (type === "recruitment")
+    d.baseState.objects[0].values.external_number = "Nabór";
+  for (const id of ["a", "b", "c"])
+    d.baseState.objects.push({
+      id,
+      type: "operator",
+      values: { name: `Operator ${id.toUpperCase()}` },
+    });
   d.baseState.operatorAssignments = [
-    { id: "old-op", objectId: "p", operatorId: "a", operatorType: "GLOWNY" },
+    { id: "op-a", objectId: "p", operatorId: "a", operatorType: "GLOWNY" },
+    { id: "op-b", objectId: "p", operatorId: "b", operatorType: "DODATKOWY" },
   ];
-  d.workingState.operatorAssignments = [
-    { id: "old-op", objectId: "p", operatorId: "a", operatorType: "DODATKOWY" },
-    { id: "new-op", objectId: "p", operatorId: "b", operatorType: "GLOWNY" },
-  ];
-  choose(d, "old-op", "later");
-  assert.throws(
-    () => review.applyReviewedChanges(d),
-    /jednego operatora głównego/,
+  d.workingState = structuredClone(d.baseState);
+  d.workingState.operatorAssignments[0].operatorType = "DODATKOWY";
+  d.workingState.operatorAssignments[1].operatorType = "GLOWNY";
+  return d;
+}
+function roles(state, objectId = "p") {
+  return state.operatorAssignments
+    .filter((row) => row.objectId === objectId)
+    .map((row) => [row.operatorId, row.operatorType])
+    .sort();
+}
+
+for (const type of ["project", "recruitment"])
+  test(`${type}: a main-operator swap is one checkbox; independent additional operators remain selectable`, () => {
+    const d = operatorDraft(type);
+    d.workingState.operatorAssignments.push({
+      id: "op-c",
+      objectId: "p",
+      operatorId: "c",
+      operatorType: "DODATKOWY",
+    });
+    const items = review.reviewItems(d);
+    const group = items.find(
+      (item) => item.label === "Zmiana operatora głównego",
+    );
+    assert.equal(items.length, 2);
+    assert.deepEqual(
+      group.details.map(({ subject, before, after }) => [
+        subject,
+        before,
+        after,
+      ]),
+      [
+        ["Operator A", "GLOWNY", "DODATKOWY"],
+        ["Operator B", "DODATKOWY", "GLOWNY"],
+      ],
+    );
+    assert.deepEqual(
+      roles(review.applyReviewedChanges(d)),
+      roles(d.workingState),
+    );
+    review.decideReviewChange(d, group.id, "later", group.fingerprint);
+    choose(d, "op-c", "later");
+    assert.deepEqual(roles(review.applyReviewedChanges(d)), roles(d.baseState));
+    choose(d, "op-c", "save");
+    assert.deepEqual(roles(review.applyReviewedChanges(d)), [
+      ["a", "GLOWNY"],
+      ["b", "DODATKOWY"],
+      ["c", "DODATKOWY"],
+    ]);
+    review.decideReviewChange(d, group.id, "save", group.fingerprint);
+    assert.deepEqual(
+      roles(review.applyReviewedChanges(d)),
+      roles(d.workingState),
+    );
+  });
+
+test("old split row decisions defer the whole swap until it is selected again", () => {
+  const d = operatorDraft();
+  const group = unit(d, "main"),
+    member = group.members[0];
+  d.reviewDecisions = {
+    [member.id]: {
+      fingerprint: review.fingerprint(member),
+      selection: "later",
+    },
+  };
+  assert.equal(review.reviewItems(d)[0].selection, "later");
+  assert.deepEqual(roles(review.applyReviewedChanges(d)), roles(d.baseState));
+  choose(d, "main", "save");
+  assert.equal(d.reviewDecisions[member.id], undefined);
+  assert.deepEqual(
+    roles(review.applyReviewedChanges(d)),
+    roles(d.workingState),
   );
+});
+
+test("discard, reload, partial save and restore keep both roles and their evidence together", () => {
+  let d = operatorDraft();
+  d.workingState.objects[0].values.notes = "Zapisana uwaga";
+  d.workingState.importTargetEvidence = [
+    {
+      id: "role-proof",
+      objectId: "p",
+      field: "operatorType",
+      sourceId: "source",
+      target: { kind: "operator_assignment", id: "op-b" },
+    },
+  ];
+  d.workingState.importSources = [
+    {
+      id: "source",
+      importKey: "reg",
+      type: "PDF",
+      snapshot: { text: "Operator B jest główny" },
+    },
+  ];
+  const originalRoles = roles(d.workingState);
+  choose(d, "main", "discard");
+  assert.deepEqual(roles(d.workingState), roles(d.baseState));
+  assert.equal(d.workingState.importTargetEvidence.length, 0);
+  assert.equal(
+    review.reviewItems(d).filter((item) => item.selection === "discarded")
+      .length,
+    1,
+  );
+  const saved = review.applyReviewedChanges(d);
+  assert.equal(saved.objects[0].values.notes, "Zapisana uwaga");
+  assert.equal(saved.importSources.length, 0);
+  saved.revision += 1;
+  review.rebaseReviewedChanges(d, saved);
+  d = JSON.parse(JSON.stringify(d));
+  const archived = review
+    .reviewItems(d)
+    .find((item) => item.selection === "discarded");
+  review.decideReviewChange(d, archived.id, "restore", archived.fingerprint);
+  assert.deepEqual(roles(d.workingState), originalRoles);
+  assert.equal(d.workingState.importTargetEvidence[0].id, "role-proof");
+  assert.equal(review.reviewItems(d)[0].selection, "later");
+  choose(d, "main", "save");
+  const restored = review.applyReviewedChanges(d);
+  assert.deepEqual(roles(restored), originalRoles);
+  assert.equal(restored.importSources[0].id, "source");
+});
+
+test("a deferred role swap survives a partial commit and stale member edits invalidate its fingerprint", () => {
+  const d = operatorDraft();
+  choose(d, "main", "later");
+  d.workingState.objects[0].values.notes = "Nowa uwaga";
+  const saved = review.applyReviewedChanges(d);
+  saved.revision += 1;
+  review.rebaseReviewedChanges(d, saved);
+  assert.deepEqual(roles(saved), roles(d.baseState));
+  assert.deepEqual(roles(d.workingState), [
+    ["a", "DODATKOWY"],
+    ["b", "GLOWNY"],
+  ]);
+  const group = review.reviewItems(d)[0];
+  assert.equal(group.selection, "later");
+  d.workingState.operatorAssignments[1].importKey = "updated-assignment";
+  assert.throws(
+    () => review.decideReviewChange(d, group.id, "save", group.fingerprint),
+    /zmodyfikowana/,
+  );
+  review.refreshReviewDecisions(d);
+  assert.equal(review.reviewItems(d)[0].selection, "save");
+});
+
+test("a newer edit to a group member prevents restoring an older discarded group", () => {
+  const d = operatorDraft();
+  const group = choose(d, "main", "discard");
+  d.workingState.operatorAssignments[0].importKey = "newer-proposal";
+  assert.throws(
+    () =>
+      review.decideReviewChange(
+        d,
+        group.id,
+        "restore",
+        review.fingerprint(group),
+      ),
+    /nowszą zmianę/,
+  );
+  review.refreshReviewDecisions(d);
+  assert.equal(Object.keys(d.discardedChanges).length, 0);
+  assert.equal(review.reviewItems(d).length, 1);
+});
+
+test("adding the first operators, removing all, and replacing a removed main are atomic", () => {
+  for (const scenario of [
+    "first",
+    "remove-all",
+    "remove-main",
+    "replace-main",
+  ]) {
+    const d = operatorDraft();
+    if (scenario === "first") d.baseState.operatorAssignments = [];
+    if (scenario === "remove-all") d.workingState.operatorAssignments = [];
+    if (scenario === "remove-main") d.workingState.operatorAssignments.shift();
+    if (scenario === "replace-main")
+      d.workingState.operatorAssignments[0].id = "op-a-replacement";
+    const group = unit(d, "main");
+    assert.ok(group, scenario);
+    assert.deepEqual(
+      roles(review.applyReviewedChanges(d)),
+      roles(d.workingState),
+    );
+    choose(d, "main", "later");
+    assert.deepEqual(roles(review.applyReviewedChanges(d)), roles(d.baseState));
+    choose(d, "main", "discard");
+    assert.deepEqual(roles(d.workingState), roles(d.baseState));
+  }
+});
+
+test("a newly chosen main supersedes a discarded group with different row IDs", () => {
+  const d = operatorDraft();
+  d.baseState.operatorAssignments = [];
+  const group = choose(d, "main", "discard");
+  d.workingState.operatorAssignments.push({
+    id: "op-c",
+    objectId: "p",
+    operatorId: "c",
+    operatorType: "GLOWNY",
+  });
+  assert.throws(
+    () =>
+      review.decideReviewChange(
+        d,
+        group.id,
+        "restore",
+        review.fingerprint(group),
+      ),
+    /nowszą zmianę/,
+  );
+  review.refreshReviewDecisions(d);
+  assert.equal(Object.keys(d.discardedChanges).length, 0);
+  assert.deepEqual(roles(review.applyReviewedChanges(d)), [["c", "GLOWNY"]]);
+});
+
+test("unmodified invalid assignments do not block a valid swap or unrelated fields and evidence", () => {
+  for (const oldRoles of [
+    ["GLOWNY", "GLOWNY"],
+    ["DODATKOWY", "DODATKOWY"],
+  ]) {
+    const d = operatorDraft();
+    for (const state of [d.baseState, d.workingState]) {
+      state.objects.push({
+        id: "legacy",
+        type: "project",
+        values: { name: "Starszy projekt" },
+      });
+      state.operatorAssignments.push(
+        ...oldRoles.map((operatorType, index) => ({
+          id: `old-${index}`,
+          objectId: "legacy",
+          operatorId: index ? "b" : "a",
+          operatorType,
+        })),
+      );
+    }
+    d.workingState.objects.find((o) => o.id === "legacy").values.notes =
+      "Niezależna uwaga";
+    d.workingState.operatorAssignments.find(
+      (row) => row.id === "old-0",
+    ).importKey = "metadata-only";
+    const saved = review.applyReviewedChanges(d);
+    assert.deepEqual(roles(saved), roles(d.workingState));
+    assert.deepEqual(roles(saved, "legacy"), roles(d.baseState, "legacy"));
+    assert.equal(
+      saved.objects.find((o) => o.id === "legacy").values.notes,
+      "Niezależna uwaga",
+    );
+  }
+});
+
+test("genuinely invalid changed roles still block saving and identify the owning object", () => {
+  for (const count of [0, 2]) {
+    const d = operatorDraft();
+    for (const row of d.workingState.operatorAssignments)
+      row.operatorType = count ? "GLOWNY" : "DODATKOWY";
+    assert.throws(
+      () => review.applyReviewedChanges(d),
+      new RegExp(`„Projekt”.*znaleziono ${count}`),
+    );
+  }
+});
+
+test("nested and top-level AI export copies do not duplicate recruitment review or save", () => {
+  const d = operatorDraft("recruitment");
+  for (const state of [d.baseState, d.workingState]) {
+    state.objects.push({
+      id: "parent",
+      type: "project",
+      values: { name: "Projekt nadrzędny" },
+    });
+    state.objects[0].values.project_id = "parent";
+  }
+  const before = structuredClone(d.workingState);
+  const exported = createAiViewExport({
+    state: d.workingState,
+    view: { objectIds: ["parent", "p"], type: "all" },
+    schema: {},
+  });
+  assert.deepEqual(exported.objects[0].recruitments[0], exported.objects[1]);
+  assert.deepEqual(d.workingState, before);
+  assert.equal(review.reviewItems(d).length, 1);
+  assert.equal(review.reviewItems(d)[0].objectId, "p");
+  const saved = review.applyReviewedChanges(d);
+  assert.equal(saved.objects.filter((o) => o.id === "p").length, 1);
+  assert.equal(saved.operatorAssignments.length, 2);
+  assert.deepEqual(roles(saved), roles(d.workingState));
 });
 
 test("a deferred reimport cannot leak a new snapshot through an unchanged file source key", () => {

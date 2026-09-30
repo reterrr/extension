@@ -205,8 +205,16 @@ function ReviewRow({
               : "Po zapisaniu"}
         </div>
         {item.details.map((detail) => (
-          <div className="review-value-row" key={detail.field}>
-            <span className="review-property">{fieldLabel(detail.field)}</span>
+          <div className="review-value-row" key={detail.key ?? detail.field}>
+            <span className="review-property">
+              {detail.subject && (
+                <strong>
+                  {detail.subject}
+                  <br />
+                </strong>
+              )}
+              {fieldLabel(detail.field)}
+            </span>
             <span className="review-before">
               <small>W bazie</small>
               {displayValue(detail.before)}
@@ -222,7 +230,8 @@ function ReviewRow({
         <details className="review-discarded-proposal">
           <summary>Cofnięta propozycja</summary>
           {item.details.map((detail) => (
-            <p key={detail.field}>
+            <p key={detail.key ?? detail.field}>
+              {detail.subject && `${detail.subject} · `}
               {fieldLabel(detail.field)}:{" "}
               <del>{displayValue(detail.after)}</del>
             </p>

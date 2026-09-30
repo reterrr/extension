@@ -228,8 +228,119 @@ export function reviewChanges(draft: DraftCommit): StoredReviewChange[] {
     if (!before && result.length === start)
       append({ kind: "object", key: "object" }, "Obiekt", "Nowy obiekt");
   }
-  return result;
+  return groupOperatorRoles(draft, result);
 }
+
+/** Main-operator handovers must never be applied or undone one row at a time. */
+function groupOperatorRoles(
+  draft: DraftCommit,
+  changes: StoredReviewChange[],
+): StoredReviewChange[] {
+  const groups = new Map<string, StoredReviewChange[]>();
+  for (const change of changes) {
+    if (change.target.collection !== "operatorAssignments") continue;
+    const members = groups.get(change.objectId) ?? [];
+    members.push(change);
+    groups.set(change.objectId, members);
+  }
+  const replacements = new Map<string, StoredReviewChange>();
+  const grouped = new Set<string>();
+  for (const [objectId, assignments] of groups) {
+    // Starting/ending with no main operator (including an empty assignment
+    // list) also couples the additional rows to the main operator's presence.
+    const wholeSet = [draft.baseState, draft.workingState].some(
+      (state) =>
+        rows(state, "operatorAssignments", objectId).filter(
+          (row) => row.operatorType === "GLOWNY",
+        ).length !== 1,
+    );
+    const roleChanges = assignments.filter(
+      (change) =>
+        wholeSet ||
+        ((change.before?.row as Row)?.operatorType === "GLOWNY") !==
+          ((change.after?.row as Row)?.operatorType === "GLOWNY"),
+    );
+    // Importers may replace a row ID while keeping the same operator. Couple
+    // that replacement too, otherwise deferral could leave duplicate links.
+    const linkedOperators = new Set(
+      roleChanges
+        .flatMap((change) => [
+          (change.before?.row as Row)?.operatorId,
+          (change.after?.row as Row)?.operatorId,
+        ])
+        .filter(Boolean),
+    );
+    const members = assignments.filter(
+      (change) =>
+        roleChanges.includes(change) ||
+        linkedOperators.has((change.before?.row as Row)?.operatorId) ||
+        linkedOperators.has((change.after?.row as Row)?.operatorId),
+    );
+    if (members.length < 2) continue;
+    members.sort((a, b) => a.id.localeCompare(b.id));
+    const groupedChange: StoredReviewChange = {
+      ...members[0],
+      id: JSON.stringify([
+        objectId,
+        "operator_roles",
+        "operatorAssignments",
+        "main",
+      ]),
+      target: {
+        kind: "operator_roles",
+        collection: "operatorAssignments",
+        key: "main",
+      },
+      label: "Zmiana operatora głównego",
+      before: Object.fromEntries(
+        members.map((change) => [change.id, change.before]),
+      ),
+      after: Object.fromEntries(
+        members.map((change) => [change.id, change.after]),
+      ),
+      members,
+    };
+    replacements.set(members[0].id, groupedChange);
+    for (const member of members) grouped.add(member.id);
+  }
+  return changes.flatMap((change) =>
+    replacements.has(change.id)
+      ? [replacements.get(change.id)!]
+      : grouped.has(change.id)
+        ? []
+        : [change],
+  );
+}
+
+function changeIds(change: StoredReviewChange): string[] {
+  return [change.id, ...(change.members ?? []).flatMap(changeIds)];
+}
+
+function changesMainOperator(change: StoredReviewChange): boolean {
+  if (change.members) return change.members.some(changesMainOperator);
+  return (
+    change.target.collection === "operatorAssignments" &&
+    ((change.before?.row as Row)?.operatorType === "GLOWNY") !==
+      ((change.after?.row as Row)?.operatorType === "GLOWNY")
+  );
+}
+
+function conflictsWith(
+  first: StoredReviewChange,
+  second: StoredReviewChange,
+): boolean {
+  if (first.objectId !== second.objectId) return false;
+  const ids = new Set(changeIds(first));
+  return (
+    changeIds(second).some((id) => ids.has(id)) ||
+    // A different newly assigned main also supersedes a discarded handover,
+    // even when all of its row IDs differ from the archived group's IDs.
+    (Boolean(first.members) &&
+      changesMainOperator(first) &&
+      changesMainOperator(second))
+  );
+}
+
 export function fingerprint(change: StoredReviewChange): string {
   return stable([change.before, change.after]);
 }
@@ -238,7 +349,12 @@ function selection(
   change: StoredReviewChange,
 ): "save" | "later" {
   const saved = draft.reviewDecisions?.[change.id];
-  return saved?.fingerprint === fingerprint(change) ? saved.selection : "save";
+  if (saved?.fingerprint === fingerprint(change)) return saved.selection;
+  // Existing drafts can still contain separate decisions for the old rows.
+  // Preserve an explicit deferral by deferring the entire handover.
+  return change.members?.some((member) => selection(draft, member) === "later")
+    ? "later"
+    : "save";
 }
 function display(value: unknown, state: LegacyStorageState): string {
   if (value === undefined || value === null || value === "") return "";
@@ -292,6 +408,31 @@ function item(
   change: StoredReviewChange,
   discarded = false,
 ): CommitReviewItem {
+  if (change.members) {
+    const members = change.members.map((member) =>
+      item(draft, member, discarded),
+    );
+    return {
+      id: change.id,
+      objectId: change.objectId,
+      group: change.group,
+      label: change.label,
+      status: members.every((member) => member.status === "ADDED")
+        ? "ADDED"
+        : members.every((member) => member.status === "REMOVED")
+          ? "REMOVED"
+          : "MODIFIED",
+      selection: discarded ? "discarded" : selection(draft, change),
+      fingerprint: fingerprint(change),
+      details: members.flatMap((member) =>
+        member.details.map((detail) => ({
+          ...detail,
+          key: `${member.id}:${detail.field}`,
+          subject: member.label,
+        })),
+      ),
+    };
+  }
   const before = detailValues(change, "before"),
     after = detailValues(change, "after");
   const details: CommitValueChange[] = [];
@@ -350,11 +491,12 @@ function item(
 }
 export function reviewItems(draft: DraftCommit): CommitReviewItem[] {
   const changes = reviewChanges(draft);
-  const activeIds = new Set(changes.map((change) => change.id));
   return [
     ...changes.map((change) => item(draft, change)),
     ...Object.values(draft.discardedChanges ?? {})
-      .filter((change) => !activeIds.has(change.id))
+      .filter(
+        (change) => !changes.some((active) => conflictsWith(change, active)),
+      )
       .map((change) => item(draft, change, true)),
   ];
 }
@@ -421,6 +563,10 @@ function apply(
   side: "before" | "after",
   source: LegacyStorageState,
 ): void {
+  if (change.members) {
+    for (const member of change.members) apply(state, member, side, source);
+    return;
+  }
   const target = change.target,
     snap = change[side];
   if (target.kind === "object") {
@@ -518,9 +664,11 @@ function retainUsedSources(
 }
 export function applyReviewedChanges(draft: DraftCommit): LegacyStorageState {
   const candidate = copy(draft.baseState);
-  for (const change of reviewChanges(draft))
-    if (selection(draft, change) === "save")
-      apply(candidate, change, "after", draft.workingState);
+  const selected = reviewChanges(draft).filter(
+    (change) => selection(draft, change) === "save",
+  );
+  for (const change of selected)
+    apply(candidate, change, "after", draft.workingState);
   retainUsedSources(candidate, draft.workingState);
   // A partial selection must not silently create an unnamed object.
   for (const object of candidate.objects)
@@ -547,15 +695,29 @@ export function applyReviewedChanges(draft: DraftCommit): LegacyStorageState {
         "Geografia wymaga przypisania operatora. Zaznacz także zmianę operatora albo odłóż jego geografię.",
       );
   const owners = new Set(
-    (candidate.operatorAssignments ?? []).map((row) => row.objectId),
+    selected
+      .filter((change) => change.target.collection === "operatorAssignments")
+      .map((change) => change.objectId),
   );
   for (const objectId of owners) {
-    const assignments = candidate.operatorAssignments!.filter(
-      (row) => row.objectId === objectId,
-    );
-    if (assignments.filter((row) => row.operatorType === "GLOWNY").length !== 1)
+    const assignments = rows(candidate, "operatorAssignments", objectId);
+    // An unrelated edit, or a provenance-only update, must not turn historic
+    // invalid assignments elsewhere in the workspace into a save blocker.
+    const roles = (state: LegacyStorageState) =>
+      rows(state, "operatorAssignments", objectId)
+        .map((row) => stable([row.id, row.operatorId, row.operatorType]))
+        .sort();
+    if (
+      !assignments.length ||
+      stable(roles(candidate)) === stable(roles(draft.baseState))
+    )
+      continue;
+    const mainCount = assignments.filter(
+      (row) => row.operatorType === "GLOWNY",
+    ).length;
+    if (mainCount !== 1)
       throw new Error(
-        "Obiekt musi mieć jednego operatora głównego. Zaznacz powiązane zmiany ról operatorów razem.",
+        `Nie można zapisać operatorów obiektu „${label(objectFor(candidate, objectId)!)}”: wymagany jest jeden operator główny, znaleziono ${mainCount}. Popraw role operatorów w tym obiekcie.`,
       );
   }
   return candidate;
@@ -608,12 +770,16 @@ export function decideReviewChange(
     );
   draft.reviewDecisions ??= {};
   draft.discardedChanges ??= {};
+  const ids = new Set(changeIds(change));
   if (decision === "discard") {
     apply(draft.workingState, change, "before", draft.baseState);
     draft.discardedChanges[id] = copy(change);
     delete draft.reviewDecisions[id];
   } else if (decision === "restore") {
-    if (!draft.discardedChanges[id] || changes.some((entry) => entry.id === id))
+    if (
+      !draft.discardedChanges[id] ||
+      changes.some((entry) => conflictsWith(change, entry))
+    )
       throw new Error("Pole ma już nowszą zmianę. Sprawdź bieżące wartości.");
     apply(draft.workingState, change, "after", draft.workingState);
     delete draft.discardedChanges[id];
@@ -632,13 +798,22 @@ export function decideReviewChange(
     };
     delete draft.discardedChanges[id];
   } else throw new Error("Nieznana decyzja dotycząca zmiany.");
+  // A group supersedes any decisions/archives left by the previous row UI.
+  for (const memberId of ids) {
+    if (memberId === id) continue;
+    delete draft.reviewDecisions[memberId];
+    delete draft.discardedChanges[memberId];
+  }
   return draft;
 }
 
 /** A newer edit replaces any prior rejection and must be reviewed afresh. */
 export function refreshReviewDecisions(draft: DraftCommit): void {
-  for (const change of reviewChanges(draft)) {
-    if (draft.discardedChanges) delete draft.discardedChanges[change.id];
+  const changes = reviewChanges(draft);
+  for (const archived of Object.values(draft.discardedChanges ?? {}))
+    if (changes.some((change) => conflictsWith(archived, change)))
+      delete draft.discardedChanges![archived.id];
+  for (const change of changes) {
     const saved = draft.reviewDecisions?.[change.id];
     if (saved && saved.fingerprint !== fingerprint(change))
       delete draft.reviewDecisions![change.id];
