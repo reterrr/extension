@@ -69,11 +69,7 @@ test("commit stamps only changed objects", () => {
   const working = structuredClone(base);
   working.objects[1].values.continuous = true;
 
-  const result = stampLastCheckedAt(
-    base,
-    working,
-    "2026-09-18T10:30:00+02:00",
-  );
+  const result = stampLastCheckedAt(base, working, "2026-09-18T10:30:00+02:00");
 
   assert.equal(
     result.objects[0].values.last_checked_at,
@@ -145,4 +141,27 @@ test("new objects receive last_checked_at on their first commit", () => {
     result.objects[2].values.last_checked_at,
     "2026-09-18T12:00:00.000Z",
   );
+});
+
+test("a partial save of operator relations or evidence stamps only its owner", () => {
+  for (const collection of [
+    "operatorAssignments",
+    "operatorContacts",
+    "importTargetEvidence",
+  ]) {
+    const base = baseState();
+    const working = structuredClone(base);
+    working[collection] = [{ id: "related", objectId: "project-1" }];
+    const result = stampLastCheckedAt(base, working, "2026-09-30T12:00:00Z");
+    assert.equal(
+      result.objects[0].values.last_checked_at,
+      "2026-09-30T12:00:00.000Z",
+      collection,
+    );
+    assert.equal(
+      result.objects[1].values.last_checked_at,
+      base.objects[1].values.last_checked_at,
+      collection,
+    );
+  }
 });

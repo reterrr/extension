@@ -52,7 +52,21 @@ export function App() {
         <span className="brand">
           Burbot<span className="brand-dot">.</span>
         </span>
-        <span className="local-badge">Przestrzeń robocza</span>
+        <details className="keyboard-help">
+          <summary>Skróty klawiatury</summary>
+          <dl>
+            <dt>Ctrl / ⌘ K</dt>
+            <dd>Wyszukaj obiekty</dd>
+            <dt>Alt 1 / 2 / 3</dt>
+            <dd>Obiekty / Zapis zmian / Import</dd>
+            <dt>Ctrl / ⌘ Enter</dt>
+            <dd>Zapisz wartość pola i przejdź dalej</dd>
+            <dt>↑ ↓ / Enter</dt>
+            <dd>Wybierz i otwórz wynik wyszukiwania</dd>
+            <dt>Spacja</dt>
+            <dd>Zaznacz zmianę do zapisu</dd>
+          </dl>
+        </details>
       </header>
       <WorkflowTabs />
       <ViewManagerPanel />
@@ -67,8 +81,8 @@ export function App() {
             accept="application/json,.json"
             hidden
           />
-          <button id="import" className="text-button">
-            Import JSON
+          <button id="import" className="text-button" hidden>
+            Wybierz plik
           </button>
           <button id="connect" className="text-button">
             Połącz
@@ -122,18 +136,11 @@ export function App() {
             </small>
           </div>
 
-          <nav className="section-navigation" aria-label="Sekcje obiektu">
-            <label htmlFor="section-select">Przejdź do sekcji</label>
-            <div className="section-navigation-controls">
-              <select id="section-select" />
-              <button id="section-go" type="button">
-                Przejdź
-              </button>
-              <button id="sections-toggle" type="button">
-                Rozwiń sekcje
-              </button>
-            </div>
-          </nav>
+          <div className="section-navigation-controls">
+            <button id="sections-toggle" type="button">
+              Rozwiń sekcje
+            </button>
+          </div>
           <div id="fields" />
 
           <section
@@ -202,9 +209,7 @@ export function App() {
                     multiple
                     hidden
                   />
-                  <strong id="local-file-drop-title">
-                    Upuść pliki tutaj
-                  </strong>
+                  <strong id="local-file-drop-title">Upuść pliki tutaj</strong>
                   <small id="local-file-drop-hint">
                     albo kliknij, aby wybrać z komputera
                   </small>
@@ -290,10 +295,6 @@ export function App() {
                       id="operator-assignment-search-feedback"
                       className="operator-assignment-search-feedback"
                     />
-                    <select
-                      id="operator-assignment-select"
-                      aria-label="Wybierz operatora z wyników wyszukiwania"
-                    />
                   </label>
                   <label htmlFor="operator-assignment-role">
                     Rola
@@ -305,9 +306,11 @@ export function App() {
                       <option value="DODATKOWY">Dodatkowy</option>
                     </select>
                   </label>
-                  <button id="operator-assignment-add-button" type="button">
-                    + Dodaj
-                  </button>
+                  <div
+                    id="operator-assignment-results"
+                    className="reference-object-picker-results"
+                    aria-label="Wyniki wyszukiwania operatorów"
+                  />
                 </div>
               </div>
             </details>

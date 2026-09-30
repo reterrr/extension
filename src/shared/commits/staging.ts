@@ -1,5 +1,11 @@
 import type { DraftCommit } from "../types/commit";
 import type { LegacyStorageState } from "../types/legacy-storage";
+import {
+  applyReviewedChanges,
+  rebaseReviewedChanges,
+  reviewChanges,
+  decideReviewChange,
+} from "./review";
 
 const OBJECT_SCOPED_KEYS = [
   "rules",
@@ -79,6 +85,7 @@ function replaceObject(
 }
 
 export function applyStagedObjects(draft: DraftCommit): LegacyStorageState {
+  if (draft.reviewVersion === 1) return applyReviewedChanges(draft);
   const committed = cloneState(draft.baseState);
   for (const objectId of draft.stagedObjectIds ?? []) {
     replaceObject(committed, draft.workingState, objectId);
@@ -94,7 +101,8 @@ export function applyStagedObjects(draft: DraftCommit): LegacyStorageState {
   for (const object of draft.workingState.objects) {
     if (!stagedIds.has(object.id)) continue;
     for (const entries of Object.values(object.evidence ?? {})) {
-      for (const evidence of entries) usedSourceIds.add(String(evidence.sourceId));
+      for (const evidence of entries)
+        usedSourceIds.add(String(evidence.sourceId));
     }
   }
 
@@ -134,6 +142,7 @@ export function rebaseCommittedObjects(
   committed: LegacyStorageState,
   objectIds: string[],
 ): DraftCommit {
+  if (draft.reviewVersion === 1) return rebaseReviewedChanges(draft, committed);
   for (const objectId of objectIds) {
     replaceObject(draft.workingState, committed, objectId);
   }
@@ -157,6 +166,9 @@ export function discardViewObject(
   draft: DraftCommit,
   objectId: string,
 ): DraftCommit {
+  for (const change of Object.values(draft.discardedChanges ?? {})) {
+    if (change.objectId === objectId) delete draft.discardedChanges![change.id];
+  }
   replaceObject(draft.workingState, draft.baseState, objectId);
   draft.stagedObjectIds = (draft.stagedObjectIds ?? []).filter(
     (id) => id !== objectId,
@@ -165,20 +177,37 @@ export function discardViewObject(
 }
 
 export function stageObject(draft: DraftCommit, objectId: string): DraftCommit {
+  if (draft.reviewVersion === 1)
+    for (const change of reviewChanges(draft).filter(
+      (entry) => entry.objectId === objectId,
+    ))
+      decideReviewChange(draft, change.id, "save");
   if (!draft.stagedObjectIds.includes(objectId)) {
     draft.stagedObjectIds.push(objectId);
   }
   return draft;
 }
 
-export function unstageObject(draft: DraftCommit, objectId: string): DraftCommit {
+export function unstageObject(
+  draft: DraftCommit,
+  objectId: string,
+): DraftCommit {
+  if (draft.reviewVersion === 1)
+    for (const change of reviewChanges(draft).filter(
+      (entry) => entry.objectId === objectId,
+    ))
+      decideReviewChange(draft, change.id, "later");
   draft.stagedObjectIds = draft.stagedObjectIds.filter((id) => id !== objectId);
   return draft;
 }
 
 export function changedObjectIds(draft: DraftCommit): string[] {
+  if (draft.reviewVersion === 1)
+    return [...new Set(reviewChanges(draft).map((change) => change.objectId))];
   const ids = new Set<string>();
-  const base = new Map(draft.baseState.objects.map((object) => [object.id, object]));
+  const base = new Map(
+    draft.baseState.objects.map((object) => [object.id, object]),
+  );
   const working = new Map(
     draft.workingState.objects.map((object) => [object.id, object]),
   );
@@ -194,11 +223,7 @@ export function changedObjectIds(draft: DraftCommit): string[] {
     for (const state of [draft.baseState, draft.workingState]) {
       const rows = (state as unknown as Record<string, unknown>)[key];
       for (const row of Array.isArray(rows) ? rows : []) {
-        if (
-          typeof row === "object" &&
-          row !== null &&
-          "objectId" in row
-        ) {
+        if (typeof row === "object" && row !== null && "objectId" in row) {
           relatedIds.add(String((row as Record<string, unknown>).objectId));
         }
       }
@@ -220,7 +245,6 @@ export function hasViewChanges(draft: DraftCommit): boolean {
   return changedObjectIds(draft).length > 0;
 }
 
-
 export interface MissingReference {
   objectId: string;
   field: string;
@@ -229,10 +253,7 @@ export interface MissingReference {
 
 export function missingReferences(
   state: LegacyStorageState,
-  schema: Record<
-    string,
-    { fields?: Record<string, { type?: string }> }
-  >,
+  schema: Record<string, { fields?: Record<string, { type?: string }> }>,
 ): MissingReference[] {
   const existing = new Set(state.objects.map((object) => object.id));
   const missing: MissingReference[] = [];
@@ -242,11 +263,7 @@ export function missingReferences(
     for (const [field, definition] of Object.entries(fields)) {
       if (definition.type !== "reference") continue;
       const targetId = object.values?.[field];
-      if (
-        typeof targetId === "string" &&
-        targetId &&
-        !existing.has(targetId)
-      ) {
+      if (typeof targetId === "string" && targetId && !existing.has(targetId)) {
         missing.push({
           objectId: object.id,
           field,

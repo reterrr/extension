@@ -2,390 +2,103 @@ if (!document.querySelector("style[data-burbot-commit-panel]")) {
   const style = document.createElement("style");
   style.dataset.burbotCommitPanel = "true";
   style.textContent = `
-.commit-panel {
-  margin: 8px 12px 6px;
-  border: 1px solid var(--line);
-  border-radius: 9px;
-  background: #fff;
-  padding: 10px;
+html[data-workflow-mode=commit] #root { max-width: none; display: grid; grid-template-rows: auto auto minmax(0, 1fr); height: 100dvh; }
+html[data-workflow-mode=commit] .brandbar { grid-row: 1; }
+html[data-workflow-mode=commit] .workflow-tabs { grid-row: 2; }
+html[data-workflow-mode=commit] .import-review-shell { display: none; }
+html[data-workflow-mode=commit] .commit-panel.review-workspace {
+  display: flex; flex-direction: column; grid-row: 3; min-height: 0; overflow: hidden;
+  margin: 0; padding: 0; border: 0; border-radius: 0; background: #fff;
+}
+.review-toolbar { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; padding: 18px 24px; border-bottom: 1px solid #cbd8cf; background: #f6f9f7; }
+.review-toolbar h1 { margin: 0; font-size: 22px; line-height: 1.3; }
+.review-toolbar p { margin: 6px 0 0; color: #53665a; font-size: 13px; }
+.review-toolbar label { display: grid; gap: 4px; font-size: 12px; }
+.review-toolbar select { width: 240px; }
+.review-layout { display: grid; grid-template-columns: 250px minmax(0, 1fr); flex: 1; min-height: 0; }
+.review-object-select { display: none; }
+.review-objects { min-width: 0; overflow-y: auto; padding: 12px; border-right: 1px solid #d1ddd5; background: #f8faf9; }
+.review-objects button { display: block; width: 100%; text-align: left; border: 1px solid transparent; padding: 12px; margin-bottom: 6px; background: transparent; }
+.review-objects strong { display: block; font-size: 14px; overflow-wrap: anywhere; }
+.review-objects small { display: block; margin-top: 6px; color: #54675b; }
+.review-objects button[aria-current=true] { background: #d9ede1; border-color: #679077; box-shadow: inset 4px 0 #236a42; }
+.review-detail { overflow-y: auto; min-width: 0; padding: 20px 24px 32px; scrollbar-gutter: stable; }
+.review-object-header { display: flex; align-items: flex-start; gap: 12px; justify-content: space-between; }
+.review-object-header h2 { margin: 3px 0 12px; font-size: 21px; line-height: 1.4; overflow-wrap: anywhere; }
+.review-object-header small { color: #53665a; }
+.review-object-header button { flex: none; border: 1px solid #aabeb1; }
+.review-bulk-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; }
+.review-bulk-actions button { border: 1px solid #b7c7bd; background: #f7faf8; }
+.review-group h3 { font-size: 15px; margin: 24px 0 10px; }
+.review-row { border: 1px solid #b5cbbb; border-radius: 9px; margin-bottom: 12px; overflow: hidden; }
+.review-row.is-later { border-color: #d4bb83; }
+.review-row.is-discarded { border-color: #c4cdc7; }
+.review-row-header { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 12px; background: #edf6f0; }
+.is-later .review-row-header { background: #fcf5e7; }
+.is-discarded .review-row-header { background: #eff1f0; }
+.review-check { display: flex; align-items: center; gap: 10px; flex: 1 1 180px; min-width: 0; cursor: pointer; }
+.review-check strong { font-size: 14px; overflow-wrap: anywhere; }
+#root .review-check input[type=checkbox], #root .view-result-membership input[type=checkbox] { width: 20px; height: 20px; min-height: 20px; flex: none; accent-color: #246849; }
+.review-kind { border-radius: 4px; padding: 2px 6px; font-size: 12px; }
+.kind-added { color: #1d643b; background: #cee9d7; }
+.kind-modified { color: #245c89; background: #dceafa; }
+.kind-removed { color: #923c36; background: #f8ddd9; }
+.review-decision { font-size: 12px; color: #495e50; }
+.review-row-header button { color: #56665c; border: 1px solid #b8c9be; background: #fff; }
+.review-values { display: grid; grid-template-columns: minmax(100px, .7fr) minmax(0, 1fr) minmax(0, 1fr); }
+.review-value-label { padding: 8px 12px; font-size: 12px; font-weight: 700; background: #f7faf8; color: #53665a; }
+.review-value-row { display: contents; }
+.review-value-row > span { padding: 12px; border-top: 1px solid #dce5df; overflow-wrap: anywhere; white-space: pre-wrap; font-size: 14px; line-height: 1.5; }
+.review-value-row small { display: none; }
+.review-value-row .review-property { color: #53665a; font-size: 12px; }
+.review-before { background: #fff0ed; color: #7b342c; }
+.review-after { background: #e2f3e8; color: #194d30; font-weight: 550; }
+.is-later .review-after { background: #fff6df; color: #735718; }
+.is-discarded .review-before, .review-kept { background: #f5f7f6; color: #53665a; }
+.review-discarded-proposal { padding: 8px 12px; color: #59665e; font-size: 12px; }
+.review-discarded-proposal p { overflow-wrap: anywhere; }
+.review-footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 24px; border-top: 1px solid #c1d0c6; background: #f5f9f6; }
+.review-footer strong, .review-footer span { display: block; }
+.review-footer span { font-size: 12px; color: #53665a; margin-top: 3px; }
+#root .commit-primary { color: #fff; background: #245f45; border: 1px solid #245f45; min-height: 44px; padding: 10px 24px; }
+.commit-error, .review-message { width: 100%; margin: 0; font-size: 13px; }
+.commit-error { color: #a02d26; }
+.review-message { color: #235a3c; }
+.review-empty { display: grid; align-content: center; min-height: 260px; text-align: center; padding: 24px; color: #53665a; }
+.review-empty h2 { color: #263d30; font-size: 22px; }
+@media (max-width: 800px) {
+  .review-layout { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr); }
+  .review-objects { display: none; }
+  .review-object-select { display: flex; align-items: center; gap: 10px; min-width: 0; font-size: 12px; padding: 10px 12px; border-bottom: 1px solid #d1ddd5; background: #f5f9f6; }
+  .review-object-select select { flex: 1; width: 100%; }
+  .review-detail { padding: 16px 12px 24px; }
+  .review-toolbar { padding: 12px; }
+  .review-toolbar h1 { font-size: 19px; }
+  .review-toolbar p { max-width: 500px; }
+  .review-object-header { flex-wrap: wrap; }
+  .review-footer { padding: 12px; }
+}
+@media (max-width: 520px) {
+  .review-toolbar { gap: 8px; }
+  .review-toolbar p { display: none; }
+  .review-object-header > div { display: none; }
+  .review-object-header { justify-content: flex-end; margin-bottom: 8px; }
+  .review-bulk-actions { flex-wrap: nowrap; margin-bottom: 10px; }
+  .review-bulk-actions button { flex: 1; padding: 6px; }
+  .review-group h3 { margin-top: 14px; }
+  .review-toolbar label { width: 100%; grid-template-columns: auto minmax(0, 1fr); align-items: center; }
+  .review-toolbar select { width: 100%; }
+  .review-values { display: block; }
+  .review-value-label { display: none; }
+  .review-value-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .review-value-row .review-property { grid-column: 1 / -1; padding: 6px 12px; background: #fafcfb; }
+  .review-value-row small { display: block; font-weight: normal; font-size: 11px; margin-bottom: 4px; }
+  .review-footer > button { flex: 1; }
+}
+@media (forced-colors: active) {
+  .review-objects button[aria-current=true], .review-row.is-save { outline: 2px solid Highlight; outline-offset: -2px; }
 }
-.commit-panel-idle {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 8px 10px;
-  align-items: center;
-}
-.commit-panel-idle strong,
-.commit-panel-active strong {
-  display: block;
-  font-size: 12px;
-}
-.commit-panel-idle p,
-.commit-hint,
-.commit-header small {
-  color: var(--muted);
-  font-size: 12px;
-}
-.commit-primary {
-  background: var(--green);
-  color: #fff;
-  white-space: nowrap;
-}
-.commit-primary:hover {
-  background: #214f40;
-}
-.commit-header {
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-  align-items: flex-start;
-  padding-bottom: 8px;
-  border-bottom: 1px solid var(--line);
-}
-.commit-header small {
-  display: block;
-  margin-top: 2px;
-}
-.commit-eyebrow {
-  display: block;
-  color: var(--muted);
-  font-size: 12px;
-  letter-spacing: 1px;
-  margin-bottom: 2px;
-}
-.commit-dirty,
-.commit-clean,
-.commit-status {
-  border-radius: 999px;
-  padding: 2px 6px;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: .4px;
-}
-.commit-dirty {
-  background: #fff2cf;
-  color: #7a5a00;
-}
-.commit-clean {
-  background: #edf4eb;
-  color: #436349;
-}
-.commit-groups {
-  display: grid;
-  gap: 5px;
-  margin-top: 8px;
-}
-.commit-group {
-  border: 1px solid var(--line);
-  border-radius: 7px;
-  overflow: hidden;
-}
-.commit-group > summary {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  list-style: none;
-  padding: 7px 8px;
-  font-size: 12px;
-  font-weight: 650;
-}
-.commit-group > summary::-webkit-details-marker {
-  display: none;
-}
-.commit-group > summary::before {
-  content: "▸";
-  margin-right: 6px;
-  color: var(--muted);
-}
-.commit-group[open] > summary::before {
-  content: "▾";
-}
-.commit-group > summary > span:first-child {
-  margin-right: auto;
-}
-.commit-count {
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 500;
-}
-.commit-group-body {
-  padding: 0 7px 7px;
-  border-top: 1px solid var(--line);
-}
-.commit-add-object {
-  color: var(--green);
-  font-size: 12px;
-  padding-left: 0;
-  margin: 3px 0;
-}
-.commit-empty {
-  color: var(--muted);
-  font-size: 12px;
-  padding: 4px 1px;
-}
-.commit-object-list {
-  display: grid;
-  gap: 3px;
-}
-.commit-object-row {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  text-align: left;
-  border: 1px solid transparent;
-  background: #f8faf7;
-  padding: 6px 7px;
-}
-.commit-object-row:hover {
-  border-color: var(--line);
-}
-.commit-object-row.commit-object-deleted {
-  opacity: .72;
-  text-decoration: line-through;
-}
-.commit-object-label {
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 12px;
-}
-.commit-status-new {
-  background: #dff1e7;
-  color: #246043;
-}
-.commit-status-modified {
-  background: #e7eef7;
-  color: #315678;
-}
-.commit-status-deleted {
-  background: #f7e4e4;
-  color: #8b4141;
-  text-decoration: none;
-}
-.commit-hint {
-  margin-top: 7px;
-}
-.commit-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 6px;
-  margin-top: 8px;
-  padding-top: 8px;
-  border-top: 1px solid var(--line);
-}
-.commit-discard {
-  color: #8a4c4c;
-}
-.commit-error {
-  grid-column: 1 / -1;
-  margin-top: 7px;
-  color: #a33f3f;
-  font-size: 12px;
-}
-/* Compact staged-diff layout. */
-.commit-panel {
-  margin: 6px 10px 4px;
-  padding: 8px;
-}
-.commit-header {
-  align-items: center;
-  padding-bottom: 6px;
-  border-bottom: 0;
-}
-.commit-header strong {
-  font-size: 12px;
-}
-.commit-header small {
-  font-size: 12px;
-}
-.commit-create-actions {
-  display: flex;
-  gap: 4px;
-  padding: 6px 0;
-  border-top: 1px solid var(--line);
-}
-.commit-create-actions button {
-  min-height: 25px;
-  padding: 4px 7px;
-  border: 1px solid #dce5de;
-  border-radius: 6px;
-  background: #f8faf8;
-  color: #496457;
-  font-size: 12px;
-}
-.commit-create-actions button:hover {
-  background: #eef4f0;
-}
-.commit-staged {
-  display: grid;
-  gap: 4px;
-  max-height: min(30vh, 240px);
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  padding-right: 2px;
-}
-.commit-change-card {
-  overflow: hidden;
-  border: 1px solid #e1e7e2;
-  border-radius: 7px;
-  background: #fbfcfb;
-}
-.commit-change-card > summary {
-  min-height: 40px;
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  padding: 6px 7px;
-  list-style: none;
-  cursor: pointer;
-}
-.commit-change-card > summary::-webkit-details-marker {
-  display: none;
-}
-.commit-change-card[open] > summary {
-  border-bottom: 1px solid #e5eae6;
-  background: #f7faf8;
-}
-.commit-change-copy {
-  min-width: 0;
-  flex: 1;
-}
-.commit-change-copy strong {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 12px;
-}
-.commit-change-copy small {
-  display: block;
-  margin-top: 1px;
-  color: var(--muted);
-  font-size: 12px;
-}
-.commit-chevron {
-  flex: none;
-  color: #8b978f;
-  font-size: 16px;
-  line-height: 1;
-  transition: transform .12s ease;
-}
-.commit-change-card[open] .commit-chevron {
-  transform: rotate(90deg);
-}
-.commit-change-body {
-  padding: 6px 7px 7px;
-}
-.commit-field-diff {
-  display: grid;
-}
-.commit-field-change {
-  display: grid;
-  grid-template-columns: minmax(90px, .8fr) minmax(0, 1.6fr);
-  gap: 8px;
-  padding: 5px 2px;
-}
-.commit-field-change + .commit-field-change {
-  border-top: 1px solid #edf1ee;
-}
-.commit-field-name {
-  color: #6d7971;
-  font-size: 12px;
-  font-weight: 650;
-}
-.commit-field-values {
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  overflow-wrap: anywhere;
-  font-size: 12px;
-}
-.commit-value-before {
-  color: #8a938d;
-  text-decoration: line-through;
-}
-.commit-arrow {
-  flex: none;
-  color: #a0aaa3;
-}
-.commit-value-after {
-  color: #285e43;
-  font-weight: 650;
-}
-.commit-value-removed {
-  color: #9a5050;
-  font-weight: 650;
-}
-.commit-related-diff {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  margin-top: 5px;
-  padding-top: 5px;
-  border-top: 1px solid #e9eeea;
-}
-.commit-related-change {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 3px 6px;
-  border: 1px solid #e0e7e1;
-  border-radius: 999px;
-  background: #fff;
-  color: #647169;
-  font-size: 12px;
-}
-.commit-related-counts {
-  display: inline-flex;
-  gap: 3px;
-}
-.commit-related-counts b {
-  font-size: 12px;
-}
-.commit-related-counts .is-added {
-  color: #2f7659;
-}
-.commit-related-counts .is-modified {
-  color: #496a8a;
-}
-.commit-related-counts .is-removed {
-  color: #a65050;
-}
-.commit-focus {
-  margin-top: 6px;
-  padding: 4px 0;
-  color: var(--green);
-  font-size: 12px;
-}
-.commit-delete-note,
-.commit-empty {
-  color: var(--muted);
-  font-size: 12px;
-}
-.commit-delete-note {
-  margin: 1px 0 5px;
-}
-.commit-empty {
-  padding: 7px 2px;
-}
-.commit-actions {
-  margin-top: 6px;
-  padding-top: 6px;
-}
-.commit-actions button {
-  min-height: 29px;
-  padding: 5px 9px;
-  font-size: 12px;
-}
-.commit-error {
-  margin-top: 6px;
-  font-size: 12px;
-}
-
 `;
   document.head.append(style);
 }
-
 export {};

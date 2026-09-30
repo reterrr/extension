@@ -28,7 +28,7 @@ async function commitCount(): Promise<number> {
   })) as CommitResponse<CommitSessionView>;
   if (!response?.ok || !response.value) return 0;
   return response.value.objects.filter(
-    (object) => object.staged && object.status !== "UNCHANGED",
+    (object) => object.status !== "UNCHANGED",
   ).length;
 }
 
@@ -115,11 +115,44 @@ export function WorkflowTabs() {
       }
     };
 
+    const keyboard = (event: KeyboardEvent) => {
+      if (event.isComposing || event.repeat) return;
+      const mod = event.ctrlKey || event.metaKey;
+      if (mod && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        window.dispatchEvent(new Event("burbot:open-object-search"));
+      } else if (
+        event.altKey &&
+        !mod &&
+        ["1", "2", "3"].includes(event.key) &&
+        !document.querySelector("dialog[open]")
+      ) {
+        event.preventDefault();
+        void setMode(
+          (["view", "commit", "import"] as const)[Number(event.key) - 1],
+        );
+      } else if (
+        mod &&
+        event.key === "Enter" &&
+        document.documentElement.dataset.workflowMode === "view" &&
+        !document.querySelector("dialog[open]")
+      ) {
+        const save = document.getElementById(
+          "save",
+        ) as HTMLButtonElement | null;
+        if (save && !save.disabled && save.getClientRects().length) {
+          event.preventDefault();
+          save.click();
+        }
+      }
+    };
+
     window.addEventListener("burbot:import-review-changed", refresh);
     window.addEventListener("burbot:commit-changed", refresh);
     window.addEventListener("burbot:workspace-state-changed", refresh);
     window.addEventListener("burbot:request-workflow-mode", modeRequested);
     browser.storage.onChanged.addListener(storageChanged);
+    document.addEventListener("keydown", keyboard);
     return () => {
       disposed = true;
       window.removeEventListener("burbot:import-review-changed", refresh);
@@ -127,6 +160,7 @@ export function WorkflowTabs() {
       window.removeEventListener("burbot:workspace-state-changed", refresh);
       window.removeEventListener("burbot:request-workflow-mode", modeRequested);
       browser.storage.onChanged.removeListener(storageChanged);
+      document.removeEventListener("keydown", keyboard);
     };
   }, []);
 
@@ -136,6 +170,8 @@ export function WorkflowTabs() {
         type="button"
         className={mode === "view" ? "active" : ""}
         aria-pressed={mode === "view"}
+        title="Obiekty · Alt+1"
+        aria-keyshortcuts="Alt+1"
         onClick={() => void setMode("view")}
       >
         Obiekty
@@ -145,6 +181,8 @@ export function WorkflowTabs() {
         type="button"
         className={mode === "commit" ? "active" : ""}
         aria-pressed={mode === "commit"}
+        title="Zapis zmian · Alt+2"
+        aria-keyshortcuts="Alt+2"
         onClick={() => void setMode("commit")}
       >
         Zapis zmian
@@ -154,6 +192,8 @@ export function WorkflowTabs() {
         type="button"
         className={mode === "import" ? "active" : ""}
         aria-pressed={mode === "import"}
+        title="Import · Alt+3"
+        aria-keyshortcuts="Alt+3"
         onClick={() => void setMode("import")}
       >
         Import

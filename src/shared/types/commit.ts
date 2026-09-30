@@ -7,8 +7,44 @@ export interface DraftCommit {
   baseRevision: number;
   baseState: LegacyStorageState;
   workingState: LegacyStorageState;
-  /** Object-level staging boundary between View and Commit. */
+  /** Legacy object staging, retained for compatibility with earlier drafts. */
   stagedObjectIds: string[];
+  /** New drafts review each field/related row automatically. */
+  reviewVersion?: 1;
+  reviewDecisions?: Record<
+    string,
+    { fingerprint: string; selection: "save" | "later" }
+  >;
+  discardedChanges?: Record<string, StoredReviewChange>;
+}
+
+export interface ReviewTarget {
+  kind: "field" | "property" | "row" | "object";
+  key: string;
+  collection?: string;
+}
+
+export interface StoredReviewChange {
+  id: string;
+  objectId: string;
+  objectType: CommitSessionObject["type"];
+  objectLabel: string;
+  target: ReviewTarget;
+  group: string;
+  label: string;
+  before: Record<string, unknown> | null;
+  after: Record<string, unknown> | null;
+}
+
+export interface CommitReviewItem {
+  id: string;
+  objectId: string;
+  group: string;
+  label: string;
+  status: CommitValueChangeStatus;
+  selection: "save" | "later" | "discarded";
+  fingerprint: string;
+  details: CommitValueChange[];
 }
 
 export type CommitObjectStatus = "UNCHANGED" | "MODIFIED" | "NEW" | "DELETED";
@@ -37,6 +73,7 @@ export interface CommitSessionObject {
   changes: CommitValueChange[];
   relatedChanges: CommitRelatedChange[];
   staged: boolean;
+  reviewItems?: CommitReviewItem[];
 }
 
 export interface CommitSessionView {
@@ -46,9 +83,9 @@ export interface CommitSessionView {
   updatedAt?: string;
   baseRevision?: number;
   workingRevision?: number;
-  /** True when at least one object is staged for SQLite. */
+  /** True when at least one pending change is selected for saving. */
   dirty: boolean;
-  /** Number of changed objects still present in View but not staged. */
+  /** Number of changed objects with all pending changes deferred. */
   pendingViewCount?: number;
   objects: CommitSessionObject[];
 }

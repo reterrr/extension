@@ -12,6 +12,8 @@ const STORAGE_KEY = "burbot:v1";
 let initialized = false;
 let state = BurbotCore.empty() as LegacyStorageState;
 let operatorSearchQuery = "";
+let searchObjectId = "";
+let adding = false;
 
 function $<T extends HTMLElement = HTMLElement>(id: string): T {
   const element = document.getElementById(id);
@@ -34,9 +36,12 @@ function chosenObject(): LegacyStoredObject | undefined {
 
 function operatorLabel(operator: LegacyStoredObject | undefined): string {
   if (!operator) return "Nieznany operator";
-  const key = operator.importKey || operator.id;
-  const name = String(operator.values?.name ?? operator.label ?? "");
-  return name ? `${key} — ${name}` : String(key);
+  return String(
+    operator.values?.name ??
+      operator.label ??
+      operator.importKey ??
+      operator.id,
+  );
 }
 
 async function data(
@@ -69,7 +74,9 @@ function assignmentsFor(objectId: string): LegacyStoredOperatorAssignment[] {
       const rank = (value: string) => (value === "GLOWNY" ? 0 : 1);
       return (
         rank(a.operatorType) - rank(b.operatorType) ||
-        operatorLabel(state.objects.find((o) => o.id === a.operatorId)).localeCompare(
+        operatorLabel(
+          state.objects.find((o) => o.id === a.operatorId),
+        ).localeCompare(
           operatorLabel(state.objects.find((o) => o.id === b.operatorId)),
           "pl",
         )
@@ -93,8 +100,7 @@ function renderRows(object: LegacyStoredObject): void {
   for (const assignment of assignments) {
     const operator = state.objects.find(
       (candidate) =>
-        candidate.id === assignment.operatorId &&
-        candidate.type === "operator",
+        candidate.id === assignment.operatorId && candidate.type === "operator",
     );
 
     const row = document.createElement("div");
@@ -108,7 +114,9 @@ function renderRows(object: LegacyStoredObject): void {
 
     const meta = document.createElement("small");
     meta.textContent =
-      assignment.operatorType === "GLOWNY" ? "Operator główny" : "Operator dodatkowy";
+      assignment.operatorType === "GLOWNY"
+        ? "Operator główny"
+        : "Operator dodatkowy";
 
     copy.append(title, meta);
 
@@ -145,116 +153,135 @@ function renderRows(object: LegacyStoredObject): void {
 }
 
 function renderAdd(object: LegacyStoredObject): void {
-  const search = $("operator-assignment-search") as HTMLInputElement;
+  const search = $<HTMLInputElement>("operator-assignment-search");
   const feedback = $("operator-assignment-search-feedback");
-  const select = $("operator-assignment-select") as HTMLSelectElement;
-  const role = $("operator-assignment-role") as HTMLSelectElement;
-  const add = $("operator-assignment-add-button") as HTMLButtonElement;
-
-  const assigned = new Set(assignmentsFor(object.id).map((row) => row.operatorId));
+  const results = $("operator-assignment-results");
+  const role = $<HTMLSelectElement>("operator-assignment-role");
+  if (searchObjectId !== object.id) {
+    searchObjectId = object.id;
+    operatorSearchQuery = "";
+  }
+  const assigned = new Set(
+    assignmentsFor(object.id).map((row) => row.operatorId),
+  );
   const operators = state.objects
-    .filter((candidate) => candidate.type === "operator" && !assigned.has(candidate.id))
+    .filter(
+      (candidate) =>
+        candidate.type === "operator" && !assigned.has(candidate.id),
+    )
     .sort((a, b) => operatorLabel(a).localeCompare(operatorLabel(b), "pl"));
+  const hasMain = assignmentsFor(object.id).some(
+    (row) => row.operatorType === "GLOWNY",
+  );
+  role.value = hasMain ? "DODATKOWY" : "GLOWNY";
+  role.disabled = !hasMain || adding;
 
-  const searchDocument = (operator: LegacyStoredObject) =>
-    createObjectSearchDocument(
-      operator,
-      operatorLabel(operator),
-      "Operator",
-    );
-
-  const renderOptions = (): void => {
-    const previous = select.value;
+  const addOperator = async (operatorId: string) => {
+    if (adding) return;
+    adding = true;
+    renderOptions();
+    try {
+      await data("ADD_OPERATOR_ASSIGNMENT", {
+        objectId: object.id,
+        operatorId,
+        operatorType: role.value,
+      });
+      operatorSearchQuery = "";
+      notice("Dodano operatora. Zmiana czeka w Zapisie zmian.");
+    } catch (error) {
+      notice(error instanceof Error ? error.message : String(error), true);
+    } finally {
+      adding = false;
+      render();
+      search.focus();
+    }
+  };
+  const buttons = () =>
+    Array.from(results.querySelectorAll<HTMLButtonElement>("button"));
+  function renderOptions(): void {
+    results.replaceChildren();
     const compiled = compileObjectSearch(operatorSearchQuery);
-
-    search.classList.toggle("is-invalid", Boolean(compiled.error));
     search.setAttribute("aria-invalid", String(Boolean(compiled.error)));
-
     const matches = compiled.error
       ? []
-      : operators.filter((operator) => compiled.matches(searchDocument(operator)));
-
-    select.replaceChildren(
-      new Option(
-        compiled.error
-          ? "Popraw wyszukiwanie…"
-          : matches.length
-            ? "Wybierz operatora…"
-            : "Brak pasujących operatorów",
-        "",
-      ),
-    );
-
-    for (const operator of matches) {
-      select.append(new Option(operatorLabel(operator), operator.id));
+      : operators.filter((operator) =>
+          compiled.matches(
+            createObjectSearchDocument(
+              operator,
+              operatorLabel(operator),
+              "Operator",
+            ),
+          ),
+        );
+    feedback.textContent =
+      compiled.error ||
+      (matches.length
+        ? `${matches.length} wyników · Enter dodaje, ↑ ↓ wybierają`
+        : "Brak pasujących operatorów do przypisania.");
+    for (const operator of matches.slice(0, 80)) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "object-option reference-object-option";
+      button.disabled = adding;
+      button.setAttribute(
+        "aria-label",
+        "Dodaj operatora: " + operatorLabel(operator),
+      );
+      const copy = document.createElement("span");
+      copy.className = "object-option-copy";
+      const name = document.createElement("strong");
+      name.className = "object-option-name";
+      name.textContent = operatorLabel(operator);
+      const meta = document.createElement("small");
+      meta.className = "object-option-meta";
+      meta.textContent = [
+        operator.values?.nip ? `NIP ${operator.values.nip}` : "",
+        operator.values?.address,
+      ]
+        .filter(Boolean)
+        .join(" · ");
+      copy.append(name, meta);
+      const action = document.createElement("span");
+      action.textContent = "+ Dodaj";
+      button.append(copy, action);
+      button.onclick = () => void addOperator(operator.id);
+      button.onkeydown = (event) => {
+        const list = buttons();
+        const index = list.indexOf(button);
+        if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+          event.preventDefault();
+          list[
+            (index + (event.key === "ArrowDown" ? 1 : -1) + list.length) %
+              list.length
+          ]?.focus();
+        } else if (event.key === "Escape") {
+          event.preventDefault();
+          search.focus();
+        }
+      };
+      results.append(button);
     }
-
-    if (matches.some((operator) => operator.id === previous)) {
-      select.value = previous;
-    } else {
-      select.value = "";
-    }
-
-    feedback.textContent = compiled.error
-      ? compiled.error
-      : operatorSearchQuery
-        ? `${matches.length} ${matches.length === 1 ? "wynik" : "wyników"}`
-        : operators.length
-          ? `${operators.length} dostępnych operatorów`
-          : "Brak operatorów do przypisania.";
-
-    add.disabled = !select.value;
-  };
-
+  }
   search.value = operatorSearchQuery;
   search.oninput = () => {
     operatorSearchQuery = search.value;
     renderOptions();
   };
   search.onkeydown = (event) => {
-    if (event.key === "Escape" && operatorSearchQuery) {
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      (event.key === "ArrowDown" ? buttons()[0] : buttons().at(-1))?.focus();
+    } else if (event.key === "Enter") {
+      event.preventDefault();
+      buttons()[0]?.click();
+    } else if (event.key === "Escape") {
       event.preventDefault();
       operatorSearchQuery = "";
       search.value = "";
       renderOptions();
-      return;
-    }
-    if (event.key === "Enter" && select.options.length === 2) {
-      event.preventDefault();
-      select.selectedIndex = 1;
-      add.disabled = false;
-      select.focus();
     }
   };
-
-  const hasMain = assignmentsFor(object.id).some(
-    (row) => row.operatorType === "GLOWNY",
-  );
-  role.value = hasMain ? "DODATKOWY" : "GLOWNY";
-  role.disabled = !hasMain;
-
-  select.onchange = () => {
-    add.disabled = !select.value;
-  };
-
   renderOptions();
-
-  add.onclick = () => {
-    if (!select.value) return;
-    void data("ADD_OPERATOR_ASSIGNMENT", {
-      objectId: object.id,
-      operatorId: select.value,
-      operatorType: role.value,
-    })
-      .then(() => {
-        operatorSearchQuery = "";
-        notice("Dodano operatora.");
-        render();
-      })
-      .catch((error: unknown) =>
-        notice(error instanceof Error ? error.message : String(error), true),
-      );
-  };
 }
 
 function render(): void {
@@ -284,7 +311,8 @@ export async function initOperatorAssignmentsUi(): Promise<void> {
 
   browser.storage.onChanged.addListener((changes, area) => {
     if (area !== "local") return;
-    const next = changes[STORAGE_KEY]?.newValue as LegacyStorageState | undefined;
+    const next = changes[STORAGE_KEY]?.newValue as
+      LegacyStorageState | undefined;
     if (!next) return;
     state = next;
     render();
@@ -292,7 +320,8 @@ export async function initOperatorAssignmentsUi(): Promise<void> {
 
   window.addEventListener("burbot:active-object-changed", render);
   window.addEventListener("burbot:workspace-state-changed", (event) => {
-    const next = (event as CustomEvent<{ state?: LegacyStorageState }>).detail?.state;
+    const next = (event as CustomEvent<{ state?: LegacyStorageState }>).detail
+      ?.state;
     if (next) state = next;
     render();
   });

@@ -1,4 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+} from "react";
 import {
   buildGeographySearchIndex,
   compileObjectSearch,
@@ -8,11 +14,6 @@ import {
   aiViewExportFilename,
   createAiViewExport,
 } from "../shared/export/aiViewExport.js";
-import {
-  readImportReview,
-  writeImportReview,
-} from "../shared/import/reviewStore";
-import { revokeApprovedImportObject } from "../shared/import/review";
 import {
   OBJECT_VIEW_STORAGE_KEY,
   addObjectToView,
@@ -128,7 +129,11 @@ export function ViewManagerPanel() {
   const [view, setView] = useState<ObjectView | null>(null);
   const [query, setQuery] = useState("");
   const [error, setError] = useState("");
-  const [busyObjectId, setBusyObjectId] = useState("");
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [typeFilter, setTypeFilter] = useState("all");
+  const [limit, setLimit] = useState(100);
+  const dialog = useRef<HTMLDialogElement>(null);
+  const searchInput = useRef<HTMLInputElement>(null);
   const [activeObjectId, setActiveObjectId] = useState("");
   const [collapsed, setCollapsed] = useState(false);
 
@@ -251,18 +256,44 @@ export function ViewManagerPanel() {
   const compiled = useMemo(() => compileObjectSearch(query), [query]);
 
   const matches = useMemo(() => {
-    if (compiled.error || !query.trim()) return [];
-    return state.objects.filter((object) =>
-      compiled.matches(
-        createObjectSearchDocument(
-          object,
-          displayName(object),
-          typeLabel(object),
-          geography.get(object.id) ?? {},
-        ),
-      ),
-    );
-  }, [compiled, geography, query, state.objects]);
+    if (compiled.error) return [];
+    return state.objects
+      .filter(
+        (object) =>
+          (typeFilter === "all" ||
+            (object.type === "nabor" ? "recruitment" : object.type) ===
+              typeFilter) &&
+          compiled.matches(
+            createObjectSearchDocument(
+              object,
+              displayName(object),
+              typeLabel(object),
+              geography.get(object.id) ?? {},
+            ),
+          ),
+      )
+      .sort((a, b) => displayName(a).localeCompare(displayName(b), "pl"));
+  }, [compiled, geography, typeFilter, state.objects]);
+
+  useEffect(() => {
+    if (pickerOpen && !dialog.current?.open) {
+      dialog.current?.showModal();
+      searchInput.current?.focus();
+    } else if (!pickerOpen) dialog.current?.close();
+  }, [pickerOpen]);
+  useEffect(() => {
+    const open = () => {
+      window.dispatchEvent(
+        new CustomEvent("burbot:request-workflow-mode", {
+          detail: { mode: "view" },
+        }),
+      );
+      setPickerOpen(true);
+    };
+    window.addEventListener("burbot:open-object-search", open);
+    return () => window.removeEventListener("burbot:open-object-search", open);
+  }, []);
+  useEffect(() => setLimit(100), [query, typeFilter]);
 
   const activeObjects = useMemo(() => {
     if (!view) return [];
@@ -281,12 +312,7 @@ export function ViewManagerPanel() {
     if (!query && view?.query) setQuery(view.query);
   }, [view?.createdAt]);
 
-  const catalogObjects = useMemo(() => {
-    const source = query.trim() && !compiled.error ? matches : state.objects;
-    return [...source]
-      .sort((a, b) => displayName(a).localeCompare(displayName(b), "pl"))
-      .slice(0, 80);
-  }, [compiled.error, matches, query, state.objects]);
+  const catalogObjects = matches.slice(0, limit);
 
   async function persist(next: ObjectView | null) {
     if (next) {
@@ -313,7 +339,7 @@ export function ViewManagerPanel() {
 
   async function setFromSearch() {
     if (compiled.error) throw new Error(compiled.error);
-    if (!matches.length) throw new Error("Brak wyników do ustawienia View.");
+    if (!matches.length) throw new Error("Brak wyników do utworzenia zestawu.");
     await persist(
       createObjectView(
         matches,
@@ -330,7 +356,7 @@ export function ViewManagerPanel() {
 
   async function exportView() {
     if (!view?.objectIds.length) {
-      throw new Error("Najpierw ustaw Active View.");
+      throw new Error("Najpierw wybierz obiekty.");
     }
 
     const exportedAt = new Date().toISOString();
@@ -345,75 +371,8 @@ export function ViewManagerPanel() {
     downloadJsonFile(aiViewExportFilename(exportedAt), payload);
   }
 
-  async function stageObject(objectId: string) {
-    setBusyObjectId(objectId);
-    try {
-      const next = await send<CommitSessionView>(
-        "BURBOT_COMMIT",
-        "STAGE_OBJECT",
-        { objectId },
-      );
-      setCommit(next);
-    } finally {
-      setBusyObjectId("");
-    }
-  }
-
-  async function unstageObject(objectId: string) {
-    setBusyObjectId(objectId);
-    try {
-      const next = await send<CommitSessionView>(
-        "BURBOT_COMMIT",
-        "UNSTAGE_OBJECT",
-        { objectId },
-      );
-      setCommit(next);
-    } finally {
-      setBusyObjectId("");
-    }
-  }
-
-  async function syncDiscardedImport(objectId: string) {
-    const review = await readImportReview();
-    if (!review) return;
-
-    const importKeys = Object.entries(review.approvedObjectIdByImportKey)
-      .filter(([, targetId]) => targetId === objectId)
-      .map(([importKey]) => importKey);
-    if (!importKeys.length) return;
-
-    const now = new Date().toISOString();
-    for (const importKey of importKeys) {
-      const preview = review.previewState.objects.find(
-        (object) => object.importKey === importKey,
-      );
-      if (preview && review.statusByObjectId[preview.id] === "APPROVED") {
-        revokeApprovedImportObject(review, preview.id, now);
-      }
-    }
-    await writeImportReview(review);
-    window.dispatchEvent(new CustomEvent("burbot:import-review-changed"));
-  }
-
-  async function discardObjectChanges(objectId: string, label: string) {
-    if (
-      !confirm("Odrzucić wszystkie niezapisane zmiany obiektu „" + label + "”?")
-    ) {
-      return;
-    }
-    setBusyObjectId(objectId);
-    try {
-      await send<CommitSessionView>("BURBOT_COMMIT", "DISCARD_OBJECT", {
-        objectId,
-      });
-      await syncDiscardedImport(objectId);
-      await refreshState();
-    } finally {
-      setBusyObjectId("");
-    }
-  }
-
   async function openObject(objectId: string) {
+    setPickerOpen(false);
     if (!view?.objectIds.includes(objectId)) await add(objectId);
     const currentWindow = await browser.windows.getCurrent();
     if (currentWindow.id === undefined) return;
@@ -430,272 +389,255 @@ export function ViewManagerPanel() {
     );
   }
 
+  function resultKeys(event: KeyboardEvent, objectId?: string) {
+    const rows = Array.from(
+      dialog.current?.querySelectorAll<HTMLButtonElement>(
+        ".view-search-open",
+      ) ?? [],
+    );
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      const index = rows.indexOf(event.currentTarget as HTMLButtonElement);
+      const next =
+        index < 0
+          ? event.key === "ArrowDown"
+            ? 0
+            : rows.length - 1
+          : (index + (event.key === "ArrowDown" ? 1 : -1) + rows.length) %
+            rows.length;
+      rows[next]?.focus();
+    } else if (event.key === "Enter" && !objectId && rows.length) {
+      event.preventDefault();
+      rows[0].click();
+    }
+  }
+
   return (
     <section className="view-manager" aria-label="Zestaw roboczy">
       <header className="view-manager-header">
-        <div>
-          <span className="eyebrow">Zestaw roboczy</span>
-          <strong>
-            {view ? objectCountLabel(activeObjects.length) : "Wybierz obiekty"}
-          </strong>
-          <small>
-            {view?.query
-              ? `Filtr: ${view.query}`
-              : view
-                ? "Ręcznie wybrany zestaw"
-                : "Wyszukaj obiekt i dodaj go przyciskiem +"}
-          </small>
-        </div>
-        <div className="view-manager-header-actions">
-          {view && (
-            <>
-              <button
-                type="button"
-                className="view-manager-collapse"
-                aria-controls="view-manager-body"
-                aria-expanded={!collapsed}
-                onClick={() => setCollapsed(!collapsed)}
-              >
-                {collapsed ? "Pokaż listę" : "Zwiń listę"}
-              </button>
-              <button
-                type="button"
-                className="text-button"
-                onClick={() => run(exportView)}
-              >
-                Eksport View
-              </button>
-              <button
-                type="button"
-                className="text-button"
-                onClick={() => run(clear)}
-              >
-                Wyczyść zestaw
-              </button>
-            </>
-          )}
-        </div>
-      </header>
-      <div id="view-manager-body" hidden={collapsed}>
-        {view && (
-          <div className="view-members">
-            {activeObjects.length ? (
-              activeObjects.map((object) => {
-                const entry = commitById.get(object.id);
-                const changed = Boolean(entry && entry.status !== "UNCHANGED");
-                const busy = busyObjectId === object.id;
-                return (
-                  <div
-                    key={object.id}
-                    className={
-                      activeObjectId === object.id
-                        ? "view-member is-active"
-                        : "view-member"
-                    }
-                  >
-                    <button
-                      type="button"
-                      className="view-member-open"
-                      aria-current={
-                        activeObjectId === object.id ? "true" : undefined
-                      }
-                      title={displayName(object)}
-                      onClick={() => run(() => openObject(object.id))}
-                    >
-                      <strong>{displayName(object)}</strong>
-                      <small>
-                        {typeLabel(object)}
-                        {changed ? " · " + statusLabel(entry) : ""}
-                      </small>
-                    </button>
-
-                    {changed && (
-                      <button
-                        type="button"
-                        className={
-                          entry?.staged
-                            ? "view-member-stage is-staged"
-                            : "view-member-stage"
-                        }
-                        disabled={busy}
-                        aria-pressed={Boolean(entry?.staged)}
-                        aria-label={
-                          (entry?.staged
-                            ? "Wycofaj z zapisu: "
-                            : "Przygotuj do zapisu: ") + displayName(object)
-                        }
-                        onClick={() =>
-                          run(() =>
-                            entry?.staged
-                              ? unstageObject(object.id)
-                              : stageObject(object.id),
-                          )
-                        }
-                      >
-                        {entry?.staged ? "✓ Do zapisu" : "Do zapisu"}
-                      </button>
-                    )}
-
-                    {changed && (
-                      <button
-                        type="button"
-                        className="view-member-discard"
-                        disabled={busy}
-                        title="Odrzuć niezapisane zmiany"
-                        aria-label={
-                          "Odrzuć niezapisane zmiany: " + displayName(object)
-                        }
-                        onClick={() =>
-                          run(() =>
-                            discardObjectChanges(
-                              object.id,
-                              displayName(object),
-                            ),
-                          )
-                        }
-                      >
-                        ↶
-                      </button>
-                    )}
-
-                    <button
-                      type="button"
-                      className="view-member-remove"
-                      aria-label={"Usuń " + displayName(object) + " z zestawu"}
-                      title="Usuń z zestawu roboczego"
-                      onClick={() => run(() => remove(object.id))}
-                    >
-                      −
-                    </button>
-                  </div>
-                );
-              })
-            ) : (
-              <p className="view-manager-empty">
-                Zestaw jest pusty. Dodaj obiekty poniżej.
-              </p>
-            )}
-          </div>
-        )}
-        <details
-          className="view-manager-catalog"
-          open={Boolean(!view || activeObjects.length === 0)}
+        <strong>{objectCountLabel(activeObjects.length)}</strong>
+        <button
+          type="button"
+          className="view-search-launch"
+          onClick={() => setPickerOpen(true)}
+          aria-keyshortcuts="Control+k Meta+k"
         >
-          <summary>
-            <span>
-              <strong>Dodaj lub znajdź obiekt</strong>
-              <small>Przeszukaj wszystkie obiekty</small>
-            </span>
-            <span className="view-manager-catalog-count">
-              {query.trim() && !compiled.error
-                ? matches.length
-                : state.objects.length}
-            </span>
-          </summary>
-
-          <div className="view-manager-catalog-body">
-            <div className="view-search">
-              <input
-                type="search"
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="Szukaj po nazwie lub użyj filtra…"
-                aria-label="Szukaj obiektu"
-                aria-describedby="view-search-help"
-                aria-invalid={Boolean(compiled.error)}
-              />
-              <button
-                type="button"
-                disabled={
-                  !query.trim() || Boolean(compiled.error) || !matches.length
-                }
-                onClick={() => run(setFromSearch)}
-              >
-                Ustaw zestaw{matches.length ? ` · ${matches.length}` : ""}
-              </button>
-            </div>
-            <small id="view-search-help" className="view-search-help">
-              Filtry: woj:małopolskie, type:nabory, /Nowy Sącz/i
-            </small>
-
-            {compiled.error && (
-              <p className="view-manager-error" role="alert">
-                {compiled.error}
-              </p>
-            )}
-
-            <div className="view-catalog-head">
-              <strong>{query.trim() ? "Wyniki filtra" : "Obiekty"}</strong>
-              <small>
-                {query.trim()
-                  ? matches.length +
-                    " wyników · + dodaje i otwiera · − usuwa z View"
-                  : "Kliknij +, aby dodać do View i od razu otworzyć obiekt"}
-              </small>
-            </div>
-
-            {!compiled.error && (
-              <div className="view-search-results">
-                {catalogObjects.map((object) => {
-                  const inView = Boolean(view?.objectIds.includes(object.id));
-                  const entry = commitById.get(object.id);
-                  return (
-                    <div key={object.id} className="view-search-result">
-                      <button
-                        type="button"
-                        className="view-search-open"
-                        aria-current={
-                          activeObjectId === object.id ? "true" : undefined
-                        }
-                        title={displayName(object)}
-                        onClick={() => run(() => openObject(object.id))}
-                      >
-                        <strong>{displayName(object)}</strong>
-                        <small>
-                          {typeLabel(object)}
-                          {entry && entry.status !== "UNCHANGED"
-                            ? " · " + statusLabel(entry)
-                            : ""}
-                        </small>
-                      </button>
-                      <button
-                        type="button"
-                        className="view-search-toggle"
-                        aria-label={
-                          (inView ? "Usuń " : "Dodaj ") +
-                          displayName(object) +
-                          (inView ? " z View" : " do View")
-                        }
-                        onClick={() =>
-                          run(() =>
-                            inView ? remove(object.id) : openObject(object.id),
-                          )
-                        }
-                      >
-                        {inView ? "−" : "+"}
-                      </button>
-                    </div>
-                  );
-                })}
-                {!catalogObjects.length && (
-                  <p className="view-manager-empty">
-                    Brak pasujących obiektów.
-                  </p>
-                )}
-                {(query.trim() ? matches.length : state.objects.length) >
-                  80 && (
-                  <small className="view-manager-more">
-                    Pokazano pierwsze 80. Zawęź filtr, aby znaleźć konkretny
-                    obiekt.
-                  </small>
-                )}
-              </div>
-            )}
+          Znajdź / wybierz <kbd>Ctrl K</kbd>
+        </button>
+      </header>
+      <div className="view-manager-header-actions">
+        <button
+          type="button"
+          className="view-manager-collapse"
+          aria-controls="view-manager-body"
+          aria-expanded={!collapsed}
+          onClick={() => setCollapsed(!collapsed)}
+        >
+          {collapsed ? "Pokaż zestaw" : "Zwiń zestaw"}
+        </button>
+        <details className="view-set-menu">
+          <summary>Więcej</summary>
+          <div>
+            <button
+              type="button"
+              disabled={!activeObjects.length}
+              onClick={() => run(exportView)}
+            >
+              Eksportuj zestaw
+            </button>
+            <button
+              type="button"
+              disabled={!activeObjects.length}
+              onClick={() => run(clear)}
+            >
+              Wyczyść zestaw
+            </button>
           </div>
         </details>
       </div>
-
-      {error && (
+      <div id="view-manager-body" hidden={collapsed}>
+        <div className="view-members">
+          {activeObjects.map((object) => (
+            <div
+              key={object.id}
+              className={
+                activeObjectId === object.id
+                  ? "view-member is-active"
+                  : "view-member"
+              }
+            >
+              <button
+                type="button"
+                className="view-member-open"
+                aria-current={activeObjectId === object.id ? "true" : undefined}
+                title={displayName(object)}
+                onClick={() => run(() => openObject(object.id))}
+              >
+                <strong>{displayName(object)}</strong>
+                <small>
+                  {[typeLabel(object), statusLabel(commitById.get(object.id))]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </small>
+              </button>
+              <button
+                type="button"
+                className="view-member-remove"
+                aria-label={"Usuń " + displayName(object) + " z zestawu"}
+                title="Usuń z zestawu roboczego"
+                onClick={() => run(() => remove(object.id))}
+              >
+                −
+              </button>
+            </div>
+          ))}
+          {!activeObjects.length && (
+            <p className="view-manager-empty">
+              Wyszukaj obiekty, nad którymi chcesz pracować.
+            </p>
+          )}
+        </div>
+      </div>
+      <dialog
+        className="view-search-dialog"
+        ref={dialog}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") {
+            event.preventDefault();
+            event.stopPropagation();
+            dialog.current?.close();
+            setPickerOpen(false);
+          }
+        }}
+        onCancel={() => setPickerOpen(false)}
+        onClose={() => setPickerOpen(false)}
+        aria-labelledby="object-search-title"
+      >
+        <header className="view-dialog-header">
+          <div>
+            <h2 id="object-search-title">Wybierz obiekty</h2>
+            <small>Enter otwiera · ↑ ↓ nawigują · Esc zamyka</small>
+          </div>
+          <button
+            type="button"
+            onClick={() => setPickerOpen(false)}
+            aria-label="Zamknij wyszukiwarkę"
+          >
+            Zamknij <kbd>Esc</kbd>
+          </button>
+        </header>
+        <div className="view-dialog-search">
+          <input
+            ref={searchInput}
+            type="search"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            onKeyDown={(event) => resultKeys(event)}
+            placeholder="Nazwa, numer, NIP lub geografia…"
+            aria-label="Szukaj obiektu"
+            aria-describedby="view-search-help"
+            aria-invalid={Boolean(compiled.error)}
+          />
+          <select
+            aria-label="Typ obiektu"
+            value={typeFilter}
+            onChange={(event) => setTypeFilter(event.target.value)}
+          >
+            <option value="all">Wszystkie typy</option>
+            <option value="recruitment">Nabory</option>
+            <option value="project">Projekty</option>
+            <option value="operator">Operatorzy</option>
+          </select>
+        </div>
+        <details className="view-search-help">
+          <summary>Filtry zaawansowane</summary>
+          <small id="view-search-help">
+            woj:małopolskie · type:nabory · /Nowy Sącz/i
+          </small>
+        </details>
+        {compiled.error && (
+          <p className="view-manager-error" role="alert">
+            {compiled.error}
+          </p>
+        )}
+        <div className="view-catalog-head">
+          <strong>
+            {matches.length}{" "}
+            {new Intl.PluralRules("pl").select(matches.length) === "one"
+              ? "wynik"
+              : new Intl.PluralRules("pl").select(matches.length) === "few"
+                ? "wyniki"
+                : "wyników"}
+          </strong>
+          <span>{activeObjects.length} w zestawie</span>
+        </div>
+        <div className="view-search-results" aria-label="Wyniki wyszukiwania">
+          {catalogObjects.map((object) => (
+            <div key={object.id} className="view-search-result">
+              <label className="view-result-membership">
+                <input
+                  type="checkbox"
+                  checked={Boolean(view?.objectIds.includes(object.id))}
+                  aria-label={"W zestawie: " + displayName(object)}
+                  onChange={(event) =>
+                    run(() =>
+                      event.target.checked ? add(object.id) : remove(object.id),
+                    )
+                  }
+                />
+              </label>
+              <button
+                type="button"
+                className="view-search-open"
+                onKeyDown={(event) => resultKeys(event, object.id)}
+                aria-current={activeObjectId === object.id ? "true" : undefined}
+                onClick={() => run(() => openObject(object.id))}
+              >
+                <strong>{displayName(object)}</strong>
+                <small>
+                  {[
+                    typeLabel(object),
+                    String(object.values?.nip ?? object.values?.number ?? ""),
+                    statusLabel(commitById.get(object.id)),
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </small>
+              </button>
+            </div>
+          ))}
+          {!catalogObjects.length && !compiled.error && (
+            <p className="view-manager-empty">Brak pasujących obiektów.</p>
+          )}
+          {matches.length > limit && (
+            <button type="button" onClick={() => setLimit(limit + 100)}>
+              Pokaż kolejne 100
+            </button>
+          )}
+        </div>
+        <footer className="view-dialog-footer">
+          <button
+            type="button"
+            disabled={Boolean(compiled.error) || !matches.length}
+            onClick={() => run(setFromSearch)}
+          >
+            Ustaw wyniki jako zestaw ({matches.length})
+          </button>
+          <button
+            type="button"
+            className="primary"
+            onClick={() => setPickerOpen(false)}
+          >
+            Gotowe · {activeObjects.length} wybranych
+          </button>
+        </footer>
+        {error && (
+          <p className="view-manager-error" role="alert">
+            {error}
+          </p>
+        )}
+      </dialog>
+      {error && !pickerOpen && (
         <p className="view-manager-error" role="alert">
           {error}
         </p>

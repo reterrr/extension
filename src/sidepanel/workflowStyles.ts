@@ -197,7 +197,7 @@ html[data-workflow-mode="commit"] #capture-area {
   display: none !important;
 }
 html[data-workflow-mode="commit"] .commit-panel {
-  display: block !important;
+  display: flex !important;
   margin-top: 8px;
 }
 

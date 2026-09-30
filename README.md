@@ -347,6 +347,30 @@ the extension through the local DB service. Burbot never stores the original
 filesystem path, so moving or deleting the original file does not break the
 attachment.
 
+## Przegląd i zapis zmian
+
+Edycje oraz zaakceptowane dane z importu pojawiają się automatycznie w **Zapisie zmian**.
+Zaznaczone pola, pliki, warianty dofinansowania i pozycje geografii trafiają do bazy
+po wybraniu **Zapisz wybrane**. Odznaczone propozycje zostają w szkicu do dalszej
+pracy, również po zapisaniu pozostałych zmian i ponownym otwarciu panelu.
+**Cofnij zmianę** przywraca zapisaną wartość, ale zachowuje porównanie i przycisk
+**Przywróć propozycję**. Źródła potwierdzające są zapisywane razem z danym polem
+lub pozycją. Powiązania z nowymi obiektami i operatorami muszą zostać zapisane
+razem z danymi, które z nich korzystają.
+
+W **Obiektach** przycisk **Znajdź / wybierz** otwiera duże okno wyszukiwania.
+Checkboxy tworzą zestaw roboczy, a kliknięcie nazwy otwiera obiekt.
+Operatora projektu lub naboru dodaje się bezpośrednio z listy wyników wyszukiwania.
+
+| Skrót | Działanie |
+| --- | --- |
+| Ctrl / ⌘ K | Otwórz wyszukiwarkę obiektów |
+| ↑ / ↓, Enter | Przejdź po wynikach i otwórz obiekt / dodaj operatora |
+| Esc | Zamknij wyszukiwarkę |
+| Alt 1 / 2 / 3 | Obiekty / Zapis zmian / Import |
+| Ctrl / ⌘ Enter | Zapisz wartość w edytorze i przejdź do następnego pustego pola |
+| Tab, Spacja | Przejdź do checkboxa i wybierz zmianę do zapisu |
+
 ## Development
 
 ```bash
@@ -367,8 +391,10 @@ npm run test:ui
 ```
 
 This test uses the built sidepanel with a deterministic WebExtension API fixture.
-It checks editing and validation, keyboard navigation, section controls, active
-objects, and layouts from 320 to 1440 px. It does not write to SQLite or replace
+It checks editing and validation, object search, operator assignment, keyboard
+navigation, partial saves with the real review engine, undo, and layouts from
+320 to 1440 px. `tests/change-review-contracts.test.mjs` additionally verifies
+rebase, persisted decisions, provenance, stale decisions and reference dependencies. It does not write to SQLite or replace
 testing the installed extension in Firefox. Set `BURBOT_CHROMIUM` to use an
 existing Chromium executable, and `BURBOT_UI_SCREENSHOTS` to save screenshots.
 

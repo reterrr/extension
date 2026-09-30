@@ -14,6 +14,12 @@ import {
 } from "../shared/commits/draftStore";
 import { commitSessionView } from "../shared/commits/session";
 import {
+  decideReviewChange,
+  reviewItems,
+  refreshReviewDecisions,
+  validateReviewSelection,
+} from "../shared/commits/review";
+import {
   applyStagedObjects,
   changedObjectIds,
   discardViewObject,
@@ -138,7 +144,7 @@ function validateCommittedReferences(state: LegacyStorageState): void {
   const object = state.objects.find((entry) => entry.id === first.objectId);
   const definition = BurbotSchema[object?.type ?? ""]?.fields?.[first.field];
   throw new Error(
-    `Nie można wykonać commita: „${object ? BurbotCore.displayName(object) : first.objectId}” wskazuje przez pole „${definition?.label ?? first.field}” na obiekt, który pozostaje tylko w View. Dodaj powiązany obiekt do Commit albo usuń tę zmianę.`,
+    `Nie można zapisać: „${object ? BurbotCore.displayName(object) : first.objectId}” wskazuje przez pole „${definition?.label ?? first.field}” na niezapisany obiekt. Zaznacz także powiązany obiekt w Zapisie zmian albo odłóż tę zmianę.`,
   );
 }
 
@@ -457,6 +463,7 @@ async function saveDraftState(
   state: LegacyStorageState,
 ): Promise<LegacyStorageState> {
   draft.workingState = state;
+  refreshReviewDecisions(draft);
   draft.updatedAt = new Date().toISOString();
   await writeActiveDraft(draft);
   await publishUiState(state);
@@ -889,7 +896,7 @@ browser.contextMenus.onClicked.addListener((info, tab) => {
       object.id,
       next,
       object.creationNote ??
-        "Obiekt został dodany do View i ustawiony jako aktywny. Uzupełnij dane, a potem dodaj go do Commit.",
+        "Obiekt został otwarty. Edycje pojawią się automatycznie w Zapisie zmian.",
     );
     await opening;
   }).catch((error: unknown) => {
@@ -1009,10 +1016,49 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
         return commitSessionView(draft);
       }
 
+      if (message.op === "REVIEW_CHANGE") {
+        const draft = await requireDraft();
+        if (
+          typeof message.changeId !== "string" ||
+          typeof message.decision !== "string" ||
+          typeof message.fingerprint !== "string"
+        ) throw new Error("Wybierz aktualną zmianę.");
+        decideReviewChange(
+          draft, message.changeId, message.decision, message.fingerprint,
+        );
+        draft.updatedAt = new Date().toISOString();
+        await writeActiveDraft(draft);
+        await publishUiState(draft.workingState);
+        queueSelectorHighlightSync(draft.workingState);
+        await notifyCommitChanged();
+        return commitSessionView(draft);
+      }
+
+      if (message.op === "REVIEW_ALL") {
+        const draft = await requireDraft();
+        if (message.decision !== "save" && message.decision !== "later") {
+          throw new Error("Wybierz zapis lub odłożenie zmian.");
+        }
+        for (const item of reviewItems(draft)) {
+          if (
+            item.selection === "discarded" ||
+            (message.objectId && item.objectId !== message.objectId)
+          ) continue;
+          decideReviewChange(draft, item.id, message.decision, item.fingerprint);
+        }
+        draft.updatedAt = new Date().toISOString();
+        await writeActiveDraft(draft);
+        await notifyCommitChanged();
+        return commitSessionView(draft);
+      }
+
       if (message.op === "COMMIT") {
         const draft = await requireDraft();
-        if (!(draft.stagedObjectIds ?? []).length) {
-          throw new Error("Nie ma obiektów dodanych do commita.");
+        if (draft.reviewVersion === 1) {
+          validateReviewSelection(draft, message.expectedReview);
+        }
+        if (!commitSessionView(draft).dirty) {
+          throw new Error("Zaznacz co najmniej jedną zmianę do zapisu.");
         }
 
         const stagedObjectIds = [...draft.stagedObjectIds];
@@ -1026,7 +1072,7 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
         draft.stagedObjectIds = [];
         draft.updatedAt = new Date().toISOString();
 
-        if (hasViewChanges(draft)) {
+        if (hasViewChanges(draft) || Object.keys(draft.discardedChanges ?? {}).length) {
           await writeActiveDraft(draft);
           await publishUiState(draft.workingState);
           queueSelectorHighlightSync(draft.workingState);
@@ -1103,7 +1149,7 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
           tabId,
           object.id,
           next,
-          "Nowy obiekt został dodany do View i ustawiony jako aktywny. Dodaj go do Commit, gdy będzie gotowy.",
+          "Nowy obiekt został otwarty. Gdy będzie gotowy, przejrzyj Zapis zmian.",
         );
         return commitSessionView(await readActiveDraft());
       }

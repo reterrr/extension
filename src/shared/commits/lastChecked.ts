@@ -6,10 +6,13 @@ import type {
 const RELATED_COLLECTIONS = [
   "rules",
   "geographies",
+  "operatorAssignments",
+  "operatorContacts",
   "fileSources",
   "financingRules",
   "documentRequirements",
   "fieldEvidence",
+  "importTargetEvidence",
 ] as const;
 
 type RelatedCollection = (typeof RELATED_COLLECTIONS)[number];
