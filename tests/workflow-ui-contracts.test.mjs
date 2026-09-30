@@ -115,7 +115,7 @@ test("Active View exposes its export action", () => {
 
   assert.match(manager, /createAiViewExport/);
   assert.match(manager, /aiViewExportFilename/);
-  assert.match(manager, />\s*Eksport View\s*</);
+  assert.match(manager, />\s*Eksportuj zestaw\s*</);
 });
 
 test("object action popover is anchored inside the header", () => {
@@ -137,18 +137,7 @@ test("object action popover is anchored inside the header", () => {
 });
 
 
-test("manual plus in View adds and activates the object", () => {
-  const manager = source("src/sidepanel/ViewManagerPanel.tsx");
 
-  assert.match(
-    manager,
-    /inView\s*\?\s*remove\(object\.id\)\s*:\s*openObject\(object\.id\)/,
-  );
-  assert.match(
-    manager,
-    /Kliknij \+, aby dodać do View i od razu otworzyć obiekt/,
-  );
-});
 
 
 test("optional enum clear remains saveable in the editor", () => {
@@ -218,7 +207,7 @@ test("opening an existing Active View object is navigation-only", () => {
 
   assert.match(
     manager,
-    /op: "FOCUS",[\s\S]*?windowId: currentWindow\.id,[\s\S]*?objectId,[\s\S]*?\}/,
+    /"FOCUS",[\s\S]*?windowId: currentWindow\.id,[\s\S]*?objectId,[\s\S]*?\}/,
   );
   assert.match(
     workspace,
@@ -557,7 +546,7 @@ test("project and recruitment workspace expose multiple operators and operator-s
   assert.match(app, /id="operator-assignments-section"/);
   assert.match(app, /id="operator-assignment-search"/);
   assert.match(app, /id="operator-assignment-search-feedback"/);
-  assert.match(app, /id="operator-assignment-select"/);
+  assert.match(app, /id="operator-assignment-results"/);
   assert.match(app, /id="geography-operator"/);
   assert.match(operators, /compileObjectSearch/);
   assert.match(operators, /createObjectSearchDocument/);

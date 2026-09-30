@@ -1762,7 +1762,8 @@ import {
     $("selected-text").disabled = !port || !active || busy || evidencePicking;
     $("page-url").disabled = !port || !active || busy || evidencePicking;
     $("connect").disabled = busy;
-    $("connect").textContent = port ? "Połącz ponownie" : "Połącz stronę";
+    $("connect").hidden = Boolean(port);
+    $("connect").textContent = "Ponów połączenie";
     $("preview").disabled =
       !port ||
       !chosen() ||

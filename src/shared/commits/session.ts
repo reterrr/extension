@@ -10,6 +10,7 @@ import type {
   LegacyStoredObject,
 } from "../types/legacy-storage";
 import { changedObjectIds } from "./staging";
+import { reviewItems } from "./review";
 
 function stable(value: unknown): string {
   return JSON.stringify(value ?? null) ?? String(value);
@@ -38,7 +39,8 @@ function displayValue(value: unknown, state: LegacyStorageState): string {
     return referenced ? labelOf(referenced) : value;
   }
   if (typeof value === "number") return String(value);
-  if (Array.isArray(value)) return value.map((item) => displayValue(item, state)).join(", ");
+  if (Array.isArray(value))
+    return value.map((item) => displayValue(item, state)).join(", ");
   try {
     return JSON.stringify(value) ?? String(value);
   } catch {
@@ -69,11 +71,7 @@ function valueChanges(
     changes.push({
       field,
       status:
-        oldText === ""
-          ? "ADDED"
-          : newText === ""
-            ? "REMOVED"
-            : "MODIFIED",
+        oldText === "" ? "ADDED" : newText === "" ? "REMOVED" : "MODIFIED",
       ...(oldText !== "" ? { before: oldText } : {}),
       ...(newText !== "" ? { after: newText } : {}),
     });
@@ -114,8 +112,12 @@ function collectionDelta(
   baseRows: RelatedRow[],
   workingRows: RelatedRow[],
 ): Pick<CommitRelatedChange, "added" | "modified" | "removed"> {
-  const before = new Map(baseRows.map((row, index) => [rowId(row, index), row]));
-  const after = new Map(workingRows.map((row, index) => [rowId(row, index), row]));
+  const before = new Map(
+    baseRows.map((row, index) => [rowId(row, index), row]),
+  );
+  const after = new Map(
+    workingRows.map((row, index) => [rowId(row, index), row]),
+  );
   let added = 0;
   let modified = 0;
   let removed = 0;
@@ -186,8 +188,12 @@ function relatedChanges(
   return changes;
 }
 
-export function projectCommitObjects(draft: DraftCommit): CommitSessionObject[] {
-  const baseById = new Map(draft.baseState.objects.map((object) => [object.id, object]));
+export function projectCommitObjects(
+  draft: DraftCommit,
+): CommitSessionObject[] {
+  const baseById = new Map(
+    draft.baseState.objects.map((object) => [object.id, object]),
+  );
   const workingById = new Map(
     draft.workingState.objects.map((object) => [object.id, object]),
   );
@@ -201,15 +207,11 @@ export function projectCommitObjects(draft: DraftCommit): CommitSessionObject[] 
       label: labelOf(object),
       status: !base
         ? "NEW"
-        : stableObject(base) === stableObject(object) && nestedChanges.length === 0
+        : stableObject(base) === stableObject(object) &&
+            nestedChanges.length === 0
           ? "UNCHANGED"
           : "MODIFIED",
-      changes: valueChanges(
-        base,
-        object,
-        draft.baseState,
-        draft.workingState,
-      ),
+      changes: valueChanges(base, object, draft.baseState, draft.workingState),
       relatedChanges: nestedChanges,
       staged: (draft.stagedObjectIds ?? []).includes(object.id),
     } satisfies CommitSessionObject;
@@ -230,17 +232,47 @@ export function projectCommitObjects(draft: DraftCommit): CommitSessionObject[] 
         }) satisfies CommitSessionObject,
     );
 
-  return [...working, ...deleted];
+  const objects: CommitSessionObject[] = [...working, ...deleted];
+  if (draft.reviewVersion === 1) {
+    const items = reviewItems(draft);
+    for (const archived of Object.values(draft.discardedChanges ?? {})) {
+      if (!objects.some((object) => object.id === archived.objectId))
+        objects.push({
+          id: archived.objectId,
+          type: archived.objectType,
+          label: archived.objectLabel,
+          status: "UNCHANGED",
+          changes: [],
+          relatedChanges: [],
+          staged: false,
+        });
+    }
+    for (const object of objects) {
+      object.reviewItems = items.filter((item) => item.objectId === object.id);
+      object.staged = object.reviewItems.some(
+        (item) => item.selection === "save",
+      );
+      if (!object.reviewItems.some((item) => item.selection !== "discarded"))
+        object.status = "UNCHANGED";
+    }
+  }
+  return objects;
 }
 
-export function commitSessionView(draft: DraftCommit | null): CommitSessionView {
+export function commitSessionView(
+  draft: DraftCommit | null,
+): CommitSessionView {
   if (!draft) {
     return { active: false, dirty: false, objects: [] };
   }
 
   const objects = projectCommitObjects(draft);
   const changedIds = new Set(changedObjectIds(draft));
-  const stagedIds = new Set(draft.stagedObjectIds ?? []);
+  const stagedIds = new Set(
+    draft.reviewVersion === 1
+      ? objects.filter((object) => object.staged).map((object) => object.id)
+      : (draft.stagedObjectIds ?? []),
+  );
   const dirty = [...stagedIds].some((id) => changedIds.has(id));
   return {
     active: true,

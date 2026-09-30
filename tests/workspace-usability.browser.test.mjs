@@ -6,8 +6,22 @@ import { readFile, mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
 import test from "node:test";
 import { chromium } from "playwright";
+import { build } from "esbuild";
 
 const root = resolve(import.meta.dirname, "..");
+const reviewRuntime = await build({
+  stdin: {
+    contents:
+      'export * from "./src/shared/commits/review.ts"; export * from "./src/shared/commits/session.ts";',
+    resolveDir: root,
+  },
+  bundle: true,
+  write: false,
+  format: "iife",
+  globalName: "ReviewTest",
+  platform: "browser",
+  logLevel: "silent",
+});
 const sourceUrl = "https://example.org/nabor";
 const state = {
   version: 1,
@@ -19,6 +33,11 @@ const state = {
   documentRequirements: [],
   fieldEvidence: [],
   objects: [
+    {
+      id: "operator",
+      type: "operator",
+      values: { name: "Rzeszowska Agencja Rozwoju", nip: "8130010538" },
+    },
     {
       id: "call",
       type: "recruitment",
@@ -112,7 +131,31 @@ function installBrowserMock(seed) {
   };
   window.__uiState = copy(seed);
   window.__uiMessages = [];
-  const commit = { active: false, dirty: false, objects: [] };
+  window.__uiCommitted = copy(seed);
+  window.__uiDraft = null;
+  const runtime = window.ReviewTest;
+  const ensureDraft = () =>
+    (window.__uiDraft ??= {
+      id: "ui-draft",
+      createdAt: "2026-09-30",
+      updatedAt: "2026-09-30",
+      baseRevision: window.__uiCommitted.revision,
+      baseState: copy(window.__uiCommitted),
+      workingState: copy(window.__uiState),
+      stagedObjectIds: [],
+      reviewVersion: 1,
+    });
+  const publish = () => {
+    window.__uiState = copy(
+      window.__uiDraft?.workingState ?? window.__uiCommitted,
+    );
+    onChanged.emit(
+      { "burbot:v1": { newValue: copy(window.__uiState) } },
+      "local",
+    );
+    onMessage.emit({ type: "BURBOT_COMMIT_CHANGED" });
+    window.dispatchEvent(new Event("burbot:commit-changed"));
+  };
   window.browser = {
     storage: {
       onChanged,
@@ -141,17 +184,65 @@ function installBrowserMock(seed) {
               type: "BURBOT_FOCUS",
               stamp: crypto.randomUUID(),
             });
-          return { ok: true, value: copy(commit) };
+          if (message.op === "NEW") ensureDraft();
+          if (message.op === "REVIEW_CHANGE") {
+            await new Promise((resolve) => setTimeout(resolve, 10));
+            runtime.decideReviewChange(
+              ensureDraft(),
+              message.changeId,
+              message.decision,
+              message.fingerprint,
+            );
+            publish();
+          }
+          if (message.op === "REVIEW_ALL") {
+            const d = ensureDraft();
+            for (const item of runtime.reviewItems(d))
+              if (
+                item.selection !== "discarded" &&
+                (!message.objectId || item.objectId === message.objectId)
+              )
+                runtime.decideReviewChange(
+                  d,
+                  item.id,
+                  message.decision,
+                  item.fingerprint,
+                );
+            publish();
+          }
+          if (message.op === "COMMIT") {
+            const d = ensureDraft();
+            runtime.validateReviewSelection(d, message.expectedReview);
+            const saved = runtime.applyReviewedChanges(d);
+            saved.revision += 1;
+            window.__uiCommitted = copy(saved);
+            runtime.rebaseReviewedChanges(d, saved);
+            publish();
+            return {
+              ok: true,
+              value: { session: runtime.commitSessionView(d) },
+            };
+          }
+          return {
+            ok: true,
+            value: runtime.commitSessionView(window.__uiDraft),
+          };
         }
         if (message.type === "BURBOT_DATA") {
           if (message.op === "GET_FOCUS") return { ok: true, value: null };
-          if (message.op !== "GET")
+          if (message.op !== "GET") {
+            const d = ensureDraft();
             window.__uiState = window.BurbotCore.mutate(
               window.__uiState,
               message,
               () => crypto.randomUUID(),
               new Date().toISOString(),
             );
+            window.__uiState.revision = d.baseRevision;
+            d.workingState = copy(window.__uiState);
+            runtime.refreshReviewDecisions(d);
+            publish();
+          }
           return { ok: true, value: copy(window.__uiState) };
         }
         return { ok: true, value: null };
@@ -230,7 +321,15 @@ test(
     });
     const errors = [];
     page.on("pageerror", (error) => errors.push(error.message));
-    await page.addInitScript(installBrowserMock, state);
+    await page.addInitScript({
+      content:
+        reviewRuntime.outputFiles[0].text +
+        "\nglobalThis.ReviewTest = ReviewTest;\n(" +
+        installBrowserMock.toString() +
+        ")(" +
+        JSON.stringify(state) +
+        ");",
+    });
     await page.goto(`http://127.0.0.1:${server.address().port}/sidepanel.html`);
     await page
       .waitForSelector(".view-member-open[aria-current=true]", {
@@ -253,8 +352,8 @@ test(
     await page.locator(".view-manager-collapse").click();
     assert.equal(await page.locator("#view-manager-body").isVisible(), false);
     await page.locator(".view-manager-collapse").click();
-    await page.locator("#section-select").selectOption("funding-panel");
-    await page.locator("#section-go").click();
+    await page.locator("#funding-panel > summary").click();
+    assert.equal(await page.locator("#section-select").count(), 0);
     assert.equal(await page.locator("#funding-panel").getAttribute("open"), "");
     const tabs = page.locator(".funding-tab");
     await tabs.first().focus();
@@ -268,9 +367,29 @@ test(
       .first();
     await numeric.focus();
     await page.keyboard.press("Enter");
-    await page.waitForFunction(
-      () => document.activeElement?.id === "edit-value",
-    );
+    await page
+      .waitForFunction(
+        () => document.activeElement?.id === "edit-value",
+        null,
+        { timeout: 5000 },
+      )
+      .catch(async (error) => {
+        throw new Error(
+          error.message +
+            " " +
+            JSON.stringify(
+              await page.evaluate(() => ({
+                focus:
+                  document.activeElement?.tagName +
+                  ":" +
+                  document.activeElement?.id,
+                label: document.querySelector("#active-label")?.textContent,
+                notice: document.querySelector("#notice")?.textContent,
+                messages: window.__uiMessages.slice(-5),
+              })),
+            ),
+        );
+      });
     assert.equal(
       await page.locator(".field-evidence-editor").getAttribute("open"),
       null,
@@ -287,13 +406,33 @@ test(
     assert.equal(await page.locator("#save").isDisabled(), true);
     await page.locator("#edit-value").fill("80,5");
     assert.equal(await page.locator("#save").isDisabled(), false);
-    await page.locator("#save").click();
+    await page.keyboard.press("Control+Enter");
     await page.waitForFunction(
       () => window.__uiState.financingRules[0].refund_percent_max === 80.5,
     );
-    await page.waitForFunction(
-      () => document.activeElement?.id === "edit-value",
-    );
+    await page
+      .waitForFunction(
+        () => document.activeElement?.id === "edit-value",
+        null,
+        { timeout: 5000 },
+      )
+      .catch(async (error) => {
+        throw new Error(
+          error.message +
+            " " +
+            JSON.stringify(
+              await page.evaluate(() => ({
+                focus:
+                  document.activeElement?.tagName +
+                  ":" +
+                  document.activeElement?.id,
+                label: document.querySelector("#active-label")?.textContent,
+                notice: document.querySelector("#notice")?.textContent,
+                messages: window.__uiMessages.slice(-5),
+              })),
+            ),
+        );
+      });
     assert.equal(
       await page.evaluate(() =>
         window.__uiMessages.some((m) => m.op === "EDIT"),
@@ -356,8 +495,7 @@ test(
       }
     }
     await page.locator("#deselect").click();
-    await page.locator("#section-select").selectOption("file-sources-panel");
-    await page.locator("#section-go").click();
+    await page.locator("#file-sources-panel > summary").click();
     await page.locator(".file-source-summary").first().click();
     for (const width of [320, 400]) {
       await page.setViewportSize({ width, height: 900 });
@@ -386,6 +524,180 @@ test(
     assert.equal(await page.locator(".view-manager").isVisible(), false);
     await page.locator(".workflow-tabs button").first().click();
     assert.equal(await page.locator("#workspace-main").isVisible(), true);
+    assert.equal(await page.locator(".view-member-stage").count(), 0);
+    assert.equal(
+      await page.getByRole("button", { name: "Połącz ponownie" }).count(),
+      0,
+    );
+    await page.keyboard.press("Control+k");
+    await page.locator(".view-search-dialog[open]").waitFor();
+    const picker = await page.locator(".view-search-dialog").boundingBox();
+    assert.ok(
+      picker.width > 900 && picker.height > 700,
+      JSON.stringify(picker),
+    );
+    await page
+      .getByRole("searchbox", { name: "Szukaj obiektu", exact: true })
+      .fill("8130010538");
+    assert.equal(await page.locator(".view-search-open").count(), 1);
+    await page.keyboard.press("ArrowDown");
+    await page.keyboard.press("Enter");
+    await page.waitForFunction(
+      () =>
+        document.querySelector("#workspace").dataset.activeObjectId ===
+        "operator",
+    );
+    assert.equal(await page.locator(".view-search-dialog").isVisible(), false);
+    await page
+      .locator(".view-member-open")
+      .filter({ hasText: "Małopolski" })
+      .click();
+    await page.locator("#operator-assignments-panel > summary").click();
+    await page.locator("#operator-assignment-search").fill("8130010538");
+    await page.locator("#operator-assignment-search").press("Enter");
+    await page.waitForFunction(
+      () => window.__uiState.operatorAssignments.length === 1,
+    );
+    assert.match(
+      await page.locator("#operator-assignment-list").innerText(),
+      /Rzeszowska Agencja/,
+    );
+    assert.equal(await page.locator("#operator-assignment-select").count(), 0);
+    await page.evaluate(async () => {
+      await browser.runtime.sendMessage({
+        type: "BURBOT_DATA",
+        op: "EDIT",
+        expectedRevision: window.__uiState.revision,
+        objectId: "call",
+        field: "notes",
+        value: "Propozycja do dopracowania",
+      });
+      await browser.runtime.sendMessage({
+        type: "BURBOT_DATA",
+        op: "EDIT",
+        expectedRevision: window.__uiState.revision,
+        objectId: "call",
+        field: "status",
+        value: "ZAWIESZONY",
+      });
+    });
+    await page.keyboard.press("Alt+2");
+    await page
+      .locator(".review-objects button")
+      .filter({ hasText: "Nabór 3/2026" })
+      .click();
+    await page
+      .getByRole("checkbox", { name: "Zapisz: Uwagi", exact: true })
+      .focus();
+    await page.keyboard.press("Space");
+    await page.waitForFunction(() =>
+      window.ReviewTest.reviewItems(window.__uiDraft).some(
+        (item) => item.label === "notes" && item.selection === "later",
+      ),
+    );
+    const statusRow = page.locator(".review-row").filter({
+      has: page.getByRole("checkbox", {
+        name: "Zapisz: Status",
+        exact: true,
+      }),
+    });
+    await statusRow.getByRole("button", { name: "Cofnij zmianę" }).click();
+    await page.waitForFunction(
+      () =>
+        window.__uiState.objects.find((o) => o.id === "call").values.status ===
+        "AKTYWNY",
+    );
+    assert.match(await statusRow.innerText(), /Cofnięta — bez zmiany/);
+    assert.match(
+      await page
+        .locator(".review-after")
+        .allTextContents()
+        .then((v) => v.join(" ")),
+      /80.5/,
+    );
+    if (process.env.BURBOT_UI_SCREENSHOTS) {
+      await page.screenshot({
+        path: resolve(process.env.BURBOT_UI_SCREENSHOTS, "review-desktop.png"),
+      });
+    }
+    await page.getByRole("button", { name: /^Zapisz wybrane/ }).click();
+    await page.waitForFunction(
+      () => window.__uiCommitted.financingRules[0].refund_percent_max === 80.5,
+    );
+    assert.equal(
+      await page.evaluate(
+        () =>
+          window.__uiCommitted.objects.find((o) => o.id === "call").values
+            .notes,
+      ),
+      undefined,
+    );
+    assert.equal(
+      await page.evaluate(
+        () =>
+          window.__uiState.objects.find((o) => o.id === "call").values.notes,
+      ),
+      "Propozycja do dopracowania",
+    );
+    assert.equal(
+      await page.evaluate(
+        () =>
+          window.__uiCommitted.objects.find((o) => o.id === "call").values
+            .status,
+      ),
+      "AKTYWNY",
+    );
+    await statusRow
+      .getByRole("button", { name: "Przywróć propozycję" })
+      .click();
+    await page.waitForFunction(
+      () =>
+        window.__uiState.objects.find((o) => o.id === "call").values.status ===
+        "ZAWIESZONY",
+    );
+    for (const width of [320, 768, 1280]) {
+      await page.setViewportSize({ width, height: 900 });
+      assert.equal(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth <= innerWidth + 1,
+        ),
+        true,
+        "review overflow " + width,
+      );
+      const footer = await page.locator(".review-footer").boundingBox();
+      assert.ok(
+        footer.y + footer.height <= 901,
+        "review footer should stay visible",
+      );
+      if (process.env.BURBOT_UI_SCREENSHOTS)
+        await page.screenshot({
+          path: resolve(
+            process.env.BURBOT_UI_SCREENSHOTS,
+            `review-${width}.png`,
+          ),
+        });
+    }
+    await page.keyboard.press("Control+k");
+    await page.locator(".view-search-dialog[open]").waitFor();
+    for (const width of [320, 1280]) {
+      await page.setViewportSize({ width, height: 900 });
+      assert.equal(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth <= innerWidth + 1,
+        ),
+        true,
+        "picker overflow " + width,
+      );
+      if (process.env.BURBOT_UI_SCREENSHOTS)
+        await page.screenshot({
+          path: resolve(
+            process.env.BURBOT_UI_SCREENSHOTS,
+            `search-${width}.png`,
+          ),
+        });
+    }
+    await page.keyboard.press("Escape");
+    assert.equal(await page.locator(".view-search-dialog").isVisible(), false);
     assert.deepEqual(errors, []);
   },
 );

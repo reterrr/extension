@@ -465,25 +465,9 @@ function visibleSections(): HTMLDetailsElement[] {
 }
 
 function enhanceSectionNavigation(): void {
-  const select = $<HTMLSelectElement>("section-select");
   const toggle = $<HTMLButtonElement>("sections-toggle");
-  if (!select || !toggle) return;
+  if (!toggle) return;
   const sections = visibleSections();
-  const options = sections.map((panel) => ({
-    id: panel.id,
-    label:
-      panel.querySelector(".workspace-section-title strong")?.textContent ??
-      "Sekcja",
-  }));
-  const signature = JSON.stringify(options);
-  if (select.dataset.sections !== signature) {
-    const selected = select.value;
-    select.replaceChildren(
-      ...options.map(({ id, label }) => new Option(label, id)),
-    );
-    if (options.some(({ id }) => id === selected)) select.value = selected;
-    select.dataset.sections = signature;
-  }
   const allOpen = sections.length > 0 && sections.every((panel) => panel.open);
   // Other modules observe child-list changes to update selector colors.
   // Do not emit a fresh mutation when the label has not changed.
@@ -589,18 +573,6 @@ export async function initWorkspaceRedesignUi(): Promise<void> {
     persistWorkspaceChrome({ captureCollapsed: collapsed });
   });
 
-  $("section-go")?.addEventListener("click", () => {
-    const panel = $<HTMLDetailsElement>(
-      $("section-select") instanceof HTMLSelectElement
-        ? ($("section-select") as HTMLSelectElement).value
-        : "",
-    );
-    if (!panel) return;
-    panel.open = true;
-    const summary = panel.querySelector("summary");
-    summary?.focus({ preventScroll: true });
-    panel.scrollIntoView({ block: "start" });
-  });
   $("sections-toggle")?.addEventListener("click", () => {
     const sections = visibleSections();
     const open = !sections.every((panel) => panel.open);

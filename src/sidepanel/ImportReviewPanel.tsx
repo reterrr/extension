@@ -658,15 +658,15 @@ export function ImportReviewPanel() {
     return (
       <section className="import-review-shell">
         <div className="import-empty-state">
-          <span className="eyebrow">IMPORT</span>
+
           <h2>Brak aktywnego importu</h2>
-          <p>Zaimportuj portable JSON. Obiekty pojawią się tutaj do sprawdzenia, a potem możesz dodać je do View.</p>
+          <p>Wybierz plik JSON i sprawdź dane przed dodaniem do obiektów.</p>
           <button
             type="button"
             className="primary"
             onClick={() => document.getElementById("import")?.click()}
           >
-            Import JSON
+            Wybierz plik JSON
           </button>
         </div>
       </section>
@@ -726,10 +726,10 @@ export function ImportReviewPanel() {
         <div className="import-review-panel">
           <header className="import-review-header">
             <div>
-              <span className="eyebrow">IMPORT REVIEW</span>
+
               <strong>{view.fileName}</strong>
               <small>
-                {view.approvedCount ?? 0} w View · {view.rejectedCount ?? 0} odrzucono · {view.pendingCount ?? 0} oczekuje
+                {view.approvedCount ?? 0} zaakceptowano · {view.rejectedCount ?? 0} odrzucono · {view.pendingCount ?? 0} oczekuje
               </small>
             </div>
             <button
@@ -774,7 +774,7 @@ export function ImportReviewPanel() {
                           <span>{object.label}</span>
                           <small>
                             {object.status === "APPROVED"
-                              ? "w View"
+                              ? "zaakceptowano"
                               : object.status === "REJECTED"
                                 ? "odrzucono"
                                 : [
@@ -974,14 +974,14 @@ export function ImportReviewPanel() {
                   )}
 
                   <p className="import-review-hint">
-                    Import służy do sprawdzenia danych i źródeł. Zaakceptowany obiekt trafia najpierw do View — nie do Commit.
+                    Zaakceptowane dane możesz dopracować w Obiektach i porównać w Zapisie zmian.
                   </p>
                   {existingTarget && selected.status !== "APPROVED" && (
                     <div className="import-review-update-existing">
                       <strong>Aktualizacja istniejącego obiektu</strong>
                       <span>{existingTarget.label}</span>
                       <small>
-                        Dodanie do View zaktualizuje ten sam obiekt roboczy.
+                        Akceptacja zaktualizuje istniejący obiekt.
                         ID pozostanie bez zmian i duplikat nie zostanie utworzony.
                       </small>
                     </div>
@@ -1004,7 +1004,7 @@ export function ImportReviewPanel() {
                           disabled={busy}
                           onClick={() => void discardApprovedSelected()}
                         >
-                          Odrzuć zmiany z View
+                          Cofnij akceptację
                         </button>
                         <button
                           type="button"
@@ -1012,7 +1012,7 @@ export function ImportReviewPanel() {
                           disabled={busy}
                           onClick={() => requestWorkflowMode("view")}
                         >
-                          Przejdź do View
+                          Otwórz obiekt
                         </button>
                       </>
                     ) : (
@@ -1032,8 +1032,8 @@ export function ImportReviewPanel() {
                           onClick={() => void approve()}
                         >
                           {existingTarget
-                            ? "Zastosuj zmiany → View"
-                            : "Dodaj obiekt → View"}
+                            ? "Zastosuj zmiany"
+                            : "Dodaj obiekt"}
                         </button>
                       </>
                     )}

@@ -1,32 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
-import { revokeApprovedImportObject } from "../shared/import/review";
-import {
-  readImportReview,
-  writeImportReview,
-} from "../shared/import/reviewStore";
 import type {
-  CommitRelatedChange,
+  CommitReviewItem,
   CommitSessionObject,
   CommitSessionView,
-  CommitValueChange,
 } from "../shared/types/commit";
-
-interface CommitResponse<T> {
-  ok?: boolean;
-  value?: T;
-  error?: string;
-}
-
-interface CommitResult {
-  session: CommitSessionView;
-}
 
 const EMPTY_SESSION: CommitSessionView = {
   active: false,
   dirty: false,
   objects: [],
 };
-
 const VALUE_LABELS: Record<string, string> = {
   OGLOSZONY: "Ogłoszony",
   PLANOWANY: "Planowany",
@@ -100,6 +83,27 @@ const FIELD_LABELS: Record<string, string> = {
   action_code: "Kod działania",
   direct_recruitment_link: "Bezpośredni link do naboru",
   funding_rules: "Zasady dofinansowania",
+  metadata: "Pozostałe informacje",
+  importKey: "Identyfikator importu",
+  evidence: "Źródła potwierdzające",
+  fileType: "Format pliku",
+  url: "Adres pliku",
+  display_name: "Nazwa dokumentu",
+  sourcePageUrl: "Strona źródłowa",
+  purpose: "Przeznaczenie",
+  has_fields: "Pola do wypełnienia",
+  intended_use: "Sposób użycia",
+  client_requirement: "Wymaganie wobec klienta",
+  signature_requirement: "Podpis",
+  operatorId: "Operator",
+  operatorType: "Rola operatora",
+  company_size: "Wielkość firmy",
+  variant_no: "Numer wariantu",
+  value: "Wartość",
+  terytCode: "Kod TERYT",
+  kind: "Rodzaj",
+  sourceImportKey: "Źródło dokumentu",
+  sourcePageImportKey: "Źródło strony",
 };
 
 async function sendCommit<T>(
@@ -110,183 +114,122 @@ async function sendCommit<T>(
     type: "BURBOT_COMMIT",
     op,
     ...payload,
-  })) as CommitResponse<T>;
-
-  if (!response?.ok) {
-    throw new Error(response?.error ?? "Commit operation failed.");
-  }
+  })) as { ok?: boolean; value?: T; error?: string };
+  if (!response?.ok)
+    throw new Error(response?.error ?? "Nie udało się zapisać decyzji.");
   return response.value as T;
 }
-
-async function currentWindowId(): Promise<number> {
-  const window = await browser.windows.getCurrent();
-  if (window.id === undefined) throw new Error("Could not resolve the current window.");
-  return window.id;
+function typeLabel(type: string) {
+  return type === "operator"
+    ? "Operator"
+    : type === "project"
+      ? "Projekt"
+      : "Nabór";
 }
-
-function statusLabel(status: CommitSessionObject["status"]): string {
-  if (status === "NEW") return "NEW";
-  if (status === "MODIFIED") return "MODIFIED";
-  if (status === "DELETED") return "DELETED";
-  return "UNCHANGED";
-}
-
-function typeLabel(type: CommitSessionObject["type"]): string {
-  if (type === "operator") return "Operator";
-  if (type === "project") return "Projekt";
-  return "Nabór";
-}
-
 function fieldLabel(field: string): string {
   if (FIELD_LABELS[field]) return FIELD_LABELS[field];
-  return field
-    .replaceAll("_", " ")
-    .replace(/\b\w/g, (letter) => letter.toLocaleUpperCase("pl-PL"));
+  const definitions = [
+    BurbotFunding?.fields,
+    BurbotDocuments?.fields,
+    ...Object.values(BurbotSchema).map((schema) => schema.fields),
+  ] as Array<Record<string, { label?: string }>>;
+  for (const fields of definitions)
+    if (fields?.[field]?.label) return fields[field].label!;
+  return FIELD_LABELS[field] ?? field.replaceAll("_", " ");
 }
-
-function displayDiffValue(value: string | undefined): string {
-  if (!value) return "";
-  return VALUE_LABELS[value] ?? value;
+function displayValue(value?: string): string {
+  return value ? (VALUE_LABELS[value] ?? value) : "Brak wartości";
 }
+const decisionLabel = {
+  save: "Do zapisu",
+  later: "Do dopracowania",
+  discarded: "Cofnięta — bez zmiany",
+};
+const statusLabel = {
+  ADDED: "Dodano",
+  MODIFIED: "Zmieniono",
+  REMOVED: "Usunięto",
+};
 
-function relatedCount(change: CommitRelatedChange): number {
-  return change.added + change.modified + change.removed;
-}
-
-function objectChangeCount(object: CommitSessionObject): number {
-  return (
-    object.changes.length +
-    object.relatedChanges.reduce((sum, change) => sum + relatedCount(change), 0)
-  );
-}
-
-function RelatedChange({ change }: { change: CommitRelatedChange }) {
-  return (
-    <div className="commit-related-change">
-      <span>{change.label}</span>
-      <span className="commit-related-counts">
-        {change.added > 0 && <b className="is-added">+{change.added}</b>}
-        {change.modified > 0 && <b className="is-modified">~{change.modified}</b>}
-        {change.removed > 0 && <b className="is-removed">−{change.removed}</b>}
-      </span>
-    </div>
-  );
-}
-
-function FieldChange({ change }: { change: CommitValueChange }) {
-  return (
-    <div className="commit-field-change">
-      <span className="commit-field-name">{fieldLabel(change.field)}</span>
-      <div className="commit-field-values">
-        {change.status === "ADDED" ? (
-          <span className="commit-value-after">+ {displayDiffValue(change.after)}</span>
-        ) : change.status === "REMOVED" ? (
-          <>
-            <span className="commit-value-before">{displayDiffValue(change.before)}</span>
-            <span className="commit-arrow">→</span>
-            <span className="commit-value-removed">usunięto</span>
-          </>
-        ) : (
-          <>
-            <span className="commit-value-before">{displayDiffValue(change.before)}</span>
-            <span className="commit-arrow">→</span>
-            <span className="commit-value-after">{displayDiffValue(change.after)}</span>
-          </>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function ChangeCard({
-  object,
+function ReviewRow({
+  item,
   busy,
-  onFocus,
-  onUnstage,
-  onDiscard,
+  onDecide,
 }: {
-  object: CommitSessionObject;
+  item: CommitReviewItem;
   busy: boolean;
-  onFocus: (objectId: string) => Promise<void>;
-  onUnstage: (objectId: string) => Promise<void>;
-  onDiscard: (objectId: string) => Promise<void>;
+  onDecide: (item: CommitReviewItem, decision: string) => void;
 }) {
-  const deleted = object.status === "DELETED";
-  const count = objectChangeCount(object);
-
+  const discarded = item.selection === "discarded";
+  const title = item.group === "Pola" ? fieldLabel(item.label) : item.label;
   return (
-    <details
-      className={"commit-change-card commit-change-" + object.status.toLowerCase()}
+    <article
+      className={"review-row is-" + item.selection}
+      data-change-id={item.id}
     >
-      <summary>
-        <span
-          className={"commit-status commit-status-" + object.status.toLowerCase()}
+      <header className="review-row-header">
+        <label className="review-check">
+          <input
+            type="checkbox"
+            disabled={busy || discarded}
+            checked={item.selection === "save"}
+            onChange={(event) =>
+              onDecide(item, event.target.checked ? "save" : "later")
+            }
+            aria-label={"Zapisz: " + title}
+          />
+          <strong>{title}</strong>
+        </label>
+        <span className={"review-kind kind-" + item.status.toLowerCase()}>
+          {discarded ? "Cofnięto" : statusLabel[item.status]}
+        </span>
+        <span className="review-decision">{decisionLabel[item.selection]}</span>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => onDecide(item, discarded ? "restore" : "discard")}
         >
-          {statusLabel(object.status)}
-        </span>
-        <span className="commit-change-copy">
-          <strong>{object.label}</strong>
-          <small>
-            {typeLabel(object.type)}
-            {count > 0
-              ? " · " + count + " " + (count === 1 ? "zmiana" : "zmian")
-              : ""}
-          </small>
-        </span>
-        <span className="commit-chevron" aria-hidden="true">›</span>
-      </summary>
-
-      <div className="commit-change-body">
-        {deleted && (
-          <p className="commit-delete-note">Obiekt zostanie usunięty z SQLite.</p>
-        )}
-
-        {object.changes.length > 0 && (
-          <div className="commit-field-diff">
-            {object.changes.map((change) => (
-              <FieldChange key={change.field} change={change} />
-            ))}
-          </div>
-        )}
-
-        {object.relatedChanges.length > 0 && (
-          <div className="commit-related-diff">
-            {object.relatedChanges.map((change) => (
-              <RelatedChange key={change.key} change={change} />
-            ))}
-          </div>
-        )}
-
-        <div className="commit-object-actions">
-          {!deleted && (
-            <button
-              type="button"
-              className="commit-focus"
-              disabled={busy}
-              onClick={() => void onFocus(object.id)}
-            >
-              Otwórz w View
-            </button>
-          )}
-          <button
-            type="button"
-            className="commit-unstage"
-            disabled={busy}
-            onClick={() => void onUnstage(object.id)}
-          >
-            Usuń z commita
-          </button>
-          <button
-            type="button"
-            className="commit-discard-object"
-            disabled={busy}
-            onClick={() => void onDiscard(object.id)}
-          >
-            Odrzuć zmiany obiektu
-          </button>
+          {discarded ? "Przywróć propozycję" : "Cofnij zmianę"}
+        </button>
+      </header>
+      <div className="review-values">
+        <div className="review-value-label" aria-hidden="true">
+          Pole
         </div>
+        <div className="review-value-label">W bazie</div>
+        <div className="review-value-label">
+          {discarded
+            ? "Pozostaje"
+            : item.selection === "later"
+              ? "Propozycja · na później"
+              : "Po zapisaniu"}
+        </div>
+        {item.details.map((detail) => (
+          <div className="review-value-row" key={detail.field}>
+            <span className="review-property">{fieldLabel(detail.field)}</span>
+            <span className="review-before">
+              <small>W bazie</small>
+              {displayValue(detail.before)}
+            </span>
+            <span className={discarded ? "review-kept" : "review-after"}>
+              <small>{discarded ? "Pozostaje" : "Propozycja"}</small>
+              {displayValue(discarded ? detail.before : detail.after)}
+            </span>
+          </div>
+        ))}
       </div>
-    </details>
+      {discarded && (
+        <details className="review-discarded-proposal">
+          <summary>Cofnięta propozycja</summary>
+          {item.details.map((detail) => (
+            <p key={detail.field}>
+              {fieldLabel(detail.field)}:{" "}
+              <del>{displayValue(detail.after)}</del>
+            </p>
+          ))}
+        </details>
+      )}
+    </article>
   );
 }
 
@@ -294,218 +237,289 @@ export function CommitPanel() {
   const [session, setSession] = useState<CommitSessionView>(EMPTY_SESSION);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-
-  async function refresh() {
-    try {
-      const next = await sendCommit<CommitSessionView>("GET");
-      setSession(next);
-      setError("");
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
-    }
-  }
+  const [message, setMessage] = useState("");
+  const [activeId, setActiveId] = useState("");
+  const [filter, setFilter] = useState("all");
 
   useEffect(() => {
-    void refresh();
-    const listener = (message: unknown) => {
-      if (
-        typeof message === "object" &&
-        message !== null &&
-        (message as { type?: unknown }).type === "BURBOT_COMMIT_CHANGED"
-      ) {
-        void refresh();
-      }
-      return undefined;
+    const refresh = () =>
+      void sendCommit<CommitSessionView>("GET")
+        .then(setSession)
+        .catch((error) => setError(String(error.message ?? error)));
+    const listener = (event: unknown) => {
+      if ((event as { type?: string })?.type === "BURBOT_COMMIT_CHANGED")
+        refresh();
     };
-    const localChanged = () => void refresh();
+    refresh();
     browser.runtime.onMessage.addListener(listener);
-    window.addEventListener("burbot:commit-changed", localChanged);
+    window.addEventListener("burbot:commit-changed", refresh);
     return () => {
       browser.runtime.onMessage.removeListener(listener);
-      window.removeEventListener("burbot:commit-changed", localChanged);
+      window.removeEventListener("burbot:commit-changed", refresh);
     };
   }, []);
+  const objects = useMemo(
+    () => session.objects.filter((object) => object.reviewItems?.length),
+    [session.objects],
+  );
+  const items = objects.flatMap((object) => object.reviewItems ?? []);
+  const selected = items.filter((item) => item.selection === "save").length;
+  const deferred = items.filter((item) => item.selection === "later").length;
+  const discarded = items.filter(
+    (item) => item.selection === "discarded",
+  ).length;
+  const visibleObjects = objects.filter(
+    (object) =>
+      filter === "all" ||
+      object.reviewItems?.some((item) => item.selection === filter),
+  );
+  const current =
+    visibleObjects.find((object) => object.id === activeId) ??
+    visibleObjects[0];
+  const currentItems =
+    current?.reviewItems?.filter(
+      (item) => filter === "all" || item.selection === filter,
+    ) ?? [];
+  const groups = [...new Set(currentItems.map((item) => item.group))];
 
-  const stagedObjects = useMemo(() => {
-    const rank = { NEW: 0, MODIFIED: 1, DELETED: 2, UNCHANGED: 3 } as const;
-    return session.objects
-      .filter((object) => object.status !== "UNCHANGED" && object.staged)
-      .sort(
-        (a, b) =>
-          rank[a.status] - rank[b.status] ||
-          a.label.localeCompare(b.label, "pl"),
-      );
-  }, [session.objects]);
-
-  async function run<T>(work: () => Promise<T>, apply?: (value: T) => void) {
+  async function run(work: () => Promise<CommitSessionView>) {
+    const focused =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
     setBusy(true);
     setError("");
+    setMessage("");
     try {
-      const value = await work();
-      apply?.(value);
+      setSession(await work());
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
+      await sendCommit<CommitSessionView>("GET")
+        .then(setSession)
+        .catch(() => undefined);
     } finally {
       setBusy(false);
+      requestAnimationFrame(() => {
+        if (
+          document.activeElement === document.body &&
+          focused?.isConnected &&
+          focused.getClientRects().length
+        )
+          focused.focus({ preventScroll: true });
+      });
     }
   }
-
-  async function focusObject(objectId: string) {
-    await run(async () => {
-      const windowId = await currentWindowId();
-      const result = await sendCommit<CommitSessionView>("FOCUS", {
-        windowId,
-        objectId,
+  function decide(item: CommitReviewItem, decision: string) {
+    void run(() =>
+      sendCommit("REVIEW_CHANGE", {
+        changeId: item.id,
+        fingerprint: item.fingerprint,
+        decision,
+      }),
+    );
+  }
+  function openObject(object: CommitSessionObject) {
+    void run(async () => {
+      const window = await browser.windows.getCurrent();
+      const value = await sendCommit<CommitSessionView>("FOCUS", {
+        windowId: window.id,
+        objectId: object.id,
       });
-      window.dispatchEvent(
+      globalThis.window.dispatchEvent(
         new CustomEvent("burbot:request-workflow-mode", {
           detail: { mode: "view" },
         }),
       );
-      return result;
+      return value;
     });
-  }
-
-  async function unstageObject(objectId: string) {
-    await run(
-      () => sendCommit<CommitSessionView>("UNSTAGE_OBJECT", { objectId }),
-      setSession,
-    );
-  }
-
-  async function unstageAll() {
-    await run(async () => {
-      let next = session;
-      for (const object of stagedObjects) {
-        next = await sendCommit<CommitSessionView>("UNSTAGE_OBJECT", {
-          objectId: object.id,
-        });
-      }
-      setSession(next);
-    });
-  }
-
-  async function syncDiscardedImport(objectId: string) {
-    const review = await readImportReview();
-    if (!review) return;
-
-    const importKeys = Object.entries(review.approvedObjectIdByImportKey)
-      .filter(([, targetId]) => targetId === objectId)
-      .map(([importKey]) => importKey);
-    if (!importKeys.length) return;
-
-    const now = new Date().toISOString();
-    for (const importKey of importKeys) {
-      const preview = review.previewState.objects.find(
-        (object) => object.importKey === importKey,
-      );
-      if (
-        preview &&
-        review.statusByObjectId[preview.id] === "APPROVED"
-      ) {
-        revokeApprovedImportObject(review, preview.id, now);
-      }
-    }
-
-    await writeImportReview(review);
-    window.dispatchEvent(
-      new CustomEvent("burbot:import-review-changed"),
-    );
-  }
-
-  async function discardObject(objectId: string) {
-    if (!confirm("Odrzucić wszystkie zmiany tego obiektu z View?")) return;
-    await run(async () => {
-      const next = await sendCommit<CommitSessionView>("DISCARD_OBJECT", {
-        objectId,
-      });
-      await syncDiscardedImport(objectId);
-      setSession(next);
-      return next;
-    });
-  }
-
-
-  if (!session.active) {
-    return (
-      <section className="commit-panel commit-panel-idle">
-        <div>
-          <strong>Zmiany w bazie</strong>
-          <p>Uruchom View, aby rozpocząć pracę na zmianach przed zapisem do SQLite.</p>
-        </div>
-        <button
-          type="button"
-          className="commit-primary"
-          disabled={busy}
-          onClick={() =>
-            void run(
-              () => sendCommit<CommitSessionView>("NEW"),
-              setSession,
-            )
-          }
-        >
-          Start View
-        </button>
-        {error && <p className="commit-error">{error}</p>}
-      </section>
-    );
   }
 
   return (
-    <section className="commit-panel commit-panel-active">
-      <div className="commit-header">
-        <div className="commit-title">
-          <strong>Commit {session.id?.slice(0, 8)}</strong>
-          <small>
-            r{session.baseRevision} · {stagedObjects.length} w commicie
-          </small>
+    <section
+      className="commit-panel review-workspace"
+      aria-label="Przegląd zmian"
+      aria-busy={busy}
+    >
+      <header className="review-toolbar">
+        <div>
+          <h1>Porównaj i wybierz zmiany</h1>
+          <p>
+            Odznaczone propozycje zostają do dopracowania. Cofnięcie przywraca
+            zapisaną wartość.
+          </p>
         </div>
-        <span className={session.dirty ? "commit-dirty" : "commit-clean"}>
-          {session.dirty ? "UNCOMMITTED" : "CLEAN"}
-        </span>
-      </div>
-
-      <div className="commit-staged">
-        {stagedObjects.length ? (
-          stagedObjects.map((object) => (
-            <ChangeCard
+        <label>
+          Pokazuj
+          <select
+            aria-label="Filtr zmian"
+            value={filter}
+            onChange={(event) => setFilter(event.target.value)}
+          >
+            <option value="all">Wszystkie ({items.length})</option>
+            <option value="save">Do zapisu ({selected})</option>
+            <option value="later">Do dopracowania ({deferred})</option>
+            <option value="discarded">Cofnięte ({discarded})</option>
+          </select>
+        </label>
+      </header>
+      <div className="review-layout">
+        <label className="review-object-select">
+          Obiekt
+          <select
+            aria-label="Obiekt do porównania"
+            value={current?.id ?? ""}
+            onChange={(event) => setActiveId(event.target.value)}
+          >
+            {!visibleObjects.length && <option value="">Brak zmian</option>}
+            {visibleObjects.map((object) => (
+              <option key={object.id} value={object.id}>
+                {object.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <nav className="review-objects" aria-label="Obiekty ze zmianami">
+          {visibleObjects.map((object) => (
+            <button
               key={object.id}
-              object={object}
-              busy={busy}
-              onFocus={focusObject}
-              onUnstage={unstageObject}
-              onDiscard={discardObject}
-            />
-          ))
-        ) : (
-          <p className="commit-empty">Brak obiektów w commicie. Dodaj obiekt z zakładki View.</p>
-        )}
+              type="button"
+              aria-current={current?.id === object.id ? "true" : undefined}
+              onClick={() => setActiveId(object.id)}
+            >
+              <strong>{object.label}</strong>
+              <small>
+                {typeLabel(object.type)} ·{" "}
+                {
+                  object.reviewItems?.filter(
+                    (item) => item.selection === "save",
+                  ).length
+                }{" "}
+                do zapisu / {object.reviewItems?.length} zmian
+              </small>
+            </button>
+          ))}
+        </nav>
+        <main className="review-detail">
+          {current ? (
+            <>
+              <header className="review-object-header">
+                <div>
+                  <small>{typeLabel(current.type)}</small>
+                  <h2>{current.label}</h2>
+                </div>
+                {current.status !== "DELETED" && (
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => openObject(current)}
+                  >
+                    Dopracuj obiekt
+                  </button>
+                )}
+              </header>
+              <div className="review-bulk-actions">
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() =>
+                    void run(() =>
+                      sendCommit("REVIEW_ALL", {
+                        objectId: current.id,
+                        decision: "save",
+                      }),
+                    )
+                  }
+                >
+                  Zaznacz wszystkie
+                </button>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() =>
+                    void run(() =>
+                      sendCommit("REVIEW_ALL", {
+                        objectId: current.id,
+                        decision: "later",
+                      }),
+                    )
+                  }
+                >
+                  Wszystkie na później
+                </button>
+              </div>
+              {groups.map((group) => (
+                <section className="review-group" key={group}>
+                  <h3>{group}</h3>
+                  {currentItems
+                    .filter((item) => item.group === group)
+                    .map((item) => (
+                      <ReviewRow
+                        key={item.id}
+                        item={item}
+                        busy={busy}
+                        onDecide={decide}
+                      />
+                    ))}
+                </section>
+              ))}
+            </>
+          ) : (
+            <div className="review-empty">
+              <h2>
+                {items.length
+                  ? "Brak zmian dla tego filtra"
+                  : "Wszystko zapisane"}
+              </h2>
+              <p>
+                {items.length
+                  ? "Wybierz inny filtr, aby zobaczyć pozostałe propozycje."
+                  : "Zmiany z edycji i zaakceptowanego importu pojawią się tutaj automatycznie."}
+              </p>
+            </div>
+          )}
+        </main>
       </div>
-
-      <div className="commit-actions">
-        <button
-          type="button"
-          className="commit-discard"
-          disabled={busy || !stagedObjects.length}
-          onClick={() => void unstageAll()}
-        >
-          Wyczyść Commit
-        </button>
+      <footer className="review-footer">
+        <div>
+          <strong>{selected} do zapisu</strong>
+          <span>
+            {deferred} do dopracowania · {discarded} cofniętych
+          </span>
+        </div>
         <button
           type="button"
           className="commit-primary"
-          disabled={busy || !session.dirty}
+          disabled={busy || !selected}
           onClick={() =>
-            void run(
-              () => sendCommit<CommitResult>("COMMIT"),
-              (value) => setSession(value.session),
-            )
+            void run(async () => {
+              const value = await sendCommit<{ session: CommitSessionView }>(
+                "COMMIT",
+                {
+                  expectedReview: items
+                    .filter((item) => item.selection === "save")
+                    .map(({ id, fingerprint }) => ({ id, fingerprint })),
+                },
+              );
+              setMessage(
+                "Zapisano wybrane zmiany. Odłożone propozycje nadal czekają na dopracowanie.",
+              );
+              return value.session;
+            })
           }
         >
-          Commit to SQLite
+          {busy ? "Zapisywanie…" : `Zapisz wybrane (${selected})`}
         </button>
-      </div>
-      {error && <p className="commit-error">{error}</p>}
+        {error && (
+          <p className="commit-error" role="alert">
+            {error}
+          </p>
+        )}
+        {message && (
+          <p className="review-message" role="status">
+            {message}
+          </p>
+        )}
+      </footer>
     </section>
   );
 }
