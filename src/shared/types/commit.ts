@@ -19,7 +19,7 @@ export interface DraftCommit {
 }
 
 export interface ReviewTarget {
-  kind: "field" | "property" | "row" | "object";
+  kind: "field" | "property" | "row" | "object" | "operator_roles";
   key: string;
   collection?: string;
 }
@@ -34,6 +34,8 @@ export interface StoredReviewChange {
   label: string;
   before: Record<string, unknown> | null;
   after: Record<string, unknown> | null;
+  /** Dependent operator rows reviewed and applied as one transaction. */
+  members?: StoredReviewChange[];
 }
 
 export interface CommitReviewItem {
@@ -52,6 +54,9 @@ export type CommitValueChangeStatus = "ADDED" | "MODIFIED" | "REMOVED";
 
 export interface CommitValueChange {
   field: string;
+  /** Identifies and labels a row inside an atomic review change. */
+  key?: string;
+  subject?: string;
   status: CommitValueChangeStatus;
   before?: string;
   after?: string;

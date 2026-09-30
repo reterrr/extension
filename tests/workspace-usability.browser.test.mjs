@@ -39,6 +39,13 @@ const state = {
       values: { name: "Rzeszowska Agencja Rozwoju", nip: "8130010538" },
     },
     {
+      id: "operator-b",
+      type: "operator",
+      values: {
+        name: "Regionalny Fundusz Rozwoju Kompetencji i Przedsiębiorczości",
+      },
+    },
+    {
       id: "call",
       type: "recruitment",
       sourceUrl,
@@ -698,6 +705,113 @@ test(
     }
     await page.keyboard.press("Escape");
     assert.equal(await page.locator(".view-search-dialog").isVisible(), false);
+
+    // A real domain operation promotes B and demotes the existing main A.
+    // Review, undo, restore and commit must treat both rows as one decision.
+    await page.evaluate(async () => {
+      await browser.runtime.sendMessage({
+        type: "BURBOT_DATA",
+        op: "ADD_OPERATOR_ASSIGNMENT",
+        objectId: "project",
+        operatorId: "operator-b",
+        operatorType: "GLOWNY",
+        expectedRevision: window.__uiState.revision,
+      });
+    });
+    await page.keyboard.press("Alt+2");
+    await page
+      .locator(".review-objects button")
+      .filter({ hasText: "Małopolski" })
+      .click();
+    const swap = page.locator(".review-row").filter({
+      has: page.getByRole("checkbox", {
+        name: "Zapisz: Zmiana operatora głównego",
+        exact: true,
+      }),
+    });
+    await swap.waitFor();
+    assert.equal(await swap.getByRole("checkbox").count(), 1);
+    assert.match(await swap.innerText(), /Rzeszowska Agencja Rozwoju/);
+    assert.match(await swap.innerText(), /Regionalny Fundusz/);
+    await swap.getByRole("checkbox").focus();
+    await page.keyboard.press("Space");
+    await page.waitForFunction(() =>
+      window.ReviewTest.reviewItems(window.__uiDraft).some(
+        (item) =>
+          item.label === "Zmiana operatora głównego" &&
+          item.selection === "later",
+      ),
+    );
+    assert.equal(await swap.getByRole("checkbox").isChecked(), false);
+    assert.deepEqual(
+      await page.evaluate(() =>
+        window.ReviewTest.applyReviewedChanges(window.__uiDraft)
+          .operatorAssignments.filter((row) => row.objectId === "project")
+          .map((row) => [row.operatorId, row.operatorType]),
+      ),
+      [["operator", "GLOWNY"]],
+    );
+    await swap.getByRole("button", { name: "Cofnij zmianę" }).click();
+    await page.waitForFunction(
+      () =>
+        window.__uiState.operatorAssignments.filter(
+          (row) => row.objectId === "project",
+        ).length === 1,
+    );
+    assert.equal(await swap.getByRole("checkbox").isDisabled(), true);
+    await swap.getByRole("button", { name: "Przywróć propozycję" }).click();
+    await page.waitForFunction(
+      () =>
+        window.__uiState.operatorAssignments.filter(
+          (row) => row.objectId === "project",
+        ).length === 2,
+    );
+    assert.equal(await swap.getByRole("checkbox").isChecked(), false);
+    // The controlled checkbox updates after the background IPC response.
+    await swap.getByRole("checkbox").click();
+    await page.waitForFunction(() =>
+      window.ReviewTest.reviewItems(window.__uiDraft).some(
+        (item) =>
+          item.label === "Zmiana operatora głównego" &&
+          item.selection === "save",
+      ),
+    );
+    for (const width of [320, 1280]) {
+      await page.setViewportSize({ width, height: 900 });
+      assert.equal(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth <= innerWidth + 1,
+        ),
+        true,
+        `operator group overflow at ${width}`,
+      );
+      if (process.env.BURBOT_UI_SCREENSHOTS)
+        await page.screenshot({
+          path: resolve(
+            process.env.BURBOT_UI_SCREENSHOTS,
+            `operator-swap-${width}.png`,
+          ),
+        });
+    }
+    await page.getByRole("button", { name: /^Zapisz wybrane/ }).click();
+    await page.waitForFunction(() =>
+      window.__uiCommitted.operatorAssignments.some(
+        (row) => row.operatorId === "operator-b",
+      ),
+    );
+    assert.deepEqual(
+      await page.evaluate(() =>
+        window.__uiCommitted.operatorAssignments
+          .filter((row) => row.objectId === "project")
+          .map((row) => [row.operatorId, row.operatorType])
+          .sort(),
+      ),
+      [
+        ["operator", "DODATKOWY"],
+        ["operator-b", "GLOWNY"],
+      ],
+    );
+    assert.equal(await page.locator(".commit-error").count(), 0);
     assert.deepEqual(errors, []);
   },
 );
