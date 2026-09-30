@@ -657,7 +657,7 @@ test("genuinely invalid changed roles still block saving and identify the owning
   }
 });
 
-test("nested and top-level AI export copies do not duplicate recruitment review or save", () => {
+test("portable exports keep each recruitment once without changing review or save", () => {
   const d = operatorDraft("recruitment");
   for (const state of [d.baseState, d.workingState]) {
     state.objects.push({
@@ -673,7 +673,14 @@ test("nested and top-level AI export copies do not duplicate recruitment review 
     view: { objectIds: ["parent", "p"], type: "all" },
     schema: {},
   });
-  assert.deepEqual(exported.objects[0].recruitments[0], exported.objects[1]);
+  assert.equal(
+    exported.objects.filter((object) => object.key === "p").length,
+    1,
+  );
+  assert.equal(
+    exported.objects.some((object) => object.recruitments),
+    false,
+  );
   assert.deepEqual(d.workingState, before);
   assert.equal(review.reviewItems(d).length, 1);
   assert.equal(review.reviewItems(d)[0].objectId, "p");

@@ -1,6 +1,12 @@
-# Burbot portable import JSON v1
+# Burbot portable import/export JSON v1
 
 Burbot import keeps source snapshots separate from the business objects extracted from them. `sources[].snapshot.text` should be a faithful textual snapshot of the real source. Evidence points into that snapshot with Unicode code-point offsets.
+
+Both **Eksportuj zestaw** and **Eksportuj wszystkie dane JSON** write this same v1 document, directly accepted by Import. View export includes related recruitments for selected projects and the referenced projects/operators needed by `$ref`. Every object appears once in `objects`; there are no nested recruitment copies. Stable object/row keys survive editing and reimport. Source snapshots and supported evidence are retained, with identical stored snapshot copies deduplicated. A file without a captured text snapshot uses `snapshot.text: ""`; this is not evidence that its contents were read.
+
+`objects[].source_url` is an optional absolute HTTP(S) URL identifying the original source page independently of evidence. It survives review and approval. System timestamps, draft decisions and executable DOM rules are not part of this business format. The JSON contains file URLs, not binary attachments; loopback URLs require the original local file server.
+
+Older `burbot-ai-view` documents and full workspace JSON backups are converted to the same business format on import. Identical nested/top-level copies are deduplicated by ID; conflicting copies produce an error. Unknown business fields and missing referenced objects are reported, not silently removed. Legacy rules are never executed or reconstructed by import.
 
 The v1 format is backward compatible. Objects can declare remote file attachments, contacts, geography and financing variants.
 

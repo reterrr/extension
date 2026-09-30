@@ -238,7 +238,7 @@ function stageExistingObjectUpdate(
     let row = (state.financingRules ?? []).find(
       (candidate) =>
         candidate.objectId === target.id &&
-        String(candidate.importKey ?? "") === importKey,
+        (String(candidate.importKey ?? "") === importKey || String(candidate.id) === importKey),
     );
 
     if (!row) {
@@ -351,7 +351,7 @@ function stageExistingObjectUpdate(
       (candidate) =>
         candidate.objectId === target.id &&
         importedRow.importKey &&
-        candidate.importKey === importedRow.importKey,
+        (candidate.importKey === importedRow.importKey || String(candidate.id) === importedRow.importKey),
     );
     row ??= (state.operatorAssignments ?? []).find(
       (candidate) =>
@@ -381,7 +381,7 @@ function stageExistingObjectUpdate(
       (candidate) =>
         candidate.objectId === target.id &&
         importedRow.importKey &&
-        candidate.importKey === importedRow.importKey,
+        (candidate.importKey === importedRow.importKey || String(candidate.id) === importedRow.importKey),
     );
     row ??= (state.geographies ?? []).find(
       (candidate) =>
@@ -429,7 +429,7 @@ function stageExistingObjectUpdate(
       (candidate) =>
         candidate.objectId === target.id &&
         importedRow.importKey &&
-        candidate.importKey === importedRow.importKey,
+        (candidate.importKey === importedRow.importKey || String(candidate.id) === importedRow.importKey),
     );
     row ??= (state.operatorContacts ?? []).find(
       (candidate) =>
@@ -464,7 +464,7 @@ function stageExistingObjectUpdate(
       (candidate) =>
         candidate.objectId === target.id &&
         importedRow.importKey &&
-        candidate.importKey === importedRow.importKey,
+        (candidate.importKey === importedRow.importKey || String(candidate.id) === importedRow.importKey),
     );
     row ??= (state.documentRequirements ?? []).find(
       (candidate) =>
