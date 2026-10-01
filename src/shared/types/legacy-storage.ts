@@ -131,7 +131,7 @@ export interface LegacyStoredFileSource {
   objectId: string;
   fileType: SourceFileType;
   url: string;
-  /** Always derived from the remote file URL / actual filename. */
+  /** Canonical URL filename when available; otherwise a page-provided document label. */
   name: string;
   sourcePageUrl: string;
   addedAt: string;
