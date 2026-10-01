@@ -492,6 +492,7 @@ function mutateFileSource(
       String(message.file.url ?? ""),
       String(message.file.sourcePageUrl ?? ""),
       typeof message.file.name === "string" ? message.file.name : undefined,
+      message.file.fileType,
     );
     const sources = (state.fileSources ||= []);
     if (
