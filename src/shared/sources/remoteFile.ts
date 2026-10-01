@@ -118,9 +118,17 @@ export function createRemoteFileSourceCandidate(
   const sourcePage = httpUrl(sourcePageUrl);
   const url = httpUrl(rawUrl, sourcePage.href);
   const urlFileType = sourceFileTypeFromUrl(url.href);
+  const pathExtension = /\.([^.\/]+)$/i.exec(url.pathname)?.[1] ?? null;
   const hintedType = isSourceFileType(fileTypeHint)
     ? fileTypeHint
     : sourceFileTypeFromHint(nameHint);
+
+  if (!urlFileType && pathExtension && !hintedType) {
+    throw new Error(
+      "Choose a supported document/file link, or an opaque download URL without a filename extension.",
+    );
+  }
+
   const fileType = urlFileType ?? hintedType ?? "OTHER";
 
   const file: RemoteFileSourceCandidate = {
