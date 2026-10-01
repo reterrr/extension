@@ -1,3 +1,6 @@
+import "../shared/domain/geographyRuntime";
+import { readWorkspaceState } from "./workspaceData";
+import "./geographyStyles";
 import { createCapturedExtractionInput } from "../shared/extraction/rules";
 import { geographyInheritanceStatus } from "../shared/configurationInheritance";
 import { isPickerSelectionResponse } from "../shared/messaging/picker";
@@ -11,7 +14,6 @@ import type {
   LegacyStoredObject,
 } from "../shared/types/legacy-storage";
 
-const STORAGE_KEY = "burbot:v1";
 let initialized = false;
 let state = BurbotCore.empty() as LegacyStorageState;
 let activePageUrl = "";
@@ -61,6 +63,7 @@ async function data(
   op: string,
   payload: Record<string, unknown> = {},
 ): Promise<LegacyStorageState> {
+  if (op === "GET") return state = await readWorkspaceState();
   const response = (await browser.runtime.sendMessage({
     type: "BURBOT_DATA",
     op,
@@ -582,6 +585,7 @@ function render(): void {
   const enabled = !!object && !!BurbotSchema[object.type]?.geography;
   section.hidden = !enabled;
   if (!object || !enabled) return;
+  if (!(document.getElementById("geography-panel") as HTMLDetailsElement).open) return;
 
   const subtitle = $("geography-subtitle");
   subtitle.textContent =
@@ -604,7 +608,7 @@ function render(): void {
 function queueRender(): void {
   if (renderQueued) return;
   renderQueued = true;
-  queueMicrotask(render);
+  requestAnimationFrame(() => { if (renderQueued) render(); });
 }
 
 function populateSelectors(): void {
@@ -703,36 +707,23 @@ export async function initGeographyUi(): Promise<void> {
   await refreshActivePage();
 
   const observer = new MutationObserver(queueRender);
-  observer.observe($("workspace"), {
-    attributes: true,
-    attributeFilter: ["data-active-object-id"],
-  });
   observer.observe($("connection"), {
     childList: true,
     subtree: true,
     characterData: true,
   });
-  observer.observe($("object-title"), {
-    childList: true,
-    subtree: true,
-  });
 
-  browser.storage.onChanged.addListener((changes, area) => {
-    if (area !== "local") return;
-    const next = changes[STORAGE_KEY]?.newValue as LegacyStorageState | undefined;
-    if (!next) return;
-    state = next;
-    queueRender();
-  });
-
-  browser.tabs.onActivated.addListener(() => {
+  browser.tabs.onActivated.addListener((info) => {
+    if (info.windowId !== uiWindowId) return;
     void refreshActivePage().then(queueRender).catch(() => undefined);
   });
-  browser.tabs.onUpdated.addListener((_id, change) => {
+  browser.tabs.onUpdated.addListener((_id, change, tab) => {
+    if (!tab?.active || tab.windowId !== uiWindowId) return;
     if (change.url || change.status === "complete")
       void refreshActivePage().then(queueRender).catch(() => undefined);
   });
 
+  $("geography-panel").addEventListener("toggle", queueRender);
   window.addEventListener("burbot:active-object-changed", queueRender);
   window.addEventListener("burbot:workspace-state-changed", (event) => {
     const next = (event as CustomEvent<{ state?: LegacyStorageState }>).detail?.state;
@@ -740,5 +731,6 @@ export async function initGeographyUi(): Promise<void> {
     queueRender();
   });
   window.addEventListener("pagehide", persistGeographyUi);
+  state = await readWorkspaceState();
   render();
 }

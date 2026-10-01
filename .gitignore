@@ -7,3 +7,5 @@ test-artifacts/
 data/*.sqlite
 data/*.sqlite-wal
 data/*.sqlite-shm
+
+.build/

@@ -1,3 +1,5 @@
+import { readWorkspaceState } from "./workspaceData";
+import "./selectorHighlightStyles";
 import { selectorColor } from "../shared/selectorPalette";
 import {
   IMPORT_EVIDENCE_LOCATOR_STORAGE_KEY,
@@ -12,11 +14,20 @@ import type {
   LegacyStoredRule,
 } from "../shared/types/legacy-storage";
 
-const STORAGE_KEY = "burbot:v1";
 let initialized = false;
 let state = BurbotCore.empty() as LegacyStorageState;
 let activePageUrl = "";
 let syncQueued = false;
+let syncRunning = false;
+let syncRequested = false;
+let syncVersion = 0;
+let locatorCache: Record<string, unknown> = {};
+let windowId: number | undefined;
+
+function updateLocatorCache(value: unknown): void {
+  locatorCache = value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown> : {};
+}
 
 type PendingSelectorPreview = {
   objectId: string;
@@ -29,20 +40,11 @@ type PendingSelectorPreview = {
 let pendingPreview: PendingSelectorPreview | null = null;
 
 async function data(): Promise<LegacyStorageState> {
-  const response = (await browser.runtime.sendMessage({
-    type: "BURBOT_DATA",
-    op: "GET",
-    expectedRevision: state.revision,
-  })) as { ok?: boolean; value?: LegacyStorageState };
-
-  if (!response?.ok || !response.value) throw new Error("Storage is unavailable.");
-  state = response.value;
-  return state;
+  return state = await readWorkspaceState();
 }
 
 async function activeTab(): Promise<browser.tabs.Tab | undefined> {
-  const currentWindow = await browser.windows.getCurrent();
-  const tabs = await browser.tabs.query({ active: true, windowId: currentWindow.id });
+  const tabs = await browser.tabs.query({ active: true, windowId });
   return tabs[0];
 }
 
@@ -204,7 +206,9 @@ function colorSidebar(): void {
 async function renderPageHighlights(
   tabId: number,
   highlights: SelectorHighlight[],
+  current: () => boolean,
 ): Promise<void> {
+  if (!current()) return;
   try {
     await browser.tabs.sendMessage(tabId, {
       type: "BURBOT_SHOW_SELECTOR_HIGHLIGHTS",
@@ -215,10 +219,12 @@ async function renderPageHighlights(
     // Inject lazily if the persistent runtime is not present yet.
   }
 
+  if (!highlights.length || !current()) return;
   await browser.scripting.executeScript({
     target: { tabId },
     files: ["selector-highlights.js"],
   });
+  if (!current()) return;
   await browser.tabs.sendMessage(tabId, {
     type: "BURBOT_SHOW_SELECTOR_HIGHLIGHTS",
     highlights,
@@ -226,24 +232,14 @@ async function renderPageHighlights(
 }
 
 async function syncPage(): Promise<void> {
+  const version = syncVersion;
   const tab = await activeTab();
+  if (version !== syncVersion) return;
   activePageUrl = tab?.url ?? "";
   colorSidebar();
   let protocol = "";
   try { protocol = new URL(activePageUrl).protocol; } catch {}
   if (!tab || tab.id === undefined || !["http:", "https:"].includes(protocol)) return;
-
-  const locatorStored = await browser.storage.local.get(
-    IMPORT_EVIDENCE_LOCATOR_STORAGE_KEY,
-  );
-  const locatorValue =
-    locatorStored[IMPORT_EVIDENCE_LOCATOR_STORAGE_KEY];
-  const locatorCache =
-    locatorValue &&
-    typeof locatorValue === "object" &&
-    !Array.isArray(locatorValue)
-      ? locatorValue
-      : {};
 
   const highlights: SelectorHighlight[] = buildStoredSelectorHighlights(
     state,
@@ -257,31 +253,42 @@ async function syncPage(): Promise<void> {
     highlights.push(pendingPreview.highlight);
   }
 
-  try { await renderPageHighlights(tab.id, highlights); } catch {}
+  try { await renderPageHighlights(tab.id, highlights, () => version === syncVersion); } catch {}
 }
 
 function queueSync(): void {
-  if (syncQueued) return;
+  syncVersion++;
+  syncRequested = true;
+  if (syncQueued || syncRunning) return;
   syncQueued = true;
-  queueMicrotask(() => { syncQueued = false; void syncPage(); });
+  requestAnimationFrame(() => {
+    syncQueued = false;
+    syncRequested = false;
+    syncRunning = true;
+    void syncPage().catch(() => undefined).finally(() => {
+      syncRunning = false;
+      if (syncRequested) queueSync();
+    });
+  });
 }
 
 export async function initSelectorHighlightsUi(): Promise<void> {
   if (initialized) return;
   initialized = true;
+  windowId = (await browser.windows.getCurrent()).id;
   await data();
+  const stored = await browser.storage.local.get(IMPORT_EVIDENCE_LOCATOR_STORAGE_KEY);
+  updateLocatorCache(stored[IMPORT_EVIDENCE_LOCATOR_STORAGE_KEY]);
   const tab = await activeTab();
   activePageUrl = tab?.url ?? "";
-  const workspace = document.getElementById("workspace");
-  if (workspace) {
-    const observer = new MutationObserver(queueSync);
-    observer.observe(workspace, { childList: true, subtree: true, attributes: true, attributeFilter: ["aria-current", "hidden"] });
-  }
+  // Sidebar layout changes only need recolouring, not storage reads and a
+  // complete page-highlights IPC round trip.
+  window.addEventListener("burbot:workspace-rendered", colorSidebar);
   document.addEventListener("click", (event) => {
     const target = event.target;
-    if (target instanceof Element && target.closest(".field-row")) queueSync();
+    if (target instanceof Element && target.closest(".field-row")) colorSidebar();
   }, true);
-  window.addEventListener("burbot:active-object-changed", queueSync);
+  window.addEventListener("burbot:active-object-changed", colorSidebar);
   window.addEventListener("burbot:selector-highlights-refresh", queueSync);
   window.addEventListener("burbot:workspace-state-changed", (event) => {
     const next = (event as CustomEvent<{ state?: LegacyStorageState }>).detail?.state;
@@ -297,14 +304,19 @@ export async function initSelectorHighlightsUi(): Promise<void> {
   browser.storage.onChanged.addListener((changes, area) => {
     if (area !== "local") return;
 
-    const next = changes[STORAGE_KEY]?.newValue as LegacyStorageState | undefined;
-    if (next) state = next;
-
-    if (next || changes[IMPORT_EVIDENCE_LOCATOR_STORAGE_KEY]) {
+    if (changes[IMPORT_EVIDENCE_LOCATOR_STORAGE_KEY]) {
+      updateLocatorCache(changes[IMPORT_EVIDENCE_LOCATOR_STORAGE_KEY].newValue);
       queueSync();
     }
   });
-  browser.tabs.onActivated.addListener(queueSync);
-  browser.tabs.onUpdated.addListener((_tabId, change) => { if (change.url || change.status === "complete") queueSync(); });
-  await syncPage();
+  browser.tabs.onActivated.addListener((info) => { if (info.windowId === windowId) queueSync(); });
+  browser.tabs.onUpdated.addListener((_tabId, change, tab) => {
+    if (tab?.active && tab.windowId === windowId && (change.url || change.status === "complete")) queueSync();
+  });
+  queueSync();
+}
+
+export function setSelectorPreview(preview: PendingSelectorPreview | null): void {
+  pendingPreview = preview;
+  queueSync();
 }

@@ -233,6 +233,7 @@ function selectFundingTab(root: HTMLElement, size: string): void {
 }
 
 function enhanceFunding(): void {
+  if (!($("funding-panel") as HTMLDetailsElement | null)?.open) return;
   const root = $("funding");
   if (!root) return;
 
@@ -406,7 +407,7 @@ function enhanceStaticStatuses(): void {
     (row) => (row as HTMLElement).dataset.classified !== "true",
   ).length;
   const fileStatus = $("file-source-count");
-  if (fileStatus) {
+  if (fileStatus && $("file-sources-panel")?.dataset.featureReady === "true" && ($("file-sources-panel") as HTMLDetailsElement).open) {
     setText(
       fileStatus,
       !fileCount
@@ -426,7 +427,7 @@ function enhanceStaticStatuses(): void {
     "#geography-list .geography-row",
   ).length;
   const geographyStatus = $("geography-count");
-  if (geographyStatus) {
+  if (geographyStatus && $("geography-panel")?.dataset.featureReady === "true" && ($("geography-panel") as HTMLDetailsElement).open) {
     setText(
       geographyStatus,
       geographyRows

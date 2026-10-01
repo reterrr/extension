@@ -1,19 +1,14 @@
 import { useEffect, useState } from "react";
-import { readImportReview } from "../shared/import/reviewStore";
+import { readImportReviewCount } from "../shared/import/reviewSummary";
+import { readCommitSummary } from "./commitSummary";
+import { readWorkspaceState } from "./workspaceData";
 import {
   OBJECT_VIEW_STORAGE_KEY,
   normalizeObjectView,
 } from "../shared/search/objectView.js";
-import type { CommitSessionView } from "../shared/types/commit";
-import type { LegacyStorageState } from "../shared/types/legacy-storage";
 
 type WorkflowMode = "view" | "commit" | "import";
 const KEY = "burbot:workflow-mode";
-
-interface CommitResponse<T> {
-  ok?: boolean;
-  value?: T;
-}
 
 async function readMode(): Promise<WorkflowMode> {
   const stored = await browser.storage.session.get(KEY);
@@ -22,27 +17,17 @@ async function readMode(): Promise<WorkflowMode> {
 }
 
 async function commitCount(): Promise<number> {
-  const response = (await browser.runtime.sendMessage({
-    type: "BURBOT_COMMIT",
-    op: "GET",
-  })) as CommitResponse<CommitSessionView>;
-  if (!response?.ok || !response.value) return 0;
-  return response.value.objects.filter(
-    (object) => object.status !== "UNCHANGED",
-  ).length;
+  return (await readCommitSummary()).objects.length;
 }
 
 async function viewCount(): Promise<number> {
   const [stored, stateResponse] = await Promise.all([
     browser.storage.session.get(OBJECT_VIEW_STORAGE_KEY),
-    browser.runtime.sendMessage({
-      type: "BURBOT_DATA",
-      op: "GET",
-    }) as Promise<CommitResponse<LegacyStorageState>>,
+    readWorkspaceState(),
   ]);
   const value = stored[OBJECT_VIEW_STORAGE_KEY];
-  if (!value || !stateResponse?.ok || !stateResponse.value) return 0;
-  const normalized = normalizeObjectView(value, stateResponse.value.objects);
+  if (!value || !stateResponse) return 0;
+  const normalized = normalizeObjectView(value, stateResponse.objects);
   return normalized?.objectIds.length ?? 0;
 }
 
@@ -54,29 +39,23 @@ export function WorkflowTabs() {
 
   async function refreshCounts() {
     const [review, staged, viewed] = await Promise.all([
-      readImportReview(),
+      readImportReviewCount(),
       commitCount(),
       viewCount(),
     ]);
 
-    setImportCount(
-      review
-        ? review.objectOrder.filter(
-            (id) => (review.statusByObjectId[id] ?? "PENDING") === "PENDING",
-          ).length
-        : 0,
-    );
+    setImportCount(review);
     setStagedCount(staged);
     setActiveViewCount(viewed);
   }
 
   async function setMode(next: WorkflowMode) {
     setModeState(next);
-    await browser.storage.session.set({ [KEY]: next });
     document.documentElement.dataset.workflowMode = next;
     window.dispatchEvent(
       new CustomEvent("burbot:workflow-mode", { detail: { mode: next } }),
     );
+    await browser.storage.session.set({ [KEY]: next });
   }
 
   useEffect(() => {
@@ -89,9 +68,28 @@ export function WorkflowTabs() {
         new CustomEvent("burbot:workflow-mode", { detail: { mode: initial } }),
       );
     });
-    void refreshCounts();
+    void refreshCounts().catch(() => undefined);
 
-    const refresh = () => void refreshCounts();
+    let queued = false;
+    let running = false;
+    let again = false;
+    const refresh = () => {
+      again = true;
+      if (queued || running) return;
+      queued = true;
+      requestAnimationFrame(() => {
+        queued = false;
+        if (disposed) return;
+        again = false;
+        running = true;
+        void refreshCounts()
+          .catch(() => undefined)
+          .finally(() => {
+            running = false;
+            if (again && !disposed) refresh();
+          });
+      });
+    };
     const modeRequested = (event: Event) => {
       const requested = (event as CustomEvent<{ mode?: WorkflowMode }>).detail
         ?.mode;
@@ -111,7 +109,7 @@ export function WorkflowTabs() {
         area === "session" &&
         (changes[OBJECT_VIEW_STORAGE_KEY] || changes[KEY])
       ) {
-        void refreshCounts();
+        refresh();
       }
     };
 

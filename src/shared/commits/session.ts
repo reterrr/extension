@@ -11,6 +11,7 @@ import type {
 } from "../types/legacy-storage";
 import { changedObjectIds } from "./staging";
 import { reviewItems } from "./review";
+import { indexReviewState, type ReviewStateIndex } from "./stateIndex";
 
 function stable(value: unknown): string {
   return JSON.stringify(value ?? null) ?? String(value);
@@ -133,24 +134,6 @@ function collectionDelta(
   return { added, modified, removed };
 }
 
-function relatedRows(
-  state: LegacyStorageState,
-  key: keyof LegacyStorageState,
-  objectId: string,
-): RelatedRow[] {
-  const value = state[key];
-  if (!Array.isArray(value)) return [];
-  return (value as unknown[])
-    .filter(
-      (row) =>
-        typeof row === "object" &&
-        row !== null &&
-        "objectId" in row &&
-        String((row as RelatedRow).objectId) === objectId,
-    )
-    .map((row) => row as RelatedRow);
-}
-
 const RELATED_COLLECTIONS: Array<{
   key: keyof LegacyStorageState;
   label: string;
@@ -167,15 +150,16 @@ const RELATED_COLLECTIONS: Array<{
 ];
 
 function relatedChanges(
-  draft: DraftCommit,
+  base: ReviewStateIndex,
+  working: ReviewStateIndex,
   objectId: string,
 ): CommitRelatedChange[] {
   const changes: CommitRelatedChange[] = [];
 
   for (const collection of RELATED_COLLECTIONS) {
     const delta = collectionDelta(
-      relatedRows(draft.baseState, collection.key, objectId),
-      relatedRows(draft.workingState, collection.key, objectId),
+      base.rows(collection.key, objectId),
+      working.rows(collection.key, objectId),
     );
     if (!delta.added && !delta.modified && !delta.removed) continue;
     changes.push({
@@ -191,16 +175,14 @@ function relatedChanges(
 export function projectCommitObjects(
   draft: DraftCommit,
 ): CommitSessionObject[] {
-  const baseById = new Map(
-    draft.baseState.objects.map((object) => [object.id, object]),
-  );
-  const workingById = new Map(
-    draft.workingState.objects.map((object) => [object.id, object]),
-  );
+  const baseIndex = indexReviewState(draft.baseState);
+  const workingIndex = indexReviewState(draft.workingState);
+  const baseById = baseIndex.objects;
+  const workingById = workingIndex.objects;
 
   const working = draft.workingState.objects.map((object) => {
     const base = baseById.get(object.id);
-    const nestedChanges = relatedChanges(draft, object.id);
+    const nestedChanges = relatedChanges(baseIndex, workingIndex, object.id);
     return {
       id: object.id,
       type: object.type,
@@ -227,7 +209,7 @@ export function projectCommitObjects(
           label: labelOf(object),
           status: "DELETED",
           changes: [],
-          relatedChanges: relatedChanges(draft, object.id),
+          relatedChanges: relatedChanges(baseIndex, workingIndex, object.id),
           staged: (draft.stagedObjectIds ?? []).includes(object.id),
         }) satisfies CommitSessionObject,
     );
@@ -235,6 +217,12 @@ export function projectCommitObjects(
   const objects: CommitSessionObject[] = [...working, ...deleted];
   if (draft.reviewVersion === 1) {
     const items = reviewItems(draft);
+    const itemsByObject = new Map<string, typeof items>();
+    for (const item of items) {
+      const entries = itemsByObject.get(item.objectId);
+      if (entries) entries.push(item);
+      else itemsByObject.set(item.objectId, [item]);
+    }
     for (const archived of Object.values(draft.discardedChanges ?? {})) {
       if (!objects.some((object) => object.id === archived.objectId))
         objects.push({
@@ -248,7 +236,7 @@ export function projectCommitObjects(
         });
     }
     for (const object of objects) {
-      object.reviewItems = items.filter((item) => item.objectId === object.id);
+      object.reviewItems = itemsByObject.get(object.id) ?? [];
       object.staged = object.reviewItems.some(
         (item) => item.selection === "save",
       );
@@ -267,7 +255,13 @@ export function commitSessionView(
   }
 
   const objects = projectCommitObjects(draft);
-  const changedIds = new Set(changedObjectIds(draft));
+  const changedIds = new Set(
+    draft.reviewVersion === 1
+      ? objects.filter((object) => object.reviewItems?.some(
+          (item) => item.selection !== "discarded",
+        )).map((object) => object.id)
+      : changedObjectIds(draft),
+  );
   const stagedIds = new Set(
     draft.reviewVersion === 1
       ? objects.filter((object) => object.staged).map((object) => object.id)

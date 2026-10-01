@@ -4,7 +4,7 @@ import {
   applyReviewedChanges,
   rebaseReviewedChanges,
   reviewChanges,
-  decideReviewChange,
+  decideAllReviewChanges,
 } from "./review";
 
 const OBJECT_SCOPED_KEYS = [
@@ -178,10 +178,7 @@ export function discardViewObject(
 
 export function stageObject(draft: DraftCommit, objectId: string): DraftCommit {
   if (draft.reviewVersion === 1)
-    for (const change of reviewChanges(draft).filter(
-      (entry) => entry.objectId === objectId,
-    ))
-      decideReviewChange(draft, change.id, "save");
+    decideAllReviewChanges(draft, "save", objectId);
   if (!draft.stagedObjectIds.includes(objectId)) {
     draft.stagedObjectIds.push(objectId);
   }
@@ -193,10 +190,7 @@ export function unstageObject(
   objectId: string,
 ): DraftCommit {
   if (draft.reviewVersion === 1)
-    for (const change of reviewChanges(draft).filter(
-      (entry) => entry.objectId === objectId,
-    ))
-      decideReviewChange(draft, change.id, "later");
+    decideAllReviewChanges(draft, "later", objectId);
   draft.stagedObjectIds = draft.stagedObjectIds.filter((id) => id !== objectId);
   return draft;
 }

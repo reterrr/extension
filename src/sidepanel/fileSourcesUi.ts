@@ -1,3 +1,5 @@
+import { readWorkspaceState } from "./workspaceData";
+import "./fileSourceStyles";
 import { createPickerClient, type PickerClient } from "./pickerRpc";
 import {
   localUploadValidationMessage,
@@ -28,8 +30,14 @@ import {
   projectForRecruitment,
 } from "../shared/fileInheritance";
 
-const STORAGE_KEY = "burbot:v1";
 let initialized = false;
+let renderQueued = false;
+
+function queueRender(): void {
+  if (renderQueued) return;
+  renderQueued = true;
+  requestAnimationFrame(() => { if (renderQueued) render(); });
+}
 let state = BurbotCore.empty() as LegacyStorageState;
 let activePageUrl = "";
 let activePageTabId: number | null = null;
@@ -93,6 +101,7 @@ async function data(
   op: string,
   payload: Record<string, unknown> = {},
 ): Promise<LegacyStorageState> {
+  if (op === "GET") return state = await readWorkspaceState();
   const response = (await browser.runtime.sendMessage({
     type: "BURBOT_DATA",
     op,
@@ -104,11 +113,6 @@ async function data(
     throw new Error(response?.error ?? "Storage is unavailable.");
   }
   state = response.value;
-  window.dispatchEvent(
-    new CustomEvent("burbot:workspace-state-changed", {
-      detail: { state },
-    }),
-  );
   return state;
 }
 
@@ -1018,10 +1022,12 @@ function renderMode(): void {
 }
 
 function render(): void {
+  renderQueued = false;
   const object = chosenObject();
   const section = $("file-sources-section");
   section.hidden = !object;
   if (!object) return;
+  if (!(document.getElementById("file-sources-panel") as HTMLDetailsElement).open) return;
 
   const root = $("file-source-list");
   const sources = (state.fileSources ?? []).filter(
@@ -1219,29 +1225,23 @@ export async function initFileSourcesUi(): Promise<void> {
     notice(error instanceof Error ? error.message : String(error), true);
   });
 
-  const observer = new MutationObserver(render);
-  observer.observe($("workspace"), {
-    attributes: true,
-    attributeFilter: ["data-active-object-id"],
-  });
-  observer.observe($("object-title"), { childList: true, subtree: true });
+  const observer = new MutationObserver(queueRender);
   observer.observe($("connection"), {
     childList: true,
     subtree: true,
     characterData: true,
   });
 
-  window.addEventListener("burbot:active-object-changed", render);
-
-  browser.storage.onChanged.addListener((changes, area) => {
-    if (area !== "local") return;
-    const next = changes[STORAGE_KEY]?.newValue as LegacyStorageState | undefined;
-    if (!next) return;
-    state = next;
-    render();
+  $("file-sources-panel").addEventListener("toggle", queueRender);
+  window.addEventListener("burbot:active-object-changed", queueRender);
+  window.addEventListener("burbot:workspace-state-changed", (event) => {
+    const next = (event as CustomEvent<{ state?: LegacyStorageState }>).detail?.state;
+    if (next) state = next;
+    queueRender();
   });
 
-  browser.tabs.onActivated.addListener(() => {
+  browser.tabs.onActivated.addListener((info) => {
+    if (info.windowId !== currentWindowId) return;
     void reconnectFileMode().catch((error: unknown) => {
       notice(error instanceof Error ? error.message : String(error), true);
     });
@@ -1263,5 +1263,6 @@ export async function initFileSourcesUi(): Promise<void> {
     fileModeEnabled = false;
     void stopPickerConnection();
   });
+  state = await readWorkspaceState();
   render();
 }

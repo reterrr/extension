@@ -8,6 +8,7 @@ import {
   resolvePdfTextSelector,
 } from "../shared/pdf/textSelector";
 import { createCapturedExtractionInput } from "../shared/extraction/rules";
+import { initWorkspaceEvents } from "../shared/storage/workspaceEvents";
 import type { PdfTextExtractionCandidate } from "../shared/types/picker";
 import type {
   LegacyStorageState,
@@ -16,6 +17,7 @@ import type {
 } from "../shared/types/legacy-storage";
 
 GlobalWorkerOptions.workerSrc = browser.runtime.getURL("pdf.worker.mjs");
+initWorkspaceEvents();
 
 type FieldDefinition = {
   label: string;
@@ -450,9 +452,8 @@ async function initialize(): Promise<void> {
   $("pages").addEventListener("mouseup", captureSelection);
   $("pages").addEventListener("keyup", captureSelection);
 
-  browser.storage.onChanged.addListener((changes, area) => {
-    if (area !== "local") return;
-    const next = changes["burbot:v1"]?.newValue as LegacyStorageState | undefined;
+  window.addEventListener("burbot:workspace-state-changed", (event) => {
+    const next = (event as CustomEvent<{ state?: LegacyStorageState }>).detail?.state;
     if (!next) return;
     state = next;
     object = state.objects.find((entry) => entry.id === objectId) ?? object;

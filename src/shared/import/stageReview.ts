@@ -21,8 +21,21 @@ export interface StagedImportReviewResult {
   updatedExisting: boolean;
 }
 
-function cloneState(state: LegacyStorageState): LegacyStorageState {
-  return JSON.parse(JSON.stringify(state)) as LegacyStorageState;
+function copyObjectForUpdate(state: LegacyStorageState, objectId: string): LegacyStorageState {
+  // Only this owner is edited below. Keep unrelated rows and immutable source
+  // snapshots shared; copying multi-megabyte regulations dominated approval.
+  const next = { ...state };
+  for (const key of ["objects", "rules", "fileSources", "financingRules",
+    "operatorAssignments", "geographies", "operatorContacts",
+    "documentRequirements", "importTargetEvidence", "importSources"] as const) {
+    const value = state[key];
+    if (!Array.isArray(value)) continue;
+    (next as unknown as Record<string, unknown>)[key] = value.map((row) =>
+      (key === "objects" ? row.id : "objectId" in row && row.objectId) === objectId
+        ? structuredClone(row) : row,
+    );
+  }
+  return next;
 }
 
 function ruleTargetKey(target?: { kind: string; id: string }): string {
@@ -160,7 +173,7 @@ function stageExistingObjectUpdate(
     throw new Error("Imported object type does not match the existing object.");
   }
 
-  const state = cloneState(original);
+  const state = copyObjectForUpdate(original, targetId);
   const target = state.objects.find((object) => object.id === targetId)!;
   const schema = BurbotSchema[target.type];
 
@@ -548,8 +561,18 @@ function stageNewObject(
   now: string,
 ): StagedImportReviewResult {
   const beforeIds = new Set(original.objects.map((object) => object.id));
+  // Apply reference edits and temporary-dependency cleanup in a small state.
+  // Core mutations clone their input, so doing this against the full workspace
+  // used to copy every regulation once per reference and dependency.
+  const dependencyIds = new Set([
+    ...plan.referencePatches.map((patch) => patch.targetObjectId),
+    ...(plan.operatorReferencePatches ?? []).map((patch) => patch.targetObjectId),
+  ]);
+  const seed = BurbotCore.empty() as LegacyStorageState;
+  seed.revision = original.revision;
+  seed.objects = original.objects.filter((object) => dependencyIds.has(object.id));
   let state = importDocumentIntoState(
-    original,
+    seed,
     plan.document,
     original.revision,
     uuid,
@@ -648,8 +671,18 @@ function stageNewObject(
     );
   }
 
+  const merged = { ...original, revision: state.revision };
+  for (const key of ["objects", "rules", "fileSources", "financingRules",
+    "operatorAssignments", "geographies", "operatorContacts",
+    "documentRequirements", "fieldEvidence", "importTargetEvidence", "importSources"] as const) {
+    const additions = key === "objects"
+      ? state.objects.filter((object) => !beforeIds.has(object.id))
+      : state[key];
+    if (additions?.length)
+      (merged as unknown as Record<string, unknown>)[key] = [...(original[key] ?? []), ...additions];
+  }
   return {
-    state,
+    state: merged,
     stagedObjectId: selected.id,
     updatedExisting: false,
   };
