@@ -16,6 +16,7 @@ import { selectorColor } from "../shared/selectorPalette";
 import {
   createRemoteFileSourceCandidate,
   sourceFileTypeFromHint,
+  sourceFileTypeFromUrl,
 } from "../shared/sources/remoteFile";
 import type {
   AttributeExtraction,
@@ -62,6 +63,25 @@ if (!globalThis.__burbotPickerLoaded) {
       link.textContent ||
       ""
     ).trim();
+  }
+
+  function fileLinkTypeHint(link: HTMLAnchorElement) {
+    return sourceFileTypeFromHint(fileLinkContextHint(link));
+  }
+
+  function isLikelyRemoteFileLink(link: HTMLAnchorElement): boolean {
+    if (sourceFileTypeFromUrl(link.href) || fileLinkTypeHint(link)) return true;
+    if (link.hasAttribute("download")) return true;
+
+    try {
+      const url = new URL(link.href);
+      if (url.protocol !== "http:" && url.protocol !== "https:") return false;
+      return /\/(?:download|downloads|pobierz|plik|file|attachment|document)(?:\/|$)/i.test(
+        url.pathname,
+      );
+    } catch {
+      return false;
+    }
   }
 
   function candidateFor(
@@ -289,15 +309,8 @@ if (!globalThis.__burbotPickerLoaded) {
           target instanceof HTMLAnchorElement
             ? target
             : target.closest("a[href]");
-        let supported = false;
-        if (link instanceof HTMLAnchorElement) {
-          try {
-            const url = new URL(link.href);
-            supported = url.protocol === "http:" || url.protocol === "https:";
-          } catch {
-            supported = false;
-          }
-        }
+        const supported =
+          link instanceof HTMLAnchorElement && isLikelyRemoteFileLink(link);
         overlay.style.borderColor = supported ? "#2f7659" : "#b78024";
         overlay.style.background = supported ? "#2f765924" : "#b780241a";
       } else {
@@ -340,11 +353,16 @@ if (!globalThis.__burbotPickerLoaded) {
           if (!(link instanceof HTMLAnchorElement)) {
             throw new Error("Kliknij link do pliku lub dokumentu.");
           }
+          if (!isLikelyRemoteFileLink(link)) {
+            throw new Error(
+              "Ten link nie wygląda jak plik. Wybierz link pobierania, załącznik lub dokument.",
+            );
+          }
           const file = createRemoteFileSourceCandidate(
             link.href,
             location.href,
             fileLinkNameHint(link),
-            sourceFileTypeFromHint(fileLinkContextHint(link)),
+            fileLinkTypeHint(link),
           );
           // File Add Mode is persistent: capture the file but keep the picker
           // session, overlay and event listeners active for the next file.
