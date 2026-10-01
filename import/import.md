@@ -1,14 +1,18 @@
-# Import naboru do Burbot — prompt dla AI i pełna specyfikacja JSON v1
+# Import i eksport Burbot — prompt dla AI i pełna specyfikacja JSON v1
 
 Przekaż AI **cały ten plik**, informacje o naborze i załączniki. Dokument opisuje format faktycznie przyjmowany przez rozszerzenie, analizę regulaminu oraz aktualizowanie istniejących danych. **Domyślnym zadaniem jest pełne opracowanie naboru i wszystkich przekazanych dokumentów.** Nie trzeba wypełniać wszystkich możliwych pól: należy ustalić wszystkie dostępne fakty, a następnie przekazać je w odpowiednich polach. Opcjonalność pola w schemacie nie oznacza, że jego analizę wolno pominąć.
 
-Zweryfikowano z kodem z 28.09.2026, commit `4f3e1a2bc35e606d150468fa1f1a64409c3ae879`. Źródłem prawdy są [importer](../src/shared/import/format.ts), [schemat runtime](../src/shared/domain/schema.js), [walidacja wartości](../src/shared/domain/core.js), [słownik geografii](../src/shared/types/geography.ts), [metadane plików](../src/shared/fileMetadata.ts), [dopasowanie obiektów](../src/shared/import/review.ts) i [zatwierdzanie importu](../src/shared/import/stageReview.ts). Przy zmianie kodu trzeba ponownie zweryfikować ten prompt. Same DTO z `business.ts`, dawny eksport AI i dawne przykłady nie zastępują kontraktu importera.
+Zaktualizowano 30.09.2026 do wspólnego formatu importu i eksportu; kompletne przykłady JSON są sprawdzane testem rzeczywistego importera. Źródłem prawdy są [eksporter](../src/shared/export/portableExport.js), [zgodność starszych eksportów](../src/shared/import/normalizePortableInput.js), [importer](../src/shared/import/format.ts), [schemat runtime](../src/shared/domain/schema.js), [walidacja wartości](../src/shared/domain/core.js), [słownik geografii](../src/shared/types/geography.ts), [metadane plików](../src/shared/fileMetadata.ts), [dopasowanie obiektów](../src/shared/import/review.ts) i [zatwierdzanie importu](../src/shared/import/stageReview.ts). Przy zmianie kodu trzeba ponownie zweryfikować ten prompt. Same DTO z `business.ts`, dawny eksport AI i dawne przykłady nie zastępują kontraktu importera.
 
 ## 1. Prompt do wykonania przez AI
 
 ### Rola i wynik
 
-Jesteś analitykiem naborów BUR i ekstraktorem danych do rozszerzenia Burbot. Użytkownik przekazuje nazwę/numer naboru, projekt, operatorów, geografię, status, dokumenty, adresy źródeł i dalsze instrukcje. Twoim zadaniem jest przygotowanie **jednego poprawnego portable import JSON v1**, zgodnego z dalszą specyfikacją.
+Jesteś analitykiem naborów BUR i ekstraktorem danych do rozszerzenia Burbot. Użytkownik przekazuje nazwę/numer naboru, projekt, operatorów, geografię, status, dokumenty, adresy źródeł i dalsze instrukcje. Twoim zadaniem jest przygotowanie **jednego poprawnego portable JSON v1**, zgodnego z dalszą specyfikacją.
+
+**Eksport i import mają ten sam format.** Plik `burbot-portable-*.json` wyeksportowany przez „Eksportuj zestaw” lub „Eksportuj wszystkie dane JSON” można od razu wczytać do Importu. Odczytuj i zwracaj `version`, `offset_unit`, `sources` oraz `objects`; wartości są zawsze w `objects[].data`, relacje w `$ref`, a metadane dokumentów w `files[].metadata`. Zachowuj istniejące `key` obiektów, wierszy i źródeł. Nie przekształcaj wyniku do starego `burbot-ai-view`, `values`, `{id,name}` ani zagnieżdżonych `project.recruitments`. Każdy obiekt występuje raz w `objects`; nabór wskazuje projekt przez `data.project_id`. Eksport dołącza niezbędne projekty/operatorów, więc referencje są lokalne do pliku.
+
+Zachowuj prawidłowe snapshoty i evidence niezmienianych wartości. Jeśli zmieniasz tekst źródła, przelicz wszystkie odnoszące się do niego offsety albo dodaj nową wersję źródła pod nowym kluczem. Pusty snapshot z eksportu oznacza, że Burbot nie miał zapisanego tekstu — odczytaj dokument; nie traktuj pustego tekstu jako dowodu ani jako wykonanej analizy. Nie odtwarzaj selektorów DOM z samych cytatów.
 
 Głównym źródłem zasad uczestnictwa i finansowania jest regulamin właściwy dla tego projektu, operatora i edycji naboru, wraz z obowiązującymi zmianami i załącznikami. Terminy i status sprawdzaj w komunikatach o konkretnym naborze. Nie zakładaj, że regulamin projektu zawiera aktualny harmonogram wszystkich naborów.
 
@@ -26,12 +30,12 @@ Tylko **jawne ograniczenie użytkownika** — np. „tylko status i daty”, „
 
 Zanim wyciągniesz wnioski, utwórz roboczy spis źródeł i plików z całego wejścia. To **wewnętrzna lista pracy**, nie nowa sekcja JSON i nie tekst do wstawienia jako snapshot.
 
-1. Zbierz `objects[].files`, załączniki przekazane do rozmowy, `source_url`, URL-e z `values` i `links`. Duplikaty tego samego adresu, np. plik ponownie wymieniony w `links`, traktuj jako jeden materiał. Nie utożsamiaj plików z różnych URL-i wyłącznie na podstawie podobnej nazwy. Jeśli zweryfikujesz, że to ten sam dokument/wersja, odnotuj powód pominięcia duplikatu.
+1. Zbierz `objects[].files`, załączniki przekazane do rozmowy, `objects[].source_url`, URL-e z `data` oraz `sources[].url`. Dla każdego `files[].source` i `source_page` odszukaj wpis o tym `sources[].key`; to on zawiera URL, typ i snapshot. Duplikaty tego samego adresu traktuj jako jeden materiał. Nie utożsamiaj plików z różnych URL-i wyłącznie na podstawie podobnej nazwy. Jeśli zweryfikujesz, że to ten sam dokument/wersja, odnotuj powód pominięcia duplikatu.
 2. Pola eksportu `name`, `file_type`, `url`, `source_page_url`, `added_at` opisują plik, ale **nie zawierają jego treści**. Obecność URL-a nie oznacza przeczytania dokumentu. `added_at` to czas dodania do Burbot, nie data wejścia w życie regulaminu.
 3. Jeżeli masz narzędzia do odczytu Internetu, a użytkownik go nie zabronił, otwórz podane oficjalne strony i pobierz dokumenty niezbędne do pełnej analizy. Nie pytaj o zgodę na zwykły odczyt już wskazanych źródeł. Zacznij od regulaminu, jego zmian i instrukcji, następnie przeczytaj **każdy unikalny przekazany plik** i powiąż go z właściwymi zapisami regulaminu.
 4. Dla PDF spróbuj ekstrakcji tekstu, a dla skanu OCR; dla DOCX/DOC i tabel użyj właściwego czytnika. Nie zastępuj treści pliku jego nazwą ani krótkim opisem z wyszukiwarki. Jeśli dostępna jest tylko część dokumentu, oznacz odczyt jako częściowy.
 5. Dla każdego materiału ustal jeden wynik roboczy: odczytany i opisany; częściowo odczytany; niedostępny po próbie odczytu; przeanalizowany i nieprzypisany do tego naboru z konkretnym powodem; zweryfikowany duplikat. **Żaden plik nie może zniknąć z analizy bez wyjaśnienia.** To stany robocze, nie nowe wartości enumów importera.
-6. Wykorzystaj identyfikatory i nazwy projektu/operatorów z eksportu. Nie twórz duplikatów tylko dlatego, że ich pełne obiekty nie były osobno wyeksportowane. Geografię i zasady finansowania, których nie było w wejściu, odczytaj z regulaminu zamiast uznawać za nieistniejące.
+6. Wykorzystaj stabilne `key` i nazwy projektu/operatorów z eksportu. Dołączone obiekty zależne także mają własne wpisy w `objects`; nie twórz ich ponownie pod nowymi kluczami. Geografię i zasady finansowania, których nie było w wejściu, odczytaj z regulaminu zamiast uznawać za nieistniejące.
 7. Przy pełnej analizie istniejącego obiektu pliki **już podpięte, ale bez opisów** nadal wymagają opracowania. Zwróć je ponownie w `files` z tym samym URL-em w `sources` oraz ustalonymi metadanymi i evidence. Importer uaktualni ich opisy po URL; samo pozostawienie starych plików w bazie nie uzupełni metadanych.
 
 ### Warunek zakończenia pełnej analizy
@@ -196,6 +200,7 @@ Problemu z uzyskaniem pełnego tekstu jednej strony nie przenoś na wszystkie po
 | --- | --- | --- |
 | `key` | niepusty tekst, wymagane | Unikalny w `objects`, stabilny między importami. Dla aktualizacji dotychczasowy `key`/`importKey` albo istniejące ID obiektu jako tekst. |
 | `type` | enum, wymagane | Dokładnie `operator`, `project`, `recruitment` — małe litery. `nabor` jest starym typem wewnętrznym, nie dopuszczonym typem portable import. |
+| `source_url` | URL HTTP(S), opcjonalne | Strona źródłowa obiektu, niezależna od cytatów i pola WWW operatora. Eksport zachowuje ją, a importer przenosi do obiektu. Pominięcie przy aktualizacji nie czyści istniejącego adresu. |
 | `data` | obiekt, wymagane | Tylko pola tabel dla danego typu. Zawsze wymagane pole główne: `name` dla operatora/projektu, `external_number` dla naboru. |
 | `evidence` | mapa, opcjonalne | Pole z `data` → tablica cytatów. Każde wskazane pole musi być też jawnie obecne w `data`. |
 | `operators` | tablica, opcjonalne | Tylko projekt i nabór; przypisania operatorów. |
@@ -205,9 +210,11 @@ Problemu z uzyskaniem pełnego tekstu jednej strony nie przenoś na wszystkie po
 | `financing` | tablica, opcjonalne | Tylko projekt i nabór; warianty finansowania. |
 | `documents` | tablica, opcjonalne, legacy | Tylko projekt i nabór; dawne wymagania według zamkniętego katalogu. Nowe konkretne pliki dodawaj przez `files`. |
 
+Eksport pomija systemowe znaczniki czasu, puste wartości oraz wewnętrzne reguły DOM, stan szkicu i zaznaczenia zapisu. Nie jest binarną kopią całej bazy. Nieznane pola biznesowe lub zerwane referencje wymagają naprawienia danych zamiast cichego pominięcia. Eksport nie zmienia wartości w bazie.
+
 Klucze w `operators`, `geography`, `contacts`, `financing`, `documents` są unikalne w danej liście danego obiektu. W praktyce nadaj im stabilne, opisowe wartości zawierające klucz rodzica i sens wiersza. Nie używaj jako klucza zmiennej stawki procentowej albo statusu: ich zmiana nie powinna tworzyć nowego wariantu lub obiektu. `files` nie ma własnego `key` — wskazuje `source`, a aktualizacja dopasowuje plik po URL.
 
-Nie generuj wewnętrznych `id`, `values`, `createdAt`, `updatedAt`, `sourceId`, `rules`, selektorów CSS, `fieldEvidence` ani `variant_no`. UI/stan wewnętrzny i eksport do AI mają inny kształt. Nieznane pola w `data` i `financing[].data` powodują błąd; dodatkowe pola strukturalne mogą zostać zignorowane, więc nie są sposobem przechowania informacji.
+Nie generuj wewnętrznych `id`, `values`, `createdAt`, `updatedAt`, `sourceId`, `rules`, selektorów CSS, `fieldEvidence` ani `variant_no`. Tylko UI/stan wewnętrzny ma inny kształt; bieżący eksport JSON i import używają dokładnie tego opisanego tutaj formatu. Nieznane pola w `data` i `financing[].data` powodują błąd; dodatkowe pola strukturalne mogą zostać zignorowane, więc nie są sposobem przechowania informacji.
 
 ## 6. `operator.data` — wszystkie bieżące pola
 
@@ -503,18 +510,21 @@ Jeżeli plik `FORMULARZ` ma puste rubryki, a regulamin mówi, kiedy i jak go prz
 
 Opis użycia może mieć kilka cytatów: jeden dla etapu, drugi dla terminu, trzeci dla sposobu przekazania/podpisu. Nie twórz sztucznego jednego cytatu z połączonych zdań z różnych miejsc. Pełny przykład 16.9 pokazuje ten układ.
 
-### 12.3. Przeniesienie plików z eksportu AI do aktualizacji
+### 12.3. Aktualizacja plików we wspólnym formacie
 
-| Dane w eksporcie wejściowym | Docelowe miejsce i działanie |
+Nie jest potrzebna konwersja struktury. Zachowaj wpis `files[]`, wskazane źródła oraz ich klucze; uzupełnij ustalone pola `metadata` i ich dowody.
+
+| Dane w eksporcie wejściowym | Działanie AI |
 | --- | --- |
-| `files[].url` | `sources[].url`; zachowaj URL istniejącego pliku przy uzupełnianiu jego metadanych. |
-| `files[].file_type` | `sources[].type`; zweryfikuj wspierany typ. |
-| `files[].name` | Pomoc do identyfikacji. Czytelny, zweryfikowany tytuł wpisz w `files[].metadata.display_name`; nie traktuj technicznej nazwy jako pełnego opisu. |
-| `files[].source_page_url` | Osobny source strony i jego klucz w `files[].source_page`, jeśli stronę identyfikujesz; snapshot rzeczywisty, a przy udokumentowanej niedostępności ograniczenie zamiast fikcyjnego tekstu. |
-| Brak pól metadanych przy pliku | Zadanie do wykonania: przeczytaj plik/regulamin/instrukcję i uzupełnij ustalone metadane. Nie pomijaj dlatego, że plik już istnieje. |
-| `files[].added_at` | Nie kopiuj do `snapshot.captured_at` ani do metadanych. |
+| `files[].source` | Zachowaj klucz; adres istniejącego załącznika znajduje się w odpowiednim `sources[].url`. Ten sam URL umożliwia aktualizację pliku. |
+| `sources[].type` | Zachowaj rzeczywisty wspierany typ, również dla archiwum. |
+| `files[].metadata.display_name` | Zachowaj lub popraw czytelną nazwę dokumentu; nie zastępuje ona instrukcji użycia. |
+| `files[].source_page` | Zachowaj referencję do źródła strony, na której znaleziono plik; jego adres i tekst są w `sources`. |
+| Brak części `metadata` | Przeczytaj plik, regulamin i instrukcję, a następnie uzupełnij ustalone pola. Obecność pliku w eksporcie nie oznacza zakończenia analizy. |
+| `snapshot.text: ""` | Brak zapisanego odczytu. Odczytaj źródło, zanim wygenerujesz z niego evidence. Nie wstawiaj opisu pliku jako tekstu źródłowego. |
+| Istniejące `evidence` | Zachowaj, jeśli nadal uzasadnia wartość i wskazuje niezmieniony snapshot. Nowe ustalenia potrzebują odpowiednich cytatów. |
 
-Nie modyfikuj adresów, aby stworzyć pozornie nowe źródła. Zachowaj stabilne klucze źródeł, jeśli są dostępne; gdy eksport ich nie zawiera, nadaj własne unikalne klucze sources. Dla aktualizacji pliku to zgodny URL decyduje o dopasowaniu, nie nowo nadana nazwa klucza source.
+Nie modyfikuj URL-a, aby stworzyć pozornie nowy plik. Nazwa pliku lokalnie przesłanego do Burbot może występować w adresie serwera `127.0.0.1`/`localhost`: zachowaj taki istniejący URL, ale nie wymyślaj go dla załącznika z rozmowy. JSON przenosi adresy i zapisany tekst, nie binarne pliki; lokalny adres zadziała tam, gdzie dostępny jest ten sam serwer plików.
 
 ## 13. `evidence` — cytaty i dokładne zakresy
 
@@ -579,13 +589,19 @@ Powtórzony tekst wymaga wyboru właściwego wystąpienia z kontekstem; pierwszy
 6. Gdy zależności nie są jeszcze dopasowane/zatwierdzone, zatwierdzaj operatorów, następnie projekt, następnie nabór. Kolejność elementów w samym JSON nie wpływa na rozwiązanie `$ref`, ale taki układ jest czytelny. Dopasowany istniejący projekt/operator może posłużyć jako relacja bez nadpisywania wszystkich jego danych.
 7. Przy aktualizacji zmieniane są jawnie przesłane pola `data`; pominięte pozostają. Nie kopiuj niepotrzebnie starych wartości, bo zaakceptowany import je ponownie ustawia. Uwagi są pojedynczym polem tekstowym: przesłane `notes` zastępuje poprzedni tekst, nie dopisuje się automatycznie; scal istotne dotychczasowe uwagi, jeśli je znasz i mają zostać zachowane.
 8. Przesłanie pola bez evidence może usunąć dotychczasowe evidence tego **pola obiektu**, żeby stare źródło nie uzasadniało nowej wartości. Przy kopiowaniu niezmienionej wartości zachowaj dostępny prawdziwy dowód, jeśli to potrzebne; nie wymyślaj go dla zachowania podświetlenia.
-9. Finansowanie aktualizuje wariant o tym samym stabilnym `key`; pominięte pola wariantu pozostają. Nowy klucz może utworzyć nowy wariant. Istnieje fallback dla starszych wierszy bez klucza po rozmiarze i numerze wariantu, ale AI nie powinno na nim opierać bezpiecznej identyfikacji.
+9. Finansowanie aktualizuje wariant o tym samym stabilnym `key` (eksport używa zapisanego klucza importu, a gdy go brak — ID wiersza); pominięte pola wariantu pozostają. Nowy klucz może utworzyć nowy wariant. Istnieje fallback dla starszych wierszy bez klucza po rozmiarze i numerze wariantu, ale AI nie powinno na nim opierać bezpiecznej identyfikacji.
 10. Przypisania operatorów aktualizują się po kluczu lub operatorze; geografia po kluczu lub zgodnym zestawie typ/rola/wartość/operator; kontakty po kluczu lub rodzaju/numerze wariantu; dawne wymagania po kluczu lub typie dokumentu. Zachowuj klucze, aby zmiana wartości aktualizowała właściwy wiersz.
 11. Pliki dopasowywane są po URL w obrębie obiektu. Zmiana URL może dodać drugi plik; pominięcie starego nie usuwa go. Przy aktualizacji tego samego pliku podaj właściwe `metadata.display_name`, bo w razie jej braku importer utworzy nazwę zastępczą z URL i może zastąpić nią dotychczasową nazwę biznesową.
 12. **Pominięcie ani `[]` nie usuwa istniejących powiązań, plików, geografii i wariantów.** Format nie ma `delete`, `remove` ani `replace_all`. Zmiana głównego operatora wymaga spójnego przesłania ról istniejących operatorów; sam nowy `GLOWNY` nie usuwa starego. Usunięcia i czyszczenie wymagają Workspace.
 13. `last_checked_at` jest nadawane przez system przy zapisie nowego lub zmienionego obiektu do SQLite. Nie podawaj go nawet w aktualizacji „sprawdzone dzisiaj”. `funding_verified_at` jest odrębną dozwoloną datą merytorycznej weryfikacji finansowania.
 
 ## 15. Zgodność wsteczna — co importer przyjmie, ale czego AI nie powinno generować na nowo
+
+### 15.0. Starsze eksporty
+
+Importer rozpoznaje dawne `format: "burbot-ai-view", version: 1` i wcześniejsze kopie workspace z `revision`, `objects` i `rules`. Zamienia ich dane biznesowe do portable v1; nie odtwarza ani nie wykonuje reguł ekstrakcji. Nowe pliki generuj wyłącznie we wspólnym formacie.
+
+W starym eksporcie AI `id` staje się stabilnym `key`, `values` przechodzi do `data`, `operators[].role` do `operator_type`, a dane plików do `sources` i `files[].metadata`. Nabory zagnieżdżone i główne są łączone po ID; identyczne kopie dają jeden obiekt, sprzeczne kopie wymagają uzgodnienia. Brakujące obiekty zależne można odtworzyć tylko z podanej w eksporcie tożsamości/nazwy, nie z domysłów. Starszy eksport nie zawierał snapshotów/evidence: nie wymyślaj ich przy konwersji; źródła plików bez odczytu otrzymują pusty tekst. Stare `links` i `geography_by_operator` były wyłącznie dodatkowymi prezentacjami tych samych danych.
 
 ### 15.1. Stare pola `data`
 
@@ -869,6 +885,7 @@ Stan demonstracyjny na 28.09.2026, 13:00. Dwa pliki są załączone do naboru, a
       "geography": [
         {
           "key": "PR_DEMO_001_PODKARPACKIE",
+          "operator": { "$ref": "OP_DEMO_A" },
           "type": "WOJEWODZTWO",
           "role": "OBEJMUJE",
           "value": "podkarpackie",

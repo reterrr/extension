@@ -114,7 +114,7 @@ export function App() {
                 <summary aria-label="Akcje obiektu">•••</summary>
                 <div className="popover menu">
                   <button id="export-excel">Eksportuj Excel</button>
-                  <button id="export">Eksportuj workspace JSON</button>
+                  <button id="export">Eksportuj wszystkie dane JSON</button>
                   <button id="delete" className="danger">
                     Usuń obiekt
                   </button>

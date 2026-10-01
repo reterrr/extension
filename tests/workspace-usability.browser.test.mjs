@@ -812,6 +812,48 @@ test(
       ],
     );
     assert.equal(await page.locator(".commit-error").count(), 0);
+
+    // Both real export controls produce a file accepted by the actual Import UI.
+    await page.keyboard.press("Alt+1");
+    await page.locator("#more > summary").click();
+    const fullDownload = page.waitForEvent("download");
+    await page.locator("#export").click();
+    const full = await fullDownload;
+    const fullText = await readFile(await full.path(), "utf8");
+    const fullDocument = JSON.parse(fullText);
+    assert.match(full.suggestedFilename(), /^burbot-portable-/);
+    assert.deepEqual(Object.keys(fullDocument), [
+      "version",
+      "offset_unit",
+      "sources",
+      "objects",
+    ]);
+    assert.equal(fullDocument.objects.length, 4);
+    await page.locator(".view-set-menu > summary").click();
+    const viewDownload = page.waitForEvent("download");
+    await page
+      .getByRole("button", { name: "Eksportuj zestaw", exact: true })
+      .click();
+    const viewFile = await viewDownload;
+    const viewDocument = JSON.parse(
+      await readFile(await viewFile.path(), "utf8"),
+    );
+    assert.deepEqual(Object.keys(viewDocument), Object.keys(fullDocument));
+    assert.equal(
+      new Set(viewDocument.objects.map((o) => o.key)).size,
+      viewDocument.objects.length,
+    );
+    await page.locator("#import-file").setInputFiles({
+      name: full.suggestedFilename(),
+      mimeType: "application/json",
+      buffer: Buffer.from(fullText),
+    });
+    await page.waitForFunction(() =>
+      document
+        .querySelector("#notice")
+        ?.textContent.includes("Załadowano 4 obiektów"),
+    );
+    assert.equal(await page.locator("#notice.error").count(), 0);
     assert.deepEqual(errors, []);
   },
 );

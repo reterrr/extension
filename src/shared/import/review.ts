@@ -1,5 +1,6 @@
 import { isSourceFileType } from "../types/source";
 import { importDocumentIntoState } from "./format";
+import { normalizePortableInput } from "./normalizePortableInput.js";
 import type {
   ImportReviewEditorOption,
   ImportReviewEditorType,
@@ -152,6 +153,7 @@ export function createImportReviewSession(
   uuid: () => string,
   now: string,
 ): ImportReviewSession {
+  input = normalizePortableInput(input);
   const previewState = importDocumentIntoState(
     BurbotCore.empty(),
     input,
@@ -1165,6 +1167,7 @@ export function buildImportApprovalPlan(
         {
           key: object.importKey,
           type: object.type,
+          ...(object.sourceUrl ? { source_url: object.sourceUrl } : {}),
           data: portableData(session, object),
           ...(object.evidence
             ? { evidence: portableEvidence(object, sourceById) }

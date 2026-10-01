@@ -105,7 +105,7 @@ The extraction discriminator remains `type` (`text`, `attribute`, `selection`, `
 
 `src/sidepanel/workspace.js` remains the legacy DOM-oriented workspace during the migration, but its extraction boundary now goes through typed rule helpers and the typed picker RPC client. This avoids rewriting the workspace UI just to introduce transport types.
 
-## Portable JSON import
+## Portable JSON import and export
 
 The side panel accepts **Burbot Import v1** JSON through **Import JSON**. This is a facts + provenance format, not an extraction-rule format. Imported values never create CSS/XPath selectors or durable extraction rules.
 
@@ -201,7 +201,9 @@ Projects and recruitments can have multiple operators through `objects[].operato
 
 Import is additive and atomic: the full document is validated before the new state is committed, and the workspace revision is incremented once. If an imported field is later edited or re-extracted, its old imported evidence is discarded so stale provenance is not retained.
 
-The existing **Export workspace state** action still exports the extension's internal local state, including extraction rules. It is intentionally different from Burbot Import v1.
+**Eksportuj zestaw** and **Eksportuj wszystkie dane JSON** now export the same portable v1 format accepted by Import (`burbot-portable-*.json`). Export includes stable keys, local `$ref` dependencies, files and metadata, operators, geography, financing, contacts, source snapshots and supported evidence. Each object appears once. `objects[].source_url` preserves its source page independently of evidence. Reimporting an unchanged export uses the existing review/approval workflow and matches existing objects and rows by their stable keys.
+
+Older `burbot-ai-view` and workspace-state JSON files remain readable through a compatibility conversion. This transfers business data, not executable extraction rules or UI/draft state. System timestamps are assigned on commit. Files are represented by URL and any captured text; their binary bytes are not embedded.
 
 ## Operator XLSX import
 

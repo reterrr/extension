@@ -2162,8 +2162,8 @@ import {
   $("export").onclick = action(async () => {
     const saved = await data("GET");
     downloadJsonFile(
-      "burbot-" + new Date().toISOString().slice(0, 10) + ".json",
-      saved,
+      aiViewExportFilename(),
+      createAiViewExport({ state: saved, schema: BurbotSchema }),
     );
     $("more").open = false;
   });

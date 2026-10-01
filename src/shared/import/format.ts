@@ -3,6 +3,7 @@ import {
   inferFileMetadataFromName,
 } from "../fileMetadata";
 import { isSourceFileType, type SourceFileType } from "../types/source";
+import { normalizePortableInput } from "./normalizePortableInput.js";
 import type {
   ImportSourceType,
   ImportedEvidence,
@@ -133,7 +134,9 @@ interface ImportDocumentRequirement {
 interface ImportObject {
   key: string;
   type: LegacyObjectType;
+  source_url?: string;
   data: Record<string, unknown>;
+  operators?: ImportOperatorAssignment[];
   evidence?: Record<string, ImportEvidence[]>;
   files?: ImportFileAttachment[];
   geography?: ImportGeography[];
@@ -312,6 +315,8 @@ function parseDocument(input: unknown): BurbotImportV1 {
     if (!isRecord(raw.data)) throw new Error(`${path}.data must be an object.`);
 
     const evidence = parseEvidenceMap(raw.evidence, `${path}.evidence`);
+    const sourceUrl = optionalString(raw.source_url, `${path}.source_url`);
+    if (sourceUrl !== undefined) BurbotCore.coerce(sourceUrl, "url");
 
     let files: ImportFileAttachment[] | undefined;
     if (raw.files !== undefined) {
@@ -509,6 +514,7 @@ function parseDocument(input: unknown): BurbotImportV1 {
     return {
       key,
       type,
+      ...(sourceUrl ? { source_url: sourceUrl } : {}),
       data: raw.data,
       evidence,
       operators,
@@ -631,7 +637,7 @@ export function importDocumentIntoState(
     throw new Error("Data changed in another panel. Review the refreshed values and retry.");
   }
 
-  const document = parseDocument(input);
+  const document = parseDocument(normalizePortableInput(input));
   const state = JSON.parse(JSON.stringify(original)) as LegacyStorageState;
   const sourceByKey = new Map<string, ImportedSource>();
 
@@ -681,6 +687,7 @@ export function importDocumentIntoState(
       id,
       type: item.type,
       importKey: item.key,
+      ...(item.source_url ? { sourceUrl: item.source_url } : {}),
       values: {},
       createdAt: now,
       updatedAt: now,
