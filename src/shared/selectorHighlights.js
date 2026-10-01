@@ -95,21 +95,21 @@ function cleanText(value) {
   return String(value ?? "").replace(/\s+/g, " ").trim();
 }
 
-function codepointSlice(text, start, end) {
-  return Array.from(String(text ?? "")).slice(start, end).join("");
-}
-
-function importedEvidenceQuote(source, evidence) {
+function importedEvidenceQuote(source, evidence, indexes) {
   const text = source?.snapshot?.text;
   if (typeof text !== "string") return null;
+  let codepoints = indexes.get(source);
+  if (!codepoints) {
+    codepoints = Array.from(text);
+    indexes.set(source, codepoints);
+  }
 
   const exact = cleanText(
     evidence?.rawValue ||
-      codepointSlice(text, evidence?.charStart ?? 0, evidence?.charEnd ?? 0),
+      codepoints.slice(evidence?.charStart ?? 0, evidence?.charEnd ?? 0).join(""),
   );
   if (!exact) return null;
 
-  const codepoints = Array.from(text);
   const start = Math.max(0, Number(evidence?.charStart) || 0);
   const end = Math.max(start, Number(evidence?.charEnd) || start);
   return {
@@ -175,6 +175,7 @@ export function buildImportedEvidenceAnchorRequests(
   locatorCache = {},
 ) {
   if (!state || !pageUrl) return [];
+  const quoteIndexes = new Map();
 
   const sourcesById = new Map(
     (state.importSources ?? []).map((source) => [String(source.id), source]),
@@ -193,7 +194,7 @@ export function buildImportedEvidenceAnchorRequests(
           return;
         }
 
-        const quote = importedEvidenceQuote(source, evidence);
+        const quote = importedEvidenceQuote(source, evidence, quoteIndexes);
         if (!quote) return;
 
         const key = importedEvidenceLocatorKey(
@@ -228,7 +229,7 @@ export function buildImportedEvidenceAnchorRequests(
       continue;
     }
 
-    const quote = importedEvidenceQuote(source, entry);
+    const quote = importedEvidenceQuote(source, entry, quoteIndexes);
     if (!quote) continue;
 
     const key = importedTargetEvidenceLocatorKey(entry);
@@ -263,6 +264,7 @@ export function buildStoredSelectorHighlights(
   locatorCache = {},
 ) {
   if (!state || !pageUrl) return [];
+  const quoteIndexes = new Map();
 
   const highlights = [];
   const seen = new Set();
@@ -360,7 +362,7 @@ export function buildStoredSelectorHighlights(
           return;
         }
 
-        const quote = importedEvidenceQuote(source, evidence);
+        const quote = importedEvidenceQuote(source, evidence, quoteIndexes);
         if (!quote) return;
 
         const locatorKey = importedEvidenceLocatorKey(
@@ -410,7 +412,7 @@ export function buildStoredSelectorHighlights(
       continue;
     }
 
-    const quote = importedEvidenceQuote(source, entry);
+    const quote = importedEvidenceQuote(source, entry, quoteIndexes);
     if (!quote) continue;
 
     const locatorKey = importedTargetEvidenceLocatorKey(entry);

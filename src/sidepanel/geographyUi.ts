@@ -11,7 +11,6 @@ import type {
   LegacyStoredObject,
 } from "../shared/types/legacy-storage";
 
-const STORAGE_KEY = "burbot:v1";
 let initialized = false;
 let state = BurbotCore.empty() as LegacyStorageState;
 let activePageUrl = "";
@@ -604,7 +603,7 @@ function render(): void {
 function queueRender(): void {
   if (renderQueued) return;
   renderQueued = true;
-  queueMicrotask(render);
+  requestAnimationFrame(() => { if (renderQueued) render(); });
 }
 
 function populateSelectors(): void {
@@ -703,26 +702,10 @@ export async function initGeographyUi(): Promise<void> {
   await refreshActivePage();
 
   const observer = new MutationObserver(queueRender);
-  observer.observe($("workspace"), {
-    attributes: true,
-    attributeFilter: ["data-active-object-id"],
-  });
   observer.observe($("connection"), {
     childList: true,
     subtree: true,
     characterData: true,
-  });
-  observer.observe($("object-title"), {
-    childList: true,
-    subtree: true,
-  });
-
-  browser.storage.onChanged.addListener((changes, area) => {
-    if (area !== "local") return;
-    const next = changes[STORAGE_KEY]?.newValue as LegacyStorageState | undefined;
-    if (!next) return;
-    state = next;
-    queueRender();
   });
 
   browser.tabs.onActivated.addListener(() => {

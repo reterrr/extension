@@ -16,7 +16,9 @@
     "import:projects": "python3 scripts/import-projects-xlsx.py",
     "check:importers": "python3 -m py_compile scripts/import-operators-xlsx.py scripts/import-projects-xlsx.py scripts/import-recruitments-xlsx.py && python3 tests/import-operators-contracts.py && python3 tests/import-projects-contracts.py && python3 tests/import-recruitments-contracts.py",
     "import:recruitments": "python3 scripts/import-recruitments-xlsx.py",
-    "test:ui": "npm run build && node --test tests/workspace-usability.browser.test.mjs"
+    "test:ui": "npm run build && node --test tests/workspace-usability.browser.test.mjs tests/selector-highlights.browser.test.mjs tests/workspace-persistence.browser.test.mjs",
+    "benchmark:workspace": "node scripts/benchmark-workspace.mjs",
+    "benchmark:highlights": "node scripts/benchmark-highlights.mjs"
   },
   "dependencies": {
     "better-sqlite3": "^13.0.3",

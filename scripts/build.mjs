@@ -16,6 +16,10 @@ const common = {
   outdir: dist,
   entryNames: "[name]",
   logLevel: "info",
+  minify: !watching,
+  define: {
+    "process.env.NODE_ENV": JSON.stringify(watching ? "development" : "production"),
+  },
 };
 
 const configs = [

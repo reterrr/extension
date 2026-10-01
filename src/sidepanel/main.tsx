@@ -7,6 +7,9 @@ import { App } from "./App";
 import { SidepanelErrorBoundary } from "./SidepanelErrorBoundary";
 import "./importReviewWorkspaceGrouping";
 import "./importReviewWorkspaceParityStyles";
+import { initWorkspaceEvents } from "../shared/storage/workspaceEvents";
+
+initWorkspaceEvents();
 
 const root = document.getElementById("root");
 if (!root) throw new Error("Missing sidepanel root element.");

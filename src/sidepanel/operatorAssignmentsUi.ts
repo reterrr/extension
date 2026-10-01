@@ -8,12 +8,18 @@ import type {
   LegacyStoredOperatorAssignment,
 } from "../shared/types/legacy-storage";
 
-const STORAGE_KEY = "burbot:v1";
 let initialized = false;
 let state = BurbotCore.empty() as LegacyStorageState;
 let operatorSearchQuery = "";
 let searchObjectId = "";
 let adding = false;
+let renderQueued = false;
+
+function queueRender(): void {
+  if (renderQueued) return;
+  renderQueued = true;
+  requestAnimationFrame(() => { if (renderQueued) render(); });
+}
 
 function $<T extends HTMLElement = HTMLElement>(id: string): T {
   const element = document.getElementById(id);
@@ -59,11 +65,6 @@ async function data(
     throw new Error(response?.error ?? "Storage is unavailable.");
   }
   state = response.value;
-  window.dispatchEvent(
-    new CustomEvent("burbot:workspace-state-changed", {
-      detail: { state },
-    }),
-  );
   return state;
 }
 
@@ -285,6 +286,7 @@ function renderAdd(object: LegacyStoredObject): void {
 }
 
 function render(): void {
+  renderQueued = false;
   const section = $("operator-assignments-section");
   const count = $("operator-assignment-count");
   const object = chosenObject();
@@ -309,21 +311,12 @@ export async function initOperatorAssignmentsUi(): Promise<void> {
 
   state = await data("GET");
 
-  browser.storage.onChanged.addListener((changes, area) => {
-    if (area !== "local") return;
-    const next = changes[STORAGE_KEY]?.newValue as
-      LegacyStorageState | undefined;
-    if (!next) return;
-    state = next;
-    render();
-  });
-
-  window.addEventListener("burbot:active-object-changed", render);
+  window.addEventListener("burbot:active-object-changed", queueRender);
   window.addEventListener("burbot:workspace-state-changed", (event) => {
     const next = (event as CustomEvent<{ state?: LegacyStorageState }>).detail
       ?.state;
     if (next) state = next;
-    render();
+    queueRender();
   });
 
   render();

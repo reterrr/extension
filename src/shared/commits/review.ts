@@ -9,6 +9,7 @@ import type {
   LegacyStorageState,
   LegacyStoredObject,
 } from "../types/legacy-storage";
+import { indexReviewState, type ReviewStateIndex } from "./stateIndex";
 
 type Row = Record<string, unknown>;
 const COLLECTIONS: Record<string, { label: string; kind: string }> = {
@@ -88,17 +89,17 @@ function attachmentMatches(row: Row, target: ReviewTarget): boolean {
   return false;
 }
 function snapshot(
-  state: LegacyStorageState,
+  index: ReviewStateIndex,
   objectId: string,
   target: ReviewTarget,
 ): Row | null {
-  const object = objectFor(state, objectId);
+  const object = index.objects.get(objectId);
   if (target.kind === "object")
     return object
       ? {
           object: copy(object),
           rows: Object.fromEntries(
-            ALL_ROWS.map((key) => [key, copy(rows(state, key, objectId))]),
+            ALL_ROWS.map((key) => [key, index.rows(key, objectId)]),
           ),
         }
       : null;
@@ -109,7 +110,7 @@ function snapshot(
   const attachments = Object.fromEntries(
     ATTACHMENTS.map((key) => [
       key,
-      rows(state, key, objectId).filter((row) =>
+      index.rows(key, objectId).filter((row) =>
         attachmentMatches(row, target),
       ),
     ]),
@@ -125,13 +126,11 @@ function snapshot(
     return value;
   }
   return {
-    row: rows(state, target.collection!, objectId).find(
-      (row) => rowKey(row) === target.key,
-    ),
+    row: index.row(target.collection!, objectId, target.key, rowKey),
     attachments,
   };
 }
-function rowLabel(key: string, row: Row, state: LegacyStorageState): string {
+function rowLabel(key: string, row: Row, index: ReviewStateIndex): string {
   if (key === "fileSources")
     return String(row.display_name || row.name || row.url || "Plik");
   if (key === "financingRules")
@@ -146,8 +145,8 @@ function rowLabel(key: string, row: Row, state: LegacyStorageState): string {
       .filter(Boolean)
       .join(" · ");
   if (key === "operatorAssignments")
-    return objectFor(state, String(row.operatorId))
-      ? label(objectFor(state, String(row.operatorId))!)
+    return index.objects.get(String(row.operatorId))
+      ? label(index.objects.get(String(row.operatorId))!)
       : "Operator";
   if (key === "operatorContacts")
     return String(row.value || row.kind || "Kontakt");
@@ -155,18 +154,20 @@ function rowLabel(key: string, row: Row, state: LegacyStorageState): string {
 }
 export function reviewChanges(draft: DraftCommit): StoredReviewChange[] {
   const result: StoredReviewChange[] = [];
+  const base = indexReviewState(draft.baseState);
+  const working = indexReviewState(draft.workingState);
   const ids = new Set(
     [...draft.baseState.objects, ...draft.workingState.objects].map(
       (object) => object.id,
     ),
   );
   for (const objectId of ids) {
-    const before = objectFor(draft.baseState, objectId);
-    const after = objectFor(draft.workingState, objectId);
+    const before = base.objects.get(objectId);
+    const after = working.objects.get(objectId);
     const object = after ?? before!;
     const append = (target: ReviewTarget, group: string, title: string) => {
-      const old = snapshot(draft.baseState, objectId, target),
-        next = snapshot(draft.workingState, objectId, target);
+      const old = snapshot(base, objectId, target),
+        next = snapshot(working, objectId, target);
       if (stable(old) === stable(next)) return;
       result.push({
         id: JSON.stringify([
@@ -198,9 +199,9 @@ export function reviewChanges(draft: DraftCommit): StoredReviewChange[] {
       ...Object.keys(before?.manualFields ?? {}),
       ...Object.keys(after.manualFields ?? {}),
     ]);
-    for (const state of [draft.baseState, draft.workingState])
+    for (const index of [base, working])
       for (const key of ATTACHMENTS)
-        for (const row of rows(state, key, objectId)) {
+        for (const row of index.rows(key, objectId)) {
           const target = row.target as { kind?: string } | undefined;
           if (!target || target.kind === "object")
             fields.add(String(row.field));
@@ -211,29 +212,29 @@ export function reviewChanges(draft: DraftCommit): StoredReviewChange[] {
     for (const key of ["sourceUrl", "importKey"])
       append({ kind: "property", key }, "Pola", key);
     for (const [key, definition] of Object.entries(COLLECTIONS)) {
-      const oldRows = rows(draft.baseState, key, objectId),
-        nextRows = rows(draft.workingState, key, objectId);
+      const oldRows = base.rows(key, objectId),
+        nextRows = working.rows(key, objectId);
       const rowIds = new Set([...oldRows, ...nextRows].map(rowKey));
       for (const rowId of rowIds) {
         const row =
-          nextRows.find((entry) => rowKey(entry) === rowId) ??
-          oldRows.find((entry) => rowKey(entry) === rowId)!;
+          working.row(key, objectId, rowId, rowKey) ??
+          base.row(key, objectId, rowId, rowKey)!;
         append(
           { kind: "row", collection: key, key: rowId },
           definition.label,
-          rowLabel(key, row, draft.workingState),
+          rowLabel(key, row, working),
         );
       }
     }
     if (!before && result.length === start)
       append({ kind: "object", key: "object" }, "Obiekt", "Nowy obiekt");
   }
-  return groupOperatorRoles(draft, result);
+  return groupOperatorRoles([base, working], result);
 }
 
 /** Main-operator handovers must never be applied or undone one row at a time. */
 function groupOperatorRoles(
-  draft: DraftCommit,
+  indexes: ReviewStateIndex[],
   changes: StoredReviewChange[],
 ): StoredReviewChange[] {
   const groups = new Map<string, StoredReviewChange[]>();
@@ -248,9 +249,9 @@ function groupOperatorRoles(
   for (const [objectId, assignments] of groups) {
     // Starting/ending with no main operator (including an empty assignment
     // list) also couples the additional rows to the main operator's presence.
-    const wholeSet = [draft.baseState, draft.workingState].some(
-      (state) =>
-        rows(state, "operatorAssignments", objectId).filter(
+    const wholeSet = indexes.some(
+      (index) =>
+        index.rows("operatorAssignments", objectId).filter(
           (row) => row.operatorType === "GLOWNY",
         ).length !== 1,
     );
@@ -803,6 +804,28 @@ export function decideReviewChange(
     if (memberId === id) continue;
     delete draft.reviewDecisions[memberId];
     delete draft.discardedChanges[memberId];
+  }
+  return draft;
+}
+
+/** Selection does not change data: compute the diff once for the entire batch. */
+export function decideAllReviewChanges(
+  draft: DraftCommit,
+  decision: "save" | "later",
+  objectId?: string,
+): DraftCommit {
+  draft.reviewDecisions ??= {};
+  draft.discardedChanges ??= {};
+  for (const change of reviewChanges(draft)) {
+    if (objectId && change.objectId !== objectId) continue;
+    draft.reviewDecisions[change.id] = {
+      fingerprint: fingerprint(change),
+      selection: decision,
+    };
+    for (const id of changeIds(change)) {
+      delete draft.discardedChanges[id];
+      if (id !== change.id) delete draft.reviewDecisions[id];
+    }
   }
   return draft;
 }

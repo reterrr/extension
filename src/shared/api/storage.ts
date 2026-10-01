@@ -8,11 +8,12 @@ import {
   migrateRecruitmentStatusesAndOperatorContacts,
 } from "../domain/stateMigrations";
 import { LEGACY_STORAGE_KEY } from "../storage/constants";
+import { publishWorkspaceState } from "../storage/workspaceEvents";
 import type { LegacyStorageState } from "../types/legacy-storage";
 
 /**
- * Temporary UI mirror for existing storage.onChanged listeners.
- * SQLite on disk is the source of truth for committed data.
+ * Compatibility snapshot for startup/migration. Hot draft updates use runtime
+ * messages; SQLite and IndexedDB remain the authoritative stores.
  */
 export const STORAGE_KEY = LEGACY_STORAGE_KEY;
 
@@ -95,13 +96,15 @@ async function readError(response: Response): Promise<string> {
  * or a state already committed to SQLite. The authoritative stores are the
  * active IndexedDB draft and the local SQLite file respectively.
  */
-export async function publishUiState(state: LegacyStorageState): Promise<void> {
+async function writeLegacyMirror(state: LegacyStorageState): Promise<void> {
   try {
     await browser.storage.local.set({ [LEGACY_STORAGE_KEY]: state });
   } catch (cause) {
     console.warn("Could not update the legacy Burbot UI mirror.", cause);
   }
 }
+
+export const publishUiState = publishWorkspaceState;
 
 async function loadRemoteState(): Promise<LegacyStorageState | null> {
   const response = await request("/state");
@@ -131,7 +134,7 @@ export async function loadCommittedState(): Promise<LegacyStorageState | null> {
 export async function loadState(): Promise<LegacyStorageState> {
   const remote = await loadRemoteState();
   if (remote) {
-    await publishUiState(remote);
+    await writeLegacyMirror(remote);
     return remote;
   }
 
@@ -143,13 +146,13 @@ export async function loadState(): Promise<LegacyStorageState> {
   if (legacy) {
     assertLegacyState(legacy);
     await saveRemoteState(legacy);
-    await publishUiState(legacy);
+    await writeLegacyMirror(legacy);
     return legacy;
   }
 
   const empty = emptyState();
   await saveRemoteState(empty);
-  await publishUiState(empty);
+  await writeLegacyMirror(empty);
   return empty;
 }
 
@@ -159,6 +162,7 @@ export async function loadState(): Promise<LegacyStorageState> {
  */
 export async function saveState(state: LegacyStorageState): Promise<void> {
   await saveRemoteState(state);
+  await writeLegacyMirror(state);
   await publishUiState(state);
 }
 
@@ -188,7 +192,7 @@ export async function commitState(
   );
   committed.revision = baseRevision + 1;
   await saveRemoteState(committed);
-  await publishUiState(committed);
+  await writeLegacyMirror(committed);
   return committed;
 }
 

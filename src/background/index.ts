@@ -13,9 +13,10 @@ import {
   writeActiveDraft,
 } from "../shared/commits/draftStore";
 import { commitSessionView } from "../shared/commits/session";
+import { isWorkspaceStateMessage } from "../shared/storage/workspaceEvents";
 import {
   decideReviewChange,
-  reviewItems,
+  decideAllReviewChanges,
   refreshReviewDecisions,
   validateReviewSelection,
 } from "../shared/commits/review";
@@ -726,13 +727,6 @@ async function registerMenus(): Promise<void> {
 browser.runtime.onInstalled.addListener(() => void registerMenus().catch(console.error));
 browser.runtime.onStartup.addListener(() => void registerMenus().catch(console.error));
 
-browser.storage.onChanged.addListener((changes, area) => {
-  if (area !== "local") return;
-  const next = changes[STORAGE_KEY]?.newValue as LegacyStorageState | undefined;
-  if (!next || !Array.isArray(next.objects) || !Array.isArray(next.rules)) return;
-  queueSelectorHighlightSync(next);
-});
-
 browser.tabs.onUpdated.addListener((tabId, change, tab) => {
   if (change.status !== "complete" && !change.url) return;
   void syncSelectorHighlightsForTab(
@@ -745,10 +739,9 @@ browser.tabs.onActivated.addListener(({ tabId }) => {
   void syncSelectorHighlightsForTab(tabId).catch(() => undefined);
 });
 
-void browser.storage.local
-  .get(STORAGE_KEY)
-  .then((stored) => {
-    const next = stored[STORAGE_KEY] as LegacyStorageState | undefined;
+void readActiveDraft()
+  .then(async (draft) => draft?.workingState ?? (await browser.storage.local.get(STORAGE_KEY))[STORAGE_KEY])
+  .then((next: LegacyStorageState | undefined) => {
     if (next && Array.isArray(next.objects) && Array.isArray(next.rules)) {
       queueSelectorHighlightSync(next);
     }
@@ -962,6 +955,11 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
     return undefined;
   }
 
+  if (isWorkspaceStateMessage(message)) {
+    queueSelectorHighlightSync(message.state);
+    return Promise.resolve({ ok: true });
+  }
+
   if (message.type === "BURBOT_COMMIT") {
     const task = enqueue(async () => {
       if (message.op === "GET") {
@@ -1028,8 +1026,10 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
         );
         draft.updatedAt = new Date().toISOString();
         await writeActiveDraft(draft);
-        await publishUiState(draft.workingState);
-        queueSelectorHighlightSync(draft.workingState);
+        if (message.decision === "discard" || message.decision === "restore") {
+          await publishUiState(draft.workingState);
+          queueSelectorHighlightSync(draft.workingState);
+        }
         await notifyCommitChanged();
         return commitSessionView(draft);
       }
@@ -1039,13 +1039,8 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
         if (message.decision !== "save" && message.decision !== "later") {
           throw new Error("Wybierz zapis lub odłożenie zmian.");
         }
-        for (const item of reviewItems(draft)) {
-          if (
-            item.selection === "discarded" ||
-            (message.objectId && item.objectId !== message.objectId)
-          ) continue;
-          decideReviewChange(draft, item.id, message.decision, item.fingerprint);
-        }
+        decideAllReviewChanges(draft, message.decision,
+          typeof message.objectId === "string" ? message.objectId : undefined);
         draft.updatedAt = new Date().toISOString();
         await writeActiveDraft(draft);
         await notifyCommitChanged();
