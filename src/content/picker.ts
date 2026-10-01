@@ -15,7 +15,7 @@ import {
 import { selectorColor } from "../shared/selectorPalette";
 import {
   createRemoteFileSourceCandidate,
-  isRemoteSupportedFileUrl,
+  sourceFileTypeFromHint,
 } from "../shared/sources/remoteFile";
 import type {
   AttributeExtraction,
@@ -33,6 +33,35 @@ if (!globalThis.__burbotPickerLoaded) {
 
   function errorMessage(error: unknown): string {
     return error instanceof Error ? error.message : String(error);
+  }
+
+  function fileLinkContextHint(link: HTMLAnchorElement): string {
+    const scope =
+      link.closest("li,tr,td,div,p,section,article") ?? link.parentElement;
+    const image = scope?.querySelector("img");
+    return [
+      link.type,
+      link.download,
+      link.title,
+      link.getAttribute("aria-label"),
+      scope?.getAttribute("class"),
+      scope?.getAttribute("data-type"),
+      image?.getAttribute("src"),
+      image?.getAttribute("alt"),
+      image?.getAttribute("title"),
+    ]
+      .filter((value): value is string => Boolean(value))
+      .join(" ");
+  }
+
+  function fileLinkNameHint(link: HTMLAnchorElement): string {
+    return (
+      link.download ||
+      link.title ||
+      link.getAttribute("aria-label") ||
+      link.textContent ||
+      ""
+    ).trim();
   }
 
   function candidateFor(
@@ -260,9 +289,15 @@ if (!globalThis.__burbotPickerLoaded) {
           target instanceof HTMLAnchorElement
             ? target
             : target.closest("a[href]");
-        const supported =
-          link instanceof HTMLAnchorElement &&
-          isRemoteSupportedFileUrl(link.href);
+        let supported = false;
+        if (link instanceof HTMLAnchorElement) {
+          try {
+            const url = new URL(link.href);
+            supported = url.protocol === "http:" || url.protocol === "https:";
+          } catch {
+            supported = false;
+          }
+        }
         overlay.style.borderColor = supported ? "#2f7659" : "#b78024";
         overlay.style.background = supported ? "#2f765924" : "#b780241a";
       } else {
@@ -303,12 +338,13 @@ if (!globalThis.__burbotPickerLoaded) {
         try {
           const link = element?.closest("a[href]");
           if (!(link instanceof HTMLAnchorElement)) {
-            throw new Error("Click a supported file link (.doc, .docx, .pdf, .xlsx, .png, .jpg, .jpeg, .zip, .rar, .7z, .tar, .gz, .tgz).");
+            throw new Error("Kliknij link do pliku lub dokumentu.");
           }
           const file = createRemoteFileSourceCandidate(
             link.href,
             location.href,
-            link.download || link.textContent,
+            fileLinkNameHint(link),
+            sourceFileTypeFromHint(fileLinkContextHint(link)),
           );
           // File Add Mode is persistent: capture the file but keep the picker
           // session, overlay and event listeners active for the next file.
