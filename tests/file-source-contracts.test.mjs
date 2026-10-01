@@ -140,16 +140,27 @@ test("all configured file extensions are accepted", () => {
   }
 });
 
-test("unknown remote extensions remain attachable as generic files", () => {
+test("explicit unsupported remote extensions are still rejected", () => {
   for (const extension of ["html", "xls", "gif", "webp", "csv"]) {
-    const file = remoteFile.createRemoteFileSourceCandidate(
-      `https://projekt.test/files/sample.${extension}`,
-      "https://projekt.test/nabor",
+    assert.throws(
+      () =>
+        remoteFile.createRemoteFileSourceCandidate(
+          `https://projekt.test/files/sample.${extension}`,
+          "https://projekt.test/nabor",
+        ),
+      /supported document\/file link/,
     );
-    assert.equal(file.fileType, "OTHER");
-    assert.equal(file.name, `sample.${extension}`);
-    assert.equal(remoteFile.isRemoteSupportedFileUrl(file.url), false);
   }
+});
+
+test("extensionless download endpoints remain attachable even without a type hint", () => {
+  const file = remoteFile.createRemoteFileSourceCandidate(
+    "https://projekt.test/download/opaque-token",
+    "https://projekt.test/nabor",
+    "Dokument do pobrania",
+  );
+  assert.equal(file.fileType, "OTHER");
+  assert.equal(file.name, "Dokument do pobrania");
 });
 
 test("opaque download links use page context instead of requiring a filename extension", () => {
