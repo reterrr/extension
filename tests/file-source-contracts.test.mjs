@@ -140,7 +140,7 @@ test("all configured file extensions are accepted", () => {
   }
 });
 
-test("unsupported remote file extensions are rejected", () => {
+test("explicit unsupported remote extensions are still rejected", () => {
   for (const extension of ["html", "xls", "gif", "webp", "csv"]) {
     assert.throws(
       () =>
@@ -148,9 +148,46 @@ test("unsupported remote file extensions are rejected", () => {
           `https://projekt.test/files/sample.${extension}`,
           "https://projekt.test/nabor",
         ),
-      /\.doc/,
+      /supported document\/file link/,
     );
   }
+});
+
+test("extensionless download endpoints remain attachable even without a type hint", () => {
+  const file = remoteFile.createRemoteFileSourceCandidate(
+    "https://projekt.test/download/opaque-token",
+    "https://projekt.test/nabor",
+    "Dokument do pobrania",
+  );
+  assert.equal(file.fileType, "OTHER");
+  assert.equal(file.name, "Dokument do pobrania");
+});
+
+test("opaque download links use page context instead of requiring a filename extension", () => {
+  const file = remoteFile.createRemoteFileSourceCandidate(
+    "https://ocrg.opolskie.pl/download/enB03whdGjCXJNvZPcHYig",
+    "https://ocrg.opolskie.pl/projekt/example/",
+    "Regulamin rekrutacji i udzielania wsparcia",
+    "PDF",
+  );
+
+  assert.equal(file.fileType, "PDF");
+  assert.equal(
+    file.url,
+    "https://ocrg.opolskie.pl/download/enB03whdGjCXJNvZPcHYig",
+  );
+  assert.equal(file.name, "Regulamin rekrutacji i udzielania wsparcia.pdf");
+});
+
+test("loose attachment hints recognize file types from classes and icon paths", () => {
+  assert.equal(
+    remoteFile.sourceFileTypeFromHint("pdf attachment /images/ext/pdf_icon.gif"),
+    "PDF",
+  );
+  assert.equal(
+    remoteFile.sourceFileTypeFromHint("download-attachment docx"),
+    "DOCX",
+  );
 });
 
 test("common archive links can be attached and classified as file sources", () => {

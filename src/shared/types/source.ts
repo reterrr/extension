@@ -12,6 +12,7 @@ export const SOURCE_FILE_TYPES = [
   "TAR",
   "GZ",
   "TGZ",
+  "OTHER",
 ] as const;
 
 export type SourceFileType = (typeof SOURCE_FILE_TYPES)[number];
