@@ -25,6 +25,9 @@ type CanonicalText = {
 type HighlightEntry = {
   id: string;
   selector: string;
+  signature: string;
+  element: Element | null;
+  anchor: Node;
   target: Element | Range;
   overlays: HTMLDivElement[];
 };
@@ -201,8 +204,7 @@ function semanticScore(element: Element | null): number {
   return score;
 }
 
-function quoteRange(root: Element, quote: SelectionQuote): Range | null {
-  const index = canonicalText(root);
+function quoteRange(index: CanonicalText, quote: SelectionQuote): Range | null {
   const positions = occurrences(index.text, quote.exact);
   if (!positions.length || quote.exact.length === 0) return null;
 
@@ -282,9 +284,7 @@ function createOverlay(
   return overlay;
 }
 
-function syncOverlayRects(entry: HighlightEntry): void {
-  const rects = targetConnected(entry.target) ? targetRects(entry.target) : [];
-
+function syncOverlayRects(entry: HighlightEntry, rects: DOMRect[]): void {
   while (entry.overlays.length < rects.length) {
     entry.overlays.push(
       createOverlay(entry.id, entry.selector, entry.target instanceof Range),
@@ -315,6 +315,8 @@ let frame: number | null = null;
 let rebuildTimer: ReturnType<typeof setTimeout> | undefined;
 let entries: HighlightEntry[] = [];
 let currentHighlights: SelectorHighlight[] = [];
+let pendingMutations: MutationRecord[] = [];
+let observing = false;
 
 function clearEntries(): void {
   if (frame !== null) cancelAnimationFrame(frame);
@@ -331,34 +333,71 @@ function clear(): void {
     rebuildTimer = undefined;
   }
   currentHighlights = [];
+  pendingMutations = [];
+  observer.disconnect();
+  observing = false;
   clearEntries();
 }
 
 function position(): void {
   frame = null;
-  for (const entry of entries) syncOverlayRects(entry);
+  // Read all layout before writing any overlay styles to avoid layout thrash.
+  const rects = entries.map((entry) =>
+    targetConnected(entry.target) ? targetRects(entry.target) : [],
+  );
+  entries.forEach((entry, index) => syncOverlayRects(entry, rects[index]));
 }
 
 function schedulePosition(): void {
-  if (frame !== null) return;
+  if (!entries.length || frame !== null) return;
   frame = requestAnimationFrame(position);
 }
 
 function rebuild(): void {
-  clearEntries();
+  const mutations = [...pendingMutations, ...observer.takeRecords()]
+    .filter((mutation) => !isOwnHighlightMutation(mutation));
+  pendingMutations = [];
+  if (rebuildTimer !== undefined) clearTimeout(rebuildTimer);
+  rebuildTimer = undefined;
+  const previous = new Map(entries.map((entry) => [entry.id, entry]));
+  const next: HighlightEntry[] = [];
   const pageRoot = document.body ?? document.documentElement;
+  // Many imported quotes share body as a fallback: walk that text only once.
+  const textIndexes = new Map<Element, CanonicalText>();
+  const quoteTarget = (root: Element, quote: SelectionQuote) => {
+    let index = textIndexes.get(root);
+    if (!index) {
+      index = canonicalText(root);
+      textIndexes.set(root, index);
+    }
+    return quoteRange(index, quote);
+  };
+  const resolved = new Map<string, Element | null>();
 
   for (const highlight of currentHighlights) {
-    const element = resolveElement(highlight);
+    const signature = JSON.stringify([highlight.selector, highlight.selectorFallbacks, highlight.quote]);
+    const old = previous.get(highlight.id);
+    const unchanged = old?.signature === signature;
+    if (unchanged && !mutations.length && targetConnected(old.target) && old.anchor.isConnected) {
+      next.push(old);
+      previous.delete(highlight.id);
+      continue;
+    }
+    const selectorKey = JSON.stringify(selectorCandidates(highlight));
+    if (!resolved.has(selectorKey)) resolved.set(selectorKey, resolveElement(highlight));
+    const element = resolved.get(selectorKey) ?? null;
     let target: Element | Range | null = null;
 
-    if (highlight.quote) {
+    if (unchanged && old.element === element && targetConnected(old.target) &&
+        old.anchor.isConnected && !mutations.some((mutation) => touchesAnchor(mutation, old.anchor))) {
+      target = old.target;
+    } else if (highlight.quote) {
       // Prefer the resolved durable container, but if the page has rearranged
       // its wrappers entirely, the quote itself can still identify the exact
       // text globally.
       target =
-        (element ? quoteRange(element, highlight.quote) : null) ??
-        quoteRange(pageRoot, highlight.quote) ??
+        (element ? quoteTarget(element, highlight.quote) : null) ??
+        quoteTarget(pageRoot, highlight.quote) ??
         element;
     } else {
       target = element;
@@ -369,21 +408,46 @@ function rebuild(): void {
     const entry: HighlightEntry = {
       id: highlight.id,
       selector: highlight.selector,
+      signature,
+      element,
+      anchor: target instanceof Range
+        ? (target.commonAncestorContainer instanceof Text
+            ? target.commonAncestorContainer.parentElement ?? target.commonAncestorContainer
+            : target.commonAncestorContainer)
+        : target,
       target,
-      overlays: [],
+      overlays: unchanged && (old.target instanceof Range) === (target instanceof Range)
+        ? old.overlays : [],
     };
-    entries.push(entry);
-    syncOverlayRects(entry);
+    if (entry.overlays === old?.overlays) previous.delete(highlight.id);
+    next.push(entry);
   }
+  for (const entry of previous.values())
+    for (const overlay of entry.overlays) overlay.remove();
+  entries = next;
+  if (frame !== null) cancelAnimationFrame(frame);
+  position();
 }
 
 function show(highlights: SelectorHighlight[]): void {
+  if (!highlights.length) {
+    clear();
+    return;
+  }
   currentHighlights = highlights;
+  if (!observing) {
+    observer.observe(document.documentElement, {
+      childList: true, subtree: true, characterData: true, attributes: true,
+      attributeFilter: ["id", "class", "href", "src", "datetime", "title", "alt", "content"],
+    });
+    observing = true;
+  }
   rebuild();
 }
 
 function scheduleRebuild(): void {
-  if (rebuildTimer !== undefined) clearTimeout(rebuildTimer);
+  // A continuously updating page must not postpone highlights indefinitely.
+  if (!currentHighlights.length || rebuildTimer !== undefined) return;
   rebuildTimer = setTimeout(() => {
     rebuildTimer = undefined;
     rebuild();
@@ -420,17 +484,18 @@ function isOwnHighlightMutation(mutation: MutationRecord): boolean {
   return changed.length > 0 && changed.every(isOwnHighlightNode);
 }
 
-const observedRoot = document.body ?? document.documentElement;
+function touchesAnchor(mutation: MutationRecord, anchor: Node): boolean {
+  const overlaps = (node: Node) => node.contains(anchor) || anchor.contains(node);
+  return mutation.type === "childList"
+    ? [...mutation.addedNodes, ...mutation.removedNodes].some(overlaps)
+    : overlaps(mutation.target);
+}
+
 const observer = new MutationObserver((mutations) => {
-  if (mutations.every(isOwnHighlightMutation)) return;
+  const relevant = mutations.filter((mutation) => !isOwnHighlightMutation(mutation));
+  if (!relevant.length) return;
+  pendingMutations.push(...relevant);
   scheduleRebuild();
-});
-observer.observe(observedRoot, {
-  childList: true,
-  subtree: true,
-  characterData: true,
-  attributes: true,
-  attributeFilter: ["id", "class", "href", "src", "datetime", "title", "alt", "content"],
 });
 
 globalThis.__burbotSelectorHighlighterRuntime = {

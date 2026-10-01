@@ -6,7 +6,6 @@ import type {
   LegacyStoredObject,
 } from "../shared/types/legacy-storage";
 
-const STORAGE_KEY = "burbot:v1";
 let initialized = false;
 let state = BurbotCore.empty() as LegacyStorageState;
 let windowId: number | undefined;
@@ -386,9 +385,8 @@ export async function initPdfCaptureUi(): Promise<void> {
     if (pending) validatePending();
   });
 
-  browser.storage.onChanged.addListener((changes, area) => {
-    if (area !== "local") return;
-    const next = changes[STORAGE_KEY]?.newValue as LegacyStorageState | undefined;
+  window.addEventListener("burbot:workspace-state-changed", (event) => {
+    const next = (event as CustomEvent<{ state?: LegacyStorageState }>).detail?.state;
     if (next) state = next;
   });
 

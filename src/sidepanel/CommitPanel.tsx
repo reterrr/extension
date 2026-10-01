@@ -251,10 +251,26 @@ export function CommitPanel() {
   const [filter, setFilter] = useState("all");
 
   useEffect(() => {
-    const refresh = () =>
-      void sendCommit<CommitSessionView>("GET")
-        .then(setSession)
-        .catch((error) => setError(String(error.message ?? error)));
+    let frame: number | null = null;
+    let running = false;
+    let requested = false;
+    let disposed = false;
+    const refresh = () => {
+      requested = true;
+      if (frame !== null || running || disposed) return;
+      frame = requestAnimationFrame(() => {
+        frame = null;
+        requested = false;
+        running = true;
+        void sendCommit<CommitSessionView>("GET")
+          .then((next) => { if (!disposed) setSession(next); })
+          .catch((error) => { if (!disposed) setError(String(error.message ?? error)); })
+          .finally(() => {
+            running = false;
+            if (requested && !disposed) refresh();
+          });
+      });
+    };
     const listener = (event: unknown) => {
       if ((event as { type?: string })?.type === "BURBOT_COMMIT_CHANGED")
         refresh();
@@ -263,6 +279,8 @@ export function CommitPanel() {
     browser.runtime.onMessage.addListener(listener);
     window.addEventListener("burbot:commit-changed", refresh);
     return () => {
+      disposed = true;
+      if (frame !== null) cancelAnimationFrame(frame);
       browser.runtime.onMessage.removeListener(listener);
       window.removeEventListener("burbot:commit-changed", refresh);
     };

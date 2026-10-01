@@ -26,6 +26,49 @@ before(async () => {
 after(async () => {
   if (directory) await rm(directory, { recursive: true, force: true });
 });
+
+test("bulk decisions equal individual decisions, including atomic groups and archived proposals", () => {
+  const d = operatorDraft();
+  d.workingState.objects[0].values.notes = "Zmiana tekstu";
+  const discarded = review.reviewItems(d).find((item) => item.label === "notes");
+  review.decideReviewChange(d, discarded.id, "discard", discarded.fingerprint);
+  for (const decision of ["later", "save"]) {
+    const individually = structuredClone(d);
+    const bulk = structuredClone(d);
+    for (const item of review.reviewItems(individually))
+      if (item.selection !== "discarded")
+        review.decideReviewChange(individually, item.id, decision, item.fingerprint);
+    review.decideAllReviewChanges(bulk, decision);
+    assert.deepEqual(bulk, individually);
+    assert.deepEqual(session.commitSessionView(bulk), session.commitSessionView(individually));
+    assert.ok(bulk.discardedChanges[discarded.id]);
+  }
+});
+
+test("bulk decisions can be limited to one owner without changing data or other selections", () => {
+  const d = draft();
+  d.workingState.objects.push({ id: "another", type: "operator", values: { name: "Operator" } });
+  const working = structuredClone(d.workingState);
+  review.decideAllReviewChanges(d, "later", "p");
+  const items = review.reviewItems(d);
+  assert.ok(items.filter((item) => item.objectId === "p").every((item) => item.selection === "later"));
+  assert.ok(items.filter((item) => item.objectId === "another").every((item) => item.selection === "save"));
+  assert.deepEqual(d.workingState, working);
+});
+
+test("indexes remain fresh when an edit keeps the same draft revision", () => {
+  const d = draft();
+  const first = review.reviewChanges(d);
+  const revision = d.workingState.revision;
+  d.workingState.objects[0].values.notes = "Kolejna poprawka";
+  d.workingState.fileSources[0].purpose = "Dodatkowy regulamin";
+  const second = review.reviewChanges(d);
+  assert.equal(d.workingState.revision, revision);
+  assert.notDeepEqual(second, first);
+  const notes = second.find((change) => change.target.key === "notes");
+  assert.equal(notes.after.value, "Kolejna poprawka");
+  assert.ok(review.reviewItems(d).some((item) => item.details.some((detail) => detail.after === "Dodatkowy regulamin")));
+});
 function draft() {
   const base = {
     version: 1,

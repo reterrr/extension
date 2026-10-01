@@ -442,3 +442,67 @@ test("portable filenames and empty selection behavior are predictable", () => {
   );
   assert.throws(() => exported(BurbotCore.empty()), /Brak obiektów/);
 });
+
+function freeze(value) {
+  if (!value || typeof value !== "object" || Object.isFrozen(value)) return value;
+  Object.freeze(value);
+  for (const child of Object.values(value)) freeze(child);
+  return value;
+}
+
+test("approval copies the edited owner while preserving unrelated data and source snapshots", () => {
+  const original = imported();
+  const saved = structuredClone(original);
+  const document = exported(original);
+  const project = document.objects.find((object) => object.type === "project");
+  project.data.name = "Zmieniona nazwa projektu";
+  project.files[0].metadata.intended_use = "Nowy opis zastosowania";
+  const session = review.createImportReviewSession(document, "update.json", ids("preview"), now);
+  const preview = session.previewState.objects.find((object) => object.importKey === project.key);
+  const plan = review.buildImportApprovalPlan(session, preview.id, original);
+  assert.ok(plan.existingTargetObjectId);
+  freeze(original);
+  const result = stage.stageImportReviewObject(original, plan, ids("updated"), now);
+  assert.deepEqual(original, saved);
+  assert.equal(result.state.objects.find((object) => object.id === result.stagedObjectId).values.name,
+    "Zmieniona nazwa projektu");
+  assert.equal(result.state.importSources[0], original.importSources[0]);
+  for (const object of original.objects)
+    if (object.id !== result.stagedObjectId)
+      assert.equal(result.state.objects.find((row) => row.id === object.id), object);
+  assert.ok(result.state.fileSources.some((row) => row.intended_use === "Nowy opis zastosowania"));
+
+  // Fail after editing fields/children: no partial writes may escape the stage.
+  assert.throws(() => stage.stageImportReviewObject(original, {
+    ...plan, reviewRules: [{ id: "bad", objectId: preview.id, field: "refund_percent_max",
+      pageUrl: "https://example.test/", selector: "body", extraction: { type: "text" },
+      target: { kind: "funding", id: "missing" }, targetImportKey: "missing" }],
+  }, ids("failed"), now), /financing|funding/i);
+  assert.deepEqual(original, saved);
+});
+
+test("new approval remaps existing references in isolation and retains every existing collection", () => {
+  const original = imported();
+  const saved = structuredClone(original);
+  const document = exported(original);
+  const recruitment = document.objects.find((object) => object.type === "recruitment");
+  recruitment.key = "new-recruitment";
+  recruitment.data.external_number = "Nowy nabór";
+  const session = review.createImportReviewSession(document, "new.json", ids("preview"), now);
+  const preview = session.previewState.objects.find((object) => object.importKey === recruitment.key);
+  const plan = review.buildImportApprovalPlan(session, preview.id, original);
+  assert.equal(plan.existingTargetObjectId, undefined);
+  assert.ok(plan.referencePatches.length);
+  assert.ok(plan.temporaryDependencyImportKeys.length);
+  freeze(original);
+  const result = stage.stageImportReviewObject(original, plan, ids("new"), now);
+  assert.deepEqual(original, saved);
+  assert.equal(result.state.objects.length, original.objects.length + 1);
+  const added = result.state.objects.find((object) => object.id === result.stagedObjectId);
+  assert.equal(added.values.project_id, original.objects.find((object) => object.type === "project").id);
+  for (const [key, value] of Object.entries(original))
+    if (Array.isArray(value)) assert.deepEqual(result.state[key].slice(0, value.length), value, key);
+  const operatorIds = new Set(original.objects.filter((object) => object.type === "operator").map((object) => object.id));
+  assert.ok(result.state.operatorAssignments.filter((row) => row.objectId === added.id)
+    .every((row) => operatorIds.has(row.operatorId)));
+});

@@ -156,10 +156,8 @@ function installBrowserMock(seed) {
     window.__uiState = copy(
       window.__uiDraft?.workingState ?? window.__uiCommitted,
     );
-    onChanged.emit(
-      { "burbot:v1": { newValue: copy(window.__uiState) } },
-      "local",
-    );
+    onMessage.emit({ type: "BURBOT_WORKSPACE_STATE_CHANGED", updateId: crypto.randomUUID(),
+      state: copy(window.__uiState) });
     onMessage.emit({ type: "BURBOT_COMMIT_CHANGED" });
     window.dispatchEvent(new Event("burbot:commit-changed"));
   };
@@ -204,17 +202,7 @@ function installBrowserMock(seed) {
           }
           if (message.op === "REVIEW_ALL") {
             const d = ensureDraft();
-            for (const item of runtime.reviewItems(d))
-              if (
-                item.selection !== "discarded" &&
-                (!message.objectId || item.objectId === message.objectId)
-              )
-                runtime.decideReviewChange(
-                  d,
-                  item.id,
-                  message.decision,
-                  item.fingerprint,
-                );
+            runtime.decideAllReviewChanges(d, message.decision, message.objectId);
             publish();
           }
           if (message.op === "COMMIT") {
@@ -372,6 +360,10 @@ test(
     const numeric = page
       .locator('#funding .field-row[data-field="refund_percent_max"]')
       .first();
+    await page.evaluate(() => {
+      window.__fieldBeforeSelection = document.querySelector("#fields .field-row");
+      window.__fundingBeforeSelection = document.querySelector("#funding .field-row");
+    });
     await numeric.focus();
     await page.keyboard.press("Enter");
     await page
@@ -397,6 +389,10 @@ test(
             ),
         );
       });
+    assert.equal(await page.evaluate(() =>
+      window.__fieldBeforeSelection === document.querySelector("#fields .field-row") &&
+      window.__fundingBeforeSelection === document.querySelector("#funding .field-row")), true,
+      "selecting a field preserves field and variant DOM nodes");
     assert.equal(
       await page.locator(".field-evidence-editor").getAttribute("open"),
       null,
@@ -417,6 +413,8 @@ test(
     await page.waitForFunction(
       () => window.__uiState.financingRules[0].refund_percent_max === 80.5,
     );
+    assert.equal(await page.evaluate(() => window.__fieldBeforeSelection === document.querySelector("#fields .field-row")),
+      true, "saving a variant preserves unrelated normal field rows");
     await page
       .waitForFunction(
         () => document.activeElement?.id === "edit-value",

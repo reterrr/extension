@@ -60,6 +60,8 @@ import {
     objectView = null;
   const expanded = new Set();
   const evidenceExpanded = new Set();
+  const normalFieldRows = new Map();
+  let normalFieldOwner = "";
   const chosen = () => db.objects.find((o) => o.id === objectId);
   const keyOf = (descriptor) =>
     descriptor ? C.targetKey(descriptor.target) + "/" + descriptor.field : "";
@@ -392,13 +394,6 @@ import {
     });
     if (!result?.ok) throw Error(result?.error || "Storage is unavailable.");
     adopt(result.value);
-    if (result.value?.objects && Array.isArray(result.value.rules)) {
-      window.dispatchEvent(
-        new CustomEvent("burbot:workspace-state-changed", {
-          detail: { state: result.value },
-        }),
-      );
-    }
     return result.value;
   }
   function rpc(op, extra = {}) {
@@ -561,7 +556,22 @@ import {
       expanded.add("operator_contact:" + descriptor.target.id);
       $("operator-contacts-panel").open = true;
     }
-    render();
+    const rows = Array.from($("workspace").querySelectorAll(".field-row"));
+    const selected = rows.find((row) =>
+      row.dataset.field === descriptor.field && row.dataset.target === C.targetKey(descriptor.target));
+    if (!selected) {
+      render();
+      return;
+    }
+    for (const row of rows) {
+      row.classList.toggle("selected", row === selected);
+      row.setAttribute("aria-pressed", String(row === selected));
+    }
+    const variant = selected.closest("details.variant");
+    if (variant) variant.open = true;
+    renderEditor();
+    controls();
+    window.dispatchEvent(new Event("burbot:workspace-rendered"));
   }
   function acceptCapture(value) {
     if (!active || !chosen()) {
@@ -678,6 +688,27 @@ import {
       }
     };
     container.append(button);
+    return button;
+  }
+  function refreshNormalFieldRow(button, field, definition, values) {
+    const descriptor = { field };
+    const readOnly = Boolean(definition.readonly || definition.system);
+    if (!readOnly) descriptors.push(descriptor);
+    const selected = !readOnly && keyOf(active) === keyOf(descriptor);
+    button.classList.toggle("selected", selected);
+    button.setAttribute("aria-pressed", String(selected));
+    button.disabled = busy;
+    const value = button.querySelector(".field-value");
+    const formatted = C.formatValue(values[field], definition, db);
+    if (value.textContent !== formatted) value.textContent = formatted;
+    const set = C.hasValue(values[field]);
+    value.classList.toggle("empty", !set);
+    const count = readOnly ? 0 : fieldEvidenceFor(descriptor).length;
+    button.dataset.evidenceCount = String(count);
+    const mark = button.querySelector(".field-mark");
+    const text = readOnly ? (set ? "AUTO" : "")
+      : [set ? "✓" : "", count ? "EV " + count : ""].filter(Boolean).join(" · ");
+    if (mark.textContent !== text) mark.textContent = text;
   }
   function trackExpansion(details, key) {
     details.open = expanded.has(key);
@@ -1757,6 +1788,7 @@ import {
     );
   }
   function controls() {
+    for (const row of $("workspace").querySelectorAll(".field-row")) row.disabled = busy;
     $("pick").disabled = !port || !active || busy || evidencePicking;
     $("pick").textContent = picking && !evidencePicking ? "Anuluj wybór" : "Wybierz element";
     $("selected-text").disabled = !port || !active || busy || evidencePicking;
@@ -1895,21 +1927,32 @@ import {
       $("rule-count").textContent = rules + (rules === 1 ? " rule" : " rules");
       $("progress-bar").max = businessFields.length || 1;
       $("progress-bar").value = count;
-      $("fields").replaceChildren();
+      const owner = object.id + "/" + object.type;
+      const reuseFields = normalFieldOwner === owner && normalFieldRows.size === fields.length &&
+        fields.every(([field]) => normalFieldRows.get(field)?.isConnected);
+      if (!reuseFields) {
+        $("fields").replaceChildren();
+        normalFieldRows.clear();
+        normalFieldOwner = owner;
+      }
       const groups = new Map();
       for (const [field, definition] of fields) {
+        if (reuseFields) {
+          refreshNormalFieldRow(normalFieldRows.get(field), field, definition, object.values);
+          continue;
+        }
         if (!groups.has(definition.group)) {
           const section = node("section", "field-group");
           section.append(node("h2", "", definition.group));
           groups.set(definition.group, section);
           $("fields").append(section);
         }
-        fieldRow(
+        normalFieldRows.set(field, fieldRow(
           groups.get(definition.group),
           field,
           definition,
           object.values,
-        );
+        ));
       }
       const hasContacts = !!BurbotSchema[object.type]?.contacts;
       $("operator-contacts-section").hidden = !hasContacts;
@@ -1928,6 +1971,7 @@ import {
     controls();
     void syncObjectWorkflowControls();
     restoreViewportAnchor();
+    window.dispatchEvent(new Event("burbot:workspace-rendered"));
   }
   function renderFailure(error) {
     console.error("Burbot workspace render failed", error);
@@ -1992,7 +2036,7 @@ import {
       event?.preventDefault();
       if (busy) return;
       busy = true;
-      render();
+      controls();
       try {
         await handler(event);
       } catch (error) {
@@ -2186,11 +2230,12 @@ import {
       render();
     } else if (change.status === "complete" || change.url) void connect();
   });
+  window.addEventListener("burbot:workspace-state-changed", (event) => {
+    if (!event.detail?.state) return;
+    adopt(event.detail.state);
+    if (!busy && ready) render();
+  });
   browser.storage.onChanged.addListener((changes, area) => {
-    if (area === "local" && changes["burbot:v1"]?.newValue) {
-      adopt(changes["burbot:v1"].newValue);
-      render();
-    }
     if (area === "session" && changes[OBJECT_VIEW_STORAGE_KEY]) {
       const rawView = changes[OBJECT_VIEW_STORAGE_KEY].newValue;
       // Creation persists the new object in the draft before it updates

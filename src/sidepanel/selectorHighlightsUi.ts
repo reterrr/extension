@@ -12,11 +12,19 @@ import type {
   LegacyStoredRule,
 } from "../shared/types/legacy-storage";
 
-const STORAGE_KEY = "burbot:v1";
 let initialized = false;
 let state = BurbotCore.empty() as LegacyStorageState;
 let activePageUrl = "";
 let syncQueued = false;
+let syncRunning = false;
+let syncRequested = false;
+let syncVersion = 0;
+let locatorCache: Record<string, unknown> = {};
+
+function updateLocatorCache(value: unknown): void {
+  locatorCache = value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown> : {};
+}
 
 type PendingSelectorPreview = {
   objectId: string;
@@ -226,24 +234,14 @@ async function renderPageHighlights(
 }
 
 async function syncPage(): Promise<void> {
+  const version = syncVersion;
   const tab = await activeTab();
+  if (version !== syncVersion) return;
   activePageUrl = tab?.url ?? "";
   colorSidebar();
   let protocol = "";
   try { protocol = new URL(activePageUrl).protocol; } catch {}
   if (!tab || tab.id === undefined || !["http:", "https:"].includes(protocol)) return;
-
-  const locatorStored = await browser.storage.local.get(
-    IMPORT_EVIDENCE_LOCATOR_STORAGE_KEY,
-  );
-  const locatorValue =
-    locatorStored[IMPORT_EVIDENCE_LOCATOR_STORAGE_KEY];
-  const locatorCache =
-    locatorValue &&
-    typeof locatorValue === "object" &&
-    !Array.isArray(locatorValue)
-      ? locatorValue
-      : {};
 
   const highlights: SelectorHighlight[] = buildStoredSelectorHighlights(
     state,
@@ -261,27 +259,37 @@ async function syncPage(): Promise<void> {
 }
 
 function queueSync(): void {
-  if (syncQueued) return;
+  syncVersion++;
+  syncRequested = true;
+  if (syncQueued || syncRunning) return;
   syncQueued = true;
-  queueMicrotask(() => { syncQueued = false; void syncPage(); });
+  requestAnimationFrame(() => {
+    syncQueued = false;
+    syncRequested = false;
+    syncRunning = true;
+    void syncPage().catch(() => undefined).finally(() => {
+      syncRunning = false;
+      if (syncRequested) queueSync();
+    });
+  });
 }
 
 export async function initSelectorHighlightsUi(): Promise<void> {
   if (initialized) return;
   initialized = true;
   await data();
+  const stored = await browser.storage.local.get(IMPORT_EVIDENCE_LOCATOR_STORAGE_KEY);
+  updateLocatorCache(stored[IMPORT_EVIDENCE_LOCATOR_STORAGE_KEY]);
   const tab = await activeTab();
   activePageUrl = tab?.url ?? "";
-  const workspace = document.getElementById("workspace");
-  if (workspace) {
-    const observer = new MutationObserver(queueSync);
-    observer.observe(workspace, { childList: true, subtree: true, attributes: true, attributeFilter: ["aria-current", "hidden"] });
-  }
+  // Sidebar layout changes only need recolouring, not storage reads and a
+  // complete page-highlights IPC round trip.
+  window.addEventListener("burbot:workspace-rendered", colorSidebar);
   document.addEventListener("click", (event) => {
     const target = event.target;
-    if (target instanceof Element && target.closest(".field-row")) queueSync();
+    if (target instanceof Element && target.closest(".field-row")) colorSidebar();
   }, true);
-  window.addEventListener("burbot:active-object-changed", queueSync);
+  window.addEventListener("burbot:active-object-changed", colorSidebar);
   window.addEventListener("burbot:selector-highlights-refresh", queueSync);
   window.addEventListener("burbot:workspace-state-changed", (event) => {
     const next = (event as CustomEvent<{ state?: LegacyStorageState }>).detail?.state;
@@ -297,14 +305,12 @@ export async function initSelectorHighlightsUi(): Promise<void> {
   browser.storage.onChanged.addListener((changes, area) => {
     if (area !== "local") return;
 
-    const next = changes[STORAGE_KEY]?.newValue as LegacyStorageState | undefined;
-    if (next) state = next;
-
-    if (next || changes[IMPORT_EVIDENCE_LOCATOR_STORAGE_KEY]) {
+    if (changes[IMPORT_EVIDENCE_LOCATOR_STORAGE_KEY]) {
+      updateLocatorCache(changes[IMPORT_EVIDENCE_LOCATOR_STORAGE_KEY].newValue);
       queueSync();
     }
   });
   browser.tabs.onActivated.addListener(queueSync);
   browser.tabs.onUpdated.addListener((_tabId, change) => { if (change.url || change.status === "complete") queueSync(); });
-  await syncPage();
+  queueSync();
 }

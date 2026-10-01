@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 
 import {
   IMPORT_EVIDENCE_LOCATOR_STORAGE_KEY,
@@ -295,8 +297,9 @@ test("background materializes imported evidence through the dedicated locator ru
 
   assert.match(
     background,
-    /buildImportedEvidenceAnchorRequests\([\s\S]*?evidence-locator\.js/,
+    /buildImportedEvidenceAnchorRequests\(/,
   );
+  assert.match(background, /files: \["evidence-locator\.js"\]/);
   assert.match(
     background,
     /IMPORT_EVIDENCE_LOCATOR_STORAGE_KEY/,
