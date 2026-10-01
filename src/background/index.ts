@@ -1,3 +1,5 @@
+import { commitSummary } from "../shared/commits/summary";
+import { createActiveTabHighlightSync } from "./activeTabHighlights";
 import "../shared/domain/schema.js";
 import "../shared/domain/geographyRuntime";
 import "../shared/domain/core.js";
@@ -195,7 +197,6 @@ async function notifyCommitChanged(): Promise<void> {
 }
 
 let selectorHighlightState: LegacyStorageState | null = null;
-let selectorHighlightSyncQueued = false;
 
 type EvidenceLocatorRecord = {
   pageUrl: string;
@@ -236,6 +237,7 @@ async function writeEvidenceLocatorCache(
 async function requestEvidenceLocators(
   tabId: number,
   items: unknown[],
+  current: () => boolean,
 ): Promise<ResolvedEvidenceLocator[]> {
   const send = async () =>
     (await browser.tabs.sendMessage(tabId, {
@@ -246,14 +248,17 @@ async function requestEvidenceLocators(
       locators?: ResolvedEvidenceLocator[];
     };
 
+  if (!current()) return [];
   let response;
   try {
     response = await send();
   } catch {
+    if (!current()) return [];
     await browser.scripting.executeScript({
       target: { tabId },
       files: ["evidence-locator.js"],
     });
+    if (!current()) return [];
     response = await send();
   }
 
@@ -266,6 +271,7 @@ async function materializeImportedEvidenceForTab(
   tabId: number,
   pageUrl: string,
   state: LegacyStorageState,
+  current: () => boolean,
 ): Promise<EvidenceLocatorCache> {
   const running = evidenceLocatorSyncByTab.get(tabId);
   if (running) return running;
@@ -293,12 +299,13 @@ async function materializeImportedEvidenceForTab(
 
     let resolved: ResolvedEvidenceLocator[] = [];
     try {
-      resolved = await requestEvidenceLocators(tabId, requests);
+      resolved = await requestEvidenceLocators(tabId, requests, current);
     } catch {
       if (changed) await writeEvidenceLocatorCache(cache);
       return cache;
     }
 
+    if (!current()) return cache;
     const resolvedByKey = new Map(
       resolved.map((locator) => [String(locator.key), locator]),
     );
@@ -332,25 +339,20 @@ async function materializeImportedEvidenceForTab(
   return task;
 }
 
-function isHttpPage(url: string | undefined): url is string {
-  if (!url) return false;
-  try {
-    return ["http:", "https:"].includes(new URL(url).protocol);
-  } catch {
-    return false;
-  }
-}
-
 async function sendSelectorHighlights(
   tabId: number,
   pageUrl: string,
   state: LegacyStorageState,
+  current: () => boolean,
 ): Promise<void> {
+  if (!current()) return;
   const locatorCache = await materializeImportedEvidenceForTab(
     tabId,
     pageUrl,
     state,
+    current,
   );
+  if (!current()) return;
   const highlights = buildStoredSelectorHighlights(
     state,
     pageUrl,
@@ -367,11 +369,13 @@ async function sendSelectorHighlights(
     // The runtime is injected lazily on ordinary webpages.
   }
 
+  if (!highlights.length || !current()) return;
   try {
     await browser.scripting.executeScript({
       target: { tabId },
       files: ["selector-highlights.js"],
     });
+    if (!current()) return;
     await browser.tabs.sendMessage(tabId, {
       type: "BURBOT_SHOW_SELECTOR_HIGHLIGHTS",
       highlights,
@@ -381,48 +385,41 @@ async function sendSelectorHighlights(
   }
 }
 
-async function syncSelectorHighlightsForTab(
-  tabId: number,
-  pageUrl?: string,
-  state = selectorHighlightState,
-): Promise<void> {
-  if (!state) return;
-  let url = pageUrl;
-  if (!url) {
-    try {
-      url = (await browser.tabs.get(tabId)).url;
-    } catch {
-      return;
-    }
-  }
-  if (!isHttpPage(url)) return;
-  await sendSelectorHighlights(tabId, url, state);
-}
-
-async function syncSelectorHighlightsForAllTabs(
-  state = selectorHighlightState,
-): Promise<void> {
-  if (!state) return;
-  const tabs = await browser.tabs.query({});
-  const eligible = tabs.filter(
-    (tab) => tab.id !== undefined && isHttpPage(tab.url),
-  );
-  await Promise.allSettled(
-    eligible.map((tab) =>
-      sendSelectorHighlights(tab.id as number, tab.url as string, state),
-    ),
-  );
-}
+const activeHighlights = createActiveTabHighlightSync<LegacyStorageState>({
+  async activeTab(windowId) {
+    return (await browser.tabs.query({ active: true, windowId }))[0];
+  },
+  async state() {
+    if (selectorHighlightState) return selectorHighlightState;
+    const state = await workspaceState();
+    return selectorHighlightState ??= state;
+  },
+  sync: sendSelectorHighlights,
+  async clear(tabId) {
+    // Never inject a runtime just to clear a tab that has not used it.
+    await Promise.allSettled([
+      browser.tabs.sendMessage(tabId, { type: "BURBOT_SHOW_SELECTOR_HIGHLIGHTS", highlights: [] }),
+      browser.tabs.sendMessage(tabId, { type: "BURBOT_SHOW_IMPORT_REVIEW_HIGHLIGHTS", highlights: [] }),
+    ]);
+  },
+});
 
 function queueSelectorHighlightSync(state?: LegacyStorageState): void {
   if (state) selectorHighlightState = state;
-  if (selectorHighlightSyncQueued) return;
-  selectorHighlightSyncQueued = true;
-  queueMicrotask(() => {
-    selectorHighlightSyncQueued = false;
-    void syncSelectorHighlightsForAllTabs().catch(() => undefined);
-  });
+  activeHighlights.request();
 }
+
+browser.runtime.onConnect.addListener((port) => {
+  if (port.name !== "burbot-workspace" ||
+      port.sender?.id !== browser.runtime.id ||
+      !port.sender.url?.startsWith(browser.runtime.getURL("sidepanel.html"))) return;
+  let unwatch: (() => void) | undefined;
+  port.onMessage.addListener((message: { windowId?: number }) => {
+    if (unwatch || !Number.isInteger(message?.windowId)) return;
+    unwatch = activeHighlights.watch(message.windowId!);
+  });
+  port.onDisconnect.addListener(() => unwatch?.());
+});
 
 async function workspaceState(): Promise<LegacyStorageState> {
   const draft = await readActiveDraft();
@@ -727,26 +724,14 @@ async function registerMenus(): Promise<void> {
 browser.runtime.onInstalled.addListener(() => void registerMenus().catch(console.error));
 browser.runtime.onStartup.addListener(() => void registerMenus().catch(console.error));
 
-browser.tabs.onUpdated.addListener((tabId, change, tab) => {
-  if (change.status !== "complete" && !change.url) return;
-  void syncSelectorHighlightsForTab(
-    tabId,
-    change.url ?? tab.url,
-  ).catch(() => undefined);
+browser.tabs.onUpdated.addListener((_tabId, change, tab) => {
+  if (!tab.active || tab.windowId === undefined || !activeHighlights.hasWindow(tab.windowId)) return;
+  if (change.status === "complete" || change.url) activeHighlights.request();
 });
 
-browser.tabs.onActivated.addListener(({ tabId }) => {
-  void syncSelectorHighlightsForTab(tabId).catch(() => undefined);
+browser.tabs.onActivated.addListener(({ windowId }) => {
+  if (activeHighlights.hasWindow(windowId)) activeHighlights.request();
 });
-
-void readActiveDraft()
-  .then(async (draft) => draft?.workingState ?? (await browser.storage.local.get(STORAGE_KEY))[STORAGE_KEY])
-  .then((next: LegacyStorageState | undefined) => {
-    if (next && Array.isArray(next.objects) && Array.isArray(next.rules)) {
-      queueSelectorHighlightSync(next);
-    }
-  })
-  .catch(() => undefined);
 
 async function captureInitialSelection(
   info: SelectionContextInfo,
@@ -962,6 +947,7 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
 
   if (message.type === "BURBOT_COMMIT") {
     const task = enqueue(async () => {
+      if (message.op === "SUMMARY") return commitSummary(await readActiveDraft());
       if (message.op === "GET") {
         return commitSessionView(await readActiveDraft());
       }

@@ -12,6 +12,10 @@ test("durable drafts reuse their base and runtime updates reach both panels once
       export * from "./src/shared/commits/draftStore.ts";
       export * from "./src/shared/storage/workspaceEvents.ts";
       export { publishUiState } from "./src/shared/api/storage.ts";
+      export * from "./src/shared/import/reviewStore.ts";
+      export * from "./src/shared/import/reviewSummary.ts";
+      export * from "./src/sidepanel/workspaceData.ts";
+      export { readCommitSummary } from "./src/sidepanel/commitSummary.ts";
     `,
     },
     bundle: true,
@@ -209,6 +213,80 @@ test("durable drafts reuse their base and runtime updates reach both panels once
     ),
     8,
   );
+  const cacheRace = await writer.evaluate(async () => {
+    const original = browser.runtime.sendMessage;
+    const waiting = [];
+    browser.runtime.sendMessage = () => new Promise(resolve => waiting.push(resolve));
+    const stale = structuredClone(window.draft.workingState);
+    const newest = structuredClone(stale);
+    newest.objects[0].values.name = "Live edit during GET";
+    const first = WorkspaceTest.readWorkspaceState(true);
+    const concurrent = WorkspaceTest.readWorkspaceState();
+    const initialRequests = waiting.length;
+    deliverRuntime({ type: "BURBOT_WORKSPACE_STATE_CHANGED", updateId: crypto.randomUUID(), state: newest });
+    waiting.shift()({ ok: true, value: stale });
+    const results = await Promise.all([first, concurrent]);
+    const beforeCreation = WorkspaceTest.readWorkspaceState(true);
+    const afterCreation = WorkspaceTest.readWorkspaceState(true);
+    waiting.shift()({ ok: true, value: newest });
+    await beforeCreation;
+    for (let i = 0; i < 5; i++) await Promise.resolve();
+    const followupRequests = waiting.length;
+    const created = structuredClone(newest);
+    created.objects.push({ id: "new", type: "project", values: { name: "New object" } });
+    waiting.shift()({ ok: true, value: created });
+    const refreshed = await afterCreation;
+    const summary = WorkspaceTest.readCommitSummary();
+    window.dispatchEvent(new Event("burbot:commit-changed"));
+    waiting.shift()({ ok: true, value: { active: false, objects: [] } });
+    for (let i = 0; i < 5; i++) await Promise.resolve();
+    waiting.shift()({ ok: true, value: { active: true, objects: [{ id: "new", status: "NEW" }] } });
+    const commit = await summary;
+    browser.runtime.sendMessage = original;
+    return { initialRequests, names: results.map(state => state.objects[0].values.name), followupRequests, created: refreshed.objects.at(-1).id, commit };
+  });
+  assert.deepEqual(cacheRace, { initialRequests: 1, names: ["Live edit during GET", "Live edit during GET"], followupRequests: 1, created: "new", commit: { active: true, objects: [{ id: "new", status: "NEW" }] } });
+  const importSummary = await writer.evaluate(async () => {
+    const session = { previewState: window.draft.workingState,
+      objectOrder: ["a", "b"], statusByObjectId: { a: "APPROVED" } };
+    await WorkspaceTest.writeImportReview(session);
+    const gets = [];
+    const get = IDBObjectStore.prototype.get;
+    IDBObjectStore.prototype.get = function(key) {
+      if (this.name === "sessions") gets.push(key);
+      return get.call(this, key);
+    };
+    const first = await WorkspaceTest.readImportReviewCount();
+    const second = await WorkspaceTest.readImportReviewCount();
+    const reads = gets.splice(0);
+    const db = await new Promise(resolve => {
+      const r = indexedDB.open("burbot-import-review", 1);
+      r.onsuccess = () => resolve(r.result);
+    });
+    await new Promise(resolve => {
+      const tx = db.transaction("sessions", "readwrite");
+      tx.objectStore("sessions").delete("pending-count");
+      tx.oncomplete = resolve;
+    });
+    db.close();
+    const migrated = await WorkspaceTest.readImportReviewCount();
+    const migrationReads = gets.splice(0);
+    await WorkspaceTest.readImportReviewCount();
+    const subsequentReads = gets.splice(0);
+    session.statusByObjectId.b = "APPROVED";
+    await WorkspaceTest.writeImportReview(session);
+    const approved = await WorkspaceTest.readImportReviewCount();
+    await WorkspaceTest.clearImportReview();
+    const cleared = await WorkspaceTest.readImportReviewCount();
+    const missing = await WorkspaceTest.readImportReview();
+    IDBObjectStore.prototype.get = get;
+    return { first, second, reads, migrated, migrationReads, subsequentReads, approved, cleared, missing };
+  });
+  assert.deepEqual(importSummary, {
+    first: 1, second: 1, reads: ["pending-count", "pending-count"],
+    migrated: 1, migrationReads: ["pending-count", "active"], subsequentReads: ["pending-count"],
+    approved: 0, cleared: 0, missing: null,
+  });
   await writer.evaluate(() => WorkspaceTest.clearActiveDraft());
   assert.equal(
     await reader.evaluate(() => WorkspaceTest.readActiveDraft()),

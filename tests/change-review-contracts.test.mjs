@@ -6,13 +6,14 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { build } from "esbuild";
 import { createAiViewExport } from "../src/shared/export/aiViewExport.js";
-let directory, review, session;
+let directory, review, session, summary;
 before(async () => {
   directory = await mkdtemp(join(tmpdir(), "burbot-review-"));
   await build({
     entryPoints: [
       "src/shared/commits/review.ts",
       "src/shared/commits/session.ts",
+      "src/shared/commits/summary.ts",
     ],
     outdir: directory,
     bundle: true,
@@ -22,6 +23,7 @@ before(async () => {
   });
   review = await import(pathToFileURL(join(directory, "review.js")));
   session = await import(pathToFileURL(join(directory, "session.js")));
+  summary = await import(pathToFileURL(join(directory, "summary.js")));
 });
 after(async () => {
   if (directory) await rm(directory, { recursive: true, force: true });
@@ -763,4 +765,27 @@ test("a deferred reimport cannot leak a new snapshot through an unchanged file s
     review.applyReviewedChanges(d).importSources.map((row) => row.id),
     ["s-old", "s-new"],
   );
+});
+
+
+test("navigation summary matches full review statuses through defer, discard and restore", () => {
+  const d = operatorDraft();
+  d.workingState.objects.push({ id: "new", type: "project", values: { name: "New" } });
+  const check = () => {
+    const expected = session.commitSessionView(d).objects
+      .filter(object => object.status !== "UNCHANGED")
+      .map(({ id, status }) => ({ id, status }))
+      .sort((a, b) => a.id.localeCompare(b.id));
+    const actual = summary.commitSummary(d);
+    assert.equal(actual.active, true);
+    assert.deepEqual(actual.objects.sort((a, b) => a.id.localeCompare(b.id)), expected);
+  };
+  check();
+  review.decideAllReviewChanges(d, "later"); check();
+  const item = review.reviewItems(d).find(item => item.objectId === "new");
+  review.decideReviewChange(d, item.id, "discard", item.fingerprint); check();
+  const archived = review.reviewItems(d).find(item => item.id === archivedId(d));
+  review.decideReviewChange(d, archived.id, "restore", archived.fingerprint); check();
+  assert.deepEqual(summary.commitSummary(null), { active: false, objects: [] });
+  function archivedId(value) { return Object.keys(value.discardedChanges)[0]; }
 });

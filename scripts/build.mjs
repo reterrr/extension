@@ -18,7 +18,9 @@ const common = {
   logLevel: "info",
   minify: !watching,
   define: {
-    "process.env.NODE_ENV": JSON.stringify(watching ? "development" : "production"),
+    "process.env.NODE_ENV": JSON.stringify(
+      watching ? "development" : "production",
+    ),
   },
 };
 
@@ -28,13 +30,17 @@ const configs = [
     entryPoints: {
       background: "src/background/index.ts",
       content: "src/content/index.ts",
-      "pdf-reader": "src/pdf-reader/bootstrap.ts",
     },
   },
   {
     ...common,
     jsx: "automatic",
+    format: "esm",
+    splitting: true,
+    chunkNames: "chunks/[name]-[hash]",
+    metafile: true,
     entryPoints: {
+      "pdf-reader": "src/pdf-reader/bootstrap.ts",
       sidepanel: "src/sidepanel/main.tsx",
       popup: "src/popup/main.tsx",
       options: "src/options/main.tsx",
@@ -80,7 +86,7 @@ async function writeStaticFiles() {
   for (const [name, [title, stylesheet]] of Object.entries(pages)) {
     await writeFile(
       resolve(dist, `${name}.html`),
-      `<!doctype html>\n<html lang="${name === "sidepanel" ? "pl" : "en"}">\n<head>\n  <meta charset="utf-8" />\n  <meta name="viewport" content="width=device-width,initial-scale=1" />\n  <title>${title}</title>\n  <link rel="stylesheet" href="${stylesheet}" />\n</head>\n<body>\n  <div id="root"></div>\n  <script defer src="${name}.js"></script>\n</body>\n</html>\n`,
+      `<!doctype html>\n<html lang="${name === "sidepanel" ? "pl" : "en"}">\n<head>\n  <meta charset="utf-8" />\n  <meta name="viewport" content="width=device-width,initial-scale=1" />\n  <title>${title}</title>\n  <link rel="stylesheet" href="${stylesheet}" />\n</head>\n<body>\n  <div id="root"></div>\n  <script type="module" src="${name}.js"></script>\n</body>\n</html>\n`,
       "utf8",
     );
   }
@@ -92,7 +98,15 @@ await writeStaticFiles();
 if (watching) {
   const contexts = await Promise.all(configs.map((config) => context(config)));
   await Promise.all(contexts.map((ctx) => ctx.watch()));
-  console.log("Watching extension sources. Static files are copied at startup.");
+  console.log(
+    "Watching extension sources. Static files are copied at startup.",
+  );
 } else {
-  await Promise.all(configs.map((config) => build(config)));
+  const results = await Promise.all(configs.map((config) => build(config)));
+  // Outside dist: diagnostics are not shipped inside the extension.
+  await mkdir(resolve(root, ".build"), { recursive: true });
+  await writeFile(
+    resolve(root, ".build/pages-meta.json"),
+    JSON.stringify(results[1].metafile),
+  );
 }

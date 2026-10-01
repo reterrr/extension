@@ -1,3 +1,4 @@
+import { readWorkspaceState } from "./workspaceData";
 import { createCapturedExtractionInput } from "../shared/extraction/rules";
 import type { PdfTextExtractionCandidate } from "../shared/types/picker";
 import type {
@@ -39,6 +40,7 @@ async function data(
   op: string,
   payload: Record<string, unknown> = {},
 ): Promise<LegacyStorageState> {
+  if (op === "GET") return state = await readWorkspaceState();
   const response = (await browser.runtime.sendMessage({
     type: "BURBOT_DATA",
     op,
@@ -256,7 +258,7 @@ function presentPdfCapture(
   notice(`Zaznaczono tekst z PDF: „${option.raw}”. Sprawdź wartość i zapisz.`);
 }
 
-async function receivePdfCapture(message: Record<string, unknown>): Promise<void> {
+export async function receivePdfCapture(message: Record<string, unknown>): Promise<void> {
   if (message.windowId !== windowId || typeof message.objectId !== "string") return;
   if (!isRecord(message.candidate)) return;
 
@@ -339,13 +341,6 @@ export async function initPdfCaptureUi(): Promise<void> {
   windowId = (await browser.windows.getCurrent()).id;
   state = await data("GET");
 
-  browser.runtime.onMessage.addListener((message: unknown) => {
-    if (!isRecord(message) || message.type !== "BURBOT_PDF_CAPTURE") return undefined;
-    void receivePdfCapture(message).catch((error: unknown) =>
-      notice(error instanceof Error ? error.message : String(error), true),
-    );
-    return undefined;
-  });
 
   document.addEventListener(
     "click",
@@ -394,7 +389,8 @@ export async function initPdfCaptureUi(): Promise<void> {
     if (info.windowId !== windowId) return;
     setTimeout(() => void syncReaderMode(), 100);
   });
-  browser.tabs.onUpdated.addListener((_tabId, change) => {
+  browser.tabs.onUpdated.addListener((_tabId, change, tab) => {
+    if (!tab?.active || tab.windowId !== windowId) return;
     if (!change.url && change.status !== "complete") return;
     setTimeout(() => void syncReaderMode(), 100);
   });

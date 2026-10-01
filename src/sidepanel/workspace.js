@@ -1,3 +1,5 @@
+import { ensureGeographyCatalog } from "./geographyCatalog";
+import { readWorkspaceState } from "./workspaceData";
 import {
   createCapturedExtractionInput,
   createPageUrlCandidate,
@@ -27,9 +29,10 @@ import {
   readSidepanelUiState,
 } from "./uiSessionState";
 
-(() => {
+export const workspaceReady = (() => {
   const $ = (id) => document.getElementById(id),
     C = BurbotCore;
+  const pluralRules = new Intl.PluralRules("pl");
   let db = C.empty(),
     objectId = "",
     active = null,
@@ -372,7 +375,7 @@ import {
       state: db,
       view,
       schema: BurbotSchema,
-      geographyCatalog: BurbotGeography?.catalog || [],
+      geographyCatalog: globalThis.BurbotGeography?.catalog || [],
       exportedAt,
     });
     downloadJsonFile(aiViewExportFilename(exportedAt), payload);
@@ -386,6 +389,7 @@ import {
     }
   }
   async function data(op, extra = {}) {
+    if (op === "GET") { const state = await readWorkspaceState(Boolean(extra.refresh)); adopt(state); return state; }
     const result = await browser.runtime.sendMessage({
       type: "BURBOT_DATA",
       op,
@@ -728,7 +732,7 @@ import {
     const scopedObjects = objectsInView(db.objects, view);
     const geographyByObject = buildGeographySearchIndex(
       db.geographies || [],
-      BurbotGeography?.catalog || [],
+      globalThis.BurbotGeography?.catalog || [],
     );
     const objectKind = (object) =>
       object.type === "nabor" ? "recruitment" : object.type;
@@ -1313,9 +1317,10 @@ import {
     const candidates = db.objects.filter((object) => object.type === referencedType);
     const geographyByObject = buildGeographySearchIndex(
       db.geographies || [],
-      BurbotGeography?.catalog || [],
+      globalThis.BurbotGeography?.catalog || [],
     );
 
+    if (db.geographies?.length) void ensureGeographyCatalog().catch(error => notice(error.message, true));
     const picker = node("div", "reference-object-picker");
     const selected = node("div", "reference-object-picker-selected");
     const search = document.createElement("input");
@@ -1954,13 +1959,29 @@ import {
           object.values,
         ));
       }
+      $("file-sources-section").hidden = false;
+      $("geography-section").hidden = !BurbotSchema[object.type]?.geography;
+      $("operator-assignments-section").hidden = !["project", "recruitment"].includes(object.type);
+      for (const [key, countId, forms] of [
+        ["fileSources", "file-source-count", ["plik", "pliki", "plików"]],
+        ["geographies", "geography-count", ["zakres", "zakresy", "zakresów"]],
+        ["operatorAssignments", "operator-assignment-count", ["operator", "operatorzy", "operatorów"]],
+        ["financingRules", "funding-status", ["wariant", "warianty", "wariantów"]],
+        ["operatorContacts", "operator-contact-count", ["kontakt", "kontakty", "kontaktów"]],
+      ]) {
+        const count = (db[key] || []).filter(row => row.objectId === object.id).length;
+        const form = pluralRules.select(count);
+        $(countId).textContent = count ? count + " " + forms[form === "one" ? 0 : form === "few" ? 1 : 2] : "Brak " + forms[2];
+      }
       const hasContacts = !!BurbotSchema[object.type]?.contacts;
       $("operator-contacts-section").hidden = !hasContacts;
-      if (hasContacts) renderOperatorContacts(object);
+      if (hasContacts && ($("operator-contacts-panel").open || active?.target?.kind === "operator_contact")) renderOperatorContacts(object);
+      else $("operator-contacts").replaceChildren();
 
       const configured = !!BurbotSchema[object.type]?.configuration;
       $("funding-section").hidden = !configured;
-      if (configured) renderFunding(object);
+      if (configured && ($("funding-panel").open || active?.target?.kind === "funding")) renderFunding(object);
+      else $("funding").replaceChildren();
       if (active && !descriptors.some((d) => keyOf(d) === keyOf(active))) {
         active = null;
         resetCapture();
@@ -2059,6 +2080,9 @@ import {
     evidencePicking = false;
     await rpc(picking ? "STOP" : "PICK");
   });
+  for (const id of ["funding-panel", "operator-contacts-panel"]) {
+    $(id).addEventListener("toggle", () => { if (ready) render(); });
+  }
   $("selected-text").onclick = action(async () => {
     acceptCapture(await rpc("SELECTION"));
   });
@@ -2220,7 +2244,11 @@ import {
     return undefined;
   });
   browser.tabs.onActivated.addListener((info) => {
-    if (info.windowId === windowId) void connect();
+    if (info.windowId !== windowId) return;
+    disconnect();
+    tabId = null;
+    $("connection").textContent = "Połącz stronę, aby wydzielać wartości";
+    render();
   });
   browser.tabs.onUpdated.addListener((id, change) => {
     if (id !== tabId) return;
@@ -2242,7 +2270,7 @@ import {
       // Active View, but the sidepanel can still observe the session change
       // before its local db mirror has adopted that draft. Refresh first so
       // the fresh object id is not filtered out as "missing".
-      void data("GET")
+      void data("GET", { refresh: true })
         .then(() => {
           objectView = normalizeObjectView(rawView, db.objects);
           switcherQuery = "";
@@ -2253,6 +2281,7 @@ import {
         .catch((error) => notice(error.message, true));
     }
   });
+  window.addEventListener("burbot:geography-catalog-ready", () => { if (ready) render(); });
   window.addEventListener("burbot:commit-changed", () => {
     void syncObjectWorkflowControls();
   });
@@ -2260,7 +2289,7 @@ import {
     void persistWorkspaceUi();
     disconnect();
   });
-  (async () => {
+  return (async () => {
     windowId = (await browser.windows.getCurrent()).id;
     await data("GET");
     const [storedView, uiState] = await Promise.all([
@@ -2306,6 +2335,5 @@ import {
     }
     scheduleWorkspaceUiPersist();
     window.dispatchEvent(new Event("burbot:workspace-ready"));
-    if (!port) await connect();
-  })().catch((error) => notice(error.message, true));
+  })().catch((error) => { notice(error.message, true); throw error; });
 })();

@@ -1,3 +1,4 @@
+import "./commitStyles";
 import { useEffect, useMemo, useState } from "react";
 import type {
   CommitReviewItem,

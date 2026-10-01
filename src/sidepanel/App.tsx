@@ -1,46 +1,24 @@
-import { useEffect } from "react";
-import "./geographyStyles";
-import "./operatorAssignmentsStyles";
-import "./fileSourceStyles";
-import "./commitStyles";
+import { lazy, Suspense, useEffect, useState } from "react";
 import "./workspaceRedesignStyles";
-import "./importReviewStyles";
 import "./workflowStyles";
 import "./workspaceLayoutStyles";
-import { CommitPanel } from "./CommitPanel";
-import { ImportReviewPanel } from "./ImportReviewPanel";
 import { WorkflowTabs } from "./WorkflowTabs";
 import { ViewManagerPanel } from "./ViewManagerPanel";
+import { startWorkspace } from "./workspaceFeatures";
+
+const ImportApp = lazy(() => import("./ImportApp"));
+const CommitApp = lazy(async () => {
+  const { CommitPanel } = await import("./CommitPanel");
+  return { default: CommitPanel };
+});
 
 export function App() {
+  const [mode, setMode] = useState("view");
   useEffect(() => {
-    void Promise.all([
-      import("./workspace.js"),
-      import("./importUi"),
-      import("./excelExportUi"),
-      import("./operatorAssignmentsUi").then(({ initOperatorAssignmentsUi }) =>
-        initOperatorAssignmentsUi(),
-      ),
-      import("./geographyUi").then(({ initGeographyUi }) => initGeographyUi()),
-      import("./fileSourcesUi").then(({ initFileSourcesUi }) =>
-        initFileSourcesUi(),
-      ),
-      import("./pdfCaptureUi").then(({ initPdfCaptureUi }) =>
-        initPdfCaptureUi(),
-      ),
-      import("./choiceEvidenceUi").then(({ initChoiceEvidenceUi }) =>
-        initChoiceEvidenceUi(),
-      ),
-      import("./captureFeedbackUi").then(({ initCaptureFeedbackUi }) =>
-        initCaptureFeedbackUi(),
-      ),
-      import("./objectReconnectUi").then(({ initObjectReconnectUi }) =>
-        initObjectReconnectUi(),
-      ),
-      import("./workspaceRedesignUi").then(({ initWorkspaceRedesignUi }) =>
-        initWorkspaceRedesignUi(),
-      ),
-    ]);
+    const changed = (event: Event) => setMode((event as CustomEvent<{ mode: string }>).detail.mode);
+    window.addEventListener("burbot:workflow-mode", changed);
+    void startWorkspace().catch(() => undefined);
+    return () => window.removeEventListener("burbot:workflow-mode", changed);
   }, []);
 
   return (
@@ -70,8 +48,10 @@ export function App() {
       </header>
       <WorkflowTabs />
       <ViewManagerPanel />
-      <ImportReviewPanel />
-      <CommitPanel />
+      <Suspense fallback={<p role="status">Ładowanie…</p>}>
+        {mode === "import" && <ImportApp />}
+        {mode === "commit" && <CommitApp />}
+      </Suspense>
       <div className="connection-bar">
         <span id="connection">Połącz stronę, aby wydzielać wartości</span>
         <div className="connection-actions">

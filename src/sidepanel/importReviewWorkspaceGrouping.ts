@@ -51,10 +51,14 @@ function queueGrouping(): void {
   });
 }
 
-const observer = new MutationObserver(queueGrouping);
-const root = document.getElementById("root");
-if (root) observer.observe(root, { childList: true, subtree: true });
-window.addEventListener("burbot:import-review-changed", queueGrouping);
-queueGrouping();
-
-export {};
+export function initImportReviewGrouping(): () => void {
+  const observer = new MutationObserver(queueGrouping);
+  const root = document.getElementById("root");
+  if (root) observer.observe(root, { childList: true, subtree: true });
+  window.addEventListener("burbot:import-review-changed", queueGrouping);
+  queueGrouping();
+  return () => {
+    observer.disconnect();
+    window.removeEventListener("burbot:import-review-changed", queueGrouping);
+  };
+}

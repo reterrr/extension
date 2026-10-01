@@ -1,5 +1,3 @@
-import "./selectorHighlightStyles";
-import { initSelectorHighlightsUi } from "./selectorHighlightsUi";
 
 let initialized = false;
 let reconnectTimer: number | undefined;
@@ -27,7 +25,6 @@ export async function initObjectReconnectUi(): Promise<void> {
   if (initialized) return;
   initialized = true;
 
-  void initSelectorHighlightsUi().catch(() => undefined);
 
   const currentWindow = await browser.windows.getCurrent();
   const windowId = currentWindow.id;
@@ -46,7 +43,6 @@ export async function initObjectReconnectUi(): Promise<void> {
     return undefined;
   });
 
-  window.addEventListener("burbot:active-object-changed", scheduleReconnect);
 
   document.addEventListener(
     "click",

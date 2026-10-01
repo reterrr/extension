@@ -1,3 +1,5 @@
+import { readWorkspaceState } from "./workspaceData";
+import "./operatorAssignmentsStyles";
 import {
   compileObjectSearch,
   createObjectSearchDocument,
@@ -54,6 +56,7 @@ async function data(
   op: string,
   payload: Record<string, unknown> = {},
 ): Promise<LegacyStorageState> {
+  if (op === "GET") return state = await readWorkspaceState();
   const response = (await browser.runtime.sendMessage({
     type: "BURBOT_DATA",
     op,
@@ -295,6 +298,7 @@ function render(): void {
 
   section.hidden = !enabled;
   if (!object || !enabled) return;
+  if (!(document.getElementById("operator-assignments-panel") as HTMLDetailsElement).open) return;
 
   const assignments = assignmentsFor(object.id);
   count.textContent = assignments.length
@@ -311,6 +315,7 @@ export async function initOperatorAssignmentsUi(): Promise<void> {
 
   state = await data("GET");
 
+  $("operator-assignments-panel").addEventListener("toggle", queueRender);
   window.addEventListener("burbot:active-object-changed", queueRender);
   window.addEventListener("burbot:workspace-state-changed", (event) => {
     const next = (event as CustomEvent<{ state?: LegacyStorageState }>).detail
@@ -319,5 +324,6 @@ export async function initOperatorAssignmentsUi(): Promise<void> {
     queueRender();
   });
 
+  state = await readWorkspaceState();
   render();
 }

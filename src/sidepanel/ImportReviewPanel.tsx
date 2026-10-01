@@ -63,12 +63,23 @@ function evidenceColorKey(entry: { id: string; field: string }): string {
   return objectAndField || entry.field;
 }
 
+let reviewHighlightVersion = 0;
+let reviewHighlightTab: number | undefined;
+
 async function sendReviewHighlights(
   session: ImportReviewSession,
   focusId?: string,
 ): Promise<void> {
+  const version = ++reviewHighlightVersion;
+  const current = () => version === reviewHighlightVersion;
   const tab = await activeTab();
-  if (!tab?.id || !tab.url || !/^https?:/.test(tab.url)) return;
+  if (!current()) return;
+  if (reviewHighlightTab !== undefined && reviewHighlightTab !== tab?.id) {
+    const previous = reviewHighlightTab;
+    reviewHighlightTab = undefined;
+    await browser.tabs.sendMessage(previous, { type: "BURBOT_SHOW_IMPORT_REVIEW_HIGHLIGHTS", highlights: [] }).catch(() => undefined);
+  }
+  if (!current() || !tab?.id || !tab.url || !/^https?:/.test(tab.url)) return;
 
   const activeUrl = comparableUrl(tab.url);
   const sourceIds = new Set(
@@ -91,36 +102,34 @@ async function sendReviewHighlights(
       colorKey: evidenceColorKey(entry),
     }));
 
+  const message = {
+    type: "BURBOT_SHOW_IMPORT_REVIEW_HIGHLIGHTS",
+    highlights,
+    ...(focusId ? { focusId } : {}),
+  };
+  if (!current()) return;
+  if (highlights.length) reviewHighlightTab = tab.id;
   try {
-    await browser.scripting.executeScript({
-      target: { tabId: tab.id },
-      files: ["import-review-highlights.js"],
-    });
-    await browser.tabs.sendMessage(tab.id, {
-      type: "BURBOT_SHOW_IMPORT_REVIEW_HIGHLIGHTS",
-      highlights,
-      ...(focusId ? { focusId } : {}),
-    });
+    await browser.tabs.sendMessage(tab.id, message);
   } catch {
-    // Evidence remains visible in the sidepanel if the page blocks injection.
+    if (!highlights.length || !current()) return;
+    try {
+      await browser.scripting.executeScript({ target: { tabId: tab.id }, files: ["import-review-highlights.js"] });
+      if (current()) await browser.tabs.sendMessage(tab.id, message);
+    } catch {
+      // Evidence stays available in the panel on restricted/navigating pages.
+    }
   }
 }
 
 async function clearPageReviewHighlights(): Promise<void> {
-  const tab = await activeTab();
-  if (!tab?.id || !tab.url || !/^https?:/.test(tab.url)) return;
-  try {
-    await browser.scripting.executeScript({
-      target: { tabId: tab.id },
-      files: ["import-review-highlights.js"],
-    });
-    await browser.tabs.sendMessage(tab.id, {
-      type: "BURBOT_SHOW_IMPORT_REVIEW_HIGHLIGHTS",
-      highlights: [],
-    });
-  } catch {
-    // Visual review is best-effort.
-  }
+  reviewHighlightVersion++;
+  const tabId = reviewHighlightTab;
+  reviewHighlightTab = undefined;
+  if (tabId === undefined) return;
+  await browser.tabs.sendMessage(tabId, {
+    type: "BURBOT_SHOW_IMPORT_REVIEW_HIGHLIGHTS", highlights: [],
+  }).catch(() => undefined);
 }
 
 async function waitForTabReady(
@@ -308,7 +317,7 @@ export function ImportReviewPanel() {
       const workflowMode = workflowStorage["burbot:workflow-mode"];
       const globalImport = workflowMode === "import";
       const initialMode: SidepanelMode =
-        nextSession && globalImport ? "review" : "workspace";
+        globalImport ? "review" : "workspace";
       modeRef.current = initialMode;
       setMode(initialMode);
       setSession(nextSession);
@@ -353,6 +362,8 @@ export function ImportReviewPanel() {
       }, 120);
     };
     window.addEventListener("scroll", onScroll, { passive: true });
+    const closing = () => { void clearPageReviewHighlights(); };
+    window.addEventListener("pagehide", closing);
 
     return () => {
       disposed = true;
@@ -360,6 +371,7 @@ export function ImportReviewPanel() {
       window.removeEventListener("burbot:workflow-mode", workflowChanged);
       window.removeEventListener("burbot:workspace-ready", workspaceReady);
       window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("pagehide", closing);
       if (scrollTimerRef.current !== undefined) {
         window.clearTimeout(scrollTimerRef.current);
       }
@@ -417,12 +429,15 @@ export function ImportReviewPanel() {
     }
 
     void sendReviewHighlights(session);
-    const sync = () => void sendReviewHighlights(session);
+    const sync = (info: { windowId: number }) => {
+      if (info.windowId === windowIdRef.current) void sendReviewHighlights(session);
+    };
     const updated = (
       _tabId: number,
       change: { url?: string; status?: string },
+      tab: browser.tabs.Tab,
     ) => {
-      if (change.url || change.status === "complete") sync();
+      if (tab.active && tab.windowId === windowIdRef.current && (change.url || change.status === "complete")) void sendReviewHighlights(session);
     };
     browser.tabs.onActivated.addListener(sync);
     browser.tabs.onUpdated.addListener(updated);
@@ -431,6 +446,7 @@ export function ImportReviewPanel() {
       browser.tabs.onActivated.removeListener(sync);
       browser.tabs.onUpdated.removeListener(updated);
       document.documentElement.classList.remove("import-review-mode");
+      void clearPageReviewHighlights();
     };
   }, [session, mode, view.selectedObjectId, view.evidence]);
 

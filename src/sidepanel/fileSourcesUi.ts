@@ -1,3 +1,5 @@
+import { readWorkspaceState } from "./workspaceData";
+import "./fileSourceStyles";
 import { createPickerClient, type PickerClient } from "./pickerRpc";
 import {
   localUploadValidationMessage,
@@ -99,6 +101,7 @@ async function data(
   op: string,
   payload: Record<string, unknown> = {},
 ): Promise<LegacyStorageState> {
+  if (op === "GET") return state = await readWorkspaceState();
   const response = (await browser.runtime.sendMessage({
     type: "BURBOT_DATA",
     op,
@@ -1024,6 +1027,7 @@ function render(): void {
   const section = $("file-sources-section");
   section.hidden = !object;
   if (!object) return;
+  if (!(document.getElementById("file-sources-panel") as HTMLDetailsElement).open) return;
 
   const root = $("file-source-list");
   const sources = (state.fileSources ?? []).filter(
@@ -1228,6 +1232,7 @@ export async function initFileSourcesUi(): Promise<void> {
     characterData: true,
   });
 
+  $("file-sources-panel").addEventListener("toggle", queueRender);
   window.addEventListener("burbot:active-object-changed", queueRender);
   window.addEventListener("burbot:workspace-state-changed", (event) => {
     const next = (event as CustomEvent<{ state?: LegacyStorageState }>).detail?.state;
@@ -1235,7 +1240,8 @@ export async function initFileSourcesUi(): Promise<void> {
     queueRender();
   });
 
-  browser.tabs.onActivated.addListener(() => {
+  browser.tabs.onActivated.addListener((info) => {
+    if (info.windowId !== currentWindowId) return;
     void reconnectFileMode().catch((error: unknown) => {
       notice(error instanceof Error ? error.message : String(error), true);
     });
@@ -1257,5 +1263,6 @@ export async function initFileSourcesUi(): Promise<void> {
     fileModeEnabled = false;
     void stopPickerConnection();
   });
+  state = await readWorkspaceState();
   render();
 }

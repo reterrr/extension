@@ -1,3 +1,6 @@
+import "../shared/domain/geographyRuntime";
+import { readWorkspaceState } from "./workspaceData";
+import "./geographyStyles";
 import { createCapturedExtractionInput } from "../shared/extraction/rules";
 import { geographyInheritanceStatus } from "../shared/configurationInheritance";
 import { isPickerSelectionResponse } from "../shared/messaging/picker";
@@ -60,6 +63,7 @@ async function data(
   op: string,
   payload: Record<string, unknown> = {},
 ): Promise<LegacyStorageState> {
+  if (op === "GET") return state = await readWorkspaceState();
   const response = (await browser.runtime.sendMessage({
     type: "BURBOT_DATA",
     op,
@@ -581,6 +585,7 @@ function render(): void {
   const enabled = !!object && !!BurbotSchema[object.type]?.geography;
   section.hidden = !enabled;
   if (!object || !enabled) return;
+  if (!(document.getElementById("geography-panel") as HTMLDetailsElement).open) return;
 
   const subtitle = $("geography-subtitle");
   subtitle.textContent =
@@ -708,14 +713,17 @@ export async function initGeographyUi(): Promise<void> {
     characterData: true,
   });
 
-  browser.tabs.onActivated.addListener(() => {
+  browser.tabs.onActivated.addListener((info) => {
+    if (info.windowId !== uiWindowId) return;
     void refreshActivePage().then(queueRender).catch(() => undefined);
   });
-  browser.tabs.onUpdated.addListener((_id, change) => {
+  browser.tabs.onUpdated.addListener((_id, change, tab) => {
+    if (!tab?.active || tab.windowId !== uiWindowId) return;
     if (change.url || change.status === "complete")
       void refreshActivePage().then(queueRender).catch(() => undefined);
   });
 
+  $("geography-panel").addEventListener("toggle", queueRender);
   window.addEventListener("burbot:active-object-changed", queueRender);
   window.addEventListener("burbot:workspace-state-changed", (event) => {
     const next = (event as CustomEvent<{ state?: LegacyStorageState }>).detail?.state;
@@ -723,5 +731,6 @@ export async function initGeographyUi(): Promise<void> {
     queueRender();
   });
   window.addEventListener("pagehide", persistGeographyUi);
+  state = await readWorkspaceState();
   render();
 }

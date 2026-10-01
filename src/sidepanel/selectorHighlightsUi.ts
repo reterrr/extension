@@ -1,3 +1,5 @@
+import { readWorkspaceState } from "./workspaceData";
+import "./selectorHighlightStyles";
 import { selectorColor } from "../shared/selectorPalette";
 import {
   IMPORT_EVIDENCE_LOCATOR_STORAGE_KEY,
@@ -20,6 +22,7 @@ let syncRunning = false;
 let syncRequested = false;
 let syncVersion = 0;
 let locatorCache: Record<string, unknown> = {};
+let windowId: number | undefined;
 
 function updateLocatorCache(value: unknown): void {
   locatorCache = value && typeof value === "object" && !Array.isArray(value)
@@ -37,20 +40,11 @@ type PendingSelectorPreview = {
 let pendingPreview: PendingSelectorPreview | null = null;
 
 async function data(): Promise<LegacyStorageState> {
-  const response = (await browser.runtime.sendMessage({
-    type: "BURBOT_DATA",
-    op: "GET",
-    expectedRevision: state.revision,
-  })) as { ok?: boolean; value?: LegacyStorageState };
-
-  if (!response?.ok || !response.value) throw new Error("Storage is unavailable.");
-  state = response.value;
-  return state;
+  return state = await readWorkspaceState();
 }
 
 async function activeTab(): Promise<browser.tabs.Tab | undefined> {
-  const currentWindow = await browser.windows.getCurrent();
-  const tabs = await browser.tabs.query({ active: true, windowId: currentWindow.id });
+  const tabs = await browser.tabs.query({ active: true, windowId });
   return tabs[0];
 }
 
@@ -212,7 +206,9 @@ function colorSidebar(): void {
 async function renderPageHighlights(
   tabId: number,
   highlights: SelectorHighlight[],
+  current: () => boolean,
 ): Promise<void> {
+  if (!current()) return;
   try {
     await browser.tabs.sendMessage(tabId, {
       type: "BURBOT_SHOW_SELECTOR_HIGHLIGHTS",
@@ -223,10 +219,12 @@ async function renderPageHighlights(
     // Inject lazily if the persistent runtime is not present yet.
   }
 
+  if (!highlights.length || !current()) return;
   await browser.scripting.executeScript({
     target: { tabId },
     files: ["selector-highlights.js"],
   });
+  if (!current()) return;
   await browser.tabs.sendMessage(tabId, {
     type: "BURBOT_SHOW_SELECTOR_HIGHLIGHTS",
     highlights,
@@ -255,7 +253,7 @@ async function syncPage(): Promise<void> {
     highlights.push(pendingPreview.highlight);
   }
 
-  try { await renderPageHighlights(tab.id, highlights); } catch {}
+  try { await renderPageHighlights(tab.id, highlights, () => version === syncVersion); } catch {}
 }
 
 function queueSync(): void {
@@ -277,6 +275,7 @@ function queueSync(): void {
 export async function initSelectorHighlightsUi(): Promise<void> {
   if (initialized) return;
   initialized = true;
+  windowId = (await browser.windows.getCurrent()).id;
   await data();
   const stored = await browser.storage.local.get(IMPORT_EVIDENCE_LOCATOR_STORAGE_KEY);
   updateLocatorCache(stored[IMPORT_EVIDENCE_LOCATOR_STORAGE_KEY]);
@@ -310,7 +309,14 @@ export async function initSelectorHighlightsUi(): Promise<void> {
       queueSync();
     }
   });
-  browser.tabs.onActivated.addListener(queueSync);
-  browser.tabs.onUpdated.addListener((_tabId, change) => { if (change.url || change.status === "complete") queueSync(); });
+  browser.tabs.onActivated.addListener((info) => { if (info.windowId === windowId) queueSync(); });
+  browser.tabs.onUpdated.addListener((_tabId, change, tab) => {
+    if (tab?.active && tab.windowId === windowId && (change.url || change.status === "complete")) queueSync();
+  });
+  queueSync();
+}
+
+export function setSelectorPreview(preview: PendingSelectorPreview | null): void {
+  pendingPreview = preview;
   queueSync();
 }

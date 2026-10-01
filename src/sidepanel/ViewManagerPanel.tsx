@@ -1,3 +1,7 @@
+import { ensureGeographyCatalog } from "./geographyCatalog";
+import { readWorkspaceState } from "./workspaceData";
+import { readCommitSummary } from "./commitSummary";
+import type { CommitSummary } from "../shared/commits/summary";
 import {
   useEffect,
   useMemo,
@@ -23,7 +27,6 @@ import {
 } from "../shared/search/objectView.js";
 import type {
   CommitSessionObject,
-  CommitSessionView,
 } from "../shared/types/commit";
 import type {
   LegacyStorageState,
@@ -51,9 +54,8 @@ const EMPTY_STATE: LegacyStorageState = {
   rules: [],
 };
 
-const EMPTY_COMMIT: CommitSessionView = {
+const EMPTY_COMMIT: CommitSummary = {
   active: false,
-  dirty: false,
   objects: [],
 };
 
@@ -86,7 +88,7 @@ function objectCountLabel(count: number): string {
   return `${count} ${form === "one" ? "obiekt" : form === "few" ? "obiekty" : "obiektów"}`;
 }
 
-function statusLabel(entry: CommitSessionObject | undefined): string {
+function statusLabel(entry: Pick<CommitSessionObject, "status"> | undefined): string {
   if (!entry || entry.status === "UNCHANGED") return "";
   if (entry.status === "NEW") return "Nowy";
   if (entry.status === "DELETED") return "Usunięty";
@@ -125,11 +127,20 @@ async function send<T>(
 export function ViewManagerPanel() {
   const [state, setState] = useState<LegacyStorageState>(EMPTY_STATE);
   const stateRef = useRef<LegacyStorageState>(EMPTY_STATE);
-  const [commit, setCommit] = useState<CommitSessionView>(EMPTY_COMMIT);
+  const [commit, setCommit] = useState<CommitSummary>(EMPTY_COMMIT);
   const [view, setView] = useState<ObjectView | null>(null);
   const [query, setQuery] = useState("");
   const [error, setError] = useState("");
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [catalogVersion, setCatalogVersion] = useState(0);
+  useEffect(() => {
+    const ready = () => setCatalogVersion(value => value + 1);
+    window.addEventListener("burbot:geography-catalog-ready", ready);
+    return () => window.removeEventListener("burbot:geography-catalog-ready", ready);
+  }, []);
+  useEffect(() => {
+    if (pickerOpen && state.geographies?.length) void ensureGeographyCatalog().catch(cause => setError(String(cause)));
+  }, [pickerOpen, state.geographies]);
   const [typeFilter, setTypeFilter] = useState("all");
   const [limit, setLimit] = useState(100);
   const dialog = useRef<HTMLDialogElement>(null);
@@ -145,8 +156,8 @@ export function ViewManagerPanel() {
   async function refreshState() {
     try {
       const [nextState, nextCommit] = await Promise.all([
-        send<LegacyStorageState>("BURBOT_DATA", "GET"),
-        send<CommitSessionView>("BURBOT_COMMIT", "GET"),
+        readWorkspaceState(true),
+        readCommitSummary(),
       ]);
       applyState(nextState);
       setCommit(nextCommit);
@@ -195,8 +206,8 @@ export function ViewManagerPanel() {
     activeChanged();
     void (async () => {
       const [next, nextCommit] = await Promise.all([
-        send<LegacyStorageState>("BURBOT_DATA", "GET"),
-        send<CommitSessionView>("BURBOT_COMMIT", "GET"),
+        readWorkspaceState(),
+        readCommitSummary(),
       ]);
       applyState(next);
       setCommit(nextCommit);
@@ -215,7 +226,9 @@ export function ViewManagerPanel() {
         void refreshState();
       }
     };
-    const commitChanged = () => void refreshState();
+    const commitChanged = () => {
+      void readCommitSummary().then(setCommit).catch((cause) => setError(String(cause)));
+    };
     const storageChanged = (
       changes: Record<string, { newValue?: unknown; oldValue?: unknown }>,
       area: string,
@@ -250,7 +263,7 @@ export function ViewManagerPanel() {
         state.geographies ?? [],
         (globals().BurbotGeography?.catalog ?? []) as never[],
       ),
-    [state.geographies],
+    [state.geographies, catalogVersion],
   );
 
   const compiled = useMemo(() => compileObjectSearch(query), [query]);
