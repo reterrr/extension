@@ -138,7 +138,7 @@ Nie ustawiaj statusu wyłącznie dlatego, że nazwa pliku zawiera rok lub termin
 | Dalsza instrukcja | Zakres wygenerowanego importu |
 | --- | --- |
 | „Przeanalizuj/rozstrzygnij/uzupełnij nabór”, „zrób import”, eksport z tym promptem bez ograniczenia | Pełna analiza wszystkich obszarów i wszystkich przekazanych materiałów. Sam status z datami nie realizuje polecenia. |
-| „Uzupełnij z regulaminu” | Ustal finansowanie, kwalifikowalność i proces w `funding_rules`/`notes`, wszystkie właściwe pliki i ich metadane po powiązaniu z zapisami regulaminu. Daty i status zmieniaj tylko przy potwierdzeniu i w dozwolonym zakresie. |
+| „Uzupełnij z regulaminu” | Ustal finansowanie, kwalifikowalność i proces w dedykowanych polach `eligible_entities`, `funding_conditions`, `application_instructions` oraz — gdy potrzebne — `funding_rules`/`notes`; uzupełnij wszystkie właściwe pliki i ich metadane po powiązaniu z zapisami regulaminu. Daty i status zmieniaj tylko przy potwierdzeniu i w dozwolonym zakresie. |
 | „Tylko finansowanie” | Wymagany identyfikator i `external_number`, `financing`, ewentualnie `funding_rules`, `funding_verified_at`, `funding_verification_url` oraz źródła/evidence. Nie zmieniaj statusu, dat, geografii ani innych sekcji. |
 | „Tylko dokumenty/pliki” | Wymagany identyfikator i pole główne, `sources`, `files`; istotny brak URL w `notes`, jeśli trzeba. Nie generuj domyślnych wariantów finansowania ani `documents` dla każdego pliku. |
 | „Tylko status i terminy” albo osobne zadanie wyraźnie ograniczone do sprawdzenia statusu | Wymagany identyfikator i `external_number`, rozstrzygnięty status, potwierdzone terminy, opis zakończenia/przyczyny oraz źródła/evidence. Nie nadpisuj finansowania bez polecenia. Tego wąskiego zakresu nie wyciągaj z samego słowa „nabór” ani „rozstrzygnij”. |
@@ -252,6 +252,7 @@ Nie wpisuj kilku telefonów, nazwiska i godzin pracy do jednego numeru. Dodatkow
 | `start_date` | date | Początek projektu, nie początek naboru. |
 | `end_date` | date | Koniec projektu, nie koniec naboru. |
 | `announcements_site_url` | URL | Strona ogłoszeń/harmonogramu naborów projektu. |
+| `project_url` | URL | Główna strona projektu. Nie zastępuje strony ogłoszeń ani strony dokumentów. |
 | `documents_url` | URL | Strona dokumentów projektu lub właściwy bezpośredni adres. |
 | `documents_link_direct` | boolean | Czy podany link prowadzi bezpośrednio do dokumentów; tylko gdy sprawdzono cel linku. |
 | `notes` | tekst | Ogólne uwagi, zakres odbiorców, ograniczenia i nierozstrzygnięte kwestie. |
@@ -285,8 +286,11 @@ Nowy projekt bez `status` otrzyma w podglądzie domyślne `PLANOWANY`. Nie trakt
 | `documents_url` | URL | Strona dokumentów właściwych dla naboru. Konkretne pliki dodatkowo w `files`. |
 | `data_source_url` | tekst | Jeden lub kilka rzeczywistych adresów wykorzystanych źródeł; nie tablica. Dla wielu zastosuj czytelny separator, np. `; `. Snapshoty nadal są w `sources`. |
 | `direct_recruitment_link` | boolean | Czy `urlOgloszenia` prowadzi do konkretnego naboru, a nie wyłącznie ogólnej strony projektu. Nie zgaduj. |
-| `notes` | tekst | Grupa docelowa, wykluczenia, proces zgłoszenia/rozliczenia, zakres dokumentów, brakujące dane, kontekst interpretacji. Nie ma osobnego pola `eligibility`, `process`, `target_group` ani `application_method`. |
-| `funding_rules` | tekst | Opis warunków dofinansowania: kwalifikowalność, premie, podstawa limitów, wkład, VAT, warunki pomocy itp., o ile wynikają ze źródła. Liczby do porównywania zapisuj także w odpowiednich wariantach `financing`. |
+| `notes` | tekst | Wykluczenia, zakres dokumentów, brakujące dane i dodatkowy kontekst, który nie pasuje do dedykowanych pól. |
+| `eligible_entities` | tekst, maks. 4000 znaków | Kwalifikujące się podmioty / grupa uprawniona do udziału w naborze. Zachowaj warunki dotyczące formy prawnej, wielkości, lokalizacji lub statusu, jeśli wynikają ze źródła. |
+| `funding_conditions` | tekst, maks. 4000 znaków | Warunki pomocy i dofinansowania: zasady udzielenia wsparcia, pomoc de minimis/publiczna, wkład własny, VAT, premie, ograniczenia i inne warunki jakościowe. Liczby porównawcze zapisuj także w `financing`. |
+| `application_instructions` | tekst, maks. 5000 znaków | Instrukcja składania wniosku: kolejność czynności, system/formularz, kanał złożenia, podpisy, wymagane etapy i terminy proceduralne. |
+| `funding_rules` | tekst | Dodatkowy lub zbiorczy opis zasad dofinansowania, gdy informacje nie mieszczą się w bardziej precyzyjnych polach. Liczby do porównywania zapisuj także w odpowiednich wariantach `financing`. |
 | `funding_verified_at` | date | Rzeczywista data weryfikacji zasad finansowania przez analityka/AI, jeśli taką weryfikację wykonano. Nie data publikacji ani dowód, że wszystkie źródła są kompletne. Bez evidence udającego, że data pochodzi z regulaminu. |
 | `funding_verification_url` | tekst | Faktycznie użyte URL-e do weryfikacji finansowania, przy wielu separator `; `. Przy samym lokalnym pliku pomiń zamiast wymyślać URL. |
 | `last_checked_at` | systemowe — **nie wysyłaj** | Nie wolno kopiować z eksportu AI do importu. |
@@ -402,11 +406,11 @@ Zakres „województwo oprócz X” można zapisać jako wiersz `OBEJMUJE` dla w
 | Pole | Typ / wymagalność | Znaczenie |
 | --- | --- | --- |
 | `key` | niepusty tekst, wymagane | Stabilny klucz wariantu, np. `NAB_001_MICRO_STANDARD`. Przy aktualizacji zachowaj dotychczasowy klucz. |
-| `company_size` | enum, wymagane | `MICRO`, `SMALL`, `MEDIUM`, `LARGE`, `B2C`. Nie `MSP`, `SME`, `ALL`, `OSOBA` ani lista rozmiarów. |
+| `company_size` | enum, wymagane | `MICRO`, `SMALL`, `MEDIUM`, `LARGE`, `B2C`, `NGO`. Nie `MSP`, `SME`, `ALL`, `OSOBA` ani lista rozmiarów. |
 | `data` | obiekt, wymagane | Wyłącznie pola poniższej tabeli. Nie twórz pustego wariantu dla każdej wielkości firmy bez potwierdzonego zastosowania. |
 | `evidence` | mapa, opcjonalne | Nazwy obecnych pól `data` → tablice cytatów. Bez kluczy `company_size`, `key` czy `variant_no`. |
 
-`MICRO` = mikroprzedsiębiorstwo, `SMALL` = małe, `MEDIUM` = średnie, `LARGE` = duże, `B2C` = osoba fizyczna/osoba dorosła w projekcie tego typu. Jeśli wspólne warunki dotyczą MŚP, możesz utworzyć trzy warianty MICRO/SMALL/MEDIUM, ale tylko jeśli źródło obejmuje te grupy. Nie dodawaj LARGE do projektu MŚP. Samozatrudnienie kwalifikuj według definicji programu, nie automatycznie jako B2C.
+`MICRO` = mikroprzedsiębiorstwo, `SMALL` = małe, `MEDIUM` = średnie, `LARGE` = duże, `B2C` = osoba fizyczna/osoba dorosła w projekcie tego typu, `NGO` = organizacja pozarządowa / podmiot non-profit objęty odrębnymi zasadami finansowania. Jeśli wspólne warunki dotyczą MŚP, możesz utworzyć trzy warianty MICRO/SMALL/MEDIUM, ale tylko jeśli źródło obejmuje te grupy. Nie dodawaj LARGE ani NGO bez potwierdzenia w źródle. Samozatrudnienie kwalifikuj według definicji programu, nie automatycznie jako B2C.
 
 Wiele wariantów tego samego `company_size` jest dozwolone. Opisz różnice w `notes`, np. standard/premia, operator, typ usługi, obszar lub forma wkładu. Numery wariantów nadaje system według kolejności osobno dla każdej wielkości firmy. Nie łącz w jednym wariancie dwóch różnych podstaw limitów tylko dlatego, że dotyczą tej samej firmy.
 

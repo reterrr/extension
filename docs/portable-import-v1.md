@@ -183,7 +183,7 @@ This creates an object-level Burbot file source that remains available after app
 Each financing entry becomes one Burbot financing variant. Project and Recruitment use the same financing structure.
 
 - `key` — required stable key unique within the object's financing list.
-- `company_size` — one of `MICRO`, `SMALL`, `MEDIUM`, `LARGE`, `B2C`.
+- `company_size` — one of `MICRO`, `SMALL`, `MEDIUM`, `LARGE`, `B2C`, `NGO`.
 - `data` — any supported financing fields:
   - `refund_percent_min` — minimum refund percentage, `0..100`;
   - `refund_percent_avg` — average refund percentage, `0..100`;

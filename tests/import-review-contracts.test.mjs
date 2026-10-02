@@ -214,6 +214,76 @@ test("repository portable-import example stays importable", async () => {
   assert.ok((session.previewState.importTargetEvidence ?? []).length >= 10);
 });
 
+test("portable import accepts NGO financing and recruitment condition fields", () => {
+  const document = documentFixture();
+  const recruitment = document.objects.find(
+    (object) => object.type === "recruitment",
+  );
+  const project = document.objects.find((object) => object.type === "project");
+
+  recruitment.data.eligible_entities = "Organizacje pozarządowe";
+  recruitment.data.funding_conditions = "Refundacja do 85%";
+  recruitment.data.application_instructions =
+    "Złóż formularz elektronicznie w systemie operatora.";
+  project.data.project_url = "https://example.test/project/home";
+  project.data.announcements_site_url =
+    "https://example.test/project/announcements";
+
+  project.financing.push({
+    key: "ngo-project",
+    company_size: "NGO",
+    data: { refund_percent_max: 85 },
+  });
+  recruitment.financing.push({
+    key: "ngo-recruitment",
+    company_size: "NGO",
+    data: { refund_percent_max: 85 },
+  });
+
+  const session = reviewModule.createImportReviewSession(
+    document,
+    "ngo-fields.json",
+    ids(),
+    "2026-10-02T10:00:00.000Z",
+  );
+  const importedRecruitment = session.previewState.objects.find(
+    (object) => object.importKey === "recruitment-1",
+  );
+  const importedProject = session.previewState.objects.find(
+    (object) => object.importKey === "project-1",
+  );
+
+  assert.equal(
+    importedRecruitment.values.eligible_entities,
+    "Organizacje pozarządowe",
+  );
+  assert.equal(
+    importedRecruitment.values.funding_conditions,
+    "Refundacja do 85%",
+  );
+  assert.equal(
+    importedRecruitment.values.application_instructions,
+    "Złóż formularz elektronicznie w systemie operatora.",
+  );
+  assert.equal(
+    importedProject.values.project_url,
+    "https://example.test/project/home",
+  );
+  assert.equal(
+    importedProject.values.announcements_site_url,
+    "https://example.test/project/announcements",
+  );
+
+  const ngoRows = (session.previewState.financingRules ?? []).filter(
+    (row) => row.company_size === "NGO",
+  );
+  assert.equal(ngoRows.length, 2);
+  assert.deepEqual(
+    new Set(ngoRows.map((row) => row.objectId)),
+    new Set([importedProject.id, importedRecruitment.id]),
+  );
+});
+
 test("legacy file name becomes display_name when metadata display_name is absent", () => {
   const session = reviewModule.createImportReviewSession(
     documentFixture(),

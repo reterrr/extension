@@ -1752,17 +1752,44 @@ export const workspaceReady = (() => {
         if (definition.max !== undefined) input.max = definition.max;
       }
       input.value = String(draft);
+      if (
+        Number.isInteger(definition.maxLength) &&
+        definition.maxLength > 0 &&
+        "maxLength" in input
+      ) {
+        input.maxLength = definition.maxLength;
+      }
     }
     if (input) {
       input.id = "edit-value";
       input.setAttribute("aria-describedby", "converted");
       input.disabled = busy;
+      let characterCount = null;
+      const refreshCharacterCount = () => {
+        if (!characterCount) return;
+        characterCount.textContent =
+          String(input.value.length) +
+          "/" +
+          String(definition.maxLength) +
+          " znaków";
+      };
       input.oninput = () => {
         draft = definition.type === "boolean" ? input.checked : input.value;
         input.indeterminate = false;
+        refreshCharacterCount();
         controls();
       };
-      if (definition.type !== "boolean") root.append(input);
+      if (definition.type !== "boolean") {
+        root.append(input);
+        if (
+          Number.isInteger(definition.maxLength) &&
+          definition.maxLength > 0
+        ) {
+          characterCount = node("small", "field-char-count");
+          root.append(characterCount);
+          refreshCharacterCount();
+        }
+      }
     }
     if (definition.type === "url" && C.hasValue(values[active.field])) {
       try {
@@ -1869,6 +1896,11 @@ export const workspaceReady = (() => {
       "Use a valid time between 00:00 and 23:59.": "Wpisz godzinę od 00:00 do 23:59.",
     };
     if (messages[message]) return messages[message];
+    const length = message.match(
+      /^Value exceeds maximum length of (\d+) characters\.$/,
+    );
+    if (length)
+      return `Wartość jest zbyt długa (maksymalnie ${length[1]} znaków).`;
     if (definition.type === "url") return "Wpisz pełny adres strony, np. https://example.pl.";
     const range = message.match(/^Value must be between (.+) and (.+)\.$/);
     if (range) return `Wpisz wartość od ${range[1]} do ${range[2]}.`;

@@ -569,6 +569,16 @@ def validate_input(
             "link_prowadzi_do_konkretnego_naboru",
             rid,
         )
+        for field, limit in (
+            ("kwalifikujace_sie_podmioty", 4000),
+            ("warunki_pomocy_i_dofinansowania", 4000),
+            ("instrukcja_skladania_wniosku", 5000),
+        ):
+            value = row.get(field, "")
+            if len(value) > limit:
+                raise ValueError(
+                    f"{rid}.{field}: maximum length is {limit} characters."
+                )
 
         if project_type == "B2B":
             build_b2b_financing(row, rid)
@@ -906,6 +916,21 @@ def merge_recruitments(
         )
         set_or_remove(values, "action_code", row["kod_dzialania"].strip() or None)
         set_or_remove(values, "notes", row["uwaga"].strip() or None)
+        set_or_remove(
+            values,
+            "eligible_entities",
+            row.get("kwalifikujace_sie_podmioty", "").strip() or None,
+        )
+        set_or_remove(
+            values,
+            "funding_conditions",
+            row.get("warunki_pomocy_i_dofinansowania", "").strip() or None,
+        )
+        set_or_remove(
+            values,
+            "application_instructions",
+            row.get("instrukcja_skladania_wniosku", "").strip() or None,
+        )
         set_or_remove(values, "direct_recruitment_link", direct_link)
         set_or_remove(
             values,

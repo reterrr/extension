@@ -69,6 +69,7 @@ ensureColumn("projects", "refund_percent_max", "REAL");
 ensureColumn("recruitments", "refund_percent_min", "REAL");
 ensureColumn("recruitments", "refund_percent_max", "REAL");
 ensureColumn("workspace_objects", "last_checked_at", "TEXT");
+ensureColumn("projects", "project_url", "TEXT");
 ensureColumn("projects", "documents_url", "TEXT");
 ensureColumn("projects", "documents_link_direct", "INTEGER");
 ensureColumn("projects", "notes", "TEXT");
@@ -129,14 +130,17 @@ ensureColumn("recruitments", "documents_url", "TEXT");
 ensureColumn("recruitments", "data_source_url", "TEXT");
 ensureColumn("recruitments", "direct_recruitment_link", "INTEGER");
 ensureColumn("recruitments", "notes", "TEXT");
+ensureColumn("recruitments", "eligible_entities", "TEXT");
+ensureColumn("recruitments", "funding_conditions", "TEXT");
+ensureColumn("recruitments", "application_instructions", "TEXT");
 ensureColumn("recruitments", "funding_rules", "TEXT");
 ensureColumn("recruitments", "funding_verified_at", "TEXT");
 ensureColumn("recruitments", "funding_verification_url", "TEXT");
 ensureColumn("geographies", "operator_object_id", "TEXT");
-db.pragma("user_version = 10");
+db.pragma("user_version = 11");
 
 db.prepare(
-  `INSERT INTO app_meta(key, value) VALUES ('schema_version', '10')
+  `INSERT INTO app_meta(key, value) VALUES ('schema_version', '11')
    ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
 ).run();
 
@@ -360,11 +364,11 @@ function syncBusinessTables(state, groupByObject) {
     INSERT INTO projects(
       id, object_id, type, name, number, status,
       refund_percent_min, refund_percent_max,
-      start_date, end_date, announcements_site_url,
+      start_date, end_date, announcements_site_url, project_url,
       documents_url, documents_link_direct, notes, schedule_note, technical_notes,
       created_at, updated_at, last_checked_at,
       geography_group_id
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   const insertOperator = db.prepare(`
     INSERT INTO operators(
@@ -402,7 +406,8 @@ function syncBusinessTables(state, groupByObject) {
       planned_end_low_quarter, planned_end_ceil_quarter,
       closed_status, status_reason, action_code,
       announcement_url, documents_url, data_source_url,
-      direct_recruitment_link, notes, funding_rules,
+      direct_recruitment_link, notes, eligible_entities, funding_conditions,
+      application_instructions, funding_rules,
       funding_verified_at, funding_verification_url,
       created_at, updated_at, last_checked_at, geography_group_id
     ) VALUES (
@@ -411,7 +416,7 @@ function syncBusinessTables(state, groupByObject) {
       ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
       ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
       ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-      ?, ?, ?, ?, ?, ?, ?, ?, ?
+      ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
     )
   `);
 
@@ -453,6 +458,7 @@ function syncBusinessTables(state, groupByObject) {
       nullableText(values.start_date),
       nullableText(values.end_date),
       nullableText(values.announcements_site_url),
+      nullableText(values.project_url),
       nullableText(values.documents_url),
       nullableBoolean(values.documents_link_direct),
       nullableText(values.notes),
@@ -537,6 +543,9 @@ function syncBusinessTables(state, groupByObject) {
       nullableText(values.data_source_url),
       nullableBoolean(values.direct_recruitment_link),
       nullableText(values.notes),
+      nullableText(values.eligible_entities),
+      nullableText(values.funding_conditions),
+      nullableText(values.application_instructions),
       nullableText(values.funding_rules),
       nullableText(values.funding_verified_at),
       nullableText(values.funding_verification_url),

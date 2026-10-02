@@ -49,6 +49,7 @@ CREATE TABLE IF NOT EXISTS projects (
   start_date TEXT,
   end_date TEXT,
   announcements_site_url TEXT,
+  project_url TEXT,
   documents_url TEXT,
   documents_link_direct INTEGER CHECK (documents_link_direct IN (0, 1)),
   notes TEXT,
@@ -148,6 +149,9 @@ CREATE TABLE IF NOT EXISTS recruitments (
   data_source_url TEXT,
   direct_recruitment_link INTEGER CHECK (direct_recruitment_link IN (0, 1)),
   notes TEXT,
+  eligible_entities TEXT,
+  funding_conditions TEXT,
+  application_instructions TEXT,
   funding_rules TEXT,
   funding_verified_at TEXT,
   funding_verification_url TEXT,
@@ -331,4 +335,4 @@ CREATE TABLE IF NOT EXISTS document_requirements (
   FOREIGN KEY (object_id) REFERENCES workspace_objects(object_id) ON DELETE CASCADE
 );
 
-PRAGMA user_version = 10;
+PRAGMA user_version = 11;
