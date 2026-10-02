@@ -308,6 +308,12 @@ function createEditor(info: NonNullable<ReturnType<typeof fieldInfo>>): HTMLElem
   } else if (definition.multiline) {
     const textarea = document.createElement("textarea");
     textarea.value = String(draft ?? "");
+    if (
+      Number.isInteger(definition.maxLength) &&
+      Number(definition.maxLength) > 0
+    ) {
+      textarea.maxLength = Number(definition.maxLength);
+    }
     input = textarea;
   } else {
     const valueInput = document.createElement("input");
