@@ -640,6 +640,19 @@ def merge_projects(
         else:
             values.pop("announcements_site_url", None)
 
+        project_url = (
+            valid_url(
+                row.get("strona_projektu", ""),
+                f"{project_key}.strona_projektu",
+            )
+            if row.get("strona_projektu", "").strip()
+            else None
+        )
+        if project_url:
+            values["project_url"] = project_url
+        else:
+            values.pop("project_url", None)
+
         documents_url = valid_url(
             row.get("link_do_dokumentow", ""),
             f"{project_key}.link_do_dokumentow",
