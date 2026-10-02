@@ -202,6 +202,22 @@ test("formats business values, validates enums, dates, NIP, percentages and refe
     3,
   );
   assert.equal(recruitment.documents_url.type, "url");
+  assert.equal(recruitment.eligible_entities.multiline, true);
+  assert.equal(recruitment.eligible_entities.maxLength, 4000);
+  assert.equal(recruitment.funding_conditions.maxLength, 4000);
+  assert.equal(recruitment.application_instructions.maxLength, 5000);
+  assert.equal(
+    s.C.coerceField("x".repeat(4000), recruitment.eligible_entities, s.state)
+      .length,
+    4000,
+  );
+  assert.throws(() =>
+    s.C.coerceField(
+      "x".repeat(4001),
+      recruitment.eligible_entities,
+      s.state,
+    ),
+  );
   assert.equal(recruitment.funding_rules.multiline, true);
   assert.equal(
     s.C.coerceField("true", recruitment.continuous, s.state),
@@ -218,6 +234,9 @@ test("formats business values, validates enums, dates, NIP, percentages and refe
     /2026/,
   );
   assert.equal(s.context.BurbotFunding.sizes.B2C, "B2C / osoba dorosła");
+  assert.equal(s.context.BurbotFunding.sizes.NGO, "NGO");
+  assert.equal(P.announcements_site_url.label, "Strona ogłoszeń");
+  assert.equal(P.project_url.type, "url");
   assert.equal(F.refund_percent_base.label, "Bazowa refundacja (%)");
   assert.equal(F.refund_percent_base.group, "Refundacja (%)");
   assert.equal(F.refund_percent_max.group, "Refundacja (%)");
@@ -321,6 +340,30 @@ test("funding variants remain independent and have separately targeted extractio
     70,
   );
 });
+test("NGO funding variants work for projects and recruitments", () => {
+  const s = setup();
+  const project = s.create("project", "Projekt NGO");
+  const recruitment = s.create("recruitment", "Nabór NGO");
+
+  s.mutate({
+    op: "ADD_FUNDING",
+    objectId: project.id,
+    companySize: "NGO",
+  });
+  s.mutate({
+    op: "ADD_FUNDING",
+    objectId: recruitment.id,
+    companySize: "NGO",
+  });
+
+  const ngoRows = s.state.financingRules.filter(
+    (row) => row.company_size === "NGO",
+  );
+  assert.equal(ngoRows.length, 2);
+  assert.equal(ngoRows.some((row) => row.objectId === project.id), true);
+  assert.equal(ngoRows.some((row) => row.objectId === recruitment.id), true);
+});
+
 test("document requirements and auto-fill belong to each object, not the catalog", () => {
   const s = setup(),
     a = s.create("project", "A"),
