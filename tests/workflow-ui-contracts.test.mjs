@@ -331,6 +331,20 @@ test("workspace advertises supported file extensions and keeps value extraction 
 });
 
 
+test("workspace exposes NGO funding and bounded recruitment condition fields", () => {
+  const schema = source("src/shared/domain/schema.js");
+  const workspace = source("src/sidepanel/workspace.js");
+
+  assert.match(schema, /NGO: "NGO"/);
+  assert.match(schema, /announcements_site_url: url\("Strona ogłoszeń"\)/);
+  assert.match(schema, /project_url: url\("Strona projektu"\)/);
+  assert.match(schema, /eligible_entities: text\("Kwalifikujące się podmioty"[\s\S]*?maxLength: 4000/);
+  assert.match(schema, /funding_conditions: text\([\s\S]*?maxLength: 4000/);
+  assert.match(schema, /application_instructions: text\([\s\S]*?maxLength: 5000/);
+  assert.match(workspace, /field-char-count/);
+  assert.match(workspace, /definition\.maxLength/);
+});
+
 test("recruitment can inherit project geography per operator and funding as copies", () => {
   const app = source("src/sidepanel/App.tsx");
   const geography = source("src/sidepanel/geographyUi.ts");
