@@ -52,6 +52,7 @@ test("SQLite schema creates typed business and provenance tables", () => {
   assert.ok(projectColumns.has("refund_percent_min"));
   assert.ok(projectColumns.has("refund_percent_max"));
   for (const column of [
+    "project_url",
     "documents_url",
     "documents_link_direct",
     "notes",
@@ -108,6 +109,9 @@ test("SQLite schema creates typed business and provenance tables", () => {
   assert.ok(recruitmentColumns.has("data_source_url"));
   assert.ok(recruitmentColumns.has("direct_recruitment_link"));
   assert.ok(recruitmentColumns.has("notes"));
+  assert.ok(recruitmentColumns.has("eligible_entities"));
+  assert.ok(recruitmentColumns.has("funding_conditions"));
+  assert.ok(recruitmentColumns.has("application_instructions"));
   assert.ok(recruitmentColumns.has("funding_rules"));
   assert.ok(recruitmentColumns.has("funding_verified_at"));
   assert.ok(recruitmentColumns.has("funding_verification_url"));
@@ -194,7 +198,7 @@ test("SQLite schema creates typed business and provenance tables", () => {
     assert.ok(evidenceColumns.has(column), `missing field_evidence.${column}`);
   }
 
-  assert.equal(db.pragma("user_version", { simple: true }), 10);
+  assert.equal(db.pragma("user_version", { simple: true }), 11);
   db.close();
 });
 
