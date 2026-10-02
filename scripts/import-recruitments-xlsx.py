@@ -569,6 +569,16 @@ def validate_input(
             "link_prowadzi_do_konkretnego_naboru",
             rid,
         )
+        for field, limit in (
+            ("kwalifikujace_sie_podmioty", 4000),
+            ("warunki_pomocy_i_dofinansowania", 4000),
+            ("instrukcja_skladania_wniosku", 5000),
+        ):
+            value = row.get(field, "")
+            if len(value) > limit:
+                raise ValueError(
+                    f"{rid}.{field}: maximum length is {limit} characters."
+                )
 
         if project_type == "B2B":
             build_b2b_financing(row, rid)
