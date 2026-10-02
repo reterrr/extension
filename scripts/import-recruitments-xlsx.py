@@ -906,6 +906,21 @@ def merge_recruitments(
         )
         set_or_remove(values, "action_code", row["kod_dzialania"].strip() or None)
         set_or_remove(values, "notes", row["uwaga"].strip() or None)
+        set_or_remove(
+            values,
+            "eligible_entities",
+            row.get("kwalifikujace_sie_podmioty", "").strip() or None,
+        )
+        set_or_remove(
+            values,
+            "funding_conditions",
+            row.get("warunki_pomocy_i_dofinansowania", "").strip() or None,
+        )
+        set_or_remove(
+            values,
+            "application_instructions",
+            row.get("instrukcja_skladania_wniosku", "").strip() or None,
+        )
         set_or_remove(values, "direct_recruitment_link", direct_link)
         set_or_remove(
             values,
