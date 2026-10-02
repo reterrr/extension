@@ -15,6 +15,7 @@ interface BurbotFieldDefinition {
   numeric?: boolean;
   legacy?: boolean;
   multiline?: boolean;
+  maxLength?: number;
   readonly?: boolean;
   system?: boolean;
   min?: number;
