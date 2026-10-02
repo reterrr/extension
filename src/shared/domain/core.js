@@ -248,9 +248,18 @@
   }
 
   function coerceField(raw, definition, state) {
+    const rawText = String(raw ?? "");
     let text = clean(raw);
     if (!text) throw Error("Choose or enter a value.");
     if (text.length > 100000) throw Error("Value is too long.");
+    const maxLength = Number(definition.maxLength);
+    if (
+      Number.isInteger(maxLength) &&
+      maxLength > 0 &&
+      rawText.length > maxLength
+    ) {
+      throw Error(`Value exceeds maximum length of ${maxLength} characters.`);
+    }
     const type = definition.type;
 
     if (type === "enum") {
