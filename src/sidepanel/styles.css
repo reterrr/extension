@@ -532,6 +532,12 @@ pre {
   max-height: 140px;
   overflow: auto;
 }
+#value-control .field-char-count {
+  display: block;
+  margin-top: 4px;
+  font-size: 10px;
+  color: var(--muted);
+}
 #value-control .open-link {
   display: block;
   font-size: 10px;
