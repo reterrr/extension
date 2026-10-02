@@ -95,7 +95,8 @@
     number: text("Numer projektu"),
     start_date: date("Data rozpoczęcia projektu"),
     end_date: date("Data zakończenia projektu"),
-    announcements_site_url: url("Strona naborów"),
+    announcements_site_url: url("Strona ogłoszeń"),
+    project_url: url("Strona projektu"),
     documents_url: url("Strona dokumentów"),
     documents_link_direct: {
       label: "Link prowadzi bezpośrednio do dokumentów",
@@ -384,6 +385,26 @@
       group: "Źródła",
     },
     notes: text("Uwagi", "Źródła", { multiline: true }),
+    eligible_entities: text("Kwalifikujące się podmioty", "Warunki naboru", {
+      multiline: true,
+      maxLength: 4000,
+    }),
+    funding_conditions: text(
+      "Warunki pomocy i dofinansowania",
+      "Warunki naboru",
+      {
+        multiline: true,
+        maxLength: 4000,
+      },
+    ),
+    application_instructions: text(
+      "Instrukcja składania wniosku",
+      "Warunki naboru",
+      {
+        multiline: true,
+        maxLength: 5000,
+      },
+    ),
     funding_rules: text("Zasady dofinansowania", "Dofinansowanie", {
       multiline: true,
     }),
@@ -628,6 +649,7 @@
       MEDIUM: "Medium",
       LARGE: "Large",
       B2C: "B2C / osoba dorosła",
+      NGO: "NGO",
     },
     fields: fundingFields,
   });
