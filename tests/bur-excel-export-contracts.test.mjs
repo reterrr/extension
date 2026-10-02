@@ -64,6 +64,7 @@ function snapshot() {
             start_date: "2026-01-01",
             end_date: "2026-12-31",
             announcements_site_url: "https://rarr.example/nabory",
+            project_url: "https://rarr.example/projekt",
             number: "FEPK.01.01-TEST",
             last_checked_at: "2026-09-20T11:00:00.000Z",
           },
@@ -110,6 +111,9 @@ function snapshot() {
             data_source_url: "https://rarr.example/nabor",
             direct_recruitment_link: true,
             action_code: "FEPK.07.09",
+            eligible_entities: "NGO prowadzące działalność na obszarze projektu.",
+            funding_conditions: "Wsparcie do 80% kosztów kwalifikowanych.",
+            application_instructions: "Złóż formularz elektronicznie i podpisz w systemie.",
             funding_verified_at: "2026-09-21",
             statusZakonczenia: "ZAKONCZONY",
             powodStatusu: "Koniec terminu",
@@ -204,6 +208,15 @@ function snapshot() {
           own_contribution_form: "CASH",
           notes: "Wariant podstawowy",
         },
+        {
+          id: "F2",
+          importKey: "ngo-default",
+          objectId: "NAB_1",
+          company_size: "NGO",
+          variant_no: 1,
+          refund_percent_max: 85,
+          notes: "Wariant NGO",
+        },
       ],
       documentRequirements: [
         {
@@ -276,6 +289,7 @@ test("BUR Excel export keeps complete business data and relations", () => {
   const project = asObjects("Projekty")[0];
   assert.equal(project.operator_id, "OP_1");
   assert.equal(project.numer_projektu, "FEPK.01.01-TEST");
+  assert.equal(project.strona_projektu, "https://rarr.example/projekt");
 
   const projectGeography = asObjects("Geografia_Projekty")[0];
   assert.equal(projectGeography.projekt_id, "PR_1");
@@ -293,6 +307,18 @@ test("BUR Excel export keeps complete business data and relations", () => {
   assert.equal(recruitment.projekt_id, "PR_1");
   assert.equal(recruitment.mikro_procent, 80);
   assert.equal(recruitment.mikro_procent_bazowy, 50);
+  assert.equal(
+    recruitment.kwalifikujace_sie_podmioty,
+    "NGO prowadzące działalność na obszarze projektu.",
+  );
+  assert.equal(
+    recruitment.warunki_pomocy_i_dofinansowania,
+    "Wsparcie do 80% kosztów kwalifikowanych.",
+  );
+  assert.equal(
+    recruitment.instrukcja_skladania_wniosku,
+    "Złóż formularz elektronicznie i podpisz w systemie.",
+  );
   assert.equal(recruitment.numer_kolejny, 1);
   assert.equal(recruitment.rok, 2026);
   assert.equal(recruitment.nabor_ciagly, "nie");
@@ -315,12 +341,15 @@ test("BUR Excel export keeps complete business data and relations", () => {
   assert.equal(recruitment.status_zakonczenia, "ZAKONCZONY");
   assert.equal(recruitment.ostatnia_zmiana, "2026-09-21T14:22:33.000Z");
 
-  const funding = asObjects("Finansowanie")[0];
-  assert.equal(funding.finansowanie_id, "micro-default");
+  const fundingRows = asObjects("Finansowanie");
+  const funding = fundingRows.find((row) => row.finansowanie_id === "micro-default");
+  const ngoFunding = fundingRows.find((row) => row.finansowanie_id === "ngo-default");
   assert.equal(funding.obiekt_id, "NAB_1");
   assert.equal(funding.refund_percent_max, 80);
   assert.equal(funding.max_per_person_pln, 5000);
   assert.equal(funding.own_contribution_form, "CASH");
+  assert.equal(ngoFunding.wielkosc_firmy, "NGO");
+  assert.equal(ngoFunding.refund_percent_max, 85);
 
   const document = asObjects("Dokumenty")[0];
   assert.equal(document.obiekt_id, "NAB_1");
