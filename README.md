@@ -268,8 +268,9 @@ typ_odbiorcy                -> project.type
 status_projektu             -> project.status
 data_start                  -> project.start_date
 data_koniec                 -> project.end_date
-Link do harmonogramu/naborów -> project.announcements_site_url
-link_do_dokumentow           -> project.documents_url
+link_do_harmonogramu         -> project.announcements_site_url (Strona ogłoszeń)
+strona_projektu               -> project.project_url
+link_do_dokumentow            -> project.documents_url
 link_prowadzi_do_dokumentow  -> project.documents_link_direct
 uwagi                         -> project.notes
 Uwaga                         -> project.schedule_note
@@ -312,6 +313,9 @@ link_dokumenty                   -> documents_url
 kod_dzialania                    -> action_code
 zrodlo_danych                    -> data_source_url (supports multiple URLs separated by ;)
 uwaga                            -> notes
+kwalifikujace_sie_podmioty       -> eligible_entities
+warunki_pomocy_i_dofinansowania  -> funding_conditions
+instrukcja_skladania_wniosku     -> application_instructions
 link_prowadzi_do_konkretnego...  -> direct_recruitment_link
 zasady_dofinansowania            -> funding_rules
 data_weryfikacji_finansow        -> funding_verified_at
@@ -320,7 +324,7 @@ zrodlo_weryfikacji_finansow      -> funding_verification_url
 
 `continuous` is set only when the source explicitly describes the recruitment as continuous (including `CIAGLY`/ `ciągły` in the source ID/name/notes/rules).
 
-B2B financing becomes MICRO / SMALL / MEDIUM variants with base/standard refund percentages and company/person limits. B2C financing becomes one `B2C` variant with base/max refund, own-contribution percentages and service/refund limits.
+Funding variants support MICRO / SMALL / MEDIUM / LARGE / B2C / NGO for both Projects and Recruitments. The XLSX importer still derives its legacy B2B/B2C variants from the dedicated workbook columns; NGO variants can be added in Workspace or portable JSON unless the workbook contains a dedicated NGO representation.
 
 Geography is normalized through the same canonical Burbot geography catalog as Projects. `include` becomes `OBEJMUJE`; `exclude` becomes `WYKLUCZA`.
 
