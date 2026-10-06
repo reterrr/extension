@@ -556,7 +556,15 @@ function officialIdentity(
   | "officialIdentifierEvidenceUrl"
 > | null {
   const identifier = cleanText(recruitment.values?.source_number);
-  if (!identifier) return null;
+  const sequence = finiteNumber(recruitment.values?.sequence_number);
+  if (
+    !identifier ||
+    (/^\d+$/u.test(identifier) &&
+      Number.isInteger(sequence) &&
+      Number(identifier) === sequence)
+  ) {
+    return null;
+  }
   const bounded = boundedText(
     identifier,
     200,
@@ -644,7 +652,8 @@ export function buildRoundImportPackagePlan(
     "workspace.conditions.eligibleEntities",
   );
   const fundingDescription = boundedText(
-    recruitment.values?.funding_conditions,
+    cleanText(recruitment.values?.funding_conditions) ||
+      cleanText(recruitment.values?.funding_rules),
     4000,
     "workspace.conditions.aidBasisDescription",
   );
@@ -951,7 +960,9 @@ export async function buildRoundImportZip(
       );
     }
     entries.push({ path: file.path, data });
-    onProgress?.(index + 1, plan.files.length, file.source.name);
+  }
+  if (plan.files.length) {
+    onProgress?.(plan.files.length, plan.files.length, "");
   }
 
   const zip = buildStoreZip(entries);
