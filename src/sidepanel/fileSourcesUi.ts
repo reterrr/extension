@@ -198,12 +198,8 @@ async function downloadAllObjectFiles(
   const sources = (state.fileSources ?? []).filter(
     (source) => source.objectId === object.id,
   );
-  if (!sources.length) {
-    throw new Error(
-      object.type === "project"
-        ? "Ten projekt nie ma przypiętych plików."
-        : "Ten nabór nie ma przypiętych plików.",
-    );
+  if (!sources.length && object.type === "project") {
+    throw new Error("Ten projekt nie ma przypiętych plików.");
   }
 
   const project =
@@ -1111,7 +1107,7 @@ function render(): void {
   downloadAll.hidden = !canBulkDownload;
   downloadAll.disabled =
     fileDownloadBusy ||
-    sources.length === 0 ||
+    (!isRecruitment && sources.length === 0) ||
     (isRecruitment && !project);
   downloadAll.textContent = fileDownloadBusy
     ? isRecruitment
