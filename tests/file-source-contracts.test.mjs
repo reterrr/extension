@@ -540,6 +540,40 @@ test("recruitment RoundImport ZIP plan matches the strict V5 manifest contract",
   assert.match(plan.warnings[0], /Pominięto 1 wpisów geografii/);
 });
 
+
+test("RoundImport plan can export a data-only recruitment with no attachments", () => {
+  const state = {
+    version: 1,
+    revision: 1,
+    objects: [
+      {
+        id: "project",
+        type: "project",
+        values: { name: "Projekt" },
+      },
+      {
+        id: "round",
+        type: "recruitment",
+        values: {
+          external_number: "Nabór bez plików",
+          project_id: "project",
+          status: "PLANOWANY",
+        },
+      },
+    ],
+    rules: [],
+    fileSources: [],
+  };
+
+  const plan = roundImportZip.buildRoundImportPackagePlan(
+    state,
+    state.objects[1],
+  );
+  assert.deepEqual(plan.manifest.files, []);
+  assert.deepEqual(plan.manifest.workspace.documents, []);
+  assert.equal(plan.manifest.name, "Nabór bez plików");
+});
+
 test("RoundImport ZIP writer creates import.json and exact declared file paths", () => {
   const encoder = new TextEncoder();
   const zip = roundImportZip.buildStoreZip(
