@@ -587,9 +587,6 @@ export function buildRoundImportPackagePlan(
   const sources = (state.fileSources ?? []).filter(
     (source) => source.objectId === recruitment.id,
   );
-  if (!sources.length) {
-    throw new Error("Ten nabór nie ma przypiętych plików do paczki ZIP.");
-  }
   if (sources.length > ROUND_IMPORT_MAX_FILES) {
     throw new Error(
       `Nabór ma ${sources.length} plików; RoundImportManifestV1 dopuszcza maksymalnie ${ROUND_IMPORT_MAX_FILES}.`,
@@ -958,8 +955,10 @@ export async function buildRoundImportZip(
   }
 
   const zip = buildStoreZip(entries);
+  const blobBytes = new Uint8Array(zip.byteLength);
+  blobBytes.set(zip);
   return {
-    blob: new Blob([zip], { type: "application/zip" }),
+    blob: new Blob([blobBytes.buffer], { type: "application/zip" }),
     manifest: plan.manifest,
     zipFileName: plan.zipFileName,
     warnings: plan.warnings,
