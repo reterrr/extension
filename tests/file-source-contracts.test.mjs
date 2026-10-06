@@ -13,6 +13,7 @@ let fileDownloads;
 let fileInheritance;
 let fileMetadata;
 let stateMigrations;
+let roundImportZip;
 
 before(async () => {
   outputDir = await mkdtemp(join(tmpdir(), "burbot-file-source-"));
@@ -24,6 +25,7 @@ before(async () => {
       fileInheritance: "src/shared/fileInheritance.ts",
       fileMetadata: "src/shared/fileMetadata.ts",
       stateMigrations: "src/shared/domain/stateMigrations.ts",
+      roundImportZip: "src/shared/export/roundImportZip.ts",
     },
     outdir: outputDir,
     bundle: true,
@@ -46,6 +48,9 @@ before(async () => {
   );
   stateMigrations = await import(
     pathToFileURL(join(outputDir, "stateMigrations.js")).href
+  );
+  roundImportZip = await import(
+    pathToFileURL(join(outputDir, "roundImportZip.js")).href
   );
 });
 
@@ -324,6 +329,328 @@ test("download path sanitizer removes Firefox-rejected invisible characters", ()
   );
 });
 
+
+
+test("recruitment RoundImport ZIP plan matches the strict V5 manifest contract", () => {
+  const state = {
+    version: 1,
+    revision: 1,
+    objects: [
+      {
+        id: "project-1",
+        type: "project",
+        label: "Generator Kompetencji 3.0",
+        values: {
+          name: "Generator Kompetencji 3.0",
+          number: "FEPK.07.09-IP.01-0001/24",
+        },
+      },
+      {
+        id: "recruitment-1",
+        type: "recruitment",
+        label: "Nabór 3/2026",
+        values: {
+          external_number: "Nabór 3/2026",
+          source_number: "BUR-I/3/2026",
+          project_id: "project-1",
+          action_code: "FEPK.07.09",
+          status: "AKTYWNY",
+          dataRozpoczeciaOd: "2026-10-10",
+          dataZakonczeniaDo: "2026-10-20",
+          eligible_entities: "MŚP i organizacje pozarządowe.",
+          funding_conditions: "Pomoc de minimis; refundacja do 80%.",
+          application_instructions: "Złóż formularz w systemie operatora.",
+          urlOgloszenia: "https://example.test/nabor/3-2026",
+          notes: "Import testowy.",
+        },
+      },
+    ],
+    rules: [],
+    geographies: [
+      {
+        id: "g1",
+        objectId: "recruitment-1",
+        type: "WOJEWODZTWO",
+        role: "OBEJMUJE",
+        value: "podkarpackie",
+      },
+      {
+        id: "g2",
+        objectId: "recruitment-1",
+        type: "GMINA",
+        role: "WYKLUCZA",
+        value: "1816132",
+      },
+      {
+        id: "g3",
+        objectId: "recruitment-1",
+        type: "POWIAT",
+        role: "OBEJMUJE",
+        value: "podkarpackie|powiat|rzeszowski",
+      },
+    ],
+    financingRules: [
+      {
+        id: "fund-1",
+        objectId: "recruitment-1",
+        company_size: "MICRO",
+        variant_no: 1,
+        refund_percent_max: 80,
+        max_amount_pln: 10000,
+        max_per_person_pln: 5000,
+        own_contribution_form: "CASH",
+      },
+      {
+        id: "fund-2",
+        objectId: "recruitment-1",
+        company_size: "NGO",
+        variant_no: 1,
+        refund_percent_standard: 85,
+        notes: "Preferencja dla NGO",
+      },
+    ],
+    fileSources: [
+      {
+        id: "rules",
+        objectId: "recruitment-1",
+        fileType: "PDF",
+        url: "https://example.test/regulamin.pdf",
+        sourcePageUrl: "https://example.test/nabor/3-2026",
+        name: "regulamin_naboru.pdf",
+        addedAt: "2026-10-01T12:00:00Z",
+        display_name: "Regulamin naboru",
+        purpose: "Regulamin",
+        has_fields: false,
+        intended_use: "Zasady udziału w naborze.",
+        client_requirement: "Informacyjny",
+        signature_requirement: "Nie jest wymagany",
+      },
+      {
+        id: "form",
+        objectId: "recruitment-1",
+        fileType: "DOCX",
+        url: "https://example.test/formularz.docx",
+        sourcePageUrl: "https://example.test/nabor/3-2026",
+        name: "formularz_zgloszeniowy.docx",
+        addedAt: "2026-10-01T12:00:00Z",
+        display_name: "Formularz zgłoszeniowy",
+        purpose: "Formularz do uzupełnienia",
+        has_fields: false,
+        intended_use: "Formularz składany przy zgłoszeniu.",
+        client_requirement: "Obowiązkowy",
+        signature_requirement: "Wymagany podpisany plik",
+      },
+    ],
+  };
+
+  const recruitment = state.objects[1];
+  const plan = roundImportZip.buildRoundImportPackagePlan(state, recruitment);
+  const manifest = plan.manifest;
+
+  assert.deepEqual(Object.keys(manifest), ["format", "name", "files", "workspace"]);
+  assert.equal(manifest.format, "RoundImportManifestV1");
+  assert.equal(manifest.name, "Nabór 3/2026");
+  assert.deepEqual(manifest.files, [
+    {
+      id: "FILE_001",
+      path: "files/regulamin_naboru.pdf",
+      purpose: "regulations",
+      requiresCompletion: false,
+    },
+    {
+      id: "FILE_002",
+      path: "files/formularz_zgloszeniowy.docx",
+      purpose: "form",
+      requiresCompletion: true,
+    },
+  ]);
+  assert.equal("name" in manifest.files[0], false);
+  assert.equal("description" in manifest.files[0], false);
+
+  assert.deepEqual(manifest.workspace.schedule, {
+    opensOn: "2026-10-10",
+    closesOn: "2026-10-20",
+    closeMode: "dated",
+  });
+  assert.equal(manifest.workspace.notes, "Import testowy.");
+  assert.equal(
+    manifest.workspace.conditions.officialRoundIdentifier,
+    "BUR-I/3/2026",
+  );
+  assert.equal(
+    manifest.workspace.conditions.officialIdentifierStatus,
+    "provided",
+  );
+  assert.equal(
+    manifest.workspace.conditions.officialIdentifierEvidenceUrl,
+    "https://example.test/nabor/3-2026",
+  );
+  assert.equal(
+    manifest.workspace.conditions.projectName,
+    "Generator Kompetencji 3.0",
+  );
+  assert.equal(manifest.workspace.conditions.programCode, "FEPK.07.09");
+  assert.equal(manifest.workspace.conditions.operatorStatus, "active");
+  assert.deepEqual(manifest.workspace.conditions.includedTerytCodes, ["18"]);
+  assert.deepEqual(manifest.workspace.conditions.excludedTerytCodes, ["1816132"]);
+  assert.deepEqual(
+    manifest.workspace.conditions.eligibleBusinessCategories,
+    ["mikro", "ngo"],
+  );
+  assert.equal(manifest.workspace.conditions.aidBasis, "de_minimis");
+  assert.equal(manifest.workspace.conditions.fundingVariants.length, 2);
+  assert.equal(
+    manifest.workspace.conditions.fundingVariants[0].mspSize,
+    "mikro",
+  );
+  assert.equal(
+    manifest.workspace.conditions.fundingVariants[0].refundPct,
+    80,
+  );
+  assert.equal(
+    manifest.workspace.conditions.fundingVariants[0].ownContributionForm,
+    "monetary",
+  );
+  assert.equal(
+    manifest.workspace.conditions.fundingVariants[1].mspSize,
+    null,
+  );
+  assert.equal(
+    manifest.workspace.conditions.fundingVariants[1].refundPct,
+    85,
+  );
+  assert.deepEqual(manifest.workspace.conditions.sourceFileIds, [
+    "FILE_001",
+    "FILE_002",
+  ]);
+
+  assert.equal(manifest.workspace.documents.length, 2);
+  assert.deepEqual(manifest.workspace.documents[1], {
+    key: "FILE_002",
+    label: "Formularz zgłoszeniowy",
+    purpose: "Formularz składany przy zgłoszeniu.",
+    requirement: "required",
+    fulfillmentMode: "operator_template",
+    originalFileId: "FILE_002",
+    sourceFileIds: ["FILE_002"],
+    signatureRequirement: "required_file",
+    sourceUrl: "https://example.test/nabor/3-2026",
+  });
+  assert.equal(plan.warnings.length, 1);
+  assert.match(plan.warnings[0], /Pominięto 1 wpisów geografii/);
+});
+
+
+test("RoundImport plan can export a data-only recruitment with no attachments", () => {
+  const state = {
+    version: 1,
+    revision: 1,
+    objects: [
+      {
+        id: "project",
+        type: "project",
+        values: { name: "Projekt" },
+      },
+      {
+        id: "round",
+        type: "recruitment",
+        values: {
+          external_number: "Nabór bez plików",
+          project_id: "project",
+          status: "PLANOWANY",
+        },
+      },
+    ],
+    rules: [],
+    fileSources: [],
+  };
+
+  const plan = roundImportZip.buildRoundImportPackagePlan(
+    state,
+    state.objects[1],
+  );
+  assert.deepEqual(plan.manifest.files, []);
+  assert.deepEqual(plan.manifest.workspace.documents, []);
+  assert.equal(plan.manifest.name, "Nabór bez plików");
+});
+
+test("RoundImport ZIP writer creates import.json and exact declared file paths", () => {
+  const encoder = new TextEncoder();
+  const zip = roundImportZip.buildStoreZip(
+    [
+      {
+        path: "import.json",
+        data: encoder.encode('{"format":"RoundImportManifestV1"}'),
+      },
+      {
+        path: "files/regulamin.pdf",
+        data: new Uint8Array([1, 2, 3, 4]),
+      },
+    ],
+    new Date("2026-10-06T12:00:00Z"),
+  );
+
+  const view = new DataView(zip.buffer, zip.byteOffset, zip.byteLength);
+  const decoder = new TextDecoder();
+  const paths = [];
+  let offset = 0;
+  while (view.getUint32(offset, true) === 0x04034b50) {
+    const size = view.getUint32(offset + 18, true);
+    const nameLength = view.getUint16(offset + 26, true);
+    const extraLength = view.getUint16(offset + 28, true);
+    const nameStart = offset + 30;
+    paths.push(
+      decoder.decode(zip.subarray(nameStart, nameStart + nameLength)),
+    );
+    offset = nameStart + nameLength + extraLength + size;
+  }
+
+  assert.deepEqual(paths, ["import.json", "files/regulamin.pdf"]);
+  assert.equal(view.getUint32(offset, true), 0x02014b50);
+});
+
+test("RoundImport export rejects archive attachments unsupported by V5", () => {
+  const state = {
+    version: 1,
+    revision: 1,
+    objects: [
+      {
+        id: "project",
+        type: "project",
+        values: { name: "Projekt" },
+      },
+      {
+        id: "round",
+        type: "recruitment",
+        values: {
+          external_number: "Nabór",
+          project_id: "project",
+        },
+      },
+    ],
+    rules: [],
+    fileSources: [
+      {
+        id: "archive",
+        objectId: "round",
+        fileType: "ZIP",
+        url: "https://example.test/pakiet.zip",
+        sourcePageUrl: "https://example.test",
+        name: "pakiet.zip",
+        addedAt: "2026-10-01T12:00:00Z",
+      },
+    ],
+  };
+
+  assert.throws(
+    () =>
+      roundImportZip.buildRoundImportPackagePlan(
+        state,
+        state.objects[1],
+      ),
+    /obsługuje tylko PDF, DOC, DOCX, XLSX, JPG, JPEG i PNG/,
+  );
+});
 
 test("project files are inherited as independent recruitment copies", () => {
   const state = {

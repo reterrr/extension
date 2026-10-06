@@ -362,9 +362,10 @@ test("recruitment can inherit project geography per operator and funding as copi
   assert.match(background, /copyProjectFundingToRecruitment/);
 });
 
-test("bulk file download is available for projects and recruitments", () => {
+test("project bulk download stays intact and recruitment download creates RoundImport ZIP", () => {
   const files = source("src/sidepanel/fileSourcesUi.ts");
   const downloads = source("src/shared/fileDownloads.ts");
+  const roundImport = source("src/shared/export/roundImportZip.ts");
 
   assert.match(
     files,
@@ -373,8 +374,12 @@ test("bulk file download is available for projects and recruitments", () => {
   assert.match(files, /downloadAll\.hidden = !canBulkDownload/);
   assert.match(files, /downloadAllObjectFiles/);
   assert.match(files, /buildProjectDownloadPlan/);
-  assert.match(files, /buildRecruitmentDownloadPlan/);
+  assert.match(files, /buildRoundImportZip/);
+  assert.match(files, /Pobierz import ZIP/);
   assert.match(downloads, /export function buildProjectDownloadPlan/);
+  assert.match(roundImport, /format: "RoundImportManifestV1"/);
+  assert.match(roundImport, /path: `files\/\$\{fileNames\[index\]\}`/);
+  assert.match(roundImport, /buildStoreZip/);
 });
 
 test("common archives use the normal file classification UI", () => {

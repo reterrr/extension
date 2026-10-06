@@ -353,6 +353,15 @@ the extension through the local DB service. Burbot never stores the original
 filesystem path, so moving or deleting the original file does not break the
 attachment.
 
+For a Recruitment, the file-section bulk download is a single V5-compatible
+`RoundImportManifestV1` ZIP. It contains exactly `import.json` and the supported
+attachments under `files/`. The manifest maps recruitment conditions, dates,
+funding variants and file classification into the strict round-import contract;
+Project bulk download keeps the existing plain-file behavior. Unsupported archive
+attachments are rejected for this ZIP because the target importer accepts only
+PDF, DOC, DOCX, XLSX, JPG/JPEG and PNG. A data-only Recruitment can still export
+a ZIP containing only `import.json`.
+
 ## Przegląd i zapis zmian
 
 Edycje oraz zaakceptowane dane z importu pojawiają się automatycznie w **Zapisie zmian**.

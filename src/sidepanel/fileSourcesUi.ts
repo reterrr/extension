@@ -21,10 +21,8 @@ import type {
   LegacyStoredObject,
 } from "../shared/types/legacy-storage";
 import type { RemoteFileSourceCandidate } from "../shared/types/source";
-import {
-  buildProjectDownloadPlan,
-  buildRecruitmentDownloadPlan,
-} from "../shared/fileDownloads";
+import { buildProjectDownloadPlan } from "../shared/fileDownloads";
+import { buildRoundImportZip } from "../shared/export/roundImportZip";
 import {
   projectFileInheritanceStatus,
   projectForRecruitment,
@@ -200,12 +198,8 @@ async function downloadAllObjectFiles(
   const sources = (state.fileSources ?? []).filter(
     (source) => source.objectId === object.id,
   );
-  if (!sources.length) {
-    throw new Error(
-      object.type === "project"
-        ? "Ten projekt nie ma przypiętych plików."
-        : "Ten nabór nie ma przypiętych plików.",
-    );
+  if (!sources.length && object.type === "project") {
+    throw new Error("Ten projekt nie ma przypiętych plików.");
   }
 
   const project =
@@ -214,31 +208,54 @@ async function downloadAllObjectFiles(
       : object;
   if (!project) {
     throw new Error(
-      "Najpierw przypisz projekt do naboru — nazwa katalogu używa nazwy naboru i projektu.",
+      "Najpierw przypisz projekt do naboru — paczka RoundImportManifestV1 wymaga docelowego programu/projektu.",
     );
   }
 
   fileDownloadBusy = true;
   render();
   try {
-    const platform = await browser.runtime.getPlatformInfo();
-    const inputFiles = sources.map((source) => ({
-      name: source.name,
-      url: source.url,
-    }));
-    const plan =
-      object.type === "project"
-        ? buildProjectDownloadPlan(
-            objectDisplayName(project),
-            inputFiles,
-            platform.os === "win",
-          )
-        : buildRecruitmentDownloadPlan(
-            objectDisplayName(object),
-            objectDisplayName(project),
-            inputFiles,
-            platform.os === "win",
+    if (object.type === "recruitment") {
+      const result = await buildRoundImportZip(
+        state,
+        object,
+        (completed, total, fileName) => {
+          notice(
+            completed >= total
+              ? `Spakowano ${total}/${total} plików…`
+              : `Tworzenie ZIP ${completed + 1}/${total}: ${fileName}`,
           );
+        },
+      );
+      const url = URL.createObjectURL(result.blob);
+      try {
+        await browser.downloads.download({
+          url,
+          filename: result.zipFileName,
+          conflictAction: "uniquify",
+          saveAs: false,
+        });
+      } finally {
+        window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      }
+      const warning = result.warnings.length
+        ? ` Uwaga: ${result.warnings.join(" ")}`
+        : "";
+      notice(
+        `Utworzono ZIP RoundImportManifestV1: „${result.zipFileName}” (${sources.length} plików + import.json).${warning}`,
+      );
+      return;
+    }
+
+    const platform = await browser.runtime.getPlatformInfo();
+    const plan = buildProjectDownloadPlan(
+      objectDisplayName(project),
+      sources.map((source) => ({
+        name: source.name,
+        url: source.url,
+      })),
+      platform.os === "win",
+    );
     const results = await Promise.allSettled(
       plan.files.map((file) =>
         browser.downloads.download({
@@ -1090,17 +1107,21 @@ function render(): void {
   downloadAll.hidden = !canBulkDownload;
   downloadAll.disabled =
     fileDownloadBusy ||
-    sources.length === 0 ||
+    (!isRecruitment && sources.length === 0) ||
     (isRecruitment && !project);
   downloadAll.textContent = fileDownloadBusy
-    ? "Pobieranie…"
-    : `↓ Pobierz wszystkie (${sources.length})`;
+    ? isRecruitment
+      ? "Tworzenie ZIP…"
+      : "Pobieranie…"
+    : isRecruitment
+      ? `↓ Pobierz import ZIP (${sources.length})`
+      : `↓ Pobierz wszystkie (${sources.length})`;
   if (object.type === "project") {
     downloadAll.title = `Pobierz do: ${objectDisplayName(object)}`;
   } else if (isRecruitment) {
     downloadAll.title = project
-      ? `Pobierz do: ${objectDisplayName(object)} - ${objectDisplayName(project)}`
-      : "Przypisz projekt, aby utworzyć katalog naboru.";
+      ? "Pobierz import.zip zgodny z RoundImportManifestV1: import.json + files/."
+      : "Przypisz projekt, aby utworzyć paczkę importu naboru.";
   } else {
     downloadAll.title = "";
   }
