@@ -479,7 +479,7 @@ export function ImportReviewPanel() {
   ): void {
     const notice = document.getElementById("notice");
     if (!notice) return;
-    notice.className = unresolvedCount ? "warning" : "";
+    notice.className = "";
     notice.textContent = unresolvedCount
       ? `Ustawiono View: ${matchedCount} istniejących obiektów. Pominięto ${unresolvedCount} nowych lub nierozpoznanych — żadne dane nie zostały zaimportowane.`
       : `Ustawiono View: ${matchedCount} obiektów. Żadne dane nie zostały zaimportowane ani zmienione.`;
