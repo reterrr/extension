@@ -382,6 +382,27 @@ test("project bulk download stays intact and recruitment download creates RoundI
   assert.match(roundImport, /buildStoreZip/);
 });
 
+test("Import tab can set Active View without importing data", () => {
+  const review = source("src/sidepanel/ImportReviewPanel.tsx");
+  const selection = source("src/shared/import/viewSelection.ts");
+
+  assert.match(review, /Ustaw View z JSON/);
+  assert.match(review, />\s*Ustaw View\s*</);
+  assert.match(review, /createObjectViewFromImportReview/);
+  assert.match(review, /readWorkspaceState\(true\)/);
+  assert.match(
+    review,
+    /\[OBJECT_VIEW_STORAGE_KEY\]: resolved\.view/,
+  );
+  assert.match(
+    selection,
+    /deliberately does not stage, approve or otherwise[\s\S]*?Active View selection/,
+  );
+  assert.equal(selection.includes("stageImportReviewObject"), false);
+  assert.equal(selection.includes("writeActiveDraft"), false);
+  assert.equal(selection.includes("publishUiState"), false);
+});
+
 test("common archives use the normal file classification UI", () => {
   const sourceTypes = source("src/shared/types/source.ts");
   const files = source("src/sidepanel/fileSourcesUi.ts");

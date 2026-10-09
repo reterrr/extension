@@ -7,6 +7,7 @@ import {
 import {
   allImportReviewEvidenceViews,
   buildImportApprovalPlan,
+  createImportReviewSession,
   findExistingImportObjectMatch,
   importReviewView,
   markImportObjectApproved,
@@ -20,6 +21,7 @@ import {
   readImportReview,
   writeImportReview,
 } from "../shared/import/reviewStore";
+import { createObjectViewFromImportReview } from "../shared/import/viewSelection";
 import {
   stageImportReviewObject,
   type ImportApprovalPlanWithRules,
@@ -40,6 +42,7 @@ import {
   readSidepanelUiState,
   type SidepanelMode,
 } from "./uiSessionState";
+import { readWorkspaceState } from "./workspaceData";
 
 async function activeTab(): Promise<browser.tabs.Tab | undefined> {
   const window = await browser.windows.getCurrent();
@@ -248,6 +251,7 @@ export function ImportReviewPanel() {
   const windowIdRef = useRef<number | null>(null);
   const modeRef = useRef<SidepanelMode>("workspace");
   const scrollTimerRef = useRef<number | undefined>(undefined);
+  const setViewFileRef = useRef<HTMLInputElement>(null);
   const view = useMemo(() => importReviewView(session), [session]);
 
   function restoreScroll(top: number): void {
@@ -469,6 +473,77 @@ export function ImportReviewPanel() {
     }
   }
 
+  function announceViewResult(
+    matchedCount: number,
+    unresolvedCount: number,
+  ): void {
+    const notice = document.getElementById("notice");
+    if (!notice) return;
+    notice.className = "";
+    notice.textContent = unresolvedCount
+      ? `Ustawiono View: ${matchedCount} istniejących obiektów. Pominięto ${unresolvedCount} nowych lub nierozpoznanych — żadne dane nie zostały zaimportowane.`
+      : `Ustawiono View: ${matchedCount} obiektów. Żadne dane nie zostały zaimportowane ani zmienione.`;
+  }
+
+  async function setImportSessionAsView(
+    sourceSession: ImportReviewSession,
+  ): Promise<void> {
+    setBusy(true);
+    setError("");
+    try {
+      const currentState = await readWorkspaceState(true);
+      const resolved = createObjectViewFromImportReview(
+        sourceSession,
+        currentState,
+        new Date().toISOString(),
+      );
+      await browser.storage.session.set({
+        [OBJECT_VIEW_STORAGE_KEY]: resolved.view,
+      });
+      announceViewResult(
+        resolved.matchedObjects.length,
+        resolved.unresolvedObjects.length,
+      );
+      requestWorkflowMode("view");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function setViewFromJsonFile(file: File): Promise<void> {
+    setBusy(true);
+    setError("");
+    try {
+      const document = JSON.parse(await file.text()) as unknown;
+      const temporarySession = createImportReviewSession(
+        document,
+        file.name,
+        () => crypto.randomUUID(),
+        new Date().toISOString(),
+      );
+      const currentState = await readWorkspaceState(true);
+      const resolved = createObjectViewFromImportReview(
+        temporarySession,
+        currentState,
+        new Date().toISOString(),
+      );
+      await browser.storage.session.set({
+        [OBJECT_VIEW_STORAGE_KEY]: resolved.view,
+      });
+      announceViewResult(
+        resolved.matchedObjects.length,
+        resolved.unresolvedObjects.length,
+      );
+      requestWorkflowMode("view");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function approve() {
     if (!session?.selectedObjectId) return;
     setBusy(true);
@@ -676,14 +751,41 @@ export function ImportReviewPanel() {
         <div className="import-empty-state">
 
           <h2>Brak aktywnego importu</h2>
-          <p>Wybierz plik JSON i sprawdź dane przed dodaniem do obiektów.</p>
-          <button
-            type="button"
-            className="primary"
-            onClick={() => document.getElementById("import")?.click()}
-          >
-            Wybierz plik JSON
-          </button>
+          <p>
+            Możesz załadować JSON do Import Review albo tylko ustawić z niego
+            View. Ustawienie View wybiera istniejące obiekty i nie importuje
+            żadnych danych.
+          </p>
+          <div className="import-empty-actions">
+            <button
+              type="button"
+              className="primary"
+              disabled={busy}
+              onClick={() => document.getElementById("import")?.click()}
+            >
+              Wybierz plik JSON
+            </button>
+            <button
+              type="button"
+              className="text-button"
+              disabled={busy}
+              onClick={() => setViewFileRef.current?.click()}
+            >
+              Ustaw View z JSON
+            </button>
+          </div>
+          <input
+            ref={setViewFileRef}
+            type="file"
+            accept="application/json,.json"
+            hidden
+            onChange={(event) => {
+              const file = event.currentTarget.files?.[0];
+              event.currentTarget.value = "";
+              if (file) void setViewFromJsonFile(file);
+            }}
+          />
+          {error && <p className="commit-error">{error}</p>}
         </div>
       </section>
     );
@@ -748,13 +850,25 @@ export function ImportReviewPanel() {
                 {view.approvedCount ?? 0} zaakceptowano · {view.rejectedCount ?? 0} odrzucono · {view.pendingCount ?? 0} oczekuje
               </small>
             </div>
-            <button
-              type="button"
-              className="text-button"
-              onClick={() => void closeReview()}
-            >
-              Zamknij
-            </button>
+            <div className="import-review-header-actions">
+              <button
+                type="button"
+                className="text-button"
+                disabled={busy}
+                title="Ustaw Active View z obiektów, które już istnieją. Nie stosuje danych z importu."
+                onClick={() => void setImportSessionAsView(session)}
+              >
+                Ustaw View
+              </button>
+              <button
+                type="button"
+                className="text-button"
+                disabled={busy}
+                onClick={() => void closeReview()}
+              >
+                Zamknij
+              </button>
+            </div>
           </header>
           <div className="import-review-progress">
             <span

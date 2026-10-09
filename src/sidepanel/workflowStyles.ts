@@ -390,6 +390,25 @@ html[data-workflow-mode="import"] #capture-area {
   font-size: 12px;
   line-height: 1.45;
 }
+.import-empty-actions {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+.import-empty-actions button {
+  min-height: 30px;
+}
+.import-review-header-actions {
+  display: flex !important;
+  align-items: center;
+  gap: 5px !important;
+}
+.import-review-header-actions button {
+  min-height: 27px;
+  padding: 4px 7px;
+  font-size: 12px;
+}
 
 /* --- Three-surface workflow polish --------------------------------------- */
 
