@@ -11,6 +11,7 @@ let outputDir;
 let reviewModule;
 let stageModule;
 let formatModule;
+let viewSelectionModule;
 
 before(async () => {
   outputDir = await mkdtemp(join(tmpdir(), "burbot-import-review-"));
@@ -23,6 +24,7 @@ before(async () => {
       format: "src/shared/import/format.ts",
       review: "src/shared/import/review.ts",
       stage: "src/shared/import/stageReview.ts",
+      viewSelection: "src/shared/import/viewSelection.ts",
     },
     outdir: outputDir,
     bundle: true,
@@ -38,6 +40,9 @@ before(async () => {
   formatModule = await import(pathToFileURL(join(outputDir, "format.js")).href);
   reviewModule = await import(pathToFileURL(join(outputDir, "review.js")).href);
   stageModule = await import(pathToFileURL(join(outputDir, "stage.js")).href);
+  viewSelectionModule = await import(
+    pathToFileURL(join(outputDir, "viewSelection.js")).href
+  );
 });
 
 after(async () => {
@@ -148,6 +153,144 @@ function documentFixture() {
     ],
   };
 }
+
+test("import JSON can set Active View without applying imported data", () => {
+  const session = reviewModule.createImportReviewSession(
+    documentFixture(),
+    "view.json",
+    ids(),
+    "2026-10-09T10:00:00.000Z",
+  );
+  const state = {
+    version: 1,
+    revision: 7,
+    objects: [
+      {
+        id: "project-existing",
+        importKey: "project-1",
+        type: "project",
+        label: "Stary projekt",
+        values: { name: "Stary projekt w bazie" },
+      },
+      {
+        id: "recruitment-existing",
+        importKey: "recruitment-1",
+        type: "recruitment",
+        label: "Stary nabór",
+        values: { external_number: "Stary nabór w bazie" },
+      },
+    ],
+    rules: [],
+  };
+  const beforeState = structuredClone(state);
+  const beforeSession = structuredClone(session);
+
+  const resolved = viewSelectionModule.createObjectViewFromImportReview(
+    session,
+    state,
+    "2026-10-09T10:01:00.000Z",
+  );
+
+  assert.deepEqual(resolved.view.objectIds, [
+    "project-existing",
+    "recruitment-existing",
+  ]);
+  assert.equal(resolved.view.query, "");
+  assert.equal(resolved.view.type, "all");
+  assert.equal(resolved.matchedObjects.length, 2);
+  assert.equal(resolved.unresolvedObjects.length, 0);
+
+  assert.deepEqual(state, beforeState, "setting View must not alter workspace data");
+  assert.deepEqual(
+    session,
+    beforeSession,
+    "setting View must not approve or mutate Import Review",
+  );
+});
+
+test("Set View skips new import objects instead of importing them", () => {
+  const document = documentFixture();
+  document.objects.push({
+    key: "operator-new",
+    type: "operator",
+    data: { name: "Nowy operator", nip: "1234567890" },
+  });
+  const session = reviewModule.createImportReviewSession(
+    document,
+    "view-with-new.json",
+    ids(),
+    "2026-10-09T10:00:00.000Z",
+  );
+  const state = {
+    version: 1,
+    revision: 1,
+    objects: [
+      {
+        id: "project-existing",
+        importKey: "project-1",
+        type: "project",
+        values: { name: "Projekt" },
+      },
+      {
+        id: "recruitment-existing",
+        importKey: "recruitment-1",
+        type: "recruitment",
+        values: { external_number: "Nabór" },
+      },
+    ],
+    rules: [],
+  };
+
+  const resolved = viewSelectionModule.createObjectViewFromImportReview(
+    session,
+    state,
+    "2026-10-09T10:01:00.000Z",
+  );
+
+  assert.deepEqual(resolved.view.objectIds, [
+    "project-existing",
+    "recruitment-existing",
+  ]);
+  assert.equal(resolved.unresolvedObjects.length, 1);
+  assert.equal(resolved.unresolvedObjects[0].importKey, "operator-new");
+  assert.equal(
+    state.objects.some((object) => object.importKey === "operator-new"),
+    false,
+  );
+});
+
+test("Set View refuses a file containing only objects absent from the database", () => {
+  const document = documentFixture();
+  document.objects = [
+    {
+      key: "project-new",
+      type: "project",
+      data: { name: "Całkiem nowy projekt" },
+    },
+  ];
+  const session = reviewModule.createImportReviewSession(
+    document,
+    "new-only.json",
+    ids(),
+    "2026-10-09T10:00:00.000Z",
+  );
+  const state = {
+    version: 1,
+    revision: 1,
+    objects: [],
+    rules: [],
+  };
+
+  assert.throws(
+    () =>
+      viewSelectionModule.createObjectViewFromImportReview(
+        session,
+        state,
+        "2026-10-09T10:01:00.000Z",
+      ),
+    /nie istnieje w bieżącej bazie/,
+  );
+});
 
 test("repository portable-import example stays importable", async () => {
   const document = JSON.parse(
