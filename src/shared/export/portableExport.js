@@ -267,6 +267,15 @@ export function createPortableExport({
     }
     const files = scoped("fileSources", object);
     const fileKeys = keysFor(files);
+    const documentRows = scoped("documentRequirements", object);
+    const referencedFileIds = new Set(
+      documentRows.flatMap((row) => [
+        ...(row.original_file_source_id
+          ? [String(row.original_file_source_id)]
+          : []),
+        ...(row.source_file_source_ids ?? []).map(String),
+      ]),
+    );
     if (files.length)
       result.files = files.map((file) => {
         const metadata = compact(
@@ -275,7 +284,11 @@ export function createPortableExport({
           ),
         );
         return {
-          key: fileKeys.get(String(file.id)),
+          ...(
+            file.importKey || referencedFileIds.has(String(file.id))
+              ? { key: fileKeys.get(String(file.id)) }
+              : {}
+          ),
           source: useUrl(file.url, file.fileType, file.sourceImportKey),
           ...(file.sourcePageUrl
             ? {
@@ -351,7 +364,7 @@ export function createPortableExport({
     }
 
     {
-      const rows = scoped("documentRequirements", object);
+      const rows = documentRows;
       if (rows.length) {
         const keys = keysFor(rows);
         result.documents = rows.map((row) => {
