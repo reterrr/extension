@@ -42,6 +42,14 @@ import {
 } from "../shared/fileMetadata";
 import { inheritProjectFilesAsCopies } from "../shared/fileInheritance";
 import {
+  documentRequirementFromFile,
+  emptyDocumentRequirement,
+  isDocumentFulfillmentMode,
+  isDocumentRequirement,
+  isDocumentResponsibility,
+  isDocumentSignatureRequirement,
+} from "../shared/documentRequirements";
+import {
   copyProjectFundingToRecruitment,
   copyProjectGeographiesToRecruitment,
 } from "../shared/configurationInheritance";
@@ -87,6 +95,9 @@ const ALLOWED_WRITES = new Set<string>([
   "UPDATE_FILE_SOURCE",
   "REMOVE_FILE_SOURCE",
   "INHERIT_PROJECT_FILES",
+  "ADD_DOCUMENT_REQUIREMENT",
+  "UPDATE_DOCUMENT_REQUIREMENT",
+  "REMOVE_DOCUMENT_REQUIREMENT",
   "ADD_OPERATOR_CONTACT",
   "REMOVE_OPERATOR_CONTACT",
   "ADD_FUNDING",
@@ -633,6 +644,22 @@ function mutateFileSource(
           String(entry.target.id) === sourceId
         ),
     );
+    for (const requirement of state.documentRequirements ?? []) {
+      if (
+        requirement.objectId !== object.id ||
+        requirement.original_file_source_id !== sourceId
+      ) {
+        requirement.source_file_source_ids = (
+          requirement.source_file_source_ids ?? []
+        ).filter((id) => id !== sourceId);
+        continue;
+      }
+      delete requirement.original_file_source_id;
+      requirement.fulfillment_mode = "WITHOUT_OPERATOR_TEMPLATE";
+      requirement.source_file_source_ids = (
+        requirement.source_file_source_ids ?? []
+      ).filter((id) => id !== sourceId);
+    }
   } else if (message.op === "INHERIT_PROJECT_FILES") {
     const inherited = inheritProjectFilesAsCopies(
       state,
@@ -647,6 +674,225 @@ function mutateFileSource(
     }
   } else {
     throw new Error("Unknown file source operation.");
+  }
+
+  object.updatedAt = now;
+  state.revision++;
+  return state;
+}
+
+function mutateDocumentRequirement(
+  original: LegacyStorageState,
+  message: Record<string, unknown>,
+  now: string,
+): LegacyStorageState {
+  if (message.expectedRevision !== original.revision) {
+    throw new Error(
+      "Data changed in another panel. Review the refreshed values and retry.",
+    );
+  }
+  if (typeof message.objectId !== "string") throw new Error("Choose an object.");
+
+  const state = cloneState(original);
+  const object = state.objects.find((entry) => entry.id === message.objectId);
+  if (!object || (object.type !== "project" && object.type !== "recruitment")) {
+    throw new Error("Wymagania dokumentowe są dostępne dla projektu i naboru.");
+  }
+
+  const rows = (state.documentRequirements ||= []);
+
+  if (message.op === "ADD_DOCUMENT_REQUIREMENT") {
+    const id = crypto.randomUUID();
+    const importKey = `DOC_${id.replace(/-/g, "").slice(0, 16)}`;
+    let row;
+    if (typeof message.fileSourceId === "string" && message.fileSourceId) {
+      const source = (state.fileSources ?? []).find(
+        (entry) =>
+          entry.id === message.fileSourceId && entry.objectId === object.id,
+      );
+      if (!source) throw new Error("Plik operatora nie istnieje.");
+      if (
+        rows.some(
+          (entry) =>
+            entry.objectId === object.id &&
+            entry.original_file_source_id === source.id,
+        )
+      ) {
+        throw new Error("Ten plik ma już wymaganie dokumentowe.");
+      }
+      row = documentRequirementFromFile(source, id, object.id, importKey);
+    } else {
+      row = emptyDocumentRequirement(id, object.id, importKey);
+    }
+    rows.push(row);
+  } else if (message.op === "UPDATE_DOCUMENT_REQUIREMENT") {
+    if (typeof message.documentId !== "string") {
+      throw new Error("Document id is required.");
+    }
+    const row = rows.find(
+      (entry) =>
+        entry.id === message.documentId && entry.objectId === object.id,
+    );
+    if (!row) throw new Error("Wymaganie dokumentowe nie istnieje.");
+    if (!isRecord(message.values)) {
+      throw new Error("Invalid document requirement values.");
+    }
+
+    const definitions = (globalThis.BurbotDocuments as {
+      fields?: Record<string, Record<string, unknown>>;
+    })?.fields ?? {};
+    const changedFields = new Set<string>();
+
+    for (const [field, raw] of Object.entries(message.values)) {
+      if (
+        field === "original_file_source_id" ||
+        field === "source_file_source_ids"
+      ) {
+        continue;
+      }
+      const definition = definitions[field];
+      if (!definition) throw new Error(`Unknown document field ${field}.`);
+
+      let value: unknown = raw;
+      if (
+        raw === undefined ||
+        raw === null ||
+        (typeof raw === "string" && !raw.trim())
+      ) {
+        value = undefined;
+      } else if (field === "requirement") {
+        if (!isDocumentRequirement(raw)) {
+          throw new Error("Nieprawidłowa wymagalność dokumentu.");
+        }
+      } else if (field === "fulfillment_mode") {
+        if (!isDocumentFulfillmentMode(raw)) {
+          throw new Error("Nieprawidłowy sposób przygotowania dokumentu.");
+        }
+      } else if (field === "responsibility") {
+        if (!isDocumentResponsibility(raw)) {
+          throw new Error("Nieprawidłowa odpowiedzialność za dokument.");
+        }
+      } else if (field === "signature_requirement") {
+        if (!isDocumentSignatureRequirement(raw)) {
+          throw new Error("Nieprawidłowe wymaganie podpisu.");
+        }
+      }
+
+      const previous = (row as unknown as Record<string, unknown>)[field];
+      const next =
+        value === undefined
+          ? undefined
+          : BurbotCore.coerceField(value, definition, state);
+      if (JSON.stringify(previous) !== JSON.stringify(next)) {
+        changedFields.add(field);
+      }
+      if (next === undefined) {
+        delete (row as unknown as Record<string, unknown>)[field];
+      } else {
+        (row as unknown as Record<string, unknown>)[field] = next;
+      }
+    }
+
+    if (
+      Object.prototype.hasOwnProperty.call(
+        message.values,
+        "original_file_source_id",
+      )
+    ) {
+      const raw = message.values.original_file_source_id;
+      const fileId =
+        raw === undefined || raw === null || String(raw).trim() === ""
+          ? undefined
+          : String(raw);
+      if (
+        fileId &&
+        !(state.fileSources ?? []).some(
+          (source) => source.id === fileId && source.objectId === object.id,
+        )
+      ) {
+        throw new Error("Wybrany wzór operatora nie należy do tego obiektu.");
+      }
+      if (row.original_file_source_id !== fileId) {
+        changedFields.add("original_file_source_id");
+      }
+      if (fileId) row.original_file_source_id = fileId;
+      else delete row.original_file_source_id;
+    }
+
+    if (
+      Object.prototype.hasOwnProperty.call(
+        message.values,
+        "source_file_source_ids",
+      )
+    ) {
+      const raw = message.values.source_file_source_ids;
+      if (!Array.isArray(raw)) {
+        throw new Error("source_file_source_ids must be an array.");
+      }
+      const ids = [...new Set(raw.map(String).filter(Boolean))];
+      for (const fileId of ids) {
+        if (
+          !(state.fileSources ?? []).some(
+            (source) => source.id === fileId && source.objectId === object.id,
+          )
+        ) {
+          throw new Error("Źródło dowodowe nie należy do tego obiektu.");
+        }
+      }
+      if (JSON.stringify(row.source_file_source_ids ?? []) !== JSON.stringify(ids)) {
+        changedFields.add("source_file_source_ids");
+      }
+      row.source_file_source_ids = ids;
+    }
+
+    if (row.requirement === "INFORMATIONAL") {
+      // Informational materials are not delivered by the client. Keep the
+      // storage contract deterministic while the UI hides this irrelevant field.
+      row.fulfillment_mode = "WITHOUT_OPERATOR_TEMPLATE";
+      delete row.original_file_source_id;
+    }
+    if (
+      row.fulfillment_mode === "OPERATOR_TEMPLATE" &&
+      !row.original_file_source_id
+    ) {
+      throw new Error(
+        "Dla wzoru operatora wybierz fizyczny plik będący oryginalnym wzorem.",
+      );
+    }
+
+    if (changedFields.size) {
+      state.importTargetEvidence = (state.importTargetEvidence ?? []).filter(
+        (entry) =>
+          !(
+            entry.objectId === object.id &&
+            entry.target?.kind === "document" &&
+            String(entry.target.id) === row.id &&
+            changedFields.has(entry.field)
+          ),
+      );
+    }
+  } else if (message.op === "REMOVE_DOCUMENT_REQUIREMENT") {
+    if (typeof message.documentId !== "string") {
+      throw new Error("Document id is required.");
+    }
+    const before = rows.length;
+    state.documentRequirements = rows.filter(
+      (entry) =>
+        !(entry.id === message.documentId && entry.objectId === object.id),
+    );
+    if (state.documentRequirements.length === before) {
+      throw new Error("Wymaganie dokumentowe nie istnieje.");
+    }
+    state.importTargetEvidence = (state.importTargetEvidence ?? []).filter(
+      (entry) =>
+        !(
+          entry.objectId === object.id &&
+          entry.target?.kind === "document" &&
+          String(entry.target.id) === message.documentId
+        ),
+    );
+  } else {
+    throw new Error("Unknown document requirement operation.");
   }
 
   object.updatedAt = now;
@@ -1184,6 +1430,12 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
       message.op === "INHERIT_PROJECT_FILES"
     ) {
       next = mutateFileSource(state, message, now);
+    } else if (
+      message.op === "ADD_DOCUMENT_REQUIREMENT" ||
+      message.op === "UPDATE_DOCUMENT_REQUIREMENT" ||
+      message.op === "REMOVE_DOCUMENT_REQUIREMENT"
+    ) {
+      next = mutateDocumentRequirement(state, message, now);
     } else if (
       message.op === "INHERIT_PROJECT_GEOGRAPHY" ||
       message.op === "INHERIT_PROJECT_FUNDING"
