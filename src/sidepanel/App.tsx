@@ -170,10 +170,42 @@ export function App() {
               </summary>
               <div className="workspace-section-body">
                 <p className="muted">
-                  Dodaj dokument i opisz jego wymagania zgodnie z regulaminem.
-                  Obsługiwane pliki: .doc, .docx, .pdf, .xlsx, .png, .jpg,
-                  .jpeg, .zip, .rar, .7z, .tar, .gz, .tgz.
+                  Dodaj fizyczne pliki operatora oraz wszystkie wymagania
+                  dokumentowe wynikające z regulaminu — także wtedy, gdy
+                  operator nie udostępnia własnego wzoru.
                 </p>
+
+                <div
+                  id="document-requirements-block"
+                  className="document-requirements-block"
+                >
+                  <div className="document-requirements-head">
+                    <span className="document-requirements-head-copy">
+                      <strong>Wymagania dokumentowe</strong>
+                      <small>
+                        Wzory operatora, dokumenty bez wzoru i materiały informacyjne
+                      </small>
+                    </span>
+                    <span
+                      id="document-requirement-count"
+                      className="workspace-section-status"
+                    >
+                      Brak wymagań
+                    </span>
+                  </div>
+                  <div
+                    id="document-requirement-list"
+                    className="document-requirement-list"
+                  />
+                  <button
+                    id="add-document-requirement"
+                    className="text-button"
+                    type="button"
+                  >
+                    + Dodaj dokument bez wzoru
+                  </button>
+                </div>
+
                 <div id="file-source-list" className="file-source-list" />
                 <div
                   id="local-file-drop-zone"
