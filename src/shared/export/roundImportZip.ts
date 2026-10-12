@@ -623,7 +623,11 @@ function documentRequirement(
   const document: RoundImportDocument = {
     key: boundedText(key, 100, "documents.key"),
     label: boundedText(label, 500, "documents.label"),
-    purpose: boundedText(purpose, 1000, "documents.purpose"),
+    purpose: boundedText(
+      purpose || label,
+      1000,
+      "documents.purpose",
+    ),
     requirement: normalizedRequirement,
     fulfillmentMode: normalizedFulfillment,
     originalFileId: originalFileId ?? null,
