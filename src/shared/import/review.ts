@@ -4,6 +4,7 @@ import { normalizePortableInput } from "./normalizePortableInput.js";
 import type {
   ImportReviewEditorOption,
   ImportReviewEditorType,
+  ImportReviewDocumentView,
   ImportReviewEvidenceView,
   ImportReviewFieldView,
   ImportReviewFileView,
@@ -403,6 +404,61 @@ function fileViews(
     }));
 }
 
+function documentViews(
+  session: ImportReviewSession,
+  object: LegacyStoredObject | undefined,
+): ImportReviewDocumentView[] {
+  if (!object) return [];
+  const filesById = new Map(
+    (session.previewState.fileSources ?? [])
+      .filter((source) => source.objectId === object.id)
+      .map((source) => [
+        source.id,
+        source.display_name?.trim() || source.name,
+      ]),
+  );
+
+  return (session.previewState.documentRequirements ?? [])
+    .filter((row) => row.objectId === object.id)
+    .map((row) => {
+      const fields = Object.entries(BurbotDocuments.fields)
+        .filter(([field]) =>
+          Object.prototype.hasOwnProperty.call(row, field),
+        )
+        .map(([field, definition]) => ({
+          field,
+          label: String(definition.label ?? field),
+          value: BurbotCore.hasValue(
+            (row as unknown as Record<string, unknown>)[field],
+          )
+            ? BurbotCore.formatValue(
+                (row as unknown as Record<string, unknown>)[field],
+                definition,
+                session.previewState,
+              )
+            : "Nie ustawiono",
+        }));
+
+      const originalFileName = row.original_file_source_id
+        ? filesById.get(row.original_file_source_id)
+        : undefined;
+      const sourceFileNames = (row.source_file_source_ids ?? [])
+        .map((id) => filesById.get(id))
+        .filter((name): name is string => Boolean(name));
+
+      return {
+        id: row.id,
+        key: String(row.importKey ?? row.id),
+        label:
+          row.label ||
+          String(row.document_type_key ?? row.importKey ?? row.id),
+        fields,
+        ...(originalFileName ? { originalFileName } : {}),
+        sourceFileNames,
+      };
+    });
+}
+
 function financingFieldViews(
   session: ImportReviewSession,
   row: Record<string, unknown>,
@@ -457,6 +513,7 @@ export function importReviewView(
       fields: [],
       evidence: [],
       files: [],
+      documents: [],
       financing: [],
     };
   }
@@ -481,6 +538,9 @@ export function importReviewView(
       financingCount: (session.previewState.financingRules ?? []).filter(
         (row) => row.objectId === entry.id,
       ).length,
+      documentCount: (session.previewState.documentRequirements ?? []).filter(
+        (row) => row.objectId === entry.id,
+      ).length,
     }));
 
   const approvedCount = objects.filter((entry) => entry.status === "APPROVED").length;
@@ -498,6 +558,7 @@ export function importReviewView(
     fields: fieldViews(session, object),
     evidence: evidenceViews(session, object),
     files: fileViews(session, object),
+    documents: documentViews(session, object),
     financing: financingViews(session, object),
   };
 }
