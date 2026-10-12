@@ -422,8 +422,10 @@ function documentViews(
     .filter((row) => row.objectId === object.id)
     .map((row) => {
       const fields = Object.entries(BurbotDocuments.fields)
-        .filter(([field]) =>
-          Object.prototype.hasOwnProperty.call(row, field),
+        .filter(
+          ([field, definition]) =>
+            !definition.hidden &&
+            Object.prototype.hasOwnProperty.call(row, field),
         )
         .map(([field, definition]) => ({
           field,
@@ -442,10 +444,6 @@ function documentViews(
       const originalFileName = row.original_file_source_id
         ? filesById.get(row.original_file_source_id)
         : undefined;
-      const sourceFileNames = (row.source_file_source_ids ?? [])
-        .map((id) => filesById.get(id))
-        .filter((name): name is string => Boolean(name));
-
       return {
         id: row.id,
         key: String(row.importKey ?? row.id),
@@ -454,7 +452,6 @@ function documentViews(
           String(row.document_type_key ?? row.importKey ?? row.id),
         fields,
         ...(originalFileName ? { originalFileName } : {}),
-        sourceFileNames,
       };
     });
 }
