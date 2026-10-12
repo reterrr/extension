@@ -1167,6 +1167,14 @@ export function importDocumentIntoState(
         );
         row.source_file_source_ids = [...new Set(sourceFileIds)];
 
+        if (
+          row.requirement === "CONDITIONAL" &&
+          (typeof row.condition !== "string" || !row.condition.trim())
+        ) {
+          throw new Error(
+            `${item.key}.documents.${importedDocument.key} is CONDITIONAL but data.condition is empty.`,
+          );
+        }
         if (row.requirement === "INFORMATIONAL") {
           row.fulfillment_mode = "WITHOUT_OPERATOR_TEMPLATE";
           delete row.original_file_source_id;
@@ -1177,6 +1185,14 @@ export function importDocumentIntoState(
         ) {
           throw new Error(
             `${item.key}.documents.${importedDocument.key} uses OPERATOR_TEMPLATE but has no original_file.`,
+          );
+        }
+        if (
+          row.fulfillment_mode !== "OPERATOR_TEMPLATE" &&
+          row.original_file_source_id
+        ) {
+          throw new Error(
+            `${item.key}.documents.${importedDocument.key} has original_file but is not OPERATOR_TEMPLATE.`,
           );
         }
 
