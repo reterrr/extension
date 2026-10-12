@@ -30,8 +30,13 @@ export function startWorkspace(): Promise<void> {
 
 async function boot(): Promise<void> {
   const files = once(async () => {
-    const { initFileSourcesUi } = await import("./fileSourcesUi");
+    const [{ initFileSourcesUi }, { initDocumentRequirementsUi }] =
+      await Promise.all([
+        import("./fileSourcesUi"),
+        import("./documentRequirementsUi"),
+      ]);
     await initFileSourcesUi();
+    await initDocumentRequirementsUi();
   });
   const geography = once(async () => {
     const { initGeographyUi } = await import("./geographyUi");
