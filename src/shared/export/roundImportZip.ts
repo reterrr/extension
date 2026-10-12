@@ -513,6 +513,9 @@ function documentFromFile(
   declaration: RoundImportFileDeclaration,
 ): RoundImportDocument {
   const purpose = filePurpose(source);
+  const documentRequirement = requirement(source);
+  const usesOperatorTemplate =
+    purpose === "form" && documentRequirement !== "informational";
   const intendedUse = boundedText(
     source.intended_use,
     1000,
@@ -528,10 +531,11 @@ function documentFromFile(
     key: declaration.id,
     label: label || declaration.path.slice("files/".length),
     purpose: intendedUse || purposeLabel(purpose),
-    requirement: requirement(source),
-    fulfillmentMode:
-      purpose === "form" ? "operator_template" : "without_operator_template",
-    originalFileId: declaration.id,
+    requirement: documentRequirement,
+    fulfillmentMode: usesOperatorTemplate
+      ? "operator_template"
+      : "without_operator_template",
+    originalFileId: usesOperatorTemplate ? declaration.id : null,
     sourceFileIds: [declaration.id],
     signatureRequirement: signatureRequirement(source),
   };
@@ -570,15 +574,39 @@ function documentRequirement(
     SHARED: "shared",
   };
 
+  const label =
+    cleanText(row.label) ||
+    cleanText(row.document_type_key) ||
+    "Dokument";
+  const purpose =
+    cleanText(row.purpose) ||
+    cleanText(row.notes);
+  const key =
+    cleanText(row.importKey) ||
+    cleanText(row.id) ||
+    cleanText(row.document_type_key);
+  if (!key) {
+    throw new Error("Wymaganie dokumentowe nie ma stabilnego klucza.");
+  }
+
+  const normalizedRequirement =
+    requirementMap[String(row.requirement ?? "UNKNOWN")] ?? "unknown";
+  const normalizedFulfillment =
+    row.requirement === "INFORMATIONAL"
+      ? "without_operator_template"
+      : row.fulfillment_mode === "OPERATOR_TEMPLATE"
+        ? "operator_template"
+        : "without_operator_template";
+
   const originalFileId = row.original_file_source_id
     ? fileIdBySourceId.get(row.original_file_source_id)
     : undefined;
   if (
-    row.fulfillment_mode === "OPERATOR_TEMPLATE" &&
+    normalizedFulfillment === "operator_template" &&
     !originalFileId
   ) {
     throw new Error(
-      `Dokument „${row.label}” jest oznaczony jako wzór operatora, ale jego plik nie jest dostępny w paczce ZIP.`,
+      `Dokument „${label}” jest oznaczony jako wzór operatora, ale jego plik nie jest dostępny w paczce ZIP.`,
     );
   }
 
@@ -586,27 +614,18 @@ function documentRequirement(
     const fileId = fileIdBySourceId.get(sourceId);
     if (!fileId) {
       throw new Error(
-        `Dokument „${row.label}” wskazuje plik źródłowy, którego nie ma w paczce ZIP.`,
+        `Dokument „${label}” wskazuje plik źródłowy, którego nie ma w paczce ZIP.`,
       );
     }
     return fileId;
   });
 
   const document: RoundImportDocument = {
-    key: boundedText(
-      cleanText(row.importKey) || cleanText(row.id),
-      100,
-      "documents.key",
-    ),
-    label: boundedText(row.label, 500, "documents.label"),
-    purpose: boundedText(row.purpose, 1000, "documents.purpose"),
-    requirement: requirementMap[String(row.requirement ?? "UNKNOWN")] ?? "unknown",
-    fulfillmentMode:
-      row.requirement === "INFORMATIONAL"
-        ? "without_operator_template"
-        : row.fulfillment_mode === "OPERATOR_TEMPLATE"
-          ? "operator_template"
-          : "without_operator_template",
+    key: boundedText(key, 100, "documents.key"),
+    label: boundedText(label, 500, "documents.label"),
+    purpose: boundedText(purpose, 1000, "documents.purpose"),
+    requirement: normalizedRequirement,
+    fulfillmentMode: normalizedFulfillment,
     originalFileId: originalFileId ?? null,
     sourceFileIds,
     signatureRequirement:
