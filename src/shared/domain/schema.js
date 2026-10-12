@@ -696,8 +696,12 @@
         multiline: true,
         maxLength: 1000,
       }),
-      version_label: text("Wersja dokumentu", "Dokumenty", {
+      // Legacy-only: old imports may still contain it, but the current
+      // document workflow no longer exposes or emits a separate version field.
+      version_label: text("Wersja dokumentu (legacy)", "Dokumenty", {
         maxLength: 255,
+        hidden: true,
+        legacy: true,
       }),
       signature_requirement: choice("Podpis", {
         UNKNOWN: "Nie ustalono",
