@@ -379,6 +379,7 @@ export function createPortableExport({
               "document_type_key",
               "original_file_source_id",
               "source_file_source_ids",
+              "version_label",
             ],
           );
 
@@ -391,16 +392,6 @@ export function createPortableExport({
             );
           }
 
-          const sourceFiles = (row.source_file_source_ids ?? []).map((id) => {
-            const key = fileKeys.get(String(id));
-            if (!key) {
-              throw new Error(
-                `Dokument „${row.label ?? row.importKey ?? row.id}” wskazuje plik źródłowy spoza obiektu.`,
-              );
-            }
-            return key;
-          });
-
           return {
             key: keys.get(rowIdentity(row)),
             ...(row.document_type_key
@@ -408,7 +399,6 @@ export function createPortableExport({
               : {}),
             data,
             ...(originalFileKey ? { original_file: originalFileKey } : {}),
-            ...(sourceFiles.length ? { source_files: sourceFiles } : {}),
             ...targetEvidence(
               object,
               "document",
