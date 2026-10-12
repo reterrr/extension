@@ -352,11 +352,24 @@ export function hasRequirementForFile(
   objectId: string,
   fileSourceId: string,
 ): boolean {
-  return (state.documentRequirements ?? []).some(
-    (row) =>
-      row.objectId === objectId &&
-      row.original_file_source_id === fileSourceId,
+  const source = (state.fileSources ?? []).find(
+    (entry) => entry.id === fileSourceId && entry.objectId === objectId,
   );
+  const sourceLabel = source
+    ? (source.display_name?.trim() || source.name).trim()
+    : "";
+
+  return (state.documentRequirements ?? []).some((row) => {
+    if (row.objectId !== objectId) return false;
+    if (row.original_file_source_id === fileSourceId) return true;
+    if (!(row.source_file_source_ids ?? []).includes(fileSourceId)) return false;
+    return Boolean(
+      sourceLabel &&
+        row.label?.trim() &&
+        row.label.trim().toLocaleLowerCase("pl-PL") ===
+          sourceLabel.toLocaleLowerCase("pl-PL"),
+    );
+  });
 }
 
 export function renderDocumentRequirementsUi(options: RenderOptions): void {
