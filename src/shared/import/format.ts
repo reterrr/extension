@@ -841,6 +841,8 @@ export function importDocumentIntoState(
       }
     }
 
+    const fileIdByKey = new Map<string, string>();
+
     if (item.files?.length) {
       for (const [fileIndex, file] of item.files.entries()) {
         const source = sourceByKey.get(file.source);
@@ -877,6 +879,7 @@ export function importDocumentIntoState(
         const row = {
           id: uuid(),
           objectId: object.id,
+          ...(file.key ? { importKey: file.key } : {}),
           fileType: source.type as SourceFileType,
           url: source.url,
           // Canonical technical filename always comes from the remote URL.
@@ -889,6 +892,7 @@ export function importDocumentIntoState(
           ...metadata,
         };
         (state.fileSources ||= []).push(row);
+        if (file.key) fileIdByKey.set(file.key, row.id);
 
         validateTargetEvidenceFields(
           file.evidence,
@@ -1041,19 +1045,22 @@ export function importDocumentIntoState(
       }
       for (const document of item.documents) {
         if (
+          document.document_type_key &&
           !globalThis.BurbotDocuments?.catalog?.some(
             (entry: { key: string }) => entry.key === document.document_type_key,
           )
         ) {
           throw new Error(
-            `Unknown document type ${document.document_type_key} in ${item.key}.`,
+            `Unknown legacy document type ${document.document_type_key} in ${item.key}.`,
           );
         }
         const row: Record<string, unknown> = {
           id: uuid(),
           objectId: object.id,
           importKey: document.key,
-          document_type_key: document.document_type_key,
+          ...(document.document_type_key
+            ? { document_type_key: document.document_type_key }
+            : {}),
         };
         for (const [field, rawValue] of Object.entries(document.data)) {
           const definition = globalThis.BurbotDocuments?.fields?.[field];
@@ -1064,6 +1071,37 @@ export function importDocumentIntoState(
           }
           row[field] = BurbotCore.coerceField(rawValue, definition, state);
         }
+
+        if (document.original_file_key) {
+          const fileId = fileIdByKey.get(document.original_file_key);
+          if (!fileId) {
+            throw new Error(
+              `${item.key}.documents.${document.key}.original_file_key must reference objects[].files[].key in the same object.`,
+            );
+          }
+          row.original_file_source_id = fileId;
+        }
+        if (document.source_file_keys?.length) {
+          const ids = document.source_file_keys.map((fileKey) => {
+            const fileId = fileIdByKey.get(fileKey);
+            if (!fileId) {
+              throw new Error(
+                `${item.key}.documents.${document.key}.source_file_keys contains unknown file key ${fileKey}.`,
+              );
+            }
+            return fileId;
+          });
+          row.source_file_ids = [...new Set(ids)];
+        }
+
+        if (!row.label && document.document_type_key) {
+          const legacy = globalThis.BurbotDocuments.catalog.find(
+            (entry: { key: string; name: string }) =>
+              entry.key === document.document_type_key,
+          );
+          if (legacy?.name) row.label = legacy.name;
+        }
+
         (state.documentRequirements ||= []).push(row);
 
         validateTargetEvidenceFields(
@@ -1076,7 +1114,7 @@ export function importDocumentIntoState(
           storeTargetEvidence(
             state,
             object.id,
-            { kind: "document", id: String(document.document_type_key) },
+            { kind: "document", id: String(row.id) },
             document.key,
             item.key,
             field,
