@@ -136,6 +136,7 @@
       },
       "files": [
         {
+          "key": "FILE_REGULATIONS",
           "source": "regulations-pdf",
           "source_page": "project-page",
           "metadata": {
@@ -199,6 +200,7 @@
           }
         },
         {
+          "key": "FILE_APPLICATION",
           "source": "application-docx",
           "source_page": "project-page",
           "metadata": {
@@ -260,6 +262,55 @@
               }
             ]
           }
+        }
+      ],
+      "documents": [
+        {
+          "key": "DOC_REGULATIONS",
+          "data": {
+            "label": "Regulamin projektu",
+            "purpose": "Materiał informacyjny opisujący zasady udziału w projekcie.",
+            "requirement": "INFORMATIONAL",
+            "fulfillment_mode": "WITHOUT_OPERATOR_TEMPLATE",
+            "responsibility": "CLIENT",
+            "source_url": "https://example.org/files/regulamin-projektu.pdf",
+            "signature_requirement": "NOT_REQUIRED"
+          },
+          "source_files": [
+            "FILE_REGULATIONS"
+          ]
+        },
+        {
+          "key": "DOC_APPLICATION",
+          "data": {
+            "label": "Formularz zgłoszeniowy",
+            "purpose": "Zgłoszenie do projektu.",
+            "requirement": "REQUIRED",
+            "fulfillment_mode": "OPERATOR_TEMPLATE",
+            "delivery_stage": "ZGLOSZENIE",
+            "responsibility": "CLIENT",
+            "required_evidence": "Wypełniony i podpisany formularz zgłoszeniowy operatora.",
+            "signature_requirement": "REQUIRED_FILE"
+          },
+          "original_file": "FILE_APPLICATION",
+          "source_files": [
+            "FILE_REGULATIONS",
+            "FILE_APPLICATION"
+          ]
+        },
+        {
+          "key": "DOC_BUR_SERVICE_CARD",
+          "data": {
+            "label": "Karta Usługi opublikowana w BUR",
+            "purpose": "Dokument dotyczący wybranej usługi rozwojowej.",
+            "requirement": "UNKNOWN",
+            "fulfillment_mode": "WITHOUT_OPERATOR_TEMPLATE",
+            "responsibility": "CLIENT",
+            "signature_requirement": "UNKNOWN"
+          },
+          "source_files": [
+            "FILE_REGULATIONS"
+          ]
         }
       ],
       "financing": [
