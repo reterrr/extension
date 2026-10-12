@@ -2,6 +2,7 @@ import {
   FILE_METADATA_INFERENCE_VERSION,
   inferFileMetadataFromName,
 } from "../fileMetadata";
+import { documentRequirementFromFile } from "../documentRequirements";
 import type { LegacyStorageState, LegacyStoredRule } from "../types/legacy-storage";
 
 function own(value: object, key: PropertyKey): boolean {
@@ -293,6 +294,58 @@ export function migrateFileMetadataInference(
 
   return changed;
 }
+
+/**
+ * Promotes the old file-level "client requirement" classification into the
+ * first-class document-requirement model. The migration is conservative:
+ * only classified physical files on Project/Recruitment are promoted, and
+ * existing document rows referencing the same file prevent duplicates.
+ */
+export function migrateFileClassificationsToDocumentRequirements(
+  state: LegacyStorageState,
+): boolean {
+  let changed = false;
+  const objectTypes = new Map(
+    state.objects.map((object) => [object.id, object.type]),
+  );
+  const rows = (state.documentRequirements ||= []);
+  const linkedFiles = new Set<string>();
+
+  for (const row of rows) {
+    if (row.original_file_source_id) linkedFiles.add(row.original_file_source_id);
+    for (const sourceId of row.source_file_source_ids ?? []) {
+      linkedFiles.add(sourceId);
+    }
+  }
+
+  for (const source of state.fileSources ?? []) {
+    const ownerType = objectTypes.get(source.objectId);
+    if (ownerType !== "project" && ownerType !== "recruitment") continue;
+    if (linkedFiles.has(source.id)) continue;
+
+    const classified =
+      Boolean(source.client_requirement) ||
+      Boolean(source.purpose) ||
+      Boolean(source.intended_use) ||
+      Boolean(source.signature_requirement) ||
+      Boolean(source.delivery_method);
+    if (!classified) continue;
+
+    const compactId = source.id.replace(/[^A-Za-z0-9_-]/gu, "_").slice(0, 48);
+    const row = documentRequirementFromFile(
+      source,
+      `migration:document:${source.id}`,
+      source.objectId,
+      `DOC_FILE_${compactId || "legacy"}`,
+    );
+    rows.push(row);
+    linkedFiles.add(source.id);
+    changed = true;
+  }
+
+  return changed;
+}
+
 
 function splitContactValues(value: unknown): string[] {
   if (typeof value !== "string") return [];
