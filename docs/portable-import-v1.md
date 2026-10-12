@@ -145,6 +145,7 @@ Archive attachments use the same business metadata fields as other files.
 Burbot does not extract field values from inside archives; the dedicated
 value-extraction workflow remains PDF-only.
 
+- `key` — optional stable file key. Use it whenever a document requirement references this file via `original_file_key` or `source_file_keys`.
 - `source` — required source key. It must point to one of the supported file source types with an HTTP(S) `url`. ZIP/RAR/7Z/TAR/GZ/TGZ sources are valid attachments and can be classified normally.
 - `source_page` — optional source key for the page where the file link was found. If supplied, that source must have a URL.
 - `name` — legacy-only input. The stored technical filename is always derived from the remote file URL; when `metadata.display_name` is absent, legacy `name` is used as the business display-name fallback.
@@ -177,6 +178,65 @@ When file metadata is missing, Burbot may apply conservative filename-based defa
 Older v1 imports may still contain `document_kind` and `delivery_method`. They remain accepted for backward compatibility but are not part of the current file editor/export model.
 
 This creates an object-level Burbot file source that remains available after approval.
+
+## `objects[].documents[]`
+
+Document requirements are separate from physical file attachments. This is the canonical place to represent documents that a client must provide even when the operator does not publish a template.
+
+Use:
+
+- `files[]` for real downloadable/uploaded files;
+- `documents[]` for the business requirement itself;
+- `original_file_key` when a requirement uses an operator-provided template;
+- `source_file_keys` for files such as a regulation/instruction that prove the requirement.
+
+A requirement can exist with **no matching file**.
+
+```json
+{
+  "documents": [
+    {
+      "key": "DOC_BANK_ACCOUNT",
+      "data": {
+        "label": "Dokument potwierdzający rachunek bankowy",
+        "purpose": "Potwierdzenie rachunku Wnioskodawcy",
+        "requirement": "REQUIRED",
+        "fulfillment_mode": "WITHOUT_OPERATOR_TEMPLATE",
+        "delivery_stage": "APPLICATION",
+        "responsibility": "CLIENT",
+        "required_evidence": "Zaświadczenie o prowadzeniu rachunku albo kopia umowy rachunku.",
+        "signature_requirement": "UNKNOWN"
+      },
+      "source_file_keys": ["FILE_REGULAMIN"]
+    }
+  ]
+}
+```
+
+Current `data` fields are:
+
+- `label` — document/requirement name, max 500 characters;
+- `purpose` — business purpose, max 1000;
+- `requirement` — `UNKNOWN`, `REQUIRED`, `CONDITIONAL`, `INFORMATIONAL`;
+- `condition` — condition for a conditional document, max 1000;
+- `fulfillment_mode` — `OPERATOR_TEMPLATE` or `WITHOUT_OPERATOR_TEMPLATE`;
+- `delivery_stage` — `APPLICATION`, `AGREEMENT`, `SERVICE`, `REFUND`, `CONTROL`, `OTHER`;
+- `responsibility` — `FUNDPILOT`, `CLIENT`, `SHARED`;
+- `required_evidence` — what the client must actually provide, max 4000;
+- `source_url` — official HTTP(S) source describing the requirement;
+- `source_description` — source/section description, max 1000;
+- `version_label` — version label, max 255;
+- `signature_requirement` — `UNKNOWN`, `NOT_REQUIRED`, `REQUIRED_FILE`, `EXTERNAL_OPERATOR`.
+
+Top-level document-reference fields:
+
+- `original_file_key` — optional `files[].key` for the operator template;
+- `source_file_keys` — optional list of up to 30 `files[].key` values whose content establishes the requirement;
+- `document_type_key` — legacy closed-catalog identifier, accepted only for backward compatibility. New imports should omit it.
+
+An informational document should use `requirement: "INFORMATIONAL"`. It is not a client-delivery requirement. Do not invent `WITHOUT_OPERATOR_TEMPLATE` documents for regulations merely because the client reads them.
+
+Evidence on `documents[]` can target any supplied document `data` field.
 
 ## `objects[].financing[]`
 
@@ -220,6 +280,8 @@ For an in-place update:
 - financing variants are upserted by their stable financing `key`; only fields supplied for that variant are changed;
 - existing financing fields omitted by AI are preserved;
 - files are upserted by URL rather than duplicated;
+- document requirements are upserted by stable document `key` (legacy rows can also match by `document_type_key`);
+- document links to operator templates/source files are remapped to the staged object's file IDs;
 - imported evidence/sources are attached to the updated values;
 - the existing object's internal ID remains unchanged.
 
