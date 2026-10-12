@@ -27,6 +27,10 @@ import {
   projectFileInheritanceStatus,
   projectForRecruitment,
 } from "../shared/fileInheritance";
+import {
+  hasRequirementForFile,
+  renderDocumentRequirementsUi,
+} from "./documentRequirementsUi";
 
 let initialized = false;
 let renderQueued = false;
@@ -993,6 +997,36 @@ function renderSource(source: LegacyStoredFileSource): HTMLElement {
     ? "Otwórz plik ↗"
     : "Otwórz źródło ↗";
 
+  const requirementButton =
+    source.objectId &&
+    (chosenObject()?.type === "project" || chosenObject()?.type === "recruitment") &&
+    !hasRequirementForFile(state, source.objectId, source.id)
+      ? document.createElement("button")
+      : null;
+  if (requirementButton) {
+    requirementButton.type = "button";
+    requirementButton.className = "text-button";
+    requirementButton.textContent = "+ Dodaj jako wymaganie";
+    requirementButton.onclick = () => {
+      const object = chosenObject();
+      if (!object || object.id !== source.objectId) {
+        notice("Wybierz obiekt, do którego należy ten plik.", true);
+        return;
+      }
+      void data("ADD_DOCUMENT_REQUIREMENT", {
+        objectId: object.id,
+        fileSourceId: source.id,
+      })
+        .then(() => {
+          notice(`Utworzono wymaganie z pliku: ${source.display_name?.trim() || source.name}.`);
+          render();
+        })
+        .catch((error: unknown) =>
+          notice(error instanceof Error ? error.message : String(error), true),
+        );
+    };
+  }
+
   const remove = document.createElement("button");
   remove.type = "button";
   remove.className = "icon-button danger";
@@ -1005,6 +1039,7 @@ function renderSource(source: LegacyStoredFileSource): HTMLElement {
   };
 
   if (read) actions.append(read);
+  if (requirementButton) actions.append(requirementButton);
   actions.append(open, remove);
   body.append(actions);
   row.append(summary, body);
@@ -1052,6 +1087,27 @@ function render(): void {
   );
   root.replaceChildren();
 
+  const supportsRequirements =
+    object.type === "project" || object.type === "recruitment";
+  const requirementHeading = $("document-requirement-heading");
+  const requirementRoot = $("document-requirement-list");
+  const addRequirement = $("add-document-requirement") as HTMLButtonElement;
+  requirementHeading.hidden = !supportsRequirements;
+  requirementRoot.hidden = !supportsRequirements;
+  addRequirement.hidden = !supportsRequirements;
+  if (supportsRequirements) {
+    renderDocumentRequirementsUi({
+      root: requirementRoot,
+      state,
+      object,
+      mutate: data,
+      notice,
+      onChanged: render,
+    });
+  } else {
+    requirementRoot.replaceChildren();
+  }
+
   if (!sources.length) {
     const empty = document.createElement("p");
     empty.className = "file-source-empty";
@@ -1060,6 +1116,16 @@ function render(): void {
   } else {
     for (const source of sources) root.append(renderSource(source));
   }
+
+  const requirementCount = (state.documentRequirements ?? []).filter(
+    (row) => row.objectId === object.id,
+  ).length;
+  const count = $("file-source-count");
+  count.textContent = supportsRequirements
+    ? `${sources.length} plików · ${requirementCount} wymagań`
+    : sources.length
+      ? `${sources.length} plików`
+      : "Brak plików";
 
   const isRecruitment = object.type === "recruitment";
   const inheritance = isRecruitment
@@ -1132,6 +1198,24 @@ function render(): void {
 export async function initFileSourcesUi(): Promise<void> {
   if (initialized) return;
   initialized = true;
+
+  $("add-document-requirement").onclick = () => {
+    const object = chosenObject();
+    if (!object || (object.type !== "project" && object.type !== "recruitment")) {
+      notice("Wybierz projekt lub nabór.", true);
+      return;
+    }
+    void data("ADD_DOCUMENT_REQUIREMENT", {
+      objectId: object.id,
+    })
+      .then(() => {
+        notice("Dodano dokument bez wzoru operatora.");
+        render();
+      })
+      .catch((error: unknown) =>
+        notice(error instanceof Error ? error.message : String(error), true),
+      );
+  };
 
   $("read-from-file").onclick = () => {
     void toggleFileMode().catch((error: unknown) => {
