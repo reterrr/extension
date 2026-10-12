@@ -1170,8 +1170,13 @@ export function buildImportApprovalPlan(
     .filter((row) => row.objectId === object.id)
     .map((row) => {
       const data: Record<string, unknown> = {};
-      for (const field of Object.keys(BurbotDocuments.fields ?? {})) {
-        if (Object.prototype.hasOwnProperty.call(row, field)) {
+      for (const [field, definition] of Object.entries(
+        BurbotDocuments.fields ?? {},
+      )) {
+        if (
+          !definition.hidden &&
+          Object.prototype.hasOwnProperty.call(row, field)
+        ) {
           data[field] = (row as unknown as Record<string, unknown>)[field];
         }
       }
@@ -1184,16 +1189,6 @@ export function buildImportApprovalPlan(
           `Nie udało się powiązać wzoru operatora dla dokumentu ${row.label ?? row.importKey ?? row.id}.`,
         );
       }
-      const sourceFiles = (row.source_file_source_ids ?? []).map((id) => {
-        const key = fileKeyById.get(id);
-        if (!key) {
-          throw new Error(
-            `Nie udało się powiązać pliku źródłowego dla dokumentu ${row.label ?? row.importKey ?? row.id}.`,
-          );
-        }
-        return key;
-      });
-
       const evidence = portableTargetEvidence(
         session.previewState,
         object.id,
@@ -1207,7 +1202,6 @@ export function buildImportApprovalPlan(
           : {}),
         data,
         ...(originalFile ? { original_file: originalFile } : {}),
-        ...(sourceFiles.length ? { source_files: sourceFiles } : {}),
         ...(evidence ? { evidence } : {}),
       };
     });
