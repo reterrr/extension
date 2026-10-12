@@ -689,6 +689,16 @@ export function removeImportReviewFile(
   if (session.previewState.fileSources.length === before) {
     throw new Error("Plik nie istnieje.");
   }
+  for (const requirement of session.previewState.documentRequirements ?? []) {
+    if (requirement.objectId !== object.id) continue;
+    requirement.source_file_source_ids = (
+      requirement.source_file_source_ids ?? []
+    ).filter((id) => id !== fileId);
+    if (requirement.original_file_source_id === fileId) {
+      delete requirement.original_file_source_id;
+      requirement.fulfillment_mode = "WITHOUT_OPERATOR_TEMPLATE";
+    }
+  }
   touch(session, object, now);
 }
 
