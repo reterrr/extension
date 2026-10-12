@@ -308,6 +308,7 @@ function stageExistingObjectUpdate(
     );
     if (targetFile) {
       targetFile.name = importedFile.name;
+      if (importedFile.importKey) targetFile.importKey = importedFile.importKey;
       targetFile.sourcePageUrl = importedFile.sourcePageUrl;
       targetFile.sourceImportKey = importedFile.sourceImportKey;
       targetFile.sourcePageImportKey = importedFile.sourcePageImportKey;
@@ -477,34 +478,77 @@ function stageExistingObjectUpdate(
       (candidate) =>
         candidate.objectId === target.id &&
         importedRow.importKey &&
-        (candidate.importKey === importedRow.importKey || String(candidate.id) === importedRow.importKey),
+        (candidate.importKey === importedRow.importKey ||
+          String(candidate.id) === importedRow.importKey),
     );
-    row ??= (state.documentRequirements ?? []).find(
-      (candidate) =>
-        candidate.objectId === target.id &&
-        candidate.document_type_key === importedRow.document_type_key,
-    );
+    if (!row && importedRow.document_type_key) {
+      const legacyMatches = (state.documentRequirements ?? []).filter(
+        (candidate) =>
+          candidate.objectId === target.id &&
+          candidate.document_type_key === importedRow.document_type_key,
+      );
+      if (legacyMatches.length === 1) row = legacyMatches[0];
+    }
+
     if (!row) {
       row = {
         id: uuid(),
         objectId: target.id,
         importKey: importedRow.importKey,
-        document_type_key: importedRow.document_type_key,
+        ...(importedRow.document_type_key
+          ? { document_type_key: importedRow.document_type_key }
+          : {}),
+        label: importedRow.label,
+        purpose: importedRow.purpose,
+        requirement: importedRow.requirement,
+        fulfillment_mode: importedRow.fulfillment_mode,
+        signature_requirement: importedRow.signature_requirement,
+        source_file_source_ids: [],
       };
       (state.documentRequirements ||= []).push(row);
     } else {
       row.importKey = importedRow.importKey;
-      row.document_type_key = importedRow.document_type_key;
+      if (importedRow.document_type_key) {
+        row.document_type_key = importedRow.document_type_key;
+      }
     }
 
     for (const field of Object.keys(BurbotDocuments.fields ?? {})) {
       if (Object.prototype.hasOwnProperty.call(importedRow, field)) {
-        row[field] = importedRow[field];
+        (row as unknown as Record<string, unknown>)[field] =
+          (importedRow as unknown as Record<string, unknown>)[field];
       }
     }
+
+    if (importedRow.original_file_source_id) {
+      const mapped = importedTargetIdMap.get(
+        `file_source:${importedRow.original_file_source_id}`,
+      );
+      if (!mapped) {
+        throw new Error(
+          `Could not map operator template for document ${importedRow.importKey ?? importedRow.id}.`,
+        );
+      }
+      row.original_file_source_id = mapped;
+    } else {
+      delete row.original_file_source_id;
+    }
+
+    row.source_file_source_ids = (
+      importedRow.source_file_source_ids ?? []
+    ).map((sourceId) => {
+      const mapped = importedTargetIdMap.get(`file_source:${sourceId}`);
+      if (!mapped) {
+        throw new Error(
+          `Could not map source file for document ${importedRow.importKey ?? importedRow.id}.`,
+        );
+      }
+      return mapped;
+    });
+
     importedTargetIdMap.set(
-      `document:${String(importedRow.document_type_key)}`,
-      String(row.document_type_key),
+      `document:${String(importedRow.id)}`,
+      String(row.id),
     );
   }
 

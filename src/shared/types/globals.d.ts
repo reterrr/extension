@@ -106,12 +106,23 @@ interface BurbotFundingApi {
   fields: Readonly<Record<string, BurbotFieldDefinition>>;
 }
 
+interface BurbotDocumentCatalogEntry {
+  key: string;
+  name: string;
+  internal?: boolean;
+}
+
+interface BurbotDocumentsApi {
+  fields: Readonly<Record<string, BurbotFieldDefinition>>;
+  catalog: ReadonlyArray<BurbotDocumentCatalogEntry>;
+}
+
 declare global {
   var BurbotCore: BurbotCoreApi;
   var BurbotSchema: Record<string, BurbotSchemaEntry>;
   var BurbotGeography: BurbotGeographyApi;
   var BurbotFunding: BurbotFundingApi;
-  var BurbotDocuments: Record<string, unknown>;
+  var BurbotDocuments: BurbotDocumentsApi;
   var __burbotPickerLoaded: boolean | undefined;
 }
 

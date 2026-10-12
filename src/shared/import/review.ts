@@ -4,6 +4,7 @@ import { normalizePortableInput } from "./normalizePortableInput.js";
 import type {
   ImportReviewEditorOption,
   ImportReviewEditorType,
+  ImportReviewDocumentView,
   ImportReviewEvidenceView,
   ImportReviewFieldView,
   ImportReviewFileView,
@@ -403,6 +404,61 @@ function fileViews(
     }));
 }
 
+function documentViews(
+  session: ImportReviewSession,
+  object: LegacyStoredObject | undefined,
+): ImportReviewDocumentView[] {
+  if (!object) return [];
+  const filesById = new Map(
+    (session.previewState.fileSources ?? [])
+      .filter((source) => source.objectId === object.id)
+      .map((source) => [
+        source.id,
+        source.display_name?.trim() || source.name,
+      ]),
+  );
+
+  return (session.previewState.documentRequirements ?? [])
+    .filter((row) => row.objectId === object.id)
+    .map((row) => {
+      const fields = Object.entries(BurbotDocuments.fields)
+        .filter(([field]) =>
+          Object.prototype.hasOwnProperty.call(row, field),
+        )
+        .map(([field, definition]) => ({
+          field,
+          label: String(definition.label ?? field),
+          value: BurbotCore.hasValue(
+            (row as unknown as Record<string, unknown>)[field],
+          )
+            ? BurbotCore.formatValue(
+                (row as unknown as Record<string, unknown>)[field],
+                definition,
+                session.previewState,
+              )
+            : "Nie ustawiono",
+        }));
+
+      const originalFileName = row.original_file_source_id
+        ? filesById.get(row.original_file_source_id)
+        : undefined;
+      const sourceFileNames = (row.source_file_source_ids ?? [])
+        .map((id) => filesById.get(id))
+        .filter((name): name is string => Boolean(name));
+
+      return {
+        id: row.id,
+        key: String(row.importKey ?? row.id),
+        label:
+          row.label ||
+          String(row.document_type_key ?? row.importKey ?? row.id),
+        fields,
+        ...(originalFileName ? { originalFileName } : {}),
+        sourceFileNames,
+      };
+    });
+}
+
 function financingFieldViews(
   session: ImportReviewSession,
   row: Record<string, unknown>,
@@ -457,6 +513,7 @@ export function importReviewView(
       fields: [],
       evidence: [],
       files: [],
+      documents: [],
       financing: [],
     };
   }
@@ -481,6 +538,9 @@ export function importReviewView(
       financingCount: (session.previewState.financingRules ?? []).filter(
         (row) => row.objectId === entry.id,
       ).length,
+      documentCount: (session.previewState.documentRequirements ?? []).filter(
+        (row) => row.objectId === entry.id,
+      ).length,
     }));
 
   const approvedCount = objects.filter((entry) => entry.status === "APPROVED").length;
@@ -498,6 +558,7 @@ export function importReviewView(
     fields: fieldViews(session, object),
     evidence: evidenceViews(session, object),
     files: fileViews(session, object),
+    documents: documentViews(session, object),
     financing: financingViews(session, object),
   };
 }
@@ -627,6 +688,16 @@ export function removeImportReviewFile(
   );
   if (session.previewState.fileSources.length === before) {
     throw new Error("Plik nie istnieje.");
+  }
+  for (const requirement of session.previewState.documentRequirements ?? []) {
+    if (requirement.objectId !== object.id) continue;
+    requirement.source_file_source_ids = (
+      requirement.source_file_source_ids ?? []
+    ).filter((id) => id !== fileId);
+    if (requirement.original_file_source_id === fileId) {
+      delete requirement.original_file_source_id;
+      requirement.fulfillment_mode = "WITHOUT_OPERATOR_TEMPLATE";
+    }
   }
   touch(session, object, now);
 }
@@ -960,6 +1031,17 @@ export function buildImportApprovalPlan(
   const selectedFiles = (session.previewState.fileSources ?? []).filter(
     (file) => file.objectId === object.id,
   );
+  const usedFileKeys = new Set<string>();
+  const fileKeyById = new Map<string, string>();
+  selectedFiles.forEach((file, index) => {
+    const preferred = String(file.importKey ?? `FILE_${index + 1}`);
+    let key = preferred;
+    for (let suffix = 2; usedFileKeys.has(key); suffix++) {
+      key = `${preferred}_${suffix}`;
+    }
+    usedFileKeys.add(key);
+    fileKeyById.set(file.id, key);
+  });
   const portableFiles = selectedFiles.map((file) => {
     const source = importedSourceForFile(file, importedSources);
     usedSourceIds.add(source.id);
@@ -994,6 +1076,7 @@ export function buildImportApprovalPlan(
     );
 
     return {
+      key: fileKeyById.get(file.id),
       source: source.importKey,
       ...(pageSource ? { source_page: pageSource.importKey } : {}),
       ...(Object.keys(metadata).length ? { metadata } : {}),
@@ -1092,19 +1175,42 @@ export function buildImportApprovalPlan(
       const data: Record<string, unknown> = {};
       for (const field of Object.keys(BurbotDocuments.fields ?? {})) {
         if (Object.prototype.hasOwnProperty.call(row, field)) {
-          data[field] = row[field];
+          data[field] = (row as unknown as Record<string, unknown>)[field];
         }
       }
+
+      const originalFile = row.original_file_source_id
+        ? fileKeyById.get(row.original_file_source_id)
+        : undefined;
+      if (row.original_file_source_id && !originalFile) {
+        throw new Error(
+          `Nie udało się powiązać wzoru operatora dla dokumentu ${row.label ?? row.importKey ?? row.id}.`,
+        );
+      }
+      const sourceFiles = (row.source_file_source_ids ?? []).map((id) => {
+        const key = fileKeyById.get(id);
+        if (!key) {
+          throw new Error(
+            `Nie udało się powiązać pliku źródłowego dla dokumentu ${row.label ?? row.importKey ?? row.id}.`,
+          );
+        }
+        return key;
+      });
+
       const evidence = portableTargetEvidence(
         session.previewState,
         object.id,
-        { kind: "document", id: String(row.document_type_key) },
+        { kind: "document", id: String(row.id) },
         sourceById,
       );
       return {
-        key: String(row.importKey ?? row.document_type_key),
-        document_type_key: String(row.document_type_key),
+        key: String(row.importKey ?? row.id),
+        ...(row.document_type_key
+          ? { document_type_key: String(row.document_type_key) }
+          : {}),
         data,
+        ...(originalFile ? { original_file: originalFile } : {}),
+        ...(sourceFiles.length ? { source_files: sourceFiles } : {}),
         ...(evidence ? { evidence } : {}),
       };
     });

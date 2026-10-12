@@ -100,6 +100,8 @@ const FIELD_LABELS: Record<string, string> = {
   intended_use: "Sposób użycia",
   client_requirement: "Wymaganie wobec klienta",
   signature_requirement: "Podpis",
+  original_file_source_id: "Wzór operatora",
+  source_file_source_ids: "Pliki źródłowe / dowodowe",
   operatorId: "Operator",
   operatorType: "Rola operatora",
   company_size: "Wielkość firmy",

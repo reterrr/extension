@@ -252,16 +252,53 @@ test("React sidepanel has a visible crash recovery boundary", () => {
 });
 
 
-test("files replace the predefined document catalog in the workspace", () => {
+test("Documents section separates physical files from document requirements", () => {
   const app = source("src/sidepanel/App.tsx");
   const workspace = source("src/sidepanel/workspace.js");
   const files = source("src/sidepanel/fileSourcesUi.ts");
+  const documents = source("src/sidepanel/documentRequirementsUi.ts");
   const background = source("src/background/index.ts");
 
   assert.equal(app.includes('id="documents-panel"'), false);
   assert.equal(app.includes('id="documents-section"'), false);
   assert.equal(workspace.includes("renderDocuments(object)"), false);
 
+  assert.match(app, /<strong>Dokumenty<\/strong>/);
+  assert.match(app, /id="document-requirement-list"/);
+  assert.match(app, /id="add-document-requirement"/);
+  assert.match(app, /Dodaj dokument bez wzoru/);
+  assert.match(app, /Pliki operatora i źródła/);
+
+  for (const label of [
+    "Nazwa",
+    "Przeznaczenie",
+    "Wymagalność",
+    "Podpis",
+    "Źródło / sposób przygotowania",
+    "Wzór operatora",
+    "Kiedy dokument jest wymagany",
+    "Etap dostarczenia",
+    "Odpowiedzialność",
+    "Co należy dostarczyć",
+    "Oficjalne źródło",
+    "Opis źródła",
+    "Wersja dokumentu",
+    "Pliki źródłowe / dowodowe",
+  ]) {
+    assert.ok(
+      documents.includes(label),
+      `missing document requirement label: ${label}`,
+    );
+  }
+
+  assert.match(files, /Dodaj jako wymaganie/);
+  assert.match(files, /renderDocumentRequirementsUi/);
+  assert.match(files, /ADD_DOCUMENT_REQUIREMENT/);
+  assert.match(background, /message\.op === "ADD_DOCUMENT_REQUIREMENT"/);
+  assert.match(background, /message\.op === "UPDATE_DOCUMENT_REQUIREMENT"/);
+  assert.match(background, /message\.op === "REMOVE_DOCUMENT_REQUIREMENT"/);
+
+  // Physical file classification remains available independently.
   for (const label of [
     "Nazwa",
     "Cel dokumentu",
@@ -272,11 +309,9 @@ test("files replace the predefined document catalog in the workspace", () => {
   ]) {
     assert.ok(files.includes(label), `missing file classification label: ${label}`);
   }
-
   assert.match(files, /UPDATE_FILE_SOURCE/);
-  assert.match(background, /message\.op === "UPDATE_FILE_SOURCE"/);
-  assert.match(files, /Do oznaczenia/);
 });
+
 
 test("file display name comes from the actual PDF filename", () => {
   const remote = source("src/shared/sources/remoteFile.ts");

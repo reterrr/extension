@@ -86,6 +86,8 @@ interface ImportFileMetadata {
 }
 
 interface ImportFileAttachment {
+  /** Stable object-local attachment key. Required when documents reference this file. */
+  key?: string;
   source: string;
   source_page?: string;
   /** Legacy-only. Canonical name is derived from the source URL filename. */
@@ -126,8 +128,13 @@ interface ImportOperatorContact {
 
 interface ImportDocumentRequirement {
   key: string;
-  document_type_key: string;
+  /** Legacy closed-catalog key. New imports should omit this. */
+  document_type_key?: string;
   data: Record<string, unknown>;
+  /** files[].key of the operator template, or null/omitted when no template exists. */
+  original_file?: string | null;
+  /** files[].key entries used as source/evidence for the requirement. */
+  source_files?: string[];
   evidence?: Record<string, ImportEvidence[]>;
 }
 
@@ -325,6 +332,7 @@ function parseDocument(input: unknown): BurbotImportV1 {
         const filePath = `${path}.files[${fileIndex}]`;
         if (!isRecord(entry)) throw new Error(`${filePath} must be an object.`);
         return {
+          key: optionalString(entry.key, `${filePath}.key`),
           source: requiredString(entry.source, `${filePath}.source`),
           source_page: optionalString(entry.source_page, `${filePath}.source_page`),
           name: optionalString(entry.name, `${filePath}.name`),
@@ -332,6 +340,12 @@ function parseDocument(input: unknown): BurbotImportV1 {
           evidence: parseEvidenceMap(entry.evidence, `${filePath}.evidence`),
         };
       });
+      const fileKeys = files
+        .map((file) => file.key)
+        .filter((key): key is string => typeof key === "string");
+      if (new Set(fileKeys).size !== fileKeys.length) {
+        throw new Error(`Duplicate ${path} files[].key.`);
+      }
     }
 
 
@@ -457,13 +471,56 @@ function parseDocument(input: unknown): BurbotImportV1 {
         if (!isRecord(entry.data)) {
           throw new Error(`${documentPath}.data must be an object.`);
         }
+
+        const documentTypeKey = optionalString(
+          entry.document_type_key,
+          `${documentPath}.document_type_key`,
+        );
+        const originalFile =
+          entry.original_file === null
+            ? null
+            : optionalString(
+                entry.original_file,
+                `${documentPath}.original_file`,
+              );
+
+        let sourceFiles: string[] | undefined;
+        if (entry.source_files !== undefined) {
+          if (!Array.isArray(entry.source_files)) {
+            throw new Error(`${documentPath}.source_files must be an array.`);
+          }
+          sourceFiles = entry.source_files.map((value, sourceIndex) =>
+            requiredString(
+              value,
+              `${documentPath}.source_files[${sourceIndex}]`,
+            ),
+          );
+          if (new Set(sourceFiles).size !== sourceFiles.length) {
+            throw new Error(
+              `${documentPath}.source_files contains duplicate file keys.`,
+            );
+          }
+        }
+
+        if (
+          !documentTypeKey &&
+          !Object.prototype.hasOwnProperty.call(entry.data, "label")
+        ) {
+          throw new Error(
+            `${documentPath}.data.label is required for a dynamic document requirement.`,
+          );
+        }
+
         return {
           key: requiredString(entry.key, `${documentPath}.key`),
-          document_type_key: requiredString(
-            entry.document_type_key,
-            `${documentPath}.document_type_key`,
-          ),
+          ...(documentTypeKey
+            ? { document_type_key: documentTypeKey }
+            : {}),
           data: entry.data,
+          ...(originalFile !== undefined
+            ? { original_file: originalFile }
+            : {}),
+          ...(sourceFiles ? { source_files: sourceFiles } : {}),
           evidence: parseEvidenceMap(
             entry.evidence,
             `${documentPath}.evidence`,
@@ -471,15 +528,7 @@ function parseDocument(input: unknown): BurbotImportV1 {
         };
       });
       uniqueByKey(documents, `${path} documents`);
-      const documentTypes = new Set<string>();
-      for (const document of documents) {
-        if (documentTypes.has(document.document_type_key)) {
-          throw new Error(
-            `Duplicate ${path} document_type_key: ${document.document_type_key}`,
-          );
-        }
-        documentTypes.add(document.document_type_key);
-      }
+
     }
 
     let financing: ImportFinancingVariant[] | undefined;
@@ -509,6 +558,25 @@ function parseDocument(input: unknown): BurbotImportV1 {
         };
       });
       uniqueByKey(financing, `${path} financing`);
+    }
+
+    const declaredFileKeys = new Set(
+      (files ?? [])
+        .map((file) => file.key)
+        .filter((fileKey): fileKey is string => typeof fileKey === "string"),
+    );
+    for (const document of documents ?? []) {
+      const references = [
+        ...(document.original_file ? [document.original_file] : []),
+        ...(document.source_files ?? []),
+      ];
+      for (const fileKey of references) {
+        if (!declaredFileKeys.has(fileKey)) {
+          throw new Error(
+            `${path}.documents.${document.key} references unknown files[].key ${fileKey}.`,
+          );
+        }
+      }
     }
 
     return {
@@ -803,6 +871,8 @@ export function importDocumentIntoState(
       }
     }
 
+    const fileIdByKey = new Map<string, string>();
+
     if (item.files?.length) {
       for (const [fileIndex, file] of item.files.entries()) {
         const source = sourceByKey.get(file.source);
@@ -839,6 +909,7 @@ export function importDocumentIntoState(
         const row = {
           id: uuid(),
           objectId: object.id,
+          ...(file.key ? { importKey: file.key } : {}),
           fileType: source.type as SourceFileType,
           url: source.url,
           // Canonical technical filename always comes from the remote URL.
@@ -851,6 +922,7 @@ export function importDocumentIntoState(
           ...metadata,
         };
         (state.fileSources ||= []).push(row);
+        if (file.key) fileIdByKey.set(file.key, row.id);
 
         validateTargetEvidenceFields(
           file.evidence,
@@ -1001,45 +1073,148 @@ export function importDocumentIntoState(
       if (!schema.configuration) {
         throw new Error(`Object type ${item.type} does not support document requirements.`);
       }
-      for (const document of item.documents) {
-        if (
-          !globalThis.BurbotDocuments?.catalog?.some(
-            (entry: { key: string }) => entry.key === document.document_type_key,
-          )
-        ) {
+      for (const importedDocument of item.documents) {
+        const legacyType = importedDocument.document_type_key;
+        const catalogEntry = legacyType
+          ? globalThis.BurbotDocuments?.catalog?.find(
+              (entry: { key: string }) => entry.key === legacyType,
+            )
+          : undefined;
+        if (legacyType && !catalogEntry) {
           throw new Error(
-            `Unknown document type ${document.document_type_key} in ${item.key}.`,
+            `Unknown document type ${legacyType} in ${item.key}.`,
           );
         }
-        const row: Record<string, unknown> = {
-          id: uuid(),
-          objectId: object.id,
-          importKey: document.key,
-          document_type_key: document.document_type_key,
-        };
-        for (const [field, rawValue] of Object.entries(document.data)) {
+
+        const rowId = uuid();
+        const row: Record<string, unknown> = legacyType
+          ? {
+              id: rowId,
+              objectId: object.id,
+              importKey: importedDocument.key,
+              document_type_key: legacyType,
+            }
+          : {
+              id: rowId,
+              objectId: object.id,
+              importKey: importedDocument.key,
+              label: importedDocument.data.label,
+              purpose: Object.prototype.hasOwnProperty.call(
+                importedDocument.data,
+                "purpose",
+              )
+                ? importedDocument.data.purpose
+                : "",
+              requirement: Object.prototype.hasOwnProperty.call(
+                importedDocument.data,
+                "requirement",
+              )
+                ? importedDocument.data.requirement
+                : "UNKNOWN",
+              fulfillment_mode: Object.prototype.hasOwnProperty.call(
+                importedDocument.data,
+                "fulfillment_mode",
+              )
+                ? importedDocument.data.fulfillment_mode
+                : "WITHOUT_OPERATOR_TEMPLATE",
+              signature_requirement: Object.prototype.hasOwnProperty.call(
+                importedDocument.data,
+                "signature_requirement",
+              )
+                ? importedDocument.data.signature_requirement
+                : "UNKNOWN",
+              source_file_source_ids: [],
+            };
+
+        for (const [field, rawValue] of Object.entries(importedDocument.data)) {
           const definition = globalThis.BurbotDocuments?.fields?.[field];
           if (!definition) {
             throw new Error(
-              `Unknown document field ${field} in ${item.key}.${document.key}.`,
+              `Unknown document field ${field} in ${item.key}.${importedDocument.key}.`,
             );
           }
           row[field] = BurbotCore.coerceField(rawValue, definition, state);
         }
-        (state.documentRequirements ||= []).push(row);
+
+        const originalFileId =
+          importedDocument.original_file === null ||
+          importedDocument.original_file === undefined
+            ? undefined
+            : fileIdByKey.get(importedDocument.original_file);
+        if (
+          importedDocument.original_file &&
+          !originalFileId
+        ) {
+          throw new Error(
+            `${item.key}.documents.${importedDocument.key}.original_file could not be resolved.`,
+          );
+        }
+        if (originalFileId) row.original_file_source_id = originalFileId;
+
+        const sourceFileIds = (importedDocument.source_files ?? []).map(
+          (fileKey) => {
+            const id = fileIdByKey.get(fileKey);
+            if (!id) {
+              throw new Error(
+                `${item.key}.documents.${importedDocument.key}.source_files references unknown file ${fileKey}.`,
+              );
+            }
+            return id;
+          },
+        );
+        row.source_file_source_ids = [...new Set(sourceFileIds)];
+
+        if (!legacyType) {
+          if (
+            row.requirement === "CONDITIONAL" &&
+            (typeof row.condition !== "string" || !row.condition.trim())
+          ) {
+            throw new Error(
+              `${item.key}.documents.${importedDocument.key} is CONDITIONAL but data.condition is empty.`,
+            );
+          }
+          if (row.requirement === "INFORMATIONAL") {
+            row.fulfillment_mode = "WITHOUT_OPERATOR_TEMPLATE";
+            delete row.original_file_source_id;
+          }
+          if (
+            row.fulfillment_mode === "OPERATOR_TEMPLATE" &&
+            !row.original_file_source_id
+          ) {
+            throw new Error(
+              `${item.key}.documents.${importedDocument.key} uses OPERATOR_TEMPLATE but has no original_file.`,
+            );
+          }
+          if (
+            row.fulfillment_mode !== "OPERATOR_TEMPLATE" &&
+            row.original_file_source_id
+          ) {
+            throw new Error(
+              `${item.key}.documents.${importedDocument.key} has original_file but is not OPERATOR_TEMPLATE.`,
+            );
+          }
+        }
+
+        (state.documentRequirements ||= []).push(
+          row as unknown as NonNullable<
+            LegacyStorageState["documentRequirements"]
+          >[number],
+        );
 
         validateTargetEvidenceFields(
-          document.evidence,
+          importedDocument.evidence,
           globalThis.BurbotDocuments.fields,
-          document.data,
-          `${item.key}.documents.${document.key}`,
+          importedDocument.data,
+          `${item.key}.documents.${importedDocument.key}`,
         );
-        for (const [field, entries] of Object.entries(document.evidence ?? {})) {
+        for (const [field, entries] of Object.entries(
+          importedDocument.evidence ?? {},
+        )) {
           storeTargetEvidence(
             state,
             object.id,
-            { kind: "document", id: String(document.document_type_key) },
-            document.key,
+            { kind: "document", id: rowId },
+            importedDocument.key,
             item.key,
             field,
             entries,

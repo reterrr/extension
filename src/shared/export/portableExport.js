@@ -266,6 +266,16 @@ export function createPortableExport({
       }));
     }
     const files = scoped("fileSources", object);
+    const fileKeys = keysFor(files);
+    const documentRows = scoped("documentRequirements", object);
+    const referencedFileIds = new Set(
+      documentRows.flatMap((row) => [
+        ...(row.original_file_source_id
+          ? [String(row.original_file_source_id)]
+          : []),
+        ...(row.source_file_source_ids ?? []).map(String),
+      ]),
+    );
     if (files.length)
       result.files = files.map((file) => {
         const metadata = compact(
@@ -274,6 +284,11 @@ export function createPortableExport({
           ),
         );
         return {
+          ...(
+            file.importKey || referencedFileIds.has(String(file.id))
+              ? { key: fileKeys.get(String(file.id)) }
+              : {}
+          ),
           source: useUrl(file.url, file.fileType, file.sourceImportKey),
           ...(file.sourcePageUrl
             ? {
@@ -316,51 +331,93 @@ export function createPortableExport({
         }),
       }));
     }
-    for (const [collection, section, kind, fields] of [
-      [
-        "financingRules",
-        "financing",
-        "funding",
-        globalThis.BurbotFunding?.fields,
-      ],
-      [
-        "documentRequirements",
-        "documents",
-        "document",
-        globalThis.BurbotDocuments?.fields,
-      ],
-    ]) {
-      const rows = scoped(collection, object).sort(
+    {
+      const rows = scoped("financingRules", object).sort(
         (a, b) => Number(a.variant_no ?? 0) - Number(b.variant_no ?? 0),
       );
-      if (!rows.length) continue;
-      const keys = keysFor(rows);
-      result[section] = rows.map((row) => {
-        const data = dataFor(row, fields, section, [
-          "id",
-          "objectId",
-          "importKey",
-          "company_size",
-          "variant_no",
-          "document_type_key",
-          "copiedAt",
-          "copiedFromProjectId",
-          "copiedFromFundingRuleId",
-        ]);
-        return {
-          key: keys.get(rowIdentity(row)),
-          ...(section === "financing"
-            ? { company_size: row.company_size }
-            : { document_type_key: row.document_type_key }),
-          data,
-          ...targetEvidence(
-            object,
-            kind,
-            section === "documents" ? row.document_type_key : row.id,
+      if (rows.length) {
+        const keys = keysFor(rows);
+        result.financing = rows.map((row) => {
+          const data = dataFor(
+            row,
+            globalThis.BurbotFunding?.fields,
+            "financing",
+            [
+              "id",
+              "objectId",
+              "importKey",
+              "company_size",
+              "variant_no",
+              "copiedAt",
+              "copiedFromProjectId",
+              "copiedFromFundingRuleId",
+            ],
+          );
+          return {
+            key: keys.get(rowIdentity(row)),
+            company_size: row.company_size,
             data,
-          ),
-        };
-      });
+            ...targetEvidence(object, "funding", row.id, data),
+          };
+        });
+      }
+    }
+
+    {
+      const rows = documentRows;
+      if (rows.length) {
+        const keys = keysFor(rows);
+        result.documents = rows.map((row) => {
+          const data = dataFor(
+            row,
+            globalThis.BurbotDocuments?.fields,
+            "documents",
+            [
+              "id",
+              "objectId",
+              "importKey",
+              "document_type_key",
+              "original_file_source_id",
+              "source_file_source_ids",
+            ],
+          );
+
+          const originalFileKey = row.original_file_source_id
+            ? fileKeys.get(String(row.original_file_source_id))
+            : undefined;
+          if (row.original_file_source_id && !originalFileKey) {
+            throw new Error(
+              `Dokument „${row.label ?? row.importKey ?? row.id}” wskazuje wzór, który nie należy do tego samego obiektu.`,
+            );
+          }
+
+          const sourceFiles = (row.source_file_source_ids ?? []).map((id) => {
+            const key = fileKeys.get(String(id));
+            if (!key) {
+              throw new Error(
+                `Dokument „${row.label ?? row.importKey ?? row.id}” wskazuje plik źródłowy spoza obiektu.`,
+              );
+            }
+            return key;
+          });
+
+          return {
+            key: keys.get(rowIdentity(row)),
+            ...(row.document_type_key
+              ? { document_type_key: row.document_type_key }
+              : {}),
+            data,
+            ...(originalFileKey ? { original_file: originalFileKey } : {}),
+            ...(sourceFiles.length ? { source_files: sourceFiles } : {}),
+            ...targetEvidence(
+              object,
+              "document",
+              row.id ?? row.document_type_key,
+              data,
+            ),
+          };
+        });
+      }
     }
     return result;
   });

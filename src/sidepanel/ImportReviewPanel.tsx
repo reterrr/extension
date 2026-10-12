@@ -915,6 +915,9 @@ export function ImportReviewPanel() {
                                   object.financingCount
                                     ? `${object.financingCount} fin.`
                                     : "",
+                                  object.documentCount
+                                    ? `${object.documentCount} dok.`
+                                    : "",
                                 ]
                                   .filter(Boolean)
                                   .join(" · ") || "do sprawdzenia"}
@@ -1061,6 +1064,62 @@ export function ImportReviewPanel() {
                               </button>
                             </div>
                           </div>
+                        ))}
+                      </div>
+                    </section>
+                  )}
+
+                  {view.documents.length > 0 && (
+                    <section className="import-review-section">
+                      <div className="import-review-section-heading">
+                        <div>
+                          <span className="eyebrow">DOKUMENTY</span>
+                          <strong>{view.documents.length} wymagań</strong>
+                        </div>
+                        <small>
+                          Wymagania są niezależne od fizycznych plików operatora.
+                        </small>
+                      </div>
+                      <div className="import-review-financing">
+                        {view.documents.map((documentRow) => (
+                          <details
+                            key={documentRow.id}
+                            className="import-review-document-card"
+                          >
+                            <summary>
+                              <span>{documentRow.label}</span>
+                              <small>{documentRow.key}</small>
+                            </summary>
+                            <div className="import-review-document-fields">
+                              {documentRow.fields.map((field) => (
+                                <label
+                                  key={field.field}
+                                  className="import-review-workspace-field"
+                                >
+                                  <small>{field.label}</small>
+                                  <strong className="import-review-workspace-value">
+                                    {field.value || "Nie ustawiono"}
+                                  </strong>
+                                </label>
+                              ))}
+                              {documentRow.originalFileName && (
+                                <label className="import-review-workspace-field">
+                                  <small>Wzór operatora</small>
+                                  <strong className="import-review-workspace-value">
+                                    {documentRow.originalFileName}
+                                  </strong>
+                                </label>
+                              )}
+                              {documentRow.sourceFileNames.length > 0 && (
+                                <label className="import-review-workspace-field">
+                                  <small>Pliki źródłowe / dowodowe</small>
+                                  <strong className="import-review-workspace-value">
+                                    {documentRow.sourceFileNames.join(", ")}
+                                  </strong>
+                                </label>
+                              )}
+                            </div>
+                          </details>
                         ))}
                       </div>
                     </section>

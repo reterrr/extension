@@ -136,6 +136,9 @@ export interface LegacyStoredFileSource {
   sourcePageUrl: string;
   addedAt: string;
 
+  /** Stable portable key for this attachment when it came from / is exported to JSON. */
+  importKey?: string;
+
   /** Business-facing document name; the physical filename remains in `name`. */
   display_name?: string;
   purpose?: FilePurpose | string;
@@ -166,6 +169,46 @@ export interface LegacyStoredFileSource {
   metadataInferenceVersion?: number;
 }
 
+export interface LegacyStoredDocumentRequirement {
+  id: string;
+  objectId: string;
+  importKey?: string;
+
+  /** Legacy closed-catalog key, retained only for old states/imports. */
+  document_type_key?: string;
+
+  label: string;
+  purpose: string;
+  requirement:
+    | "UNKNOWN"
+    | "REQUIRED"
+    | "CONDITIONAL"
+    | "INFORMATIONAL"
+    | "OPTIONAL";
+  condition?: string;
+  fulfillment_mode: "OPERATOR_TEMPLATE" | "WITHOUT_OPERATOR_TEMPLATE";
+  delivery_stage?: string;
+  responsibility?: "FUNDPILOT" | "CLIENT" | "SHARED";
+  required_evidence?: string;
+
+  /** Existing Burbot fileSource IDs, never external DB asset IDs. */
+  original_file_source_id?: string;
+  source_file_source_ids?: string[];
+
+  source_url?: string;
+  source_description?: string;
+  version_label?: string;
+  signature_requirement:
+    | "UNKNOWN"
+    | "NOT_REQUIRED"
+    | "REQUIRED_FILE"
+    | "EXTERNAL_OPERATOR";
+
+  /** Legacy fields retained for round-trip compatibility. */
+  auto_fill?: boolean;
+  notes?: string;
+}
+
 export type LegacyStoredRule = ExecutableExtractionRule & {
   objectId: string;
   field: string;
@@ -191,6 +234,6 @@ export interface LegacyStorageState {
   importSources?: ImportedSource[];
   importTargetEvidence?: ImportedTargetEvidence[];
   financingRules?: Array<Record<string, unknown>>;
-  documentRequirements?: Array<Record<string, unknown>>;
+  documentRequirements?: LegacyStoredDocumentRequirement[];
   fieldEvidence?: LegacyStoredFieldEvidence[];
 }

@@ -150,7 +150,9 @@ function rowLabel(key: string, row: Row, index: ReviewStateIndex): string {
       : "Operator";
   if (key === "operatorContacts")
     return String(row.value || row.kind || "Kontakt");
-  return String(row.name || row.document_type_key || row.field || "Dokument");
+  return String(
+    row.label || row.name || row.document_type_key || row.field || "Dokument",
+  );
 }
 export function reviewChanges(draft: DraftCommit): StoredReviewChange[] {
   const result: StoredReviewChange[] = [];

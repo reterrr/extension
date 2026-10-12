@@ -327,6 +327,43 @@ test("repository portable-import example stays importable", async () => {
   assert.equal(files[1].purpose, "Formularz do uzupełnienia");
   assert.equal(files[1].has_fields, true);
 
+  assert.equal(files[0].importKey, "FILE_REGULATIONS");
+  assert.equal(files[1].importKey, "FILE_APPLICATION");
+
+  const documents = (session.previewState.documentRequirements ?? []).filter(
+    (entry) => entry.objectId === project.id,
+  );
+  assert.equal(documents.length, 3);
+
+  const regulations = documents.find(
+    (entry) => entry.importKey === "DOC_REGULATIONS",
+  );
+  const application = documents.find(
+    (entry) => entry.importKey === "DOC_APPLICATION",
+  );
+  const serviceCard = documents.find(
+    (entry) => entry.importKey === "DOC_BUR_SERVICE_CARD",
+  );
+  assert.ok(regulations);
+  assert.ok(application);
+  assert.ok(serviceCard);
+
+  assert.equal(regulations.requirement, "INFORMATIONAL");
+  assert.equal(regulations.fulfillment_mode, "WITHOUT_OPERATOR_TEMPLATE");
+  assert.equal(regulations.original_file_source_id, undefined);
+  assert.deepEqual(regulations.source_file_source_ids, [files[0].id]);
+
+  assert.equal(application.requirement, "REQUIRED");
+  assert.equal(application.fulfillment_mode, "OPERATOR_TEMPLATE");
+  assert.equal(application.original_file_source_id, files[1].id);
+  assert.deepEqual(
+    new Set(application.source_file_source_ids),
+    new Set([files[0].id, files[1].id]),
+  );
+
+  assert.equal(serviceCard.fulfillment_mode, "WITHOUT_OPERATOR_TEMPLATE");
+  assert.equal(serviceCard.original_file_source_id, undefined);
+
   const projectAssignments = (session.previewState.operatorAssignments ?? []).filter(
     (entry) => entry.objectId === project.id,
   );
@@ -355,6 +392,169 @@ test("repository portable-import example stays importable", async () => {
   );
 
   assert.ok((session.previewState.importTargetEvidence ?? []).length >= 10);
+});
+
+test("dynamic documents support operator templates and no-template requirements", () => {
+  const document = documentFixture();
+  const project = document.objects.find((object) => object.type === "project");
+  project.files[0].key = "FILE_RULES";
+  project.documents = [
+    {
+      key: "DOC_FORM",
+      data: {
+        label: "Formularz operatora",
+        purpose: "Formularz wymagany przy zgłoszeniu.",
+        requirement: "CONDITIONAL",
+        condition: "Gdy wnioskodawca korzysta z pomocy de minimis.",
+        fulfillment_mode: "OPERATOR_TEMPLATE",
+        delivery_stage: "ZGLOSZENIE",
+        responsibility: "CLIENT",
+        required_evidence: "Wypełniony formularz.",
+        signature_requirement: "REQUIRED_FILE",
+      },
+      original_file: "FILE_RULES",
+      source_files: ["FILE_RULES"],
+    },
+    {
+      key: "DOC_BANK",
+      data: {
+        label: "Potwierdzenie rachunku bankowego",
+        purpose: "Potwierdza rachunek wnioskodawcy.",
+        requirement: "REQUIRED",
+        fulfillment_mode: "WITHOUT_OPERATOR_TEMPLATE",
+        delivery_stage: "ZGLOSZENIE",
+        responsibility: "CLIENT",
+        required_evidence:
+          "Zaświadczenie o prowadzeniu rachunku albo kopia umowy rachunku.",
+        source_url: "https://example.test/project",
+        source_description: "Wymóg wynikający z regulaminu.",
+        version_label: "2026",
+        signature_requirement: "NOT_REQUIRED",
+      },
+      source_files: ["FILE_RULES"],
+    },
+  ];
+
+  const session = reviewModule.createImportReviewSession(
+    document,
+    "documents.json",
+    ids(),
+    "2026-10-12T13:00:00.000Z",
+  );
+  const importedProject = session.previewState.objects.find(
+    (object) => object.importKey === "project-1",
+  );
+  assert.ok(importedProject);
+
+  const file = session.previewState.fileSources.find(
+    (entry) => entry.objectId === importedProject.id,
+  );
+  assert.ok(file);
+  assert.equal(file.importKey, "FILE_RULES");
+
+  const rows = session.previewState.documentRequirements.filter(
+    (entry) => entry.objectId === importedProject.id,
+  );
+  assert.equal(rows.length, 2);
+
+  const form = rows.find((entry) => entry.importKey === "DOC_FORM");
+  const bank = rows.find((entry) => entry.importKey === "DOC_BANK");
+  assert.ok(form);
+  assert.ok(bank);
+
+  assert.equal(form.fulfillment_mode, "OPERATOR_TEMPLATE");
+  assert.equal(form.original_file_source_id, file.id);
+  assert.deepEqual(form.source_file_source_ids, [file.id]);
+  assert.equal(form.condition, "Gdy wnioskodawca korzysta z pomocy de minimis.");
+  assert.equal(form.signature_requirement, "REQUIRED_FILE");
+
+  assert.equal(bank.fulfillment_mode, "WITHOUT_OPERATOR_TEMPLATE");
+  assert.equal(bank.original_file_source_id, undefined);
+  assert.equal(bank.delivery_stage, "ZGLOSZENIE");
+  assert.equal(bank.responsibility, "CLIENT");
+  assert.equal(
+    bank.required_evidence,
+    "Zaświadczenie o prowadzeniu rachunku albo kopia umowy rachunku.",
+  );
+
+  const reviewView = reviewModule.importReviewView(session);
+  assert.equal(reviewView.documents.length, 2);
+  assert.equal(reviewView.objects[0].documentCount, 2);
+  assert.equal(reviewView.documents[0].label, "Formularz operatora");
+  assert.equal(reviewView.documents[0].originalFileName, "regulamin.pdf");
+  assert.deepEqual(reviewView.documents[0].sourceFileNames, ["regulamin.pdf"]);
+  assert.ok(
+    reviewView.documents[1].fields.some(
+      (field) =>
+        field.label === "Co należy dostarczyć" &&
+        field.value.includes("Zaświadczenie"),
+    ),
+  );
+
+  const approval = reviewModule.buildImportApprovalPlan(
+    session,
+    importedProject.id,
+  );
+  const portableProject = approval.document.objects.find(
+    (object) => object.key === "project-1",
+  );
+  assert.ok(portableProject);
+
+  assert.equal(portableProject.files[0].key, "FILE_RULES");
+  assert.equal(portableProject.documents[0].original_file, "FILE_RULES");
+  assert.deepEqual(portableProject.documents[0].source_files, ["FILE_RULES"]);
+  assert.equal(
+    portableProject.documents[1].data.fulfillment_mode,
+    "WITHOUT_OPERATOR_TEMPLATE",
+  );
+
+  const staged = stageModule.stageImportReviewObject(
+    BurbotCore.empty(),
+    approval,
+    ids(),
+    "2026-10-12T13:01:00.000Z",
+  );
+  const stagedDocs = staged.state.documentRequirements.filter(
+    (entry) => entry.objectId === staged.stagedObjectId,
+  );
+  const stagedForm = stagedDocs.find((entry) => entry.importKey === "DOC_FORM");
+  const stagedBank = stagedDocs.find((entry) => entry.importKey === "DOC_BANK");
+  assert.ok(stagedForm);
+  assert.ok(stagedBank);
+
+  const stagedFile = staged.state.fileSources.find(
+    (entry) => entry.objectId === staged.stagedObjectId,
+  );
+  assert.ok(stagedFile);
+  assert.equal(stagedForm.original_file_source_id, stagedFile.id);
+  assert.equal(stagedBank.original_file_source_id, undefined);
+});
+
+test("operator-template documents reject missing physical template references", () => {
+  const document = documentFixture();
+  const project = document.objects.find((object) => object.type === "project");
+  project.documents = [
+    {
+      key: "DOC_FORM",
+      data: {
+        label: "Formularz operatora",
+        requirement: "REQUIRED",
+        fulfillment_mode: "OPERATOR_TEMPLATE",
+        signature_requirement: "REQUIRED_FILE",
+      },
+    },
+  ];
+
+  assert.throws(
+    () =>
+      reviewModule.createImportReviewSession(
+        document,
+        "invalid-document.json",
+        ids(),
+        "2026-10-12T13:00:00.000Z",
+      ),
+    /uses OPERATOR_TEMPLATE but has no original_file/,
+  );
 });
 
 test("portable import accepts NGO financing and recruitment condition fields", () => {

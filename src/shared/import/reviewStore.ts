@@ -1,4 +1,7 @@
-import { migrateFundingRefundRanges } from "../domain/stateMigrations";
+import {
+  migrateFileClassificationsToDocumentRequirements,
+  migrateFundingRefundRanges,
+} from "../domain/stateMigrations";
 import type { ImportReviewSession } from "../types/importReview";
 
 import {
@@ -22,6 +25,7 @@ export async function readImportReview(): Promise<ImportReviewSession | null> {
     const session = (value as ImportReviewSession | undefined) ?? null;
     if (session) {
       migrateFundingRefundRanges(session.previewState);
+      migrateFileClassificationsToDocumentRequirements(session.previewState);
       session.importedFieldsByObjectId ||= {};
       session.importedFinancingFieldsByObjectId ||= {};
     }
@@ -35,6 +39,7 @@ export async function writeImportReview(
   session: ImportReviewSession,
 ): Promise<void> {
   migrateFundingRefundRanges(session.previewState);
+  migrateFileClassificationsToDocumentRequirements(session.previewState);
   const database = await openDatabase();
   try {
     const transaction = database.transaction(STORE, "readwrite");
