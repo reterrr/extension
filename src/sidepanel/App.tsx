@@ -174,7 +174,10 @@ export function App() {
                   Obsługiwane pliki: .doc, .docx, .pdf, .xlsx, .png, .jpg,
                   .jpeg, .zip, .rar, .7z, .tar, .gz, .tgz.
                 </p>
-                <div className="document-requirement-heading">
+                <div
+                  id="document-requirement-heading"
+                  className="document-requirement-heading"
+                >
                   <div>
                     <strong>Wymagania dokumentowe</strong>
                     <small>
