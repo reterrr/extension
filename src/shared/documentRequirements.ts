@@ -158,11 +158,10 @@ export function normalizeDocumentRequirement(
 
   // Old rows used only requirement/auto_fill/notes and a catalog key.
   if (!normalized.label) {
-    const legacyName =
-      globalThis.BurbotDocuments?.catalog?.find?.(
-        (entry: { key?: unknown }) =>
-          String(entry.key ?? "") === String(normalized.document_type_key ?? ""),
-      )?.name;
+    const legacyName = globalThis.BurbotDocuments.catalog.find(
+      (entry) =>
+        String(entry.key) === String(normalized.document_type_key ?? ""),
+    )?.name;
     normalized.label =
       (typeof legacyName === "string" && legacyName) ||
       String(normalized.document_type_key ?? "Dokument");
