@@ -477,6 +477,20 @@ test("dynamic documents support operator templates and no-template requirements"
     "Zaświadczenie o prowadzeniu rachunku albo kopia umowy rachunku.",
   );
 
+  const reviewView = reviewModule.importReviewView(session);
+  assert.equal(reviewView.documents.length, 2);
+  assert.equal(reviewView.objects[0].documentCount, 2);
+  assert.equal(reviewView.documents[0].label, "Formularz operatora");
+  assert.equal(reviewView.documents[0].originalFileName, "regulamin.pdf");
+  assert.deepEqual(reviewView.documents[0].sourceFileNames, ["regulamin.pdf"]);
+  assert.ok(
+    reviewView.documents[1].fields.some(
+      (field) =>
+        field.label === "Co należy dostarczyć" &&
+        field.value.includes("Zaświadczenie"),
+    ),
+  );
+
   const approval = reviewModule.buildImportApprovalPlan(
     session,
     importedProject.id,
