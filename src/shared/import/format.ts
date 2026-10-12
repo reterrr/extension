@@ -86,6 +86,8 @@ interface ImportFileMetadata {
 }
 
 interface ImportFileAttachment {
+  /** Stable object-local attachment key. Required when documents reference this file. */
+  key?: string;
   source: string;
   source_page?: string;
   /** Legacy-only. Canonical name is derived from the source URL filename. */
@@ -126,8 +128,13 @@ interface ImportOperatorContact {
 
 interface ImportDocumentRequirement {
   key: string;
-  document_type_key: string;
+  /** Legacy closed-catalog key. New imports should omit this. */
+  document_type_key?: string;
   data: Record<string, unknown>;
+  /** files[].key of the operator template, or null/omitted when no template exists. */
+  original_file?: string | null;
+  /** files[].key entries used as source/evidence for the requirement. */
+  source_files?: string[];
   evidence?: Record<string, ImportEvidence[]>;
 }
 
@@ -325,6 +332,7 @@ function parseDocument(input: unknown): BurbotImportV1 {
         const filePath = `${path}.files[${fileIndex}]`;
         if (!isRecord(entry)) throw new Error(`${filePath} must be an object.`);
         return {
+          key: optionalString(entry.key, `${filePath}.key`),
           source: requiredString(entry.source, `${filePath}.source`),
           source_page: optionalString(entry.source_page, `${filePath}.source_page`),
           name: optionalString(entry.name, `${filePath}.name`),
@@ -457,13 +465,56 @@ function parseDocument(input: unknown): BurbotImportV1 {
         if (!isRecord(entry.data)) {
           throw new Error(`${documentPath}.data must be an object.`);
         }
+
+        const documentTypeKey = optionalString(
+          entry.document_type_key,
+          `${documentPath}.document_type_key`,
+        );
+        const originalFile =
+          entry.original_file === null
+            ? null
+            : optionalString(
+                entry.original_file,
+                `${documentPath}.original_file`,
+              );
+
+        let sourceFiles: string[] | undefined;
+        if (entry.source_files !== undefined) {
+          if (!Array.isArray(entry.source_files)) {
+            throw new Error(`${documentPath}.source_files must be an array.`);
+          }
+          sourceFiles = entry.source_files.map((value, sourceIndex) =>
+            requiredString(
+              value,
+              `${documentPath}.source_files[${sourceIndex}]`,
+            ),
+          );
+          if (new Set(sourceFiles).size !== sourceFiles.length) {
+            throw new Error(
+              `${documentPath}.source_files contains duplicate file keys.`,
+            );
+          }
+        }
+
+        if (
+          !documentTypeKey &&
+          !Object.prototype.hasOwnProperty.call(entry.data, "label")
+        ) {
+          throw new Error(
+            `${documentPath}.data.label is required for a dynamic document requirement.`,
+          );
+        }
+
         return {
           key: requiredString(entry.key, `${documentPath}.key`),
-          document_type_key: requiredString(
-            entry.document_type_key,
-            `${documentPath}.document_type_key`,
-          ),
+          ...(documentTypeKey
+            ? { document_type_key: documentTypeKey }
+            : {}),
           data: entry.data,
+          ...(originalFile !== undefined
+            ? { original_file: originalFile }
+            : {}),
+          ...(sourceFiles ? { source_files: sourceFiles } : {}),
           evidence: parseEvidenceMap(
             entry.evidence,
             `${documentPath}.evidence`,
@@ -471,15 +522,7 @@ function parseDocument(input: unknown): BurbotImportV1 {
         };
       });
       uniqueByKey(documents, `${path} documents`);
-      const documentTypes = new Set<string>();
-      for (const document of documents) {
-        if (documentTypes.has(document.document_type_key)) {
-          throw new Error(
-            `Duplicate ${path} document_type_key: ${document.document_type_key}`,
-          );
-        }
-        documentTypes.add(document.document_type_key);
-      }
+
     }
 
     let financing: ImportFinancingVariant[] | undefined;
