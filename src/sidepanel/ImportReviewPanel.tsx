@@ -1084,13 +1084,13 @@ export function ImportReviewPanel() {
                         {view.documents.map((documentRow) => (
                           <details
                             key={documentRow.id}
-                            className="import-review-finance-card import-review-document-card"
+                            className="import-review-document-card"
                           >
                             <summary>
                               <span>{documentRow.label}</span>
                               <small>{documentRow.key}</small>
                             </summary>
-                            <div className="import-review-finance-fields">
+                            <div className="import-review-document-fields">
                               {documentRow.fields.map((field) => (
                                 <label
                                   key={field.field}
