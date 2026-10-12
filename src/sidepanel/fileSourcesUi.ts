@@ -23,6 +23,7 @@ import type {
 import type { RemoteFileSourceCandidate } from "../shared/types/source";
 import { buildProjectDownloadPlan } from "../shared/fileDownloads";
 import { buildRoundImportZip } from "../shared/export/roundImportZip";
+import { createRequirementFromFile } from "./documentRequirementsUi";
 import {
   projectFileInheritanceStatus,
   projectForRecruitment,
@@ -1004,8 +1005,27 @@ function renderSource(source: LegacyStoredFileSource): HTMLElement {
     );
   };
 
+  const createRequirement = document.createElement("button");
+  createRequirement.type = "button";
+  createRequirement.className = "text-button";
+  createRequirement.textContent = "Utwórz wymaganie";
+  createRequirement.title =
+    "Tworzy wymaganie dokumentowe powiązane z tym wzorem operatora.";
+  createRequirement.onclick = () => {
+    const object = chosenObject();
+    if (!object || object.id !== source.objectId) {
+      notice("Wybierz obiekt, do którego należy ten plik.", true);
+      return;
+    }
+    expandedFileSources.add(source.id);
+    void createRequirementFromFile(object.id, source.id).catch(
+      (error: unknown) =>
+        notice(error instanceof Error ? error.message : String(error), true),
+    );
+  };
+
   if (read) actions.append(read);
-  actions.append(open, remove);
+  actions.append(createRequirement, open, remove);
   body.append(actions);
   row.append(summary, body);
   return row;
