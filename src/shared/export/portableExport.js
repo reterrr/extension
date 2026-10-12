@@ -266,6 +266,13 @@ export function createPortableExport({
       }));
     }
     const files = scoped("fileSources", object);
+    const fileKeys = keysFor(files);
+    const fileKeyById = new Map(
+      files.map((file) => [
+        String(file.id),
+        fileKeys.get(String(file.id)) ?? String(file.id),
+      ]),
+    );
     if (files.length)
       result.files = files.map((file) => {
         const metadata = compact(
@@ -274,6 +281,7 @@ export function createPortableExport({
           ),
         );
         return {
+          key: fileKeys.get(String(file.id)),
           source: useUrl(file.url, file.fileType, file.sourceImportKey),
           ...(file.sourcePageUrl
             ? {
@@ -316,49 +324,91 @@ export function createPortableExport({
         }),
       }));
     }
-    for (const [collection, section, kind, fields] of [
-      [
-        "financingRules",
-        "financing",
-        "funding",
-        globalThis.BurbotFunding?.fields,
-      ],
-      [
-        "documentRequirements",
-        "documents",
-        "document",
-        globalThis.BurbotDocuments?.fields,
-      ],
-    ]) {
-      const rows = scoped(collection, object).sort(
-        (a, b) => Number(a.variant_no ?? 0) - Number(b.variant_no ?? 0),
-      );
-      if (!rows.length) continue;
-      const keys = keysFor(rows);
-      result[section] = rows.map((row) => {
-        const data = dataFor(row, fields, section, [
-          "id",
-          "objectId",
-          "importKey",
-          "company_size",
-          "variant_no",
-          "document_type_key",
-          "copiedAt",
-          "copiedFromProjectId",
-          "copiedFromFundingRuleId",
-        ]);
+    const financingRows = scoped("financingRules", object).sort(
+      (a, b) => Number(a.variant_no ?? 0) - Number(b.variant_no ?? 0),
+    );
+    if (financingRows.length) {
+      const keys = keysFor(financingRows);
+      result.financing = financingRows.map((row) => {
+        const data = dataFor(
+          row,
+          globalThis.BurbotFunding?.fields,
+          "financing",
+          [
+            "id",
+            "objectId",
+            "importKey",
+            "company_size",
+            "variant_no",
+            "copiedAt",
+            "copiedFromProjectId",
+            "copiedFromFundingRuleId",
+          ],
+        );
         return {
           key: keys.get(rowIdentity(row)),
-          ...(section === "financing"
-            ? { company_size: row.company_size }
-            : { document_type_key: row.document_type_key }),
+          company_size: row.company_size,
           data,
-          ...targetEvidence(
-            object,
-            kind,
-            section === "documents" ? row.document_type_key : row.id,
-            data,
-          ),
+          ...targetEvidence(object, "funding", row.id, data),
+        };
+      });
+    }
+
+    const documentRows = scoped("documentRequirements", object);
+    if (documentRows.length) {
+      const keys = keysFor(documentRows);
+      result.documents = documentRows.map((row) => {
+        const data = dataFor(
+          row,
+          globalThis.BurbotDocuments?.fields,
+          "documents",
+          [
+            "id",
+            "objectId",
+            "importKey",
+            "document_type_key",
+            "original_file_source_id",
+            "source_file_ids",
+            "copiedAt",
+            "copiedFromProjectId",
+          ],
+        );
+        const originalFileKey = row.original_file_source_id
+          ? fileKeyById.get(String(row.original_file_source_id))
+          : undefined;
+        const sourceFileKeys = Array.isArray(row.source_file_ids)
+          ? row.source_file_ids
+              .map((id) => fileKeyById.get(String(id)))
+              .filter(Boolean)
+          : [];
+        if (row.original_file_source_id && !originalFileKey) {
+          throw new Error(
+            `Dokument „${row.label ?? row.importKey ?? row.id}” wskazuje plik spoza tego obiektu.`,
+          );
+        }
+        if (
+          Array.isArray(row.source_file_ids) &&
+          sourceFileKeys.length !== row.source_file_ids.length
+        ) {
+          throw new Error(
+            `Dokument „${row.label ?? row.importKey ?? row.id}” ma nierozwiązywalny plik źródłowy.`,
+          );
+        }
+        const evidence =
+          targetEvidence(object, "document", row.id, data).evidence
+            ? targetEvidence(object, "document", row.id, data)
+            : row.document_type_key
+              ? targetEvidence(object, "document", row.document_type_key, data)
+              : {};
+        return {
+          key: keys.get(rowIdentity(row)),
+          ...(row.document_type_key
+            ? { document_type_key: row.document_type_key }
+            : {}),
+          ...(originalFileKey ? { original_file_key: originalFileKey } : {}),
+          ...(sourceFileKeys.length ? { source_file_keys: sourceFileKeys } : {}),
+          data,
+          ...evidence,
         };
       });
     }
