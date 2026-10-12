@@ -3,6 +3,7 @@ import {
   uniqueDownloadFileNames,
 } from "../fileDownloads";
 import { projectForRecruitment } from "../fileInheritance";
+import type { LegacyStoredDocumentRequirement } from "../documentRequirements";
 import type {
   LegacyStorageState,
   LegacyStoredFileSource,
@@ -547,6 +548,144 @@ function documentFromFile(
   return document;
 }
 
+
+function requirementFromRow(value: unknown): RoundRequirement {
+  switch (String(value ?? "")) {
+    case "REQUIRED":
+      return "required";
+    case "CONDITIONAL":
+    case "OPTIONAL":
+      return "conditional";
+    case "INFORMATIONAL":
+      return "informational";
+    default:
+      return "unknown";
+  }
+}
+
+function signatureFromRow(value: unknown): RoundSignatureRequirement {
+  switch (String(value ?? "")) {
+    case "NOT_REQUIRED":
+      return "not_required";
+    case "REQUIRED_FILE":
+      return "required_file";
+    case "EXTERNAL_OPERATOR":
+      return "external_operator";
+    default:
+      return "unknown";
+  }
+}
+
+function responsibilityFromRow(
+  value: unknown,
+): "fundpilot" | "client" | "shared" | null {
+  switch (String(value ?? "")) {
+    case "FUNDPILOT":
+      return "fundpilot";
+    case "CLIENT":
+      return "client";
+    case "SHARED":
+      return "shared";
+    default:
+      return null;
+  }
+}
+
+function documentFromRequirement(
+  row: LegacyStoredDocumentRequirement,
+  fileIdBySourceId: Map<string, string>,
+): RoundImportDocument {
+  const label =
+    boundedText(
+      row.label || row.document_type_key || row.importKey || "Dokument",
+      500,
+      `documents.${row.id}.label`,
+    ) || "Dokument";
+  const purpose =
+    boundedText(row.purpose, 1000, `documents.${row.id}.purpose`) ||
+    "Wymaganie dokumentowe";
+  const requirement = requirementFromRow(row.requirement);
+  const originalFileId = row.original_file_source_id
+    ? fileIdBySourceId.get(String(row.original_file_source_id))
+    : undefined;
+  if (row.original_file_source_id && !originalFileId) {
+    throw new Error(
+      `Dokument „${label}” wskazuje plik operatora, który nie jest przypięty do naboru.`,
+    );
+  }
+
+  const sourceFileIds = (row.source_file_ids ?? []).map((sourceId) => {
+    const mapped = fileIdBySourceId.get(String(sourceId));
+    if (!mapped) {
+      throw new Error(
+        `Dokument „${label}” wskazuje plik źródłowy, który nie jest przypięty do naboru.`,
+      );
+    }
+    return mapped;
+  });
+
+  const fulfillmentMode =
+    requirement === "informational"
+      ? "without_operator_template"
+      : row.fulfillment_mode === "OPERATOR_TEMPLATE"
+        ? "operator_template"
+        : "without_operator_template";
+
+  const document: RoundImportDocument = {
+    key: String(row.importKey ?? row.id),
+    label,
+    purpose,
+    requirement,
+    fulfillmentMode,
+    ...(cleanText(row.condition)
+      ? {
+          condition: boundedText(
+            row.condition,
+            1000,
+            `documents.${row.id}.condition`,
+          ),
+        }
+      : {}),
+    ...(cleanText(row.delivery_stage)
+      ? { deliveryStage: cleanText(row.delivery_stage).slice(0, 60) }
+      : {}),
+    responsibility: responsibilityFromRow(row.responsibility),
+    ...(cleanText(row.required_evidence)
+      ? {
+          requiredEvidence: boundedText(
+            row.required_evidence,
+            4000,
+            `documents.${row.id}.requiredEvidence`,
+          ),
+        }
+      : {}),
+    ...(originalFileId ? { originalFileId } : {}),
+    ...(sourceFileIds.length ? { sourceFileIds } : {}),
+    ...(httpUrl(row.source_url) ? { sourceUrl: httpUrl(row.source_url) } : {}),
+    ...(cleanText(row.source_description)
+      ? {
+          sourceDescription: boundedText(
+            row.source_description,
+            1000,
+            `documents.${row.id}.sourceDescription`,
+          ),
+        }
+      : {}),
+    ...(cleanText(row.version_label)
+      ? {
+          versionLabel: boundedText(
+            row.version_label,
+            255,
+            `documents.${row.id}.versionLabel`,
+          ),
+        }
+      : {}),
+    signatureRequirement: signatureFromRow(row.signature_requirement),
+  };
+
+  return document;
+}
+
 function officialIdentity(
   recruitment: LegacyStoredObject,
 ): Pick<
@@ -686,6 +825,25 @@ export function buildRoundImportPackagePlan(
     5000,
     "workspace.notes",
   );
+  const fileIdBySourceId = new Map(
+    packageFiles.map((file) => [String(file.source.id), file.id]),
+  );
+  const storedDocuments = (
+    (state.documentRequirements ?? []) as LegacyStoredDocumentRequirement[]
+  ).filter((row) => row.objectId === recruitment.id);
+  if (storedDocuments.length > 30) {
+    throw new Error(
+      `Nabór ma ${storedDocuments.length} wymagań dokumentowych; RoundImportManifestV1 dopuszcza maksymalnie 30.`,
+    );
+  }
+  const documents = storedDocuments.length
+    ? storedDocuments.map((row) =>
+        documentFromRequirement(row, fileIdBySourceId),
+      )
+    : packageFiles.map((file, index) =>
+        documentFromFile(file.source, declarations[index]),
+      );
+
   const manifest: RoundImportManifestV1 = {
     format: "RoundImportManifestV1",
     name: recruitmentName(recruitment),
@@ -694,9 +852,7 @@ export function buildRoundImportPackagePlan(
       notes,
       ...(roundSchedule ? { schedule: roundSchedule } : {}),
       conditions,
-      documents: packageFiles.map((file, index) =>
-        documentFromFile(file.source, declarations[index]),
-      ),
+      documents,
     },
   };
 
