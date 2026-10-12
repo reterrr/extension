@@ -8,7 +8,7 @@ Both **Eksportuj zestaw** and **Eksportuj wszystkie dane JSON** write this same 
 
 Older `burbot-ai-view` documents and full workspace JSON backups are converted to the same business format on import. Identical nested/top-level copies are deduplicated by ID; conflicting copies produce an error. Unknown business fields and missing referenced objects are reported, not silently removed. Legacy rules are never executed or reconstructed by import.
 
-The v1 format is backward compatible. Objects can declare remote file attachments, contacts, geography and financing variants.
+The v1 format is backward compatible. Objects can declare remote file attachments, dynamic document requirements, contacts, geography and financing variants. A document requirement may reference an operator template from `files[]`, or exist without any template at all.
 
 A complete importable example lives at:
 
@@ -49,6 +49,7 @@ That example is covered by the import-review tests so its offsets, references, f
       },
       "files": [
         {
+          "key": "FILE_REGULATIONS",
           "source": "regulations-pdf",
           "source_page": "project-page",
           "metadata": {
@@ -59,6 +60,20 @@ That example is covered by the import-review tests so its offsets, references, f
             "client_requirement": "Informacyjny",
             "signature_requirement": "Nie jest wymagany"
           }
+        }
+      ],
+      "documents": [
+        {
+          "key": "DOC_REGULATIONS",
+          "data": {
+            "label": "Regulamin projektu",
+            "purpose": "Materiał informacyjny opisujący zasady udziału.",
+            "requirement": "INFORMATIONAL",
+            "fulfillment_mode": "WITHOUT_OPERATOR_TEMPLATE",
+            "responsibility": "CLIENT",
+            "signature_requirement": "NOT_REQUIRED"
+          },
+          "source_files": ["FILE_REGULATIONS"]
         }
       ]
     }
@@ -145,6 +160,7 @@ Archive attachments use the same business metadata fields as other files.
 Burbot does not extract field values from inside archives; the dedicated
 value-extraction workflow remains PDF-only.
 
+- `key` — optional stable attachment key, but required when any `documents[]` row references this file through `original_file` or `source_files`. New exports always emit it.
 - `source` — required source key. It must point to one of the supported file source types with an HTTP(S) `url`. ZIP/RAR/7Z/TAR/GZ/TGZ sources are valid attachments and can be classified normally.
 - `source_page` — optional source key for the page where the file link was found. If supplied, that source must have a URL.
 - `name` — legacy-only input. The stored technical filename is always derived from the remote file URL; when `metadata.display_name` is absent, legacy `name` is used as the business display-name fallback.
@@ -177,6 +193,74 @@ When file metadata is missing, Burbot may apply conservative filename-based defa
 Older v1 imports may still contain `document_kind` and `delivery_method`. They remain accepted for backward compatibility but are not part of the current file editor/export model.
 
 This creates an object-level Burbot file source that remains available after approval.
+
+## `objects[].documents[]`
+
+Document requirements are first-class business rows and are deliberately separate from physical file attachments.
+
+Use them for all documents that matter in the process, including documents for which the operator does **not** provide a template: a BUR Service Card, bank-account proof, KRS/CEIDG printout, invoice, payment confirmation, certificate, power of attorney or another externally obtained document.
+
+A dynamic document row contains:
+
+- `key` — required stable document-requirement key;
+- `data.label` — required readable name, up to 500 characters;
+- `data.purpose` — free-text purpose, up to 1000 characters;
+- `data.requirement` — `UNKNOWN`, `REQUIRED`, `CONDITIONAL`, or `INFORMATIONAL`;
+- `data.condition` — condition for a conditional requirement, up to 1000 characters;
+- `data.fulfillment_mode` — `OPERATOR_TEMPLATE` or `WITHOUT_OPERATOR_TEMPLATE`;
+- `data.delivery_stage` — process stage, up to 60 characters;
+- `data.responsibility` — `FUNDPILOT`, `CLIENT`, or `SHARED`;
+- `data.required_evidence` — what must actually be delivered/shown, up to 4000 characters;
+- `data.source_url` — optional official HTTP(S) URL;
+- `data.source_description` — explanation of the source/basis, up to 1000 characters;
+- `data.version_label` — optional version label, up to 255 characters;
+- `data.signature_requirement` — `UNKNOWN`, `NOT_REQUIRED`, `REQUIRED_FILE`, or `EXTERNAL_OPERATOR`;
+- `original_file` — optional `files[].key` identifying the operator-provided template. It is required when `fulfillment_mode` is `OPERATOR_TEMPLATE`;
+- `source_files` — optional unique list of `files[].key` entries that prove/explain the requirement. A regulation can be a source file without being a document that the client submits;
+- `evidence` — optional evidence for fields inside `data`.
+
+For an informational document, Burbot normalizes the fulfillment mode to `WITHOUT_OPERATOR_TEMPLATE` and does not treat the physical file as a client template.
+
+Example without an operator template:
+
+```json
+{
+  "key": "DOC_BUR_SERVICE_CARD",
+  "data": {
+    "label": "Karta Usługi opublikowana w BUR",
+    "purpose": "Potwierdzenie wybranej usługi przy zgłoszeniu.",
+    "requirement": "REQUIRED",
+    "fulfillment_mode": "WITHOUT_OPERATOR_TEMPLATE",
+    "delivery_stage": "ZGLOSZENIE",
+    "responsibility": "CLIENT",
+    "required_evidence": "Karta Usługi pobrana z BUR dla wybranej usługi.",
+    "signature_requirement": "NOT_REQUIRED"
+  },
+  "source_files": ["FILE_REGULATIONS"]
+}
+```
+
+Example using an operator template:
+
+```json
+{
+  "key": "DOC_DE_MINIMIS",
+  "data": {
+    "label": "Wniosek o udzielenie pomocy de minimis",
+    "requirement": "CONDITIONAL",
+    "condition": "Gdy wsparcie stanowi pomoc de minimis.",
+    "fulfillment_mode": "OPERATOR_TEMPLATE",
+    "delivery_stage": "ZGLOSZENIE",
+    "responsibility": "CLIENT",
+    "required_evidence": "Wypełniony i podpisany formularz operatora.",
+    "signature_requirement": "REQUIRED_FILE"
+  },
+  "original_file": "FILE_DE_MINIMIS",
+  "source_files": ["FILE_REGULATIONS", "FILE_DE_MINIMIS"]
+}
+```
+
+The old `document_type_key`, `auto_fill`, and `notes` representation is still accepted for backward compatibility. New imports should use the dynamic fields above instead.
 
 ## `objects[].financing[]`
 
@@ -220,6 +304,7 @@ For an in-place update:
 - financing variants are upserted by their stable financing `key`; only fields supplied for that variant are changed;
 - existing financing fields omitted by AI are preserved;
 - files are upserted by URL rather than duplicated;
+- document requirements are upserted by their stable `key`; operator-template and source-file links are remapped to the target object's file records;
 - imported evidence/sources are attached to the updated values;
 - the existing object's internal ID remains unchanged.
 
