@@ -86,6 +86,7 @@ interface ImportFileMetadata {
 }
 
 interface ImportFileAttachment {
+  key?: string;
   source: string;
   source_page?: string;
   /** Legacy-only. Canonical name is derived from the source URL filename. */
@@ -126,8 +127,12 @@ interface ImportOperatorContact {
 
 interface ImportDocumentRequirement {
   key: string;
-  document_type_key: string;
+  /** Legacy closed-catalog identifier. New imports should omit it. */
+  document_type_key?: string;
   data: Record<string, unknown>;
+  /** References objects[].files[].key values inside the same object. */
+  original_file_key?: string;
+  source_file_keys?: string[];
   evidence?: Record<string, ImportEvidence[]>;
 }
 
@@ -325,6 +330,7 @@ function parseDocument(input: unknown): BurbotImportV1 {
         const filePath = `${path}.files[${fileIndex}]`;
         if (!isRecord(entry)) throw new Error(`${filePath} must be an object.`);
         return {
+          key: optionalString(entry.key, `${filePath}.key`),
           source: requiredString(entry.source, `${filePath}.source`),
           source_page: optionalString(entry.source_page, `${filePath}.source_page`),
           name: optionalString(entry.name, `${filePath}.name`),
@@ -332,6 +338,12 @@ function parseDocument(input: unknown): BurbotImportV1 {
           evidence: parseEvidenceMap(entry.evidence, `${filePath}.evidence`),
         };
       });
+      const fileKeys = files
+        .map((file) => file.key)
+        .filter((key): key is string => Boolean(key));
+      if (new Set(fileKeys).size !== fileKeys.length) {
+        throw new Error(`Duplicate ${path}.files[].key.`);
+      }
     }
 
 
@@ -457,13 +469,38 @@ function parseDocument(input: unknown): BurbotImportV1 {
         if (!isRecord(entry.data)) {
           throw new Error(`${documentPath}.data must be an object.`);
         }
+        const sourceFileKeys =
+          entry.source_file_keys === undefined
+            ? undefined
+            : Array.isArray(entry.source_file_keys)
+              ? entry.source_file_keys.map((value, sourceIndex) =>
+                  requiredString(
+                    value,
+                    `${documentPath}.source_file_keys[${sourceIndex}]`,
+                  ),
+                )
+              : (() => {
+                  throw new Error(
+                    `${documentPath}.source_file_keys must be an array.`,
+                  );
+                })();
+        if (sourceFileKeys && sourceFileKeys.length > 30) {
+          throw new Error(
+            `${documentPath}.source_file_keys can contain at most 30 entries.`,
+          );
+        }
         return {
           key: requiredString(entry.key, `${documentPath}.key`),
-          document_type_key: requiredString(
+          document_type_key: optionalString(
             entry.document_type_key,
             `${documentPath}.document_type_key`,
           ),
           data: entry.data,
+          original_file_key: optionalString(
+            entry.original_file_key,
+            `${documentPath}.original_file_key`,
+          ),
+          source_file_keys: sourceFileKeys,
           evidence: parseEvidenceMap(
             entry.evidence,
             `${documentPath}.evidence`,
@@ -471,14 +508,15 @@ function parseDocument(input: unknown): BurbotImportV1 {
         };
       });
       uniqueByKey(documents, `${path} documents`);
-      const documentTypes = new Set<string>();
+      const legacyDocumentTypes = new Set<string>();
       for (const document of documents) {
-        if (documentTypes.has(document.document_type_key)) {
+        if (!document.document_type_key) continue;
+        if (legacyDocumentTypes.has(document.document_type_key)) {
           throw new Error(
             `Duplicate ${path} document_type_key: ${document.document_type_key}`,
           );
         }
-        documentTypes.add(document.document_type_key);
+        legacyDocumentTypes.add(document.document_type_key);
       }
     }
 
