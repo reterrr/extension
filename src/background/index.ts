@@ -46,6 +46,7 @@ import {
   copyProjectGeographiesToRecruitment,
 } from "../shared/configurationInheritance";
 import { discardStaleImportedEvidence } from "../shared/import/evidence";
+import { mutateDocumentRequirement } from "../shared/documentRequirements";
 import { importDocumentIntoState } from "../shared/import/format";
 import { isPickerSelectionResponse } from "../shared/messaging/picker";
 import {
@@ -86,6 +87,10 @@ const ALLOWED_WRITES = new Set<string>([
   "ADD_FILE_SOURCE",
   "UPDATE_FILE_SOURCE",
   "REMOVE_FILE_SOURCE",
+  "ADD_DOCUMENT_REQUIREMENT",
+  "CREATE_DOCUMENT_REQUIREMENT_FROM_FILE",
+  "UPDATE_DOCUMENT_REQUIREMENT",
+  "REMOVE_DOCUMENT_REQUIREMENT",
   "INHERIT_PROJECT_FILES",
   "ADD_OPERATOR_CONTACT",
   "REMOVE_OPERATOR_CONTACT",
@@ -1184,6 +1189,18 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
       message.op === "INHERIT_PROJECT_FILES"
     ) {
       next = mutateFileSource(state, message, now);
+    } else if (
+      message.op === "ADD_DOCUMENT_REQUIREMENT" ||
+      message.op === "CREATE_DOCUMENT_REQUIREMENT_FROM_FILE" ||
+      message.op === "UPDATE_DOCUMENT_REQUIREMENT" ||
+      message.op === "REMOVE_DOCUMENT_REQUIREMENT"
+    ) {
+      next = mutateDocumentRequirement(
+        state,
+        message,
+        () => crypto.randomUUID(),
+        now,
+      );
     } else if (
       message.op === "INHERIT_PROJECT_GEOGRAPHY" ||
       message.op === "INHERIT_PROJECT_FUNDING"
