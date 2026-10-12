@@ -318,6 +318,40 @@ style.textContent = `
     font-size: 12px;
     font-weight: 700;
   }
+  .import-review-document-card {
+    border: 1px solid #e1e8e2;
+    border-radius: 9px;
+    background: #fafcfa;
+  }
+  .import-review-document-card > summary {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 9px 10px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 700;
+  }
+  .import-review-document-card > summary small {
+    color: #859188;
+    font-size: 12px;
+    font-weight: 500;
+  }
+  .import-review-document-fields {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 7px;
+    padding: 0 9px 9px;
+  }
+  .import-review-document-fields label {
+    display: grid;
+    gap: 3px;
+    min-width: 0;
+  }
+  .import-review-document-fields label > small {
+    color: #7a887f;
+    font-size: 12px;
+  }
   .import-review-finance-card > summary small {
     color: #859188;
     font-size: 12px;
@@ -386,6 +420,7 @@ style.textContent = `
     .import-review-layout { grid-template-columns: 1fr; }
     .import-review-list { border-right: 0; border-bottom: 1px solid #edf1ed; }
     .import-review-finance-fields { grid-template-columns: 1fr; }
+    .import-review-document-fields { grid-template-columns: 1fr; }
     .import-review-section-heading { align-items: flex-start; }
     .import-review-section-heading > small { max-width: 55%; }
   }
