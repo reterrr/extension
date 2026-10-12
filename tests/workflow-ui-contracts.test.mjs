@@ -282,14 +282,15 @@ test("Documents section separates physical files from document requirements", ()
     "Co należy dostarczyć",
     "Oficjalne źródło",
     "Opis źródła",
-    "Wersja dokumentu",
-    "Pliki źródłowe / dowodowe",
   ]) {
     assert.ok(
       documents.includes(label),
       `missing document requirement label: ${label}`,
     );
   }
+
+  assert.equal(documents.includes("Wersja dokumentu"), false);
+  assert.equal(documents.includes("Pliki źródłowe / dowodowe"), false);
 
   assert.match(files, /Dodaj jako wymaganie/);
   assert.match(files, /renderDocumentRequirementsUi/);
