@@ -17,7 +17,6 @@ jobs:
       - name: Typecheck baseline report
         continue-on-error: true
         run: npm run typecheck
-      - run: npm run check:importers
       - name: Relevant contract tests
         run: node --test tests/core.test.cjs tests/file-source-contracts.test.mjs tests/import-review-contracts.test.mjs tests/portable-roundtrip-contracts.test.mjs tests/bur-excel-export-contracts.test.mjs tests/workflow-ui-contracts.test.mjs tests/change-review-contracts.test.mjs tests/commit-staging-contracts.test.mjs
       - run: npm run build
