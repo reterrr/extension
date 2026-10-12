@@ -308,7 +308,7 @@ function stageExistingObjectUpdate(
     );
     if (targetFile) {
       targetFile.name = importedFile.name;
-      targetFile.importKey = importedFile.importKey;
+      if (importedFile.importKey) targetFile.importKey = importedFile.importKey;
       targetFile.sourcePageUrl = importedFile.sourcePageUrl;
       targetFile.sourceImportKey = importedFile.sourceImportKey;
       targetFile.sourcePageImportKey = importedFile.sourcePageImportKey;
