@@ -624,7 +624,7 @@ export function buildBurSheets(snapshot, geographySource) {
       typ_obiektu: object?.type,
       nazwa_obiektu: objectName(object),
       document_type_key: item.document_type_key,
-      nazwa_dokumentu: catalog?.name,
+      nazwa_dokumentu: item.label ?? catalog?.name,
       wewnetrzny: yesNo(catalog?.internal ?? false),
       ostatnia_zmiana_obiektu: object?.updatedAt,
     };
