@@ -654,18 +654,65 @@
     fields: fundingFields,
   });
 
-  // Legacy compatibility only. The current workspace does not expose a
-  // predefined document-type catalog: real files are attached dynamically and
-  // classified on the file record itself. Keep this runtime only so old
-  // committed states/imports and extraction targets can still be read.
+  // Dynamic document requirements are separate from physical file sources.
+  // The legacy catalog remains available only so old committed rows/imports can
+  // still be read and exported.
   globalThis.BurbotDocuments = Object.freeze({
     fields: {
-      requirement: choice("Requirement", {
-        REQUIRED: "Required",
-        OPTIONAL: "Optional",
+      label: text("Nazwa", "Dokumenty", { maxLength: 500 }),
+      purpose: text("Przeznaczenie", "Dokumenty", {
+        multiline: true,
+        maxLength: 1000,
       }),
-      auto_fill: { label: "Auto-fill", type: "boolean" },
-      notes: text("Notes", "Documents", { multiline: true }),
+      requirement: choice("Wymagalność", {
+        UNKNOWN: "Nie ustalono",
+        REQUIRED: "Obowiązkowy",
+        CONDITIONAL: "Warunkowy",
+        INFORMATIONAL: "Informacyjny",
+        OPTIONAL: "Opcjonalny (legacy)",
+      }),
+      condition: text("Kiedy dokument jest wymagany", "Dokumenty", {
+        multiline: true,
+        maxLength: 1000,
+      }),
+      fulfillment_mode: choice("Źródło / sposób przygotowania", {
+        OPERATOR_TEMPLATE: "Wzór udostępniony przez operatora",
+        WITHOUT_OPERATOR_TEMPLATE: "Dokument dostarczany bez wzoru operatora",
+      }),
+      delivery_stage: text("Etap dostarczenia", "Dokumenty", {
+        maxLength: 60,
+      }),
+      responsibility: choice("Odpowiedzialność", {
+        FUNDPILOT: "FundPilot",
+        CLIENT: "Klient",
+        SHARED: "Wspólna",
+      }),
+      required_evidence: text("Co należy dostarczyć", "Dokumenty", {
+        multiline: true,
+        maxLength: 4000,
+      }),
+      source_url: url("Oficjalne źródło"),
+      source_description: text("Opis źródła", "Dokumenty", {
+        multiline: true,
+        maxLength: 1000,
+      }),
+      version_label: text("Wersja dokumentu", "Dokumenty", {
+        maxLength: 255,
+      }),
+      signature_requirement: choice("Podpis", {
+        UNKNOWN: "Nie ustalono",
+        NOT_REQUIRED: "Nie jest wymagany",
+        REQUIRED_FILE: "Wymagany podpisany plik",
+        EXTERNAL_OPERATOR: "Dowód / podpis w systemie operatora",
+      }),
+
+      // Legacy fields remain importable/exportable but are no longer used by
+      // the current document editor.
+      auto_fill: { label: "Auto-fill (legacy)", type: "boolean", legacy: true },
+      notes: text("Notes (legacy)", "Documents", {
+        multiline: true,
+        legacy: true,
+      }),
     },
     catalog: [
       ["msp_application_form", "Formularz zgłoszeniowy MSP (Zał. 1)"],
