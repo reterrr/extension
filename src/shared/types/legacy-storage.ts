@@ -136,6 +136,9 @@ export interface LegacyStoredFileSource {
   sourcePageUrl: string;
   addedAt: string;
 
+  /** Stable portable key for this attachment when it came from / is exported to JSON. */
+  importKey?: string;
+
   /** Business-facing document name; the physical filename remains in `name`. */
   display_name?: string;
   purpose?: FilePurpose | string;
