@@ -112,8 +112,7 @@ if (!document.querySelector("style[data-burbot-file-sources]")) {
   display: grid;
   gap: 3px;
 }
-.document-requirement-field > span,
-.document-requirement-source-files > legend {
+.document-requirement-field > span {
   color: var(--muted);
   font-size: 12px;
   font-weight: 700;
@@ -134,23 +133,6 @@ if (!document.querySelector("style[data-burbot-file-sources]")) {
 .document-requirement-field textarea {
   min-height: 66px;
   resize: vertical;
-}
-.document-requirement-source-files {
-  display: grid;
-  gap: 5px;
-  margin: 0;
-  padding: 7px 8px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-}
-.document-requirement-source-files label {
-  display: flex;
-  align-items: flex-start;
-  gap: 6px;
-  font-size: 12px;
-}
-.document-requirement-source-files input {
-  margin-top: 2px;
 }
 .document-requirement-save {
   justify-self: start;
