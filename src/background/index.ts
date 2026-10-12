@@ -711,12 +711,20 @@ function mutateDocumentRequirement(
           entry.id === message.fileSourceId && entry.objectId === object.id,
       );
       if (!source) throw new Error("Plik operatora nie istnieje.");
+      const sourceLabel =
+        (source.display_name?.trim() || source.name).trim().toLocaleLowerCase(
+          "pl-PL",
+        );
       if (
-        rows.some(
-          (entry) =>
-            entry.objectId === object.id &&
-            entry.original_file_source_id === source.id,
-        )
+        rows.some((entry) => {
+          if (entry.objectId !== object.id) return false;
+          if (entry.original_file_source_id === source.id) return true;
+          return (
+            (entry.source_file_source_ids ?? []).includes(source.id) &&
+            Boolean(entry.label?.trim()) &&
+            entry.label.trim().toLocaleLowerCase("pl-PL") === sourceLabel
+          );
+        })
       ) {
         throw new Error("Ten plik ma już wymaganie dokumentowe.");
       }
