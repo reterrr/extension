@@ -127,7 +127,7 @@ export function documentRequirementFromFile(
     objectId,
     importKey,
     label,
-    purpose: intendedUse,
+    purpose: intendedUse.slice(0, 1000),
     requirement,
     ...(requirement === "CONDITIONAL" && intendedUse
       ? { condition: intendedUse.slice(0, 1000) }
