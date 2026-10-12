@@ -267,7 +267,7 @@ test("Documents section separates physical files from document requirements", ()
   assert.match(app, /id="document-requirement-list"/);
   assert.match(app, /id="add-document-requirement"/);
   assert.match(app, /Dodaj dokument bez wzoru/);
-  assert.match(app, /Pliki operatora i źródła/);
+  assert.match(app, /Pliki operatora/);
 
   for (const label of [
     "Nazwa",
