@@ -536,7 +536,6 @@ function documentFromFile(
       ? "operator_template"
       : "without_operator_template",
     originalFileId: usesOperatorTemplate ? declaration.id : null,
-    sourceFileIds: [declaration.id],
     signatureRequirement: signatureRequirement(source),
   };
 
@@ -610,16 +609,6 @@ function documentRequirement(
     );
   }
 
-  const sourceFileIds = (row.source_file_source_ids ?? []).map((sourceId) => {
-    const fileId = fileIdBySourceId.get(sourceId);
-    if (!fileId) {
-      throw new Error(
-        `Dokument „${label}” wskazuje plik źródłowy, którego nie ma w paczce ZIP.`,
-      );
-    }
-    return fileId;
-  });
-
   const document: RoundImportDocument = {
     key: boundedText(key, 100, "documents.key"),
     label: boundedText(label, 500, "documents.label"),
@@ -631,7 +620,6 @@ function documentRequirement(
     requirement: normalizedRequirement,
     fulfillmentMode: normalizedFulfillment,
     originalFileId: originalFileId ?? null,
-    sourceFileIds,
     signatureRequirement:
       signatureMap[String(row.signature_requirement ?? "UNKNOWN")] ?? "unknown",
   };
@@ -652,11 +640,6 @@ function documentRequirement(
     1000,
     "documents.sourceDescription",
   );
-  const versionLabel = boundedText(
-    row.version_label,
-    255,
-    "documents.versionLabel",
-  );
   const sourceUrl = httpUrl(row.source_url);
   const responsibility =
     responsibilityMap[String(row.responsibility ?? "")] ?? null;
@@ -667,7 +650,6 @@ function documentRequirement(
   if (requiredEvidence) document.requiredEvidence = requiredEvidence;
   if (sourceUrl) document.sourceUrl = sourceUrl;
   if (sourceDescription) document.sourceDescription = sourceDescription;
-  if (versionLabel) document.versionLabel = versionLabel;
 
   return document;
 }
