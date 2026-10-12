@@ -158,8 +158,8 @@ export function App() {
             <details id="file-sources-panel" className="workspace-section-card">
               <summary className="workspace-section-summary">
                 <span className="workspace-section-title">
-                  <strong>Pliki</strong>
-                  <small>Dokumenty, wymagania i podpisy</small>
+                  <strong>Dokumenty</strong>
+                  <small>Wymagania klienta, wzory operatora i pliki źródłowe</small>
                 </span>
                 <span
                   id="file-source-count"
@@ -174,6 +174,31 @@ export function App() {
                   Obsługiwane pliki: .doc, .docx, .pdf, .xlsx, .png, .jpg,
                   .jpeg, .zip, .rar, .7z, .tar, .gz, .tgz.
                 </p>
+                <div className="document-requirement-heading">
+                  <div>
+                    <strong>Wymagania dokumentowe</strong>
+                    <small>
+                      Dokument może mieć wzór operatora albo być dostarczany przez klienta bez wzoru.
+                    </small>
+                  </div>
+                  <button
+                    id="add-document-requirement"
+                    className="text-button"
+                    type="button"
+                  >
+                    + Dodaj dokument bez wzoru
+                  </button>
+                </div>
+                <div
+                  id="document-requirement-list"
+                  className="document-requirement-list"
+                />
+                <div className="file-source-subheading">
+                  <strong>Pliki operatora i źródła</strong>
+                  <small>
+                    Fizyczne załączniki pozostają osobno od wymagań dokumentowych.
+                  </small>
+                </div>
                 <div id="file-source-list" className="file-source-list" />
                 <div
                   id="local-file-drop-zone"
