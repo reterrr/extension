@@ -129,6 +129,8 @@ export interface LegacyStoredGeography {
 export interface LegacyStoredFileSource {
   id: string;
   objectId: string;
+  /** Stable portable key used by documents[] references. */
+  importKey?: string;
   fileType: SourceFileType;
   url: string;
   /** Canonical URL filename when available; otherwise a page-provided document label. */
