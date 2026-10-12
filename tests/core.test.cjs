@@ -249,6 +249,21 @@ test("formats business values, validates enums, dates, NIP, percentages and refe
   assert.equal(F.own_contribution_percent_min.group, "Wkład własny");
   assert.equal(F.own_contribution_form.label, "Forma wkładu własnego");
   assert.equal(F.notes.label, "Uwagi");
+  const D = s.context.BurbotDocuments.fields;
+  assert.equal(D.label.label, "Nazwa");
+  assert.equal(D.label.maxLength, 500);
+  assert.equal(D.purpose.maxLength, 1000);
+  assert.equal(
+    D.fulfillment_mode.options.OPERATOR_TEMPLATE,
+    "Wzór udostępniony przez operatora",
+  );
+  assert.equal(
+    D.fulfillment_mode.options.WITHOUT_OPERATOR_TEMPLATE,
+    "Dokument dostarczany bez wzoru operatora",
+  );
+  assert.equal(D.required_evidence.maxLength, 4000);
+  assert.equal(D.source_url.type, "url");
+  assert.equal(D.signature_requirement.options.REQUIRED_FILE, "Wymagany podpisany plik");
   assert.equal(
     s.C.coerceField("95%", F.refund_percent_base, s.state),
     95,
