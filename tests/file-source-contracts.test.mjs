@@ -541,6 +541,131 @@ test("recruitment RoundImport ZIP plan matches the strict V5 manifest contract",
 });
 
 
+test("RoundImport exports configured documents including requirements without operator templates", () => {
+  const state = {
+    version: 1,
+    revision: 1,
+    objects: [
+      {
+        id: "project",
+        type: "project",
+        values: { name: "Projekt" },
+      },
+      {
+        id: "round",
+        type: "recruitment",
+        values: {
+          external_number: "Nabór 1/2026",
+          project_id: "project",
+          status: "AKTYWNY",
+        },
+      },
+    ],
+    rules: [],
+    fileSources: [
+      {
+        id: "rules",
+        objectId: "round",
+        fileType: "PDF",
+        url: "https://example.test/regulamin.pdf",
+        sourcePageUrl: "https://example.test/nabor",
+        name: "regulamin.pdf",
+        addedAt: "2026-10-01T12:00:00Z",
+      },
+      {
+        id: "form",
+        objectId: "round",
+        fileType: "DOCX",
+        url: "https://example.test/formularz.docx",
+        sourcePageUrl: "https://example.test/nabor",
+        name: "formularz.docx",
+        addedAt: "2026-10-01T12:00:00Z",
+      },
+    ],
+    documentRequirements: [
+      {
+        id: "doc-rules",
+        objectId: "round",
+        importKey: "DOC_RULES",
+        label: "Regulamin naboru",
+        purpose: "Materiał informacyjny.",
+        requirement: "INFORMATIONAL",
+        fulfillment_mode: "WITHOUT_OPERATOR_TEMPLATE",
+        signature_requirement: "NOT_REQUIRED",
+        source_file_source_ids: ["rules"],
+      },
+      {
+        id: "doc-form",
+        objectId: "round",
+        importKey: "DOC_FORM",
+        label: "Formularz zgłoszeniowy",
+        purpose: "Formularz składany przy zgłoszeniu.",
+        requirement: "CONDITIONAL",
+        condition: "Gdy podmiot składa zgłoszenie w tej ścieżce.",
+        fulfillment_mode: "OPERATOR_TEMPLATE",
+        delivery_stage: "ZGLOSZENIE",
+        responsibility: "CLIENT",
+        required_evidence: "Wypełniony i podpisany formularz operatora.",
+        original_file_source_id: "form",
+        source_file_source_ids: ["rules", "form"],
+        source_url: "https://example.test/nabor",
+        source_description: "Wymóg z regulaminu.",
+        version_label: "1.0",
+        signature_requirement: "REQUIRED_FILE",
+      },
+      {
+        id: "doc-bank",
+        objectId: "round",
+        importKey: "DOC_BANK",
+        label: "Potwierdzenie rachunku bankowego",
+        purpose: "Potwierdza rachunek wnioskodawcy.",
+        requirement: "REQUIRED",
+        fulfillment_mode: "WITHOUT_OPERATOR_TEMPLATE",
+        delivery_stage: "ZGLOSZENIE",
+        responsibility: "CLIENT",
+        required_evidence:
+          "Zaświadczenie o prowadzeniu rachunku lub kopia umowy rachunku.",
+        source_file_source_ids: ["rules"],
+        signature_requirement: "UNKNOWN",
+      },
+    ],
+  };
+
+  const plan = roundImportZip.buildRoundImportPackagePlan(
+    state,
+    state.objects[1],
+  );
+  assert.equal(plan.manifest.workspace.documents.length, 3);
+
+  const [rules, form, bank] = plan.manifest.workspace.documents;
+  assert.deepEqual(rules, {
+    key: "DOC_RULES",
+    label: "Regulamin naboru",
+    purpose: "Materiał informacyjny.",
+    requirement: "informational",
+    fulfillmentMode: "without_operator_template",
+    originalFileId: null,
+    sourceFileIds: ["FILE_001"],
+    signatureRequirement: "not_required",
+  });
+  assert.equal(form.fulfillmentMode, "operator_template");
+  assert.equal(form.originalFileId, "FILE_002");
+  assert.deepEqual(form.sourceFileIds, ["FILE_001", "FILE_002"]);
+  assert.equal(form.condition, "Gdy podmiot składa zgłoszenie w tej ścieżce.");
+  assert.equal(form.deliveryStage, "ZGLOSZENIE");
+  assert.equal(form.responsibility, "client");
+  assert.equal(form.signatureRequirement, "required_file");
+  assert.equal(form.versionLabel, "1.0");
+
+  assert.equal(bank.fulfillmentMode, "without_operator_template");
+  assert.equal(bank.originalFileId, null);
+  assert.deepEqual(bank.sourceFileIds, ["FILE_001"]);
+  assert.equal(
+    bank.requiredEvidence,
+    "Zaświadczenie o prowadzeniu rachunku lub kopia umowy rachunku.",
+  );
+});
+
 test("RoundImport plan can export a data-only recruitment with no attachments", () => {
   const state = {
     version: 1,
@@ -820,6 +945,84 @@ test("re-inheriting adds only new project files and never overwrites recruitment
   assert.equal(firstCopy.display_name, "Nabór ma własną nazwę");
 });
 
+
+test("classified physical files migrate to first-class document requirements once", () => {
+  const state = {
+    version: 1,
+    revision: 1,
+    objects: [
+      {
+        id: "round",
+        type: "recruitment",
+        values: { external_number: "Nabór" },
+      },
+    ],
+    rules: [],
+    fileSources: [
+      {
+        id: "rules",
+        objectId: "round",
+        fileType: "PDF",
+        url: "https://example.test/regulamin.pdf",
+        sourcePageUrl: "https://example.test/nabor",
+        name: "regulamin.pdf",
+        addedAt: "2026-10-01T12:00:00Z",
+        display_name: "Regulamin",
+        purpose: "Regulamin",
+        intended_use: "Zasady udziału.",
+        client_requirement: "Informacyjny",
+        signature_requirement: "Nie jest wymagany",
+        delivery_method: "Z oryginału operatora",
+      },
+      {
+        id: "bank",
+        objectId: "round",
+        fileType: "PDF",
+        url: "https://example.test/bank.pdf",
+        sourcePageUrl: "https://example.test/nabor",
+        name: "bank.pdf",
+        addedAt: "2026-10-01T12:00:00Z",
+        display_name: "Potwierdzenie rachunku",
+        purpose: "Inny dokument",
+        intended_use: "Dokument wymagany przy zgłoszeniu.",
+        client_requirement: "Warunkowy",
+        signature_requirement: "Nie jest wymagany",
+        delivery_method: "Dokument dostarczany bez wzoru operatora",
+      },
+    ],
+    documentRequirements: [],
+  };
+
+  assert.equal(
+    stateMigrations.migrateFileClassificationsToDocumentRequirements(state),
+    true,
+  );
+  assert.equal(state.documentRequirements.length, 2);
+
+  const rules = state.documentRequirements.find(
+    (row) => row.source_file_source_ids?.includes("rules"),
+  );
+  const bank = state.documentRequirements.find(
+    (row) => row.source_file_source_ids?.includes("bank"),
+  );
+  assert.ok(rules);
+  assert.ok(bank);
+
+  assert.equal(rules.requirement, "INFORMATIONAL");
+  assert.equal(rules.fulfillment_mode, "WITHOUT_OPERATOR_TEMPLATE");
+  assert.equal(rules.original_file_source_id, undefined);
+
+  assert.equal(bank.requirement, "CONDITIONAL");
+  assert.equal(bank.fulfillment_mode, "WITHOUT_OPERATOR_TEMPLATE");
+  assert.equal(bank.original_file_source_id, undefined);
+  assert.equal(bank.condition, "Dokument wymagany przy zgłoszeniu.");
+
+  assert.equal(
+    stateMigrations.migrateFileClassificationsToDocumentRequirements(state),
+    false,
+  );
+  assert.equal(state.documentRequirements.length, 2);
+});
 
 test("regulation filenames get safe informational defaults", () => {
   assert.deepEqual(
