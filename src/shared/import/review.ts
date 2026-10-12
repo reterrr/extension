@@ -960,6 +960,17 @@ export function buildImportApprovalPlan(
   const selectedFiles = (session.previewState.fileSources ?? []).filter(
     (file) => file.objectId === object.id,
   );
+  const usedFileKeys = new Set<string>();
+  const fileKeyById = new Map<string, string>();
+  selectedFiles.forEach((file, index) => {
+    const preferred = String(file.importKey ?? `FILE_${index + 1}`);
+    let key = preferred;
+    for (let suffix = 2; usedFileKeys.has(key); suffix++) {
+      key = `${preferred}_${suffix}`;
+    }
+    usedFileKeys.add(key);
+    fileKeyById.set(file.id, key);
+  });
   const portableFiles = selectedFiles.map((file) => {
     const source = importedSourceForFile(file, importedSources);
     usedSourceIds.add(source.id);
@@ -994,6 +1005,7 @@ export function buildImportApprovalPlan(
     );
 
     return {
+      key: fileKeyById.get(file.id),
       source: source.importKey,
       ...(pageSource ? { source_page: pageSource.importKey } : {}),
       ...(Object.keys(metadata).length ? { metadata } : {}),
@@ -1092,19 +1104,42 @@ export function buildImportApprovalPlan(
       const data: Record<string, unknown> = {};
       for (const field of Object.keys(BurbotDocuments.fields ?? {})) {
         if (Object.prototype.hasOwnProperty.call(row, field)) {
-          data[field] = row[field];
+          data[field] = (row as unknown as Record<string, unknown>)[field];
         }
       }
+
+      const originalFile = row.original_file_source_id
+        ? fileKeyById.get(row.original_file_source_id)
+        : undefined;
+      if (row.original_file_source_id && !originalFile) {
+        throw new Error(
+          `Nie udało się powiązać wzoru operatora dla dokumentu ${row.label ?? row.importKey ?? row.id}.`,
+        );
+      }
+      const sourceFiles = (row.source_file_source_ids ?? []).map((id) => {
+        const key = fileKeyById.get(id);
+        if (!key) {
+          throw new Error(
+            `Nie udało się powiązać pliku źródłowego dla dokumentu ${row.label ?? row.importKey ?? row.id}.`,
+          );
+        }
+        return key;
+      });
+
       const evidence = portableTargetEvidence(
         session.previewState,
         object.id,
-        { kind: "document", id: String(row.document_type_key) },
+        { kind: "document", id: String(row.id) },
         sourceById,
       );
       return {
-        key: String(row.importKey ?? row.document_type_key),
-        document_type_key: String(row.document_type_key),
+        key: String(row.importKey ?? row.id),
+        ...(row.document_type_key
+          ? { document_type_key: String(row.document_type_key) }
+          : {}),
         data,
+        ...(originalFile ? { original_file: originalFile } : {}),
+        ...(sourceFiles.length ? { source_files: sourceFiles } : {}),
         ...(evidence ? { evidence } : {}),
       };
     });
