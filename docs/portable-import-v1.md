@@ -72,8 +72,7 @@ That example is covered by the import-review tests so its offsets, references, f
             "fulfillment_mode": "WITHOUT_OPERATOR_TEMPLATE",
             "responsibility": "CLIENT",
             "signature_requirement": "NOT_REQUIRED"
-          },
-          "source_files": ["FILE_REGULATIONS"]
+          }
         }
       ]
     }
@@ -160,7 +159,7 @@ Archive attachments use the same business metadata fields as other files.
 Burbot does not extract field values from inside archives; the dedicated
 value-extraction workflow remains PDF-only.
 
-- `key` — optional stable attachment key, but required when any `documents[]` row references this file through `original_file` or `source_files`. Exports emit it whenever the attachment already has a stable key or a document requirement references it; unrelated legacy physical-only attachments may remain keyless for backward-compatible round trips.
+- `key` — optional stable attachment key, but required when a `documents[]` row references this file through `original_file`. Exports emit it whenever the attachment already has a stable key or a document requirement uses it as an operator template; unrelated legacy physical-only attachments may remain keyless for backward-compatible round trips.
 - `source` — required source key. It must point to one of the supported file source types with an HTTP(S) `url`. ZIP/RAR/7Z/TAR/GZ/TGZ sources are valid attachments and can be classified normally.
 - `source_page` — optional source key for the page where the file link was found. If supplied, that source must have a URL.
 - `name` — legacy-only input. The stored technical filename is always derived from the remote file URL; when `metadata.display_name` is absent, legacy `name` is used as the business display-name fallback.
@@ -192,6 +191,8 @@ When file metadata is missing, Burbot may apply conservative filename-based defa
 
 Older v1 imports may still contain `document_kind` and `delivery_method`. They remain accepted for backward compatibility but are not part of the current file editor/export model.
 
+Older document requirements may also contain `data.version_label` and `source_files`. They remain importable for compatibility, but current exports and AI-generated imports omit both fields.
+
 This creates an object-level Burbot file source that remains available after approval.
 
 ## `objects[].documents[]`
@@ -213,10 +214,8 @@ A dynamic document row contains:
 - `data.required_evidence` — what must actually be delivered/shown, up to 4000 characters;
 - `data.source_url` — optional official HTTP(S) URL;
 - `data.source_description` — explanation of the source/basis, up to 1000 characters;
-- `data.version_label` — optional version label, up to 255 characters;
 - `data.signature_requirement` — `UNKNOWN`, `NOT_REQUIRED`, `REQUIRED_FILE`, or `EXTERNAL_OPERATOR`;
 - `original_file` — optional `files[].key` identifying the operator-provided template. It is required when `fulfillment_mode` is `OPERATOR_TEMPLATE`;
-- `source_files` — optional unique list of `files[].key` entries that prove/explain the requirement. A regulation can be a source file without being a document that the client submits;
 - `evidence` — optional evidence for fields inside `data`.
 
 For an informational document, Burbot normalizes the fulfillment mode to `WITHOUT_OPERATOR_TEMPLATE` and does not treat the physical file as a client template.
@@ -235,8 +234,7 @@ Example without an operator template:
     "responsibility": "CLIENT",
     "required_evidence": "Karta Usługi pobrana z BUR dla wybranej usługi.",
     "signature_requirement": "NOT_REQUIRED"
-  },
-  "source_files": ["FILE_REGULATIONS"]
+  }
 }
 ```
 
@@ -255,8 +253,7 @@ Example using an operator template:
     "required_evidence": "Wypełniony i podpisany formularz operatora.",
     "signature_requirement": "REQUIRED_FILE"
   },
-  "original_file": "FILE_DE_MINIMIS",
-  "source_files": ["FILE_REGULATIONS", "FILE_DE_MINIMIS"]
+  "original_file": "FILE_DE_MINIMIS"
 }
 ```
 
