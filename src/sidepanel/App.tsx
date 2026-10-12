@@ -197,7 +197,7 @@ export function App() {
                   className="document-requirement-list"
                 />
                 <div className="file-source-subheading">
-                  <strong>Pliki operatora i źródła</strong>
+                  <strong>Pliki operatora</strong>
                   <small>
                     Fizyczne załączniki pozostają osobno od wymagań dokumentowych.
                   </small>
