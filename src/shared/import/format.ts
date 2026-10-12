@@ -340,6 +340,12 @@ function parseDocument(input: unknown): BurbotImportV1 {
           evidence: parseEvidenceMap(entry.evidence, `${filePath}.evidence`),
         };
       });
+      const fileKeys = files
+        .map((file) => file.key)
+        .filter((key): key is string => typeof key === "string");
+      if (new Set(fileKeys).size !== fileKeys.length) {
+        throw new Error(`Duplicate ${path} files[].key.`);
+      }
     }
 
 
@@ -552,6 +558,25 @@ function parseDocument(input: unknown): BurbotImportV1 {
         };
       });
       uniqueByKey(financing, `${path} financing`);
+    }
+
+    const declaredFileKeys = new Set(
+      (files ?? [])
+        .map((file) => file.key)
+        .filter((fileKey): fileKey is string => typeof fileKey === "string"),
+    );
+    for (const document of documents ?? []) {
+      const references = [
+        ...(document.original_file ? [document.original_file] : []),
+        ...(document.source_files ?? []),
+      ];
+      for (const fileKey of references) {
+        if (!declaredFileKeys.has(fileKey)) {
+          throw new Error(
+            `${path}.documents.${document.key} references unknown files[].key ${fileKey}.`,
+          );
+        }
+      }
     }
 
     return {
