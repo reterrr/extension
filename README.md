@@ -333,34 +333,62 @@ Geography is normalized through the same canonical Burbot geography catalog as P
 The **Export Excel** action exports the committed SQLite state as a business workbook. The main sheets remain `Operatorzy`, `Projekty` and `Nabory`, but the export also includes normalized sheets for data that cannot be represented safely in one wide row:
 
 - `Finansowanie` — every funding variant and every current funding field,
-- `Dokumenty` — every document requirement with catalog name and requirement fields,
+- `Dokumenty` — every dynamic document requirement, including no-template requirements and their fulfillment/source/signature fields,
 - `Pliki` — all remote file sources attached to objects,
 - `Pola_Obiektow` — normalized object field/value dump so no current object value is lost,
 - the existing project/operator and geography relation sheets.
 
 `Operatorzy` exports address, email, phone, website and notes. `Nabory` includes all current recruitment date/planning/status/source fields. The final `Nabory` column is `ostatnia_zmiana`, sourced from the recruitment object's `updatedAt` timestamp. `ostatnio_sprawdzono` remains a separate system timestamp.
 
-## Local file uploads
+## Documents, requirements and local file uploads
 
-The **Pliki** section also accepts local files by drag and drop or by clicking the
+The **Dokumenty** section deliberately separates two concepts:
+
+- **Wymagania dokumentowe** describe what the client/operator must actually
+  prepare, provide, sign or know. A requirement may use an operator-provided
+  template (`OPERATOR_TEMPLATE`) or exist without any operator template
+  (`WITHOUT_OPERATOR_TEMPLATE`). This is where Karta Usługi BUR, bank-account
+  proof, KRS/CEIDG, invoices, payment confirmations and similar externally
+  obtained documents belong.
+- **Pliki operatora i źródła** are real physical attachments. They may be the
+  original template for one requirement, evidence/source for several
+  requirements, or informational material that the client never submits.
+
+Use **+ Dodaj dokument bez wzoru** for a requirement that exists only in the
+rules/process. Use **+ Dodaj jako wymaganie** on a physical file when that file is
+an operator template or an informational document that should also be represented
+as a requirement. Informational rows are never treated as client templates.
+
+Document requirements support: name, purpose, requirement
+(required/conditional/informational/unknown), condition, fulfillment mode,
+delivery stage, responsibility, required evidence, official source URL/source
+description, version label, signature requirement, an optional original
+operator-template file and any number of source/evidence files.
+
+The physical-file area accepts local files by drag and drop or by clicking the
 drop zone. Supported types are `.doc`, `.docx`, `.pdf`, `.xlsx`, `.png`,
 `.jpg`, `.jpeg`, `.zip`, `.rar`, `.7z`, `.tar`, `.gz` and `.tgz`,
-up to 100 MB per file. Archive files can be classified with the same document
-metadata as other attachments; value extraction remains PDF-only.
+up to 100 MB per file. Value extraction remains PDF-only.
 
 Uploaded files are copied into the local SQLite database as BLOBs and exposed to
 the extension through the local DB service. Burbot never stores the original
 filesystem path, so moving or deleting the original file does not break the
 attachment.
 
-For a Recruitment, the file-section bulk download is a single V5-compatible
-`RoundImportManifestV1` ZIP. It contains exactly `import.json` and the supported
-attachments under `files/`. The manifest maps recruitment conditions, dates,
-funding variants and file classification into the strict round-import contract;
-Project bulk download keeps the existing plain-file behavior. Unsupported archive
-attachments are rejected for this ZIP because the target importer accepts only
-PDF, DOC, DOCX, XLSX, JPG/JPEG and PNG. A data-only Recruitment can still export
-a ZIP containing only `import.json`.
+Existing file-level classifications are migrated conservatively into first-class
+document requirements. The old file metadata stays available for compatibility,
+but new portable imports should represent business requirements in
+`objects[].documents[]` and physical files in `objects[].files[]`.
+
+For a Recruitment, the Documents-section bulk download is a single V5-compatible
+`RoundImportManifestV1` ZIP. It contains `import.json` plus supported physical
+attachments under `files/`. Configured requirements are exported independently,
+so the manifest may contain more `workspace.documents` rows than physical
+files. Documents without operator templates therefore survive the ZIP export
+without inventing fake files. Project bulk download keeps the existing plain-file
+behavior. Unsupported archive attachments are rejected for this ZIP because the
+target importer accepts only PDF, DOC, DOCX, XLSX, JPG/JPEG and PNG. A data-only
+Recruitment can still export a ZIP containing only `import.json`.
 
 ## Przegląd i zapis zmian
 
