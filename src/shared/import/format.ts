@@ -1087,47 +1087,44 @@ export function importDocumentIntoState(
         }
 
         const rowId = uuid();
-        const row: Record<string, unknown> = {
-          id: rowId,
-          objectId: object.id,
-          importKey: importedDocument.key,
-          ...(legacyType ? { document_type_key: legacyType } : {}),
-          label:
-            typeof importedDocument.data.label === "string"
-              ? importedDocument.data.label
-              : String(catalogEntry?.name ?? legacyType ?? "Dokument"),
-          purpose:
-            typeof importedDocument.data.purpose === "string"
-              ? importedDocument.data.purpose
-              : typeof importedDocument.data.notes === "string"
-                ? importedDocument.data.notes
+        const row: Record<string, unknown> = legacyType
+          ? {
+              id: rowId,
+              objectId: object.id,
+              importKey: importedDocument.key,
+              document_type_key: legacyType,
+            }
+          : {
+              id: rowId,
+              objectId: object.id,
+              importKey: importedDocument.key,
+              label: importedDocument.data.label,
+              purpose: Object.prototype.hasOwnProperty.call(
+                importedDocument.data,
+                "purpose",
+              )
+                ? importedDocument.data.purpose
                 : "",
-          requirement: Object.prototype.hasOwnProperty.call(
-            importedDocument.data,
-            "requirement",
-          )
-            ? importedDocument.data.requirement
-            : "UNKNOWN",
-          fulfillment_mode: Object.prototype.hasOwnProperty.call(
-            importedDocument.data,
-            "fulfillment_mode",
-          )
-            ? importedDocument.data.fulfillment_mode
-            : "WITHOUT_OPERATOR_TEMPLATE",
-          responsibility: Object.prototype.hasOwnProperty.call(
-            importedDocument.data,
-            "responsibility",
-          )
-            ? importedDocument.data.responsibility
-            : "CLIENT",
-          signature_requirement: Object.prototype.hasOwnProperty.call(
-            importedDocument.data,
-            "signature_requirement",
-          )
-            ? importedDocument.data.signature_requirement
-            : "UNKNOWN",
-          source_file_source_ids: [],
-        };
+              requirement: Object.prototype.hasOwnProperty.call(
+                importedDocument.data,
+                "requirement",
+              )
+                ? importedDocument.data.requirement
+                : "UNKNOWN",
+              fulfillment_mode: Object.prototype.hasOwnProperty.call(
+                importedDocument.data,
+                "fulfillment_mode",
+              )
+                ? importedDocument.data.fulfillment_mode
+                : "WITHOUT_OPERATOR_TEMPLATE",
+              signature_requirement: Object.prototype.hasOwnProperty.call(
+                importedDocument.data,
+                "signature_requirement",
+              )
+                ? importedDocument.data.signature_requirement
+                : "UNKNOWN",
+              source_file_source_ids: [],
+            };
 
         for (const [field, rawValue] of Object.entries(importedDocument.data)) {
           const definition = globalThis.BurbotDocuments?.fields?.[field];
@@ -1167,33 +1164,35 @@ export function importDocumentIntoState(
         );
         row.source_file_source_ids = [...new Set(sourceFileIds)];
 
-        if (
-          row.requirement === "CONDITIONAL" &&
-          (typeof row.condition !== "string" || !row.condition.trim())
-        ) {
-          throw new Error(
-            `${item.key}.documents.${importedDocument.key} is CONDITIONAL but data.condition is empty.`,
-          );
-        }
-        if (row.requirement === "INFORMATIONAL") {
-          row.fulfillment_mode = "WITHOUT_OPERATOR_TEMPLATE";
-          delete row.original_file_source_id;
-        }
-        if (
-          row.fulfillment_mode === "OPERATOR_TEMPLATE" &&
-          !row.original_file_source_id
-        ) {
-          throw new Error(
-            `${item.key}.documents.${importedDocument.key} uses OPERATOR_TEMPLATE but has no original_file.`,
-          );
-        }
-        if (
-          row.fulfillment_mode !== "OPERATOR_TEMPLATE" &&
-          row.original_file_source_id
-        ) {
-          throw new Error(
-            `${item.key}.documents.${importedDocument.key} has original_file but is not OPERATOR_TEMPLATE.`,
-          );
+        if (!legacyType) {
+          if (
+            row.requirement === "CONDITIONAL" &&
+            (typeof row.condition !== "string" || !row.condition.trim())
+          ) {
+            throw new Error(
+              `${item.key}.documents.${importedDocument.key} is CONDITIONAL but data.condition is empty.`,
+            );
+          }
+          if (row.requirement === "INFORMATIONAL") {
+            row.fulfillment_mode = "WITHOUT_OPERATOR_TEMPLATE";
+            delete row.original_file_source_id;
+          }
+          if (
+            row.fulfillment_mode === "OPERATOR_TEMPLATE" &&
+            !row.original_file_source_id
+          ) {
+            throw new Error(
+              `${item.key}.documents.${importedDocument.key} uses OPERATOR_TEMPLATE but has no original_file.`,
+            );
+          }
+          if (
+            row.fulfillment_mode !== "OPERATOR_TEMPLATE" &&
+            row.original_file_source_id
+          ) {
+            throw new Error(
+              `${item.key}.documents.${importedDocument.key} has original_file but is not OPERATOR_TEMPLATE.`,
+            );
+          }
         }
 
         (state.documentRequirements ||= []).push(
