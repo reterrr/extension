@@ -121,7 +121,17 @@ export function documentRequirementFromFile(
   const explicitlyWithoutTemplate =
     legacyDelivery.includes("bez wzoru") ||
     legacyDelivery.includes("without operator template");
-  const usesOperatorTemplate = !informational && !explicitlyWithoutTemplate;
+  const explicitlyOperatorTemplate =
+    legacyDelivery.includes("oryginalu operatora") ||
+    legacyDelivery.includes("original operator") ||
+    legacyDelivery.includes("operator template");
+  const looksLikeOperatorTemplate =
+    source.purpose === "Formularz do uzupełnienia" ||
+    source.has_fields === true;
+  const usesOperatorTemplate =
+    !informational &&
+    !explicitlyWithoutTemplate &&
+    (explicitlyOperatorTemplate || looksLikeOperatorTemplate);
   return {
     id,
     objectId,
