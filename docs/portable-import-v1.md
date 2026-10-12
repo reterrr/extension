@@ -160,7 +160,7 @@ Archive attachments use the same business metadata fields as other files.
 Burbot does not extract field values from inside archives; the dedicated
 value-extraction workflow remains PDF-only.
 
-- `key` — optional stable attachment key, but required when any `documents[]` row references this file through `original_file` or `source_files`. New exports always emit it.
+- `key` — optional stable attachment key, but required when any `documents[]` row references this file through `original_file` or `source_files`. Exports emit it whenever the attachment already has a stable key or a document requirement references it; unrelated legacy physical-only attachments may remain keyless for backward-compatible round trips.
 - `source` — required source key. It must point to one of the supported file source types with an HTTP(S) `url`. ZIP/RAR/7Z/TAR/GZ/TGZ sources are valid attachments and can be classified normally.
 - `source_page` — optional source key for the page where the file link was found. If supplied, that source must have a URL.
 - `name` — legacy-only input. The stored technical filename is always derived from the remote file URL; when `metadata.display_name` is absent, legacy `name` is used as the business display-name fallback.
