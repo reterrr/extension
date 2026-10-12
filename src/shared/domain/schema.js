@@ -669,6 +669,7 @@
         REQUIRED: "Obowiązkowy",
         CONDITIONAL: "Warunkowy",
         INFORMATIONAL: "Informacyjny",
+        OPTIONAL: "Opcjonalny (legacy)",
       }),
       condition: text("Kiedy dokument jest wymagany", "Dokumenty", {
         multiline: true,
