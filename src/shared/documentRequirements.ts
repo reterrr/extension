@@ -114,6 +114,14 @@ export function documentRequirementFromFile(
     source.name;
 
   const informational = requirement === "INFORMATIONAL";
+  const legacyDelivery = String(source.delivery_method ?? "")
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/gu, "")
+    .toLocaleLowerCase("pl-PL");
+  const explicitlyWithoutTemplate =
+    legacyDelivery.includes("bez wzoru") ||
+    legacyDelivery.includes("without operator template");
+  const usesOperatorTemplate = !informational && !explicitlyWithoutTemplate;
   return {
     id,
     objectId,
@@ -124,12 +132,12 @@ export function documentRequirementFromFile(
     ...(requirement === "CONDITIONAL" && intendedUse
       ? { condition: intendedUse.slice(0, 1000) }
       : {}),
-    fulfillment_mode: informational
-      ? "WITHOUT_OPERATOR_TEMPLATE"
-      : "OPERATOR_TEMPLATE",
-    responsibility: "CLIENT",
+    fulfillment_mode: usesOperatorTemplate
+      ? "OPERATOR_TEMPLATE"
+      : "WITHOUT_OPERATOR_TEMPLATE",
+    ...(informational ? {} : { responsibility: "CLIENT" }),
     signature_requirement: signatureFromFileSource(source),
-    ...(!informational ? { original_file_source_id: source.id } : {}),
+    ...(usesOperatorTemplate ? { original_file_source_id: source.id } : {}),
     // The physical file remains useful as provenance even when it is only an
     // informational regulation/instruction rather than a client template.
     source_file_source_ids: [source.id],
