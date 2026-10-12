@@ -871,6 +871,8 @@ export function importDocumentIntoState(
       }
     }
 
+    const fileIdByKey = new Map<string, string>();
+
     if (item.files?.length) {
       for (const [fileIndex, file] of item.files.entries()) {
         const source = sourceByKey.get(file.source);
@@ -907,6 +909,7 @@ export function importDocumentIntoState(
         const row = {
           id: uuid(),
           objectId: object.id,
+          ...(file.key ? { importKey: file.key } : {}),
           fileType: source.type as SourceFileType,
           url: source.url,
           // Canonical technical filename always comes from the remote URL.
@@ -919,6 +922,7 @@ export function importDocumentIntoState(
           ...metadata,
         };
         (state.fileSources ||= []).push(row);
+        if (file.key) fileIdByKey.set(file.key, row.id);
 
         validateTargetEvidenceFields(
           file.evidence,
@@ -1069,45 +1073,133 @@ export function importDocumentIntoState(
       if (!schema.configuration) {
         throw new Error(`Object type ${item.type} does not support document requirements.`);
       }
-      for (const document of item.documents) {
-        if (
-          !globalThis.BurbotDocuments?.catalog?.some(
-            (entry: { key: string }) => entry.key === document.document_type_key,
-          )
-        ) {
+      for (const importedDocument of item.documents) {
+        const legacyType = importedDocument.document_type_key;
+        const catalogEntry = legacyType
+          ? globalThis.BurbotDocuments?.catalog?.find(
+              (entry: { key: string }) => entry.key === legacyType,
+            )
+          : undefined;
+        if (legacyType && !catalogEntry) {
           throw new Error(
-            `Unknown document type ${document.document_type_key} in ${item.key}.`,
+            `Unknown document type ${legacyType} in ${item.key}.`,
           );
         }
+
+        const rowId = uuid();
         const row: Record<string, unknown> = {
-          id: uuid(),
+          id: rowId,
           objectId: object.id,
-          importKey: document.key,
-          document_type_key: document.document_type_key,
+          importKey: importedDocument.key,
+          ...(legacyType ? { document_type_key: legacyType } : {}),
+          label:
+            typeof importedDocument.data.label === "string"
+              ? importedDocument.data.label
+              : String(catalogEntry?.name ?? legacyType ?? "Dokument"),
+          purpose:
+            typeof importedDocument.data.purpose === "string"
+              ? importedDocument.data.purpose
+              : typeof importedDocument.data.notes === "string"
+                ? importedDocument.data.notes
+                : "",
+          requirement: Object.prototype.hasOwnProperty.call(
+            importedDocument.data,
+            "requirement",
+          )
+            ? importedDocument.data.requirement
+            : "UNKNOWN",
+          fulfillment_mode: Object.prototype.hasOwnProperty.call(
+            importedDocument.data,
+            "fulfillment_mode",
+          )
+            ? importedDocument.data.fulfillment_mode
+            : "WITHOUT_OPERATOR_TEMPLATE",
+          responsibility: Object.prototype.hasOwnProperty.call(
+            importedDocument.data,
+            "responsibility",
+          )
+            ? importedDocument.data.responsibility
+            : "CLIENT",
+          signature_requirement: Object.prototype.hasOwnProperty.call(
+            importedDocument.data,
+            "signature_requirement",
+          )
+            ? importedDocument.data.signature_requirement
+            : "UNKNOWN",
+          source_file_source_ids: [],
         };
-        for (const [field, rawValue] of Object.entries(document.data)) {
+
+        for (const [field, rawValue] of Object.entries(importedDocument.data)) {
           const definition = globalThis.BurbotDocuments?.fields?.[field];
           if (!definition) {
             throw new Error(
-              `Unknown document field ${field} in ${item.key}.${document.key}.`,
+              `Unknown document field ${field} in ${item.key}.${importedDocument.key}.`,
             );
           }
           row[field] = BurbotCore.coerceField(rawValue, definition, state);
         }
-        (state.documentRequirements ||= []).push(row);
+
+        const originalFileId =
+          importedDocument.original_file === null ||
+          importedDocument.original_file === undefined
+            ? undefined
+            : fileIdByKey.get(importedDocument.original_file);
+        if (
+          importedDocument.original_file &&
+          !originalFileId
+        ) {
+          throw new Error(
+            `${item.key}.documents.${importedDocument.key}.original_file could not be resolved.`,
+          );
+        }
+        if (originalFileId) row.original_file_source_id = originalFileId;
+
+        const sourceFileIds = (importedDocument.source_files ?? []).map(
+          (fileKey) => {
+            const id = fileIdByKey.get(fileKey);
+            if (!id) {
+              throw new Error(
+                `${item.key}.documents.${importedDocument.key}.source_files references unknown file ${fileKey}.`,
+              );
+            }
+            return id;
+          },
+        );
+        row.source_file_source_ids = [...new Set(sourceFileIds)];
+
+        if (row.requirement === "INFORMATIONAL") {
+          row.fulfillment_mode = "WITHOUT_OPERATOR_TEMPLATE";
+          delete row.original_file_source_id;
+        }
+        if (
+          row.fulfillment_mode === "OPERATOR_TEMPLATE" &&
+          !row.original_file_source_id
+        ) {
+          throw new Error(
+            `${item.key}.documents.${importedDocument.key} uses OPERATOR_TEMPLATE but has no original_file.`,
+          );
+        }
+
+        (state.documentRequirements ||= []).push(
+          row as unknown as NonNullable<
+            LegacyStorageState["documentRequirements"]
+          >[number],
+        );
 
         validateTargetEvidenceFields(
-          document.evidence,
+          importedDocument.evidence,
           globalThis.BurbotDocuments.fields,
-          document.data,
-          `${item.key}.documents.${document.key}`,
+          importedDocument.data,
+          `${item.key}.documents.${importedDocument.key}`,
         );
-        for (const [field, entries] of Object.entries(document.evidence ?? {})) {
+        for (const [field, entries] of Object.entries(
+          importedDocument.evidence ?? {},
+        )) {
           storeTargetEvidence(
             state,
             object.id,
-            { kind: "document", id: String(document.document_type_key) },
-            document.key,
+            { kind: "document", id: rowId },
+            importedDocument.key,
             item.key,
             field,
             entries,
