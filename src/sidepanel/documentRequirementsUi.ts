@@ -225,10 +225,6 @@ function renderRequirement(
     fieldLabel("Odpowiedzialność", responsibility),
   );
 
-  const sourceRow = document.createElement("div");
-  sourceRow.className = "document-requirement-field-row";
-  sourceRow.append(fieldLabel("Oficjalne źródło", sourceUrl));
-
   body.append(
     firstRow,
     secondRow,
@@ -236,7 +232,7 @@ function renderRequirement(
     fieldLabel("Kiedy dokument jest wymagany", conditionInput),
     fourthRow,
     fieldLabel("Co należy dostarczyć", requiredEvidence),
-    sourceRow,
+    fieldLabel("Oficjalne źródło", sourceUrl),
     fieldLabel("Opis źródła", sourceDescription),
   );
 
