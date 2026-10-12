@@ -547,6 +547,108 @@ function documentFromFile(
   return document;
 }
 
+function documentRequirement(
+  row: NonNullable<LegacyStorageState["documentRequirements"]>[number],
+  fileIdBySourceId: Map<string, string>,
+): RoundImportDocument {
+  const requirementMap: Record<string, RoundRequirement> = {
+    REQUIRED: "required",
+    CONDITIONAL: "conditional",
+    INFORMATIONAL: "informational",
+    OPTIONAL: "unknown",
+    UNKNOWN: "unknown",
+  };
+  const signatureMap: Record<string, RoundSignatureRequirement> = {
+    NOT_REQUIRED: "not_required",
+    REQUIRED_FILE: "required_file",
+    EXTERNAL_OPERATOR: "external_operator",
+    UNKNOWN: "unknown",
+  };
+  const responsibilityMap: Record<string, "fundpilot" | "client" | "shared"> = {
+    FUNDPILOT: "fundpilot",
+    CLIENT: "client",
+    SHARED: "shared",
+  };
+
+  const originalFileId = row.original_file_source_id
+    ? fileIdBySourceId.get(row.original_file_source_id)
+    : undefined;
+  if (
+    row.fulfillment_mode === "OPERATOR_TEMPLATE" &&
+    !originalFileId
+  ) {
+    throw new Error(
+      `Dokument „${row.label}” jest oznaczony jako wzór operatora, ale jego plik nie jest dostępny w paczce ZIP.`,
+    );
+  }
+
+  const sourceFileIds = (row.source_file_source_ids ?? []).map((sourceId) => {
+    const fileId = fileIdBySourceId.get(sourceId);
+    if (!fileId) {
+      throw new Error(
+        `Dokument „${row.label}” wskazuje plik źródłowy, którego nie ma w paczce ZIP.`,
+      );
+    }
+    return fileId;
+  });
+
+  const document: RoundImportDocument = {
+    key: boundedText(
+      cleanText(row.importKey) || cleanText(row.id),
+      100,
+      "documents.key",
+    ),
+    label: boundedText(row.label, 500, "documents.label"),
+    purpose: boundedText(row.purpose, 1000, "documents.purpose"),
+    requirement: requirementMap[String(row.requirement ?? "UNKNOWN")] ?? "unknown",
+    fulfillmentMode:
+      row.requirement === "INFORMATIONAL"
+        ? "without_operator_template"
+        : row.fulfillment_mode === "OPERATOR_TEMPLATE"
+          ? "operator_template"
+          : "without_operator_template",
+    originalFileId: originalFileId ?? null,
+    sourceFileIds,
+    signatureRequirement:
+      signatureMap[String(row.signature_requirement ?? "UNKNOWN")] ?? "unknown",
+  };
+
+  const condition = boundedText(row.condition, 1000, "documents.condition");
+  const deliveryStage = boundedText(
+    row.delivery_stage,
+    60,
+    "documents.deliveryStage",
+  );
+  const requiredEvidence = boundedText(
+    row.required_evidence,
+    4000,
+    "documents.requiredEvidence",
+  );
+  const sourceDescription = boundedText(
+    row.source_description,
+    1000,
+    "documents.sourceDescription",
+  );
+  const versionLabel = boundedText(
+    row.version_label,
+    255,
+    "documents.versionLabel",
+  );
+  const sourceUrl = httpUrl(row.source_url);
+  const responsibility =
+    responsibilityMap[String(row.responsibility ?? "")] ?? null;
+
+  if (condition) document.condition = condition;
+  if (deliveryStage) document.deliveryStage = deliveryStage;
+  if (responsibility) document.responsibility = responsibility;
+  if (requiredEvidence) document.requiredEvidence = requiredEvidence;
+  if (sourceUrl) document.sourceUrl = sourceUrl;
+  if (sourceDescription) document.sourceDescription = sourceDescription;
+  if (versionLabel) document.versionLabel = versionLabel;
+
+  return document;
+}
+
 function officialIdentity(
   recruitment: LegacyStoredObject,
 ): Pick<
@@ -633,6 +735,9 @@ export function buildRoundImportPackagePlan(
       };
     },
   );
+  const fileIdBySourceId = new Map(
+    packageFiles.map((file) => [file.source.id, file.id]),
+  );
 
   const rows = (state.financingRules ?? []).filter(
     (row) => String(row.objectId ?? "") === recruitment.id,
@@ -694,9 +799,16 @@ export function buildRoundImportPackagePlan(
       notes,
       ...(roundSchedule ? { schedule: roundSchedule } : {}),
       conditions,
-      documents: packageFiles.map((file, index) =>
-        documentFromFile(file.source, declarations[index]),
-      ),
+      documents: (() => {
+        const configured = (state.documentRequirements ?? []).filter(
+          (row) => row.objectId === recruitment.id,
+        );
+        return configured.length
+          ? configured.map((row) => documentRequirement(row, fileIdBySourceId))
+          : packageFiles.map((file, index) =>
+              documentFromFile(file.source, declarations[index]),
+            );
+      })(),
     },
   };
 
