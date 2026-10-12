@@ -845,10 +845,20 @@ function mutateDocumentRequirement(
       row.source_file_source_ids = ids;
     }
 
+    if (
+      row.requirement === "CONDITIONAL" &&
+      (!row.condition || !row.condition.trim())
+    ) {
+      throw new Error(
+        "Dla dokumentu warunkowego opisz, kiedy dokument jest wymagany.",
+      );
+    }
     if (row.requirement === "INFORMATIONAL") {
       // Informational materials are not delivered by the client. Keep the
       // storage contract deterministic while the UI hides this irrelevant field.
       row.fulfillment_mode = "WITHOUT_OPERATOR_TEMPLATE";
+      delete row.original_file_source_id;
+    } else if (row.fulfillment_mode === "WITHOUT_OPERATOR_TEMPLATE") {
       delete row.original_file_source_id;
     }
     if (
