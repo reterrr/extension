@@ -430,8 +430,9 @@ export function mutateDocumentRequirement(
       (entry) => entry.id === id && entry.objectId === object.id,
     );
     if (!row) throw new Error("Wymaganie dokumentowe nie istnieje.");
-    state.documentRequirements = rows.filter((entry) => entry.id !== id);
     removeEvidenceForDocument(state, object.id, row);
+    const index = rows.findIndex((entry) => entry.id === id);
+    rows.splice(index, 1);
   } else {
     throw new Error("Nieznana operacja wymagania dokumentowego.");
   }
