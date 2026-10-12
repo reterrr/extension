@@ -441,13 +441,14 @@ Dla jednoznacznej stałej refundacji 60% można podać `refund_percent_min = ref
 
 | Pole | Typ / wymagalność | Znaczenie |
 | --- | --- | --- |
+| `key` | niepusty tekst, zalecane; wymagane gdy `documents[]` odwołuje się do pliku | Stabilny klucz fizycznego załącznika w obrębie obiektu, np. `FILE_REGULAMIN`, `FILE_FORMULARZ`. Zachowuj istniejący klucz przy aktualizacji. |
 | `source` | niepusty tekst, wymagane | Klucz źródła z `sources`. Musi wskazywać `DOC`, `DOCX`, `PDF`, `XLSX`, `PNG`, `JPG`, `JPEG`, `ZIP`, `RAR`, `7Z`, `TAR`, `GZ` lub `TGZ` z prawdziwym URL HTTP(S). `HTML` nie jest plikiem załącznika. Archiwa można oznaczać tymi samymi metadanymi co pozostałe pliki. |
 | `source_page` | niepusty tekst, opcjonalne | Klucz źródła strony, na której znaleziono plik. Wskazane źródło musi mieć URL; importer nie wymusza typu HTML, ale semantycznie wskazuj właściwą stronę pochodzenia. |
 | `metadata` | obiekt, opcjonalne | Opis konkretnego pliku, pola niżej. |
 | `evidence` | mapa, opcjonalne | Pola metadanych → tablice cytatów z pliku lub instrukcji, która określa ich wymaganie. Wskazane pole musi być obecne w metadanych (nazwa wyświetlana może mieć fallback systemowy). |
 | `name` | niepusty tekst, opcjonalne, legacy | Dawna nazwa biznesowa. Dla nowego importu stosuj `metadata.display_name`. Nazwa techniczna i tak pochodzi z nazwy pliku w URL. |
 
-Plik nie ma własnych pól `key`, `url`, `filename`, `type`, `operator`, `document_type_key`, `content`, `required` ani `signature`. URL i typ są w `sources`, a klasyfikacja w `metadata`. Ten sam source można podpiąć do więcej niż jednego właściwego obiektu. Nie dołączaj automatycznie dokumentów całego projektu do każdego naboru, jeśli nie potwierdzono ich zastosowania.
+Plik ma tylko stabilny `key`, referencję do `source`, opcjonalny `source_page`, metadane i evidence. Nie wkładaj do `files[]` pól biznesowego wymagania takich jak `requirement`, `condition`, `delivery_stage`, `responsibility` czy `required_evidence` — należą do `documents[]`. URL i typ są w `sources`, a klasyfikacja fizycznego pliku w `metadata`. Ten sam source można podpiąć do więcej niż jednego właściwego obiektu. Nie dołączaj automatycznie dokumentów całego projektu do każdego naboru, jeśli nie potwierdzono ich zastosowania.
 
 ### Wszystkie bieżące pola `files[].metadata`
 
@@ -530,6 +531,93 @@ Nie jest potrzebna konwersja struktury. Zachowaj wpis `files[]`, wskazane źród
 
 Nie modyfikuj URL-a, aby stworzyć pozornie nowy plik. Nazwa pliku lokalnie przesłanego do Burbot może występować w adresie serwera `127.0.0.1`/`localhost`: zachowaj taki istniejący URL, ale nie wymyślaj go dla załącznika z rozmowy. JSON przenosi adresy i zapisany tekst, nie binarne pliki; lokalny adres zadziała tam, gdzie dostępny jest ten sam serwer plików.
 
+### 12.4. `documents[]` — wymagania dokumentowe, także bez wzoru operatora
+
+`files[]` opisuje **fizyczne pliki**, a `documents[]` opisuje **to, co klient/operator rzeczywiście musi przygotować, dostarczyć, podpisać albo znać**. Liczba wymagań dokumentowych nie musi być równa liczbie plików.
+
+Przykłady:
+- operator udostępnia własny formularz DOCX → istnieje wpis w `files[]` i wymaganie w `documents[]` z `fulfillment_mode: "OPERATOR_TEMPLATE"` oraz `original_file`;
+- regulamin wymaga Karty Usługi z BUR, faktury, potwierdzenia przelewu albo KRS/CEIDG, ale operator nie daje własnego wzoru → utwórz `documents[]` z `fulfillment_mode: "WITHOUT_OPERATOR_TEMPLATE"`, bez `original_file`;
+- regulamin/instrukcja jest tylko materiałem informacyjnym → można zachować fizyczny plik w `files[]`; jeśli tworzysz dla niego również wpis `documents[]`, ustaw `requirement: "INFORMATIONAL"`, bez `original_file`.
+
+Każdy nowy wpis `documents[]` ma postać:
+
+| Pole | Typ / dokładne wartości | Znaczenie |
+| --- | --- | --- |
+| `key` | niepusty tekst, wymagane | Stabilny klucz wymagania, np. `DOC_KARTA_USLUGI_BUR`. |
+| `data` | obiekt, wymagane | Pola biznesowe wymagania opisane niżej. |
+| `original_file` | `files[].key`, `null` albo pominięte | Fizyczny wzór operatora. Dla `OPERATOR_TEMPLATE` wymagany i musi wskazywać plik tego samego obiektu. Dla dokumentu bez wzoru pomiń lub ustaw `null`. |
+| `source_files` | tablica unikalnych `files[].key` | Pliki stanowiące źródło/dowód wymagania, np. regulamin lub instrukcja. To nie znaczy, że klient ma je składać. |
+| `evidence` | mapa, opcjonalne | Cytaty potwierdzające konkretne pola `data`. |
+| `document_type_key` | legacy, opcjonalne | Tylko do zgodności ze starym zamkniętym katalogiem. **Nowe importy go nie generują.** |
+
+Bieżące pola `documents[].data`:
+
+| Pole | Typ / wartości | Znaczenie |
+| --- | --- | --- |
+| `label` | tekst 1–500, **wymagane dla nowego dynamicznego dokumentu** | Czytelna nazwa wymagania, np. „Karta Usługi opublikowana w BUR”. |
+| `purpose` | tekst do 1000 | Do czego dokument służy. Nie ograniczaj się do „załącznik”; opisz funkcję w procesie. |
+| `requirement` | `UNKNOWN`, `REQUIRED`, `CONDITIONAL`, `INFORMATIONAL` | Wymagalność. `CONDITIONAL` wymaga opisania warunku w `condition`. |
+| `condition` | tekst do 1000 | Kiedy/dla kogo dokument jest wymagany. Używaj szczególnie dla `CONDITIONAL`. |
+| `fulfillment_mode` | `OPERATOR_TEMPLATE` albo `WITHOUT_OPERATOR_TEMPLATE` | Czy klient używa wzoru operatora, czy sam pozyskuje/przygotowuje dokument. |
+| `delivery_stage` | tekst do 60 | Etap procesu, np. `ZGLOSZENIE`, `UMOWA`, `REALIZACJA`, `REFUNDACJA`, `KONTROLA`; używaj nazwy wynikającej z procesu, nie wymyślaj etapu. |
+| `responsibility` | `FUNDPILOT`, `CLIENT`, `SHARED` | Kto odpowiada za przygotowanie/dostarczenie dokumentu. Jeśli źródło tego nie rozstrzyga, pomiń. |
+| `required_evidence` | tekst do 4000 | Co konkretnie trzeba dostarczyć/okazać, np. „Karta Usługi pobrana z BUR dla wybranej usługi” albo „faktura oraz potwierdzenie zapłaty”. |
+| `source_url` | URL HTTP/HTTPS | Oficjalne źródło wymagania. Może wskazywać ogłoszenie, regulamin albo stronę operatora. |
+| `source_description` | tekst do 1000 | Krótkie wyjaśnienie podstawy, np. „Wymóg z § 6 ust. 4 Regulaminu”. |
+| `version_label` | tekst do 255 | Wersja dokumentu/wymagania, jeśli ma znaczenie. |
+| `signature_requirement` | `UNKNOWN`, `NOT_REQUIRED`, `REQUIRED_FILE`, `EXTERNAL_OPERATOR` | Czy i gdzie wymagany jest podpis/dowód podpisania. |
+
+Zasady spójności:
+- `fulfillment_mode: "OPERATOR_TEMPLATE"` **musi** mieć `original_file`;
+- `fulfillment_mode: "WITHOUT_OPERATOR_TEMPLATE"` nie wymaga fizycznego pliku;
+- `requirement: "INFORMATIONAL"` oznacza, że klient nie dostarcza tego dokumentu; nie przypisuj mu `original_file` jako formularza do złożenia;
+- `source_files` opisuje dowody/źródła wymagania i może wskazywać np. regulamin, nawet jeśli sam wymagany dokument jest bez wzoru;
+- fakt, że operator udostępnił plik, nie oznacza automatycznie, że klient ma go złożyć;
+- fakt, że regulamin wymaga dokumentu, nie oznacza, że musi istnieć jego plik w `files[]`.
+
+Przykład dokumentu bez wzoru operatora:
+
+```json
+{
+  "key": "DOC_KARTA_USLUGI_BUR",
+  "data": {
+    "label": "Karta Usługi opublikowana w BUR",
+    "purpose": "Potwierdza wybraną usługę rozwojową przy zgłoszeniu.",
+    "requirement": "REQUIRED",
+    "fulfillment_mode": "WITHOUT_OPERATOR_TEMPLATE",
+    "delivery_stage": "ZGLOSZENIE",
+    "responsibility": "CLIENT",
+    "required_evidence": "Karta Usługi pobrana z BUR dla wybranej usługi.",
+    "source_url": "https://operator.example/nabor",
+    "source_description": "Wymóg wskazany w regulaminie naboru.",
+    "signature_requirement": "NOT_REQUIRED"
+  },
+  "source_files": ["FILE_REGULAMIN"]
+}
+```
+
+Przykład formularza na wzorze operatora:
+
+```json
+{
+  "key": "DOC_DE_MINIMIS",
+  "data": {
+    "label": "Wniosek o udzielenie pomocy de minimis",
+    "purpose": "Załącznik składany przez podmiot ubiegający się o pomoc de minimis.",
+    "requirement": "CONDITIONAL",
+    "condition": "Gdy wsparcie jest udzielane jako pomoc de minimis.",
+    "fulfillment_mode": "OPERATOR_TEMPLATE",
+    "delivery_stage": "ZGLOSZENIE",
+    "responsibility": "CLIENT",
+    "required_evidence": "Wypełniony i podpisany formularz operatora.",
+    "signature_requirement": "REQUIRED_FILE"
+  },
+  "original_file": "FILE_DE_MINIMIS",
+  "source_files": ["FILE_REGULAMIN", "FILE_DE_MINIMIS"]
+}
+```
+
 ## 13. `evidence` — cytaty i dokładne zakresy
 
 Evidence jest mapą, np. `evidence.status` to tablica co najmniej jednego rzeczywistego cytatu potwierdzającego status. Puste tablice są technicznie dozwolone, ale niczego nie potwierdzają — pomijaj je. Wiele cytatów może wspierać jedno pole.
@@ -551,7 +639,7 @@ Dozwolone miejsca i nazwy kluczy:
 | `files[].evidence` | `display_name`, `purpose`, `has_fields`, `intended_use`, `client_requirement`, `signature_requirement` oraz legacy `document_kind`, `delivery_method`. |
 | `geography[].evidence` | Wyłącznie `value`. |
 | `contacts[].evidence` | Wyłącznie `value`. |
-| `documents[].evidence` | Wyłącznie podane `requirement`, `auto_fill`, `notes`. |
+| `documents[].evidence` | Wyłącznie jawnie podane pola `documents[].data`, np. `label`, `purpose`, `requirement`, `condition`, `fulfillment_mode`, `delivery_stage`, `responsibility`, `required_evidence`, `source_url`, `source_description`, `version_label`, `signature_requirement`. Referencje `original_file` i `source_files` nie mają własnych kluczy evidence. |
 
 Nie ma osobnej mapy evidence na `sources`, `$ref` lub `operators[]`. Dla referencji będącej polem `data`, np. `project_id`, można użyć zwykłego `objects[].evidence.project_id`, jeśli cytat rzeczywiście potwierdza relację.
 
@@ -594,7 +682,7 @@ Powtórzony tekst wymaga wyboru właściwego wystąpienia z kontekstem; pierwszy
 7. Przy aktualizacji zmieniane są jawnie przesłane pola `data`; pominięte pozostają. Nie kopiuj niepotrzebnie starych wartości, bo zaakceptowany import je ponownie ustawia. Uwagi są pojedynczym polem tekstowym: przesłane `notes` zastępuje poprzedni tekst, nie dopisuje się automatycznie; scal istotne dotychczasowe uwagi, jeśli je znasz i mają zostać zachowane.
 8. Przesłanie pola bez evidence może usunąć dotychczasowe evidence tego **pola obiektu**, żeby stare źródło nie uzasadniało nowej wartości. Przy kopiowaniu niezmienionej wartości zachowaj dostępny prawdziwy dowód, jeśli to potrzebne; nie wymyślaj go dla zachowania podświetlenia.
 9. Finansowanie aktualizuje wariant o tym samym stabilnym `key` (eksport używa zapisanego klucza importu, a gdy go brak — ID wiersza); pominięte pola wariantu pozostają. Nowy klucz może utworzyć nowy wariant. Istnieje fallback dla starszych wierszy bez klucza po rozmiarze i numerze wariantu, ale AI nie powinno na nim opierać bezpiecznej identyfikacji.
-10. Przypisania operatorów aktualizują się po kluczu lub operatorze; geografia po kluczu lub zgodnym zestawie typ/rola/wartość/operator; kontakty po kluczu lub rodzaju/numerze wariantu; dawne wymagania po kluczu lub typie dokumentu. Zachowuj klucze, aby zmiana wartości aktualizowała właściwy wiersz.
+10. Przypisania operatorów aktualizują się po kluczu lub operatorze; geografia po kluczu lub zgodnym zestawie typ/rola/wartość/operator; kontakty po kluczu lub rodzaju/numerze wariantu; wymagania dokumentowe po stabilnym `documents[].key` (stary fallback po `document_type_key` działa tylko dla legacy). Zachowuj klucze, aby zmiana wartości aktualizowała właściwy wiersz.
 11. Pliki dopasowywane są po URL w obrębie obiektu. Zmiana URL może dodać drugi plik; pominięcie starego nie usuwa go. Przy aktualizacji tego samego pliku podaj właściwe `metadata.display_name`, bo w razie jej braku importer utworzy nazwę zastępczą z URL i może zastąpić nią dotychczasową nazwę biznesową.
 12. **Pominięcie ani `[]` nie usuwa istniejących powiązań, plików, geografii i wariantów.** Format nie ma `delete`, `remove` ani `replace_all`. Zmiana głównego operatora wymaga spójnego przesłania ról istniejących operatorów; sam nowy `GLOWNY` nie usuwa starego. Usunięcia i czyszczenie wymagają Workspace.
 13. `last_checked_at` jest nadawane przez system przy zapisie nowego lub zmienionego obiektu do SQLite. Nie podawaj go nawet w aktualizacji „sprawdzone dzisiaj”. `funding_verified_at` jest odrębną dozwoloną datą merytorycznej weryfikacji finansowania.
@@ -641,9 +729,9 @@ Walidator pól enum w `data` dopasowuje także etykiety UI i wielkość liter. D
 
 Te ułatwienia nie oznaczają swobody dla strukturalnych enumów: `objects[].type`, `sources[].type`, `company_size`, `geography[].type`, `geography[].role`, `contacts[].kind`, `operators[].operator_type` są sprawdzane względem dokładnych list.
 
-### 15.3. `documents[]` — pełny starszy katalog wymagań
+### 15.3. Legacy `document_type_key` — stary zamknięty katalog
 
-Ta sekcja dokumentuje kompatybilność. Do nowych rzeczywistych załączników używaj `sources` + `files` + `metadata`. Wymaganie dokumentu nie jest tym samym co konkretny plik. `documents[]` nie zapisuje URL ani binarnej zawartości.
+Ta sekcja dokumentuje wyłącznie kompatybilność. **Nowe wymagania dokumentowe są dynamiczne i używają modelu z sekcji 12.4.** Stare importy mogą nadal zawierać `document_type_key` oraz pola `requirement`/`auto_fill`/`notes`; importer je zachowuje. AI nie powinno generować `document_type_key` dla nowych danych.
 
 | Pole | Typ / wartości | Znaczenie |
 | --- | --- | --- |
