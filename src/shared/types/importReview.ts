@@ -68,6 +68,21 @@ export interface ImportReviewFinancingFieldView {
   options?: ImportReviewEditorOption[];
 }
 
+export interface ImportReviewDocumentFieldView {
+  field: string;
+  label: string;
+  value: string;
+}
+
+export interface ImportReviewDocumentView {
+  id: string;
+  key: string;
+  label: string;
+  fields: ImportReviewDocumentFieldView[];
+  originalFileName?: string;
+  sourceFileNames: string[];
+}
+
 export interface ImportReviewFinancingView {
   id: string;
   key: string;
@@ -86,6 +101,7 @@ export interface ImportReviewObjectView {
   evidenceCount: number;
   fileCount: number;
   financingCount: number;
+  documentCount: number;
 }
 
 export interface ImportReviewView {
@@ -101,5 +117,6 @@ export interface ImportReviewView {
   fields: ImportReviewFieldView[];
   evidence: ImportReviewEvidenceView[];
   files: ImportReviewFileView[];
+  documents: ImportReviewDocumentView[];
   financing: ImportReviewFinancingView[];
 }
