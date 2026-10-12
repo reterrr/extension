@@ -479,22 +479,28 @@ function stageExistingObjectUpdate(
         importedRow.importKey &&
         (candidate.importKey === importedRow.importKey || String(candidate.id) === importedRow.importKey),
     );
-    row ??= (state.documentRequirements ?? []).find(
-      (candidate) =>
-        candidate.objectId === target.id &&
-        candidate.document_type_key === importedRow.document_type_key,
-    );
+    if (importedRow.document_type_key) {
+      row ??= (state.documentRequirements ?? []).find(
+        (candidate) =>
+          candidate.objectId === target.id &&
+          candidate.document_type_key === importedRow.document_type_key,
+      );
+    }
     if (!row) {
       row = {
         id: uuid(),
         objectId: target.id,
         importKey: importedRow.importKey,
-        document_type_key: importedRow.document_type_key,
+        ...(importedRow.document_type_key
+          ? { document_type_key: importedRow.document_type_key }
+          : {}),
       };
       (state.documentRequirements ||= []).push(row);
     } else {
       row.importKey = importedRow.importKey;
-      row.document_type_key = importedRow.document_type_key;
+      if (importedRow.document_type_key) {
+        row.document_type_key = importedRow.document_type_key;
+      }
     }
 
     for (const field of Object.keys(BurbotDocuments.fields ?? {})) {
@@ -502,10 +508,47 @@ function stageExistingObjectUpdate(
         row[field] = importedRow[field];
       }
     }
+
+    if (importedRow.original_file_source_id) {
+      const mapped = importedTargetIdMap.get(
+        `file_source:${String(importedRow.original_file_source_id)}`,
+      );
+      if (!mapped) {
+        throw new Error(
+          `Could not remap document template file ${String(importedRow.original_file_source_id)}.`,
+        );
+      }
+      row.original_file_source_id = mapped;
+    } else {
+      delete row.original_file_source_id;
+    }
+
+    if (Array.isArray(importedRow.source_file_ids)) {
+      row.source_file_ids = importedRow.source_file_ids.map((fileId) => {
+        const mapped = importedTargetIdMap.get(
+          `file_source:${String(fileId)}`,
+        );
+        if (!mapped) {
+          throw new Error(
+            `Could not remap document source file ${String(fileId)}.`,
+          );
+        }
+        return mapped;
+      });
+    } else {
+      delete row.source_file_ids;
+    }
+
     importedTargetIdMap.set(
-      `document:${String(importedRow.document_type_key)}`,
-      String(row.document_type_key),
+      `document:${String(importedRow.id)}`,
+      String(row.id),
     );
+    if (importedRow.document_type_key) {
+      importedTargetIdMap.set(
+        `document:${String(importedRow.document_type_key)}`,
+        String(row.id),
+      );
+    }
   }
 
   const importedNestedEvidence = (importedState.importTargetEvidence ?? []).filter(
