@@ -482,7 +482,14 @@ test("dynamic documents support operator templates and no-template requirements"
   assert.equal(reviewView.objects[0].documentCount, 2);
   assert.equal(reviewView.documents[0].label, "Formularz operatora");
   assert.equal(reviewView.documents[0].originalFileName, "regulamin.pdf");
-  assert.deepEqual(reviewView.documents[0].sourceFileNames, ["regulamin.pdf"]);
+  assert.equal(
+    Object.prototype.hasOwnProperty.call(reviewView.documents[0], "sourceFileNames"),
+    false,
+  );
+  assert.equal(
+    reviewView.documents[1].fields.some((field) => field.field === "version_label"),
+    false,
+  );
   assert.ok(
     reviewView.documents[1].fields.some(
       (field) =>
@@ -502,7 +509,17 @@ test("dynamic documents support operator templates and no-template requirements"
 
   assert.equal(portableProject.files[0].key, "FILE_RULES");
   assert.equal(portableProject.documents[0].original_file, "FILE_RULES");
-  assert.deepEqual(portableProject.documents[0].source_files, ["FILE_RULES"]);
+  assert.equal(
+    Object.prototype.hasOwnProperty.call(portableProject.documents[0], "source_files"),
+    false,
+  );
+  assert.equal(
+    Object.prototype.hasOwnProperty.call(
+      portableProject.documents[1].data,
+      "version_label",
+    ),
+    false,
+  );
   assert.equal(
     portableProject.documents[1].data.fulfillment_mode,
     "WITHOUT_OPERATOR_TEMPLATE",

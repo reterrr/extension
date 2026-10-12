@@ -532,7 +532,6 @@ test("recruitment RoundImport ZIP plan matches the strict V5 manifest contract",
     requirement: "required",
     fulfillmentMode: "operator_template",
     originalFileId: "FILE_002",
-    sourceFileIds: ["FILE_002"],
     signatureRequirement: "required_file",
     sourceUrl: "https://example.test/nabor/3-2026",
   });
@@ -645,21 +644,20 @@ test("RoundImport exports configured documents including requirements without op
     requirement: "informational",
     fulfillmentMode: "without_operator_template",
     originalFileId: null,
-    sourceFileIds: ["FILE_001"],
     signatureRequirement: "not_required",
   });
   assert.equal(form.fulfillmentMode, "operator_template");
   assert.equal(form.originalFileId, "FILE_002");
-  assert.deepEqual(form.sourceFileIds, ["FILE_001", "FILE_002"]);
+  assert.equal(Object.prototype.hasOwnProperty.call(form, "sourceFileIds"), false);
   assert.equal(form.condition, "Gdy podmiot składa zgłoszenie w tej ścieżce.");
   assert.equal(form.deliveryStage, "ZGLOSZENIE");
   assert.equal(form.responsibility, "client");
   assert.equal(form.signatureRequirement, "required_file");
-  assert.equal(form.versionLabel, "1.0");
+  assert.equal(Object.prototype.hasOwnProperty.call(form, "versionLabel"), false);
 
   assert.equal(bank.fulfillmentMode, "without_operator_template");
   assert.equal(bank.originalFileId, null);
-  assert.deepEqual(bank.sourceFileIds, ["FILE_001"]);
+  assert.equal(Object.prototype.hasOwnProperty.call(bank, "sourceFileIds"), false);
   assert.equal(
     bank.requiredEvidence,
     "Zaświadczenie o prowadzeniu rachunku lub kopia umowy rachunku.",

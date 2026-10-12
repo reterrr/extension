@@ -422,8 +422,10 @@ function documentViews(
     .filter((row) => row.objectId === object.id)
     .map((row) => {
       const fields = Object.entries(BurbotDocuments.fields)
-        .filter(([field]) =>
-          Object.prototype.hasOwnProperty.call(row, field),
+        .filter(
+          ([field, definition]) =>
+            !definition.hidden &&
+            Object.prototype.hasOwnProperty.call(row, field),
         )
         .map(([field, definition]) => ({
           field,
@@ -442,10 +444,6 @@ function documentViews(
       const originalFileName = row.original_file_source_id
         ? filesById.get(row.original_file_source_id)
         : undefined;
-      const sourceFileNames = (row.source_file_source_ids ?? [])
-        .map((id) => filesById.get(id))
-        .filter((name): name is string => Boolean(name));
-
       return {
         id: row.id,
         key: String(row.importKey ?? row.id),
@@ -454,7 +452,6 @@ function documentViews(
           String(row.document_type_key ?? row.importKey ?? row.id),
         fields,
         ...(originalFileName ? { originalFileName } : {}),
-        sourceFileNames,
       };
     });
 }
@@ -1173,8 +1170,13 @@ export function buildImportApprovalPlan(
     .filter((row) => row.objectId === object.id)
     .map((row) => {
       const data: Record<string, unknown> = {};
-      for (const field of Object.keys(BurbotDocuments.fields ?? {})) {
-        if (Object.prototype.hasOwnProperty.call(row, field)) {
+      for (const [field, definition] of Object.entries(
+        BurbotDocuments.fields ?? {},
+      )) {
+        if (
+          !definition.hidden &&
+          Object.prototype.hasOwnProperty.call(row, field)
+        ) {
           data[field] = (row as unknown as Record<string, unknown>)[field];
         }
       }
@@ -1187,16 +1189,6 @@ export function buildImportApprovalPlan(
           `Nie udało się powiązać wzoru operatora dla dokumentu ${row.label ?? row.importKey ?? row.id}.`,
         );
       }
-      const sourceFiles = (row.source_file_source_ids ?? []).map((id) => {
-        const key = fileKeyById.get(id);
-        if (!key) {
-          throw new Error(
-            `Nie udało się powiązać pliku źródłowego dla dokumentu ${row.label ?? row.importKey ?? row.id}.`,
-          );
-        }
-        return key;
-      });
-
       const evidence = portableTargetEvidence(
         session.previewState,
         object.id,
@@ -1210,7 +1202,6 @@ export function buildImportApprovalPlan(
           : {}),
         data,
         ...(originalFile ? { original_file: originalFile } : {}),
-        ...(sourceFiles.length ? { source_files: sourceFiles } : {}),
         ...(evidence ? { evidence } : {}),
       };
     });

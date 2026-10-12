@@ -99,47 +99,6 @@ function physicalFileOptions(
   selectNode.value = current ?? "";
 }
 
-function renderSourceFileChecks(
-  row: LegacyStoredDocumentRequirement,
-  files: LegacyStoredFileSource[],
-): {
-  node: HTMLElement;
-  selectedIds: () => string[];
-} {
-  const wrapper = document.createElement("fieldset");
-  wrapper.className = "document-requirement-source-files";
-  const legend = document.createElement("legend");
-  legend.textContent = "Pliki źródłowe / dowodowe";
-  wrapper.append(legend);
-
-  if (!files.length) {
-    const empty = document.createElement("small");
-    empty.textContent = "Brak przypiętych plików.";
-    wrapper.append(empty);
-  }
-
-  const selected = new Set(row.source_file_source_ids ?? []);
-  const checks: HTMLInputElement[] = [];
-  for (const source of files) {
-    const label = document.createElement("label");
-    const checkbox = document.createElement("input");
-    checkbox.type = "checkbox";
-    checkbox.value = source.id;
-    checkbox.checked = selected.has(source.id);
-    checks.push(checkbox);
-    const span = document.createElement("span");
-    span.textContent = fileLabel(source);
-    label.append(checkbox, span);
-    wrapper.append(label);
-  }
-
-  return {
-    node: wrapper,
-    selectedIds: () =>
-      checks.filter((checkbox) => checkbox.checked).map((checkbox) => checkbox.value),
-  };
-}
-
 function renderRequirement(
   row: LegacyStoredDocumentRequirement,
   options: RenderOptions,
@@ -231,7 +190,6 @@ function renderRequirement(
   sourceUrl.type = "url";
   sourceUrl.placeholder = "https://…";
   const sourceDescription = textarea(text(normalized.source_description), 1000);
-  const versionLabel = input(text(normalized.version_label), 255);
 
   const originalFile = document.createElement("select");
   physicalFileOptions(originalFile, files, normalized.original_file_source_id);
@@ -267,15 +225,6 @@ function renderRequirement(
     fieldLabel("Odpowiedzialność", responsibility),
   );
 
-  const sourceRow = document.createElement("div");
-  sourceRow.className = "document-requirement-field-row";
-  sourceRow.append(
-    fieldLabel("Oficjalne źródło", sourceUrl),
-    fieldLabel("Wersja dokumentu", versionLabel),
-  );
-
-  const sourceFiles = renderSourceFileChecks(normalized, files);
-
   body.append(
     firstRow,
     secondRow,
@@ -283,9 +232,8 @@ function renderRequirement(
     fieldLabel("Kiedy dokument jest wymagany", conditionInput),
     fourthRow,
     fieldLabel("Co należy dostarczyć", requiredEvidence),
-    sourceRow,
+    fieldLabel("Oficjalne źródło", sourceUrl),
     fieldLabel("Opis źródła", sourceDescription),
-    sourceFiles.node,
   );
 
   const informational = () => requirement.value === "INFORMATIONAL";
@@ -321,10 +269,8 @@ function renderRequirement(
         !informational() && fulfillment.value === "OPERATOR_TEMPLATE"
           ? originalFile.value || undefined
           : undefined,
-      source_file_source_ids: sourceFiles.selectedIds(),
       source_url: sourceUrl.value,
       source_description: sourceDescription.value,
-      version_label: versionLabel.value,
       signature_requirement: signature.value,
     };
     void options

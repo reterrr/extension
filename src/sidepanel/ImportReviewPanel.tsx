@@ -1110,14 +1110,6 @@ export function ImportReviewPanel() {
                                   </strong>
                                 </label>
                               )}
-                              {documentRow.sourceFileNames.length > 0 && (
-                                <label className="import-review-workspace-field">
-                                  <small>Pliki źródłowe / dowodowe</small>
-                                  <strong className="import-review-workspace-value">
-                                    {documentRow.sourceFileNames.join(", ")}
-                                  </strong>
-                                </label>
-                              )}
                             </div>
                           </details>
                         ))}

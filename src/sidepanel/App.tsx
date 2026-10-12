@@ -159,7 +159,7 @@ export function App() {
               <summary className="workspace-section-summary">
                 <span className="workspace-section-title">
                   <strong>Dokumenty</strong>
-                  <small>Wymagania klienta, wzory operatora i pliki źródłowe</small>
+                  <small>Wymagania klienta i pliki operatora</small>
                 </span>
                 <span
                   id="file-source-count"
@@ -197,7 +197,7 @@ export function App() {
                   className="document-requirement-list"
                 />
                 <div className="file-source-subheading">
-                  <strong>Pliki operatora i źródła</strong>
+                  <strong>Pliki operatora</strong>
                   <small>
                     Fizyczne załączniki pozostają osobno od wymagań dokumentowych.
                   </small>
