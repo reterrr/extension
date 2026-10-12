@@ -275,10 +275,7 @@
             "responsibility": "CLIENT",
             "source_url": "https://example.org/files/regulamin-projektu.pdf",
             "signature_requirement": "NOT_REQUIRED"
-          },
-          "source_files": [
-            "FILE_REGULATIONS"
-          ]
+          }
         },
         {
           "key": "DOC_APPLICATION",
@@ -292,11 +289,7 @@
             "required_evidence": "Wypełniony i podpisany formularz zgłoszeniowy operatora.",
             "signature_requirement": "REQUIRED_FILE"
           },
-          "original_file": "FILE_APPLICATION",
-          "source_files": [
-            "FILE_REGULATIONS",
-            "FILE_APPLICATION"
-          ]
+          "original_file": "FILE_APPLICATION"
         },
         {
           "key": "DOC_BUR_SERVICE_CARD",
@@ -307,10 +300,7 @@
             "fulfillment_mode": "WITHOUT_OPERATOR_TEMPLATE",
             "responsibility": "CLIENT",
             "signature_requirement": "UNKNOWN"
-          },
-          "source_files": [
-            "FILE_REGULATIONS"
-          ]
+          }
         }
       ],
       "financing": [
