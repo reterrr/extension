@@ -1110,10 +1110,6 @@ export function ImportReviewPanel() {
                                   </strong>
                                 </label>
                               )}
-
-                                  </strong>
-                                </label>
-                              )}
                             </div>
                           </details>
                         ))}
