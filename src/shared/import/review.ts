@@ -960,6 +960,12 @@ export function buildImportApprovalPlan(
   const selectedFiles = (session.previewState.fileSources ?? []).filter(
     (file) => file.objectId === object.id,
   );
+  const portableFileKeyById = new Map(
+    selectedFiles.map((file) => [
+      String(file.id),
+      String(file.importKey ?? file.sourceImportKey ?? file.id),
+    ]),
+  );
   const portableFiles = selectedFiles.map((file) => {
     const source = importedSourceForFile(file, importedSources);
     usedSourceIds.add(source.id);
@@ -994,6 +1000,7 @@ export function buildImportApprovalPlan(
     );
 
     return {
+      key: portableFileKeyById.get(String(file.id)),
       source: source.importKey,
       ...(pageSource ? { source_page: pageSource.importKey } : {}),
       ...(Object.keys(metadata).length ? { metadata } : {}),
@@ -1095,15 +1102,51 @@ export function buildImportApprovalPlan(
           data[field] = row[field];
         }
       }
-      const evidence = portableTargetEvidence(
-        session.previewState,
-        object.id,
-        { kind: "document", id: String(row.document_type_key) },
-        sourceById,
-      );
+      const originalFileKey = row.original_file_source_id
+        ? portableFileKeyById.get(String(row.original_file_source_id))
+        : undefined;
+      const sourceFileKeys = Array.isArray(row.source_file_ids)
+        ? row.source_file_ids
+            .map((id) => portableFileKeyById.get(String(id)))
+            .filter((value): value is string => Boolean(value))
+        : [];
+      if (row.original_file_source_id && !originalFileKey) {
+        throw new Error(
+          `Document ${row.importKey ?? row.id} points to a file outside the imported object.`,
+        );
+      }
+      if (
+        Array.isArray(row.source_file_ids) &&
+        sourceFileKeys.length !== row.source_file_ids.length
+      ) {
+        throw new Error(
+          `Document ${row.importKey ?? row.id} has an unresolved source file.`,
+        );
+      }
+
+      const evidence =
+        portableTargetEvidence(
+          session.previewState,
+          object.id,
+          { kind: "document", id: String(row.id) },
+          sourceById,
+        ) ??
+        (row.document_type_key
+          ? portableTargetEvidence(
+              session.previewState,
+              object.id,
+              { kind: "document", id: String(row.document_type_key) },
+              sourceById,
+            )
+          : undefined);
+
       return {
-        key: String(row.importKey ?? row.document_type_key),
-        document_type_key: String(row.document_type_key),
+        key: String(row.importKey ?? row.id),
+        ...(row.document_type_key
+          ? { document_type_key: String(row.document_type_key) }
+          : {}),
+        ...(originalFileKey ? { original_file_key: originalFileKey } : {}),
+        ...(sourceFileKeys.length ? { source_file_keys: sourceFileKeys } : {}),
         data,
         ...(evidence ? { evidence } : {}),
       };
