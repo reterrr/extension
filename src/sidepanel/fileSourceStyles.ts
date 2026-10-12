@@ -2,6 +2,160 @@ if (!document.querySelector("style[data-burbot-file-sources]")) {
   const style = document.createElement("style");
   style.dataset.burbotFileSources = "true";
   style.textContent = `
+.document-requirement-heading,
+.file-source-subheading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 8px;
+}
+.document-requirement-heading > div,
+.file-source-subheading {
+  color: var(--text);
+}
+.document-requirement-heading strong,
+.file-source-subheading strong {
+  display: block;
+  font-size: 12px;
+}
+.document-requirement-heading small,
+.file-source-subheading small {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.file-source-subheading {
+  display: block;
+  margin-top: 14px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+.document-requirement-list {
+  display: grid;
+  gap: 6px;
+  margin-top: 8px;
+}
+.document-requirement-empty {
+  margin: 0;
+  padding: 7px 8px;
+  border: 1px dashed var(--line);
+  border-radius: 7px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.document-requirement-row {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #fff;
+}
+.document-requirement-row > summary {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 9px;
+  cursor: pointer;
+  list-style: none;
+}
+.document-requirement-row > summary::-webkit-details-marker {
+  display: none;
+}
+.document-requirement-row > summary::before {
+  content: "›";
+  color: var(--muted);
+  font-size: 16px;
+  line-height: 1;
+  transition: transform .12s ease;
+}
+.document-requirement-row[open] > summary::before {
+  transform: rotate(90deg);
+}
+.document-requirement-summary-copy {
+  flex: 1;
+  min-width: 0;
+}
+.document-requirement-summary-copy strong,
+.document-requirement-summary-copy small {
+  display: block;
+}
+.document-requirement-summary-copy strong {
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.document-requirement-summary-copy small {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.document-requirement-remove {
+  flex: none;
+  width: 24px;
+  min-width: 24px;
+  height: 24px;
+  padding: 0;
+}
+.document-requirement-body {
+  display: grid;
+  gap: 7px;
+  padding: 9px;
+  border-top: 1px solid var(--line);
+  background: #f8faf8;
+}
+.document-requirement-field-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 7px;
+}
+.document-requirement-field {
+  display: grid;
+  gap: 3px;
+}
+.document-requirement-field > span,
+.document-requirement-source-files > legend {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+.document-requirement-field input,
+.document-requirement-field textarea,
+.document-requirement-field select {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 32px;
+  padding: 6px 7px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  color: inherit;
+  font: inherit;
+}
+.document-requirement-field textarea {
+  min-height: 66px;
+  resize: vertical;
+}
+.document-requirement-source-files {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+  padding: 7px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+.document-requirement-source-files label {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  font-size: 12px;
+}
+.document-requirement-source-files input {
+  margin-top: 2px;
+}
+.document-requirement-save {
+  justify-self: start;
+}
+
 .file-source-list {
   display: grid;
   gap: 6px;
@@ -253,8 +407,12 @@ if (!document.querySelector("style[data-burbot-file-sources]")) {
   box-shadow: inset 0 0 0 1px #bfd4bb;
 }
 @media (max-width: 430px) {
-  .file-source-field-row {
+  .file-source-field-row,
+  .document-requirement-field-row {
     grid-template-columns: 1fr;
+  }
+  .document-requirement-heading {
+    display: grid;
   }
 }
 `;
