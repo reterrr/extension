@@ -80,7 +80,6 @@ export interface ImportReviewDocumentView {
   label: string;
   fields: ImportReviewDocumentFieldView[];
   originalFileName?: string;
-  sourceFileNames: string[];
 }
 
 export interface ImportReviewFinancingView {
