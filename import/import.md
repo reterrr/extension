@@ -547,7 +547,6 @@ Każdy nowy wpis `documents[]` ma postać:
 | `key` | niepusty tekst, wymagane | Stabilny klucz wymagania, np. `DOC_KARTA_USLUGI_BUR`. |
 | `data` | obiekt, wymagane | Pola biznesowe wymagania opisane niżej. |
 | `original_file` | `files[].key`, `null` albo pominięte | Fizyczny wzór operatora. Dla `OPERATOR_TEMPLATE` wymagany i musi wskazywać plik tego samego obiektu. Dla dokumentu bez wzoru pomiń lub ustaw `null`. |
-| `source_files` | tablica unikalnych `files[].key` | Pliki stanowiące źródło/dowód wymagania, np. regulamin lub instrukcja. To nie znaczy, że klient ma je składać. |
 | `evidence` | mapa, opcjonalne | Cytaty potwierdzające konkretne pola `data`. |
 | `document_type_key` | legacy, opcjonalne | Tylko do zgodności ze starym zamkniętym katalogiem. **Nowe importy go nie generują.** |
 
@@ -565,14 +564,12 @@ Bieżące pola `documents[].data`:
 | `required_evidence` | tekst do 4000 | Co konkretnie trzeba dostarczyć/okazać, np. „Karta Usługi pobrana z BUR dla wybranej usługi” albo „faktura oraz potwierdzenie zapłaty”. |
 | `source_url` | URL HTTP/HTTPS | Oficjalne źródło wymagania. Może wskazywać ogłoszenie, regulamin albo stronę operatora. |
 | `source_description` | tekst do 1000 | Krótkie wyjaśnienie podstawy, np. „Wymóg z § 6 ust. 4 Regulaminu”. |
-| `version_label` | tekst do 255 | Wersja dokumentu/wymagania, jeśli ma znaczenie. |
 | `signature_requirement` | `UNKNOWN`, `NOT_REQUIRED`, `REQUIRED_FILE`, `EXTERNAL_OPERATOR` | Czy i gdzie wymagany jest podpis/dowód podpisania. |
 
 Zasady spójności:
 - `fulfillment_mode: "OPERATOR_TEMPLATE"` **musi** mieć `original_file`;
 - `fulfillment_mode: "WITHOUT_OPERATOR_TEMPLATE"` nie wymaga fizycznego pliku;
 - `requirement: "INFORMATIONAL"` oznacza, że klient nie dostarcza tego dokumentu; nie przypisuj mu `original_file` jako formularza do złożenia;
-- `source_files` opisuje dowody/źródła wymagania i może wskazywać np. regulamin, nawet jeśli sam wymagany dokument jest bez wzoru;
 - fakt, że operator udostępnił plik, nie oznacza automatycznie, że klient ma go złożyć;
 - fakt, że regulamin wymaga dokumentu, nie oznacza, że musi istnieć jego plik w `files[]`.
 
@@ -592,8 +589,7 @@ Przykład dokumentu bez wzoru operatora:
     "source_url": "https://operator.example/nabor",
     "source_description": "Wymóg wskazany w regulaminie naboru.",
     "signature_requirement": "NOT_REQUIRED"
-  },
-  "source_files": ["FILE_REGULAMIN"]
+  }
 }
 ```
 
@@ -613,8 +609,7 @@ Przykład formularza na wzorze operatora:
     "required_evidence": "Wypełniony i podpisany formularz operatora.",
     "signature_requirement": "REQUIRED_FILE"
   },
-  "original_file": "FILE_DE_MINIMIS",
-  "source_files": ["FILE_REGULAMIN", "FILE_DE_MINIMIS"]
+  "original_file": "FILE_DE_MINIMIS"
 }
 ```
 
@@ -639,7 +634,7 @@ Dozwolone miejsca i nazwy kluczy:
 | `files[].evidence` | `display_name`, `purpose`, `has_fields`, `intended_use`, `client_requirement`, `signature_requirement` oraz legacy `document_kind`, `delivery_method`. |
 | `geography[].evidence` | Wyłącznie `value`. |
 | `contacts[].evidence` | Wyłącznie `value`. |
-| `documents[].evidence` | Wyłącznie jawnie podane pola `documents[].data`, np. `label`, `purpose`, `requirement`, `condition`, `fulfillment_mode`, `delivery_stage`, `responsibility`, `required_evidence`, `source_url`, `source_description`, `version_label`, `signature_requirement`. Referencje `original_file` i `source_files` nie mają własnych kluczy evidence. |
+| `documents[].evidence` | Wyłącznie jawnie podane pola `documents[].data`, np. `label`, `purpose`, `requirement`, `condition`, `fulfillment_mode`, `delivery_stage`, `responsibility`, `required_evidence`, `source_url`, `source_description`, `signature_requirement`. Referencja `original_file` nie ma własnego klucza evidence. |
 
 Nie ma osobnej mapy evidence na `sources`, `$ref` lub `operators[]`. Dla referencji będącej polem `data`, np. `project_id`, można użyć zwykłego `objects[].evidence.project_id`, jeśli cytat rzeczywiście potwierdza relację.
 
@@ -729,7 +724,11 @@ Walidator pól enum w `data` dopasowuje także etykiety UI i wielkość liter. D
 
 Te ułatwienia nie oznaczają swobody dla strukturalnych enumów: `objects[].type`, `sources[].type`, `company_size`, `geography[].type`, `geography[].role`, `contacts[].kind`, `operators[].operator_type` są sprawdzane względem dokładnych list.
 
-### 15.3. Legacy `document_type_key` — stary zamknięty katalog
+### 15.3. Legacy pola dokumentów
+
+Importer nadal przyjmuje starsze pola `documents[].data.version_label` oraz `documents[].source_files` wyłącznie dla zgodności z istniejącymi eksportami. **Nowe importy AI nie powinny ich generować.** Bieżący model opiera się na `source_url`, `source_description` i — jeśli operator udostępnia konkretny wzór — `original_file`.
+
+### 15.4. Legacy `document_type_key` — stary zamknięty katalog
 
 Ta sekcja dokumentuje wyłącznie kompatybilność. **Nowe wymagania dokumentowe są dynamiczne i używają modelu z sekcji 12.4.** Stare importy mogą nadal zawierać `document_type_key` oraz pola `requirement`/`auto_fill`/`notes`; importer je zachowuje. AI nie powinno generować `document_type_key` dla nowych danych.
 
