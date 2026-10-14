@@ -293,6 +293,24 @@ test("Documents section renders one unified list for files and no-template docum
     documents,
     /card\.className = "document-requirement-row file-source-row"/,
   );
+  assert.match(
+    documents,
+    /fulfillmentLabelNode\.hidden = isInfo \|\| usesOperatorTemplate/,
+  );
+  assert.match(documents, /originalFileLabel\.hidden = !usesOperatorTemplate/);
+  assert.match(documents, /fourthRow\.hidden = !withoutOperatorTemplate/);
+  assert.match(
+    documents,
+    /requiredEvidenceLabel\.hidden = !withoutOperatorTemplate/,
+  );
+  assert.match(
+    documents,
+    /fulfillment\.value === "WITHOUT_OPERATOR_TEMPLATE"[\s\S]*?deliveryStage\.value/,
+  );
+  assert.match(
+    documents,
+    /fulfillment\.value === "OPERATOR_TEMPLATE"[\s\S]*?originalFile\.value/,
+  );
   assert.match(files, /const representedFileIds = supportsRequirements/);
   assert.match(
     files,
