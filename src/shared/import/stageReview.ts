@@ -218,6 +218,34 @@ function stageExistingObjectUpdate(
   const target = state.objects.find((object) => object.id === targetId)!;
   const schema = BurbotSchema[target.type];
 
+  if (selected.type === "recruitment") {
+    const projectPatch = plan.referencePatches.find(
+      (patch) => patch.field === "project_id",
+    );
+    if (projectPatch) {
+      for (const row of (state.financingRules ?? []).filter(
+        (candidate) => candidate.objectId === selected.id && candidate.serviceId,
+      )) {
+        const importedService = (state.serviceDefinitions ?? []).find(
+          (service) => service.id === row.serviceId,
+        );
+        if (!importedService) continue;
+        if (importedService.objectId === projectPatch.targetObjectId) continue;
+        const service = serviceMatch(
+          state,
+          projectPatch.targetObjectId,
+          importedService,
+        );
+        if (!service) {
+          throw new Error(
+            `Could not resolve project service for financing variant ${String(row.importKey ?? row.id)}. Approve or create the project service first.`,
+          );
+        }
+        row.serviceId = service.id;
+      }
+    }
+  }
+
   for (const patch of plan.referencePatches) {
     if (!state.objects.some((object) => object.id === patch.targetObjectId)) {
       throw new Error(
@@ -704,6 +732,9 @@ function stageNewObject(
   const seed = BurbotCore.empty() as LegacyStorageState;
   seed.revision = original.revision;
   seed.objects = original.objects.filter((object) => dependencyIds.has(object.id));
+  seed.serviceDefinitions = (original.serviceDefinitions ?? [])
+    .filter((row) => dependencyIds.has(row.objectId))
+    .map((row) => structuredClone(row));
   let state = importDocumentIntoState(
     seed,
     plan.document,
@@ -834,9 +865,17 @@ function stageNewObject(
   for (const key of ["objects", "rules", "fileSources", "financingRules",
     "serviceDefinitions", "operatorAssignments", "geographies", "operatorContacts",
     "documentRequirements", "fieldEvidence", "importTargetEvidence", "importSources"] as const) {
-    const additions = key === "objects"
-      ? state.objects.filter((object) => !beforeIds.has(object.id))
-      : state[key];
+    const additions =
+      key === "objects"
+        ? state.objects.filter((object) => !beforeIds.has(object.id))
+        : key === "serviceDefinitions"
+          ? (state.serviceDefinitions ?? []).filter(
+              (row) =>
+                !(original.serviceDefinitions ?? []).some(
+                  (existing) => existing.id === row.id,
+                ),
+            )
+          : state[key];
     if (additions?.length)
       (merged as unknown as Record<string, unknown>)[key] = [...(original[key] ?? []), ...additions];
   }
