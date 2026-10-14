@@ -317,8 +317,10 @@ function renderRequirement(
   const informational = () => requirement.value === "INFORMATIONAL";
   const refreshMode = () => {
     const isInfo = informational();
-    const usesOperatorTemplate =
+    const wantsOperatorTemplate =
       !isInfo && fulfillment.value === "OPERATOR_TEMPLATE";
+    const usesOperatorTemplate =
+      wantsOperatorTemplate && Boolean(originalFile.value);
     const withoutOperatorTemplate =
       !isInfo && fulfillment.value === "WITHOUT_OPERATOR_TEMPLATE";
 
@@ -328,9 +330,11 @@ function renderRequirement(
     //
     // Delivery workflow fields describe only case 2. For case 1 the physical
     // operator file is the relevant input and showing both sets of controls
-    // makes the card look like two independent requirements.
+    // makes the card look like two independent requirements. Keep the mode
+    // selector visible while a template is being chosen so the user can still
+    // switch back to "without template".
     fulfillmentLabelNode.hidden = isInfo || usesOperatorTemplate;
-    originalFileLabel.hidden = !usesOperatorTemplate;
+    originalFileLabel.hidden = !wantsOperatorTemplate;
     thirdRow.hidden = isInfo;
     fourthRow.hidden = !withoutOperatorTemplate;
     requiredEvidenceLabel.hidden = !withoutOperatorTemplate;
