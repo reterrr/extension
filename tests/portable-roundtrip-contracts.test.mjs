@@ -222,6 +222,20 @@ test("editing exported rows with database IDs updates existing rows, even with g
   );
 });
 
+test("canonical no-template documents cannot also declare a physical source", () => {
+  const document = structuredClone(example);
+  const project = byKey(document, "project-1");
+  const noTemplate = project.files.find(
+    (file) => file.key === "DOC_BUR_SERVICE_CARD",
+  );
+  noTemplate.source = "regulations-pdf";
+
+  assert.throws(
+    () => imported(document),
+    /without_template=true must not contain source/,
+  );
+});
+
 test("files without captured text remain attachments with empty snapshots; URLs and false survive", () => {
   const state = BurbotCore.empty();
   state.objects = [{ id: "o", type: "operator", values: { name: "Operator" } }];
