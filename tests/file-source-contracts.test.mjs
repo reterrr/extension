@@ -650,8 +650,9 @@ test("RoundImport exports configured documents including requirements without op
   assert.equal(form.originalFileId, "FILE_002");
   assert.equal(Object.prototype.hasOwnProperty.call(form, "sourceFileIds"), false);
   assert.equal(form.condition, "Gdy podmiot składa zgłoszenie w tej ścieżce.");
-  assert.equal(form.deliveryStage, "ZGLOSZENIE");
-  assert.equal(form.responsibility, "client");
+  assert.equal(Object.prototype.hasOwnProperty.call(form, "deliveryStage"), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(form, "responsibility"), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(form, "requiredEvidence"), false);
   assert.equal(form.signatureRequirement, "required_file");
   assert.equal(Object.prototype.hasOwnProperty.call(form, "versionLabel"), false);
 
