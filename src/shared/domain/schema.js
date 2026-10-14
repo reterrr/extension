@@ -659,6 +659,9 @@
       LARGE: "Large",
       B2C: "B2C / osoba dorosła",
       NGO: "NGO",
+      NON_PUBLIC_FINANCE_EMPLOYER:
+        "Pracodawca poza sektorem finansów publicznych",
+      OTHER_EMPLOYER: "Pozostali pracodawcy",
     },
     fields: fundingFields,
   });
