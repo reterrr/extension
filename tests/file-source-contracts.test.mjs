@@ -651,7 +651,7 @@ test("FundPilot project export expands to all project recruitments", () => {
     revision: 1,
     objects: [
       {
-        id: "PR",
+        id: "project-id",
         importKey: "PR",
         type: "project",
         values: { name: "Projekt", status: "AKTYWNY", type: "B2B" },
