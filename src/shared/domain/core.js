@@ -695,6 +695,27 @@
           );
       } else if (message.op === "ASSIGN") {
         assign(state, object, message, uuid, now);
+        if (
+          object.type === "recruitment" &&
+          message.field === "project_id" &&
+          (!message.target || message.target.kind === "object")
+        ) {
+          const projectId = String(object.values?.project_id || "");
+          const validServices = new Set(
+            (state.serviceDefinitions || [])
+              .filter((row) => row.objectId === projectId)
+              .map((row) => row.id),
+          );
+          for (const row of state.financingRules || []) {
+            if (
+              row.objectId === object.id &&
+              row.serviceId &&
+              !validServices.has(row.serviceId)
+            ) {
+              delete row.serviceId;
+            }
+          }
+        }
       } else if (message.op === "EDIT") {
         const { values, definition } = fieldContext(
           state,
@@ -712,6 +733,28 @@
           : coerceField(message.value, definition, state);
         if (clearing) delete values[message.field];
         else values[message.field] = value;
+
+        if (
+          object.type === "recruitment" &&
+          message.field === "project_id" &&
+          (!message.target || message.target.kind === "object")
+        ) {
+          const projectId = String(value || "");
+          const validServices = new Set(
+            (state.serviceDefinitions || [])
+              .filter((row) => row.objectId === projectId)
+              .map((row) => row.id),
+          );
+          for (const row of state.financingRules || []) {
+            if (
+              row.objectId === object.id &&
+              row.serviceId &&
+              !validServices.has(row.serviceId)
+            ) {
+              delete row.serviceId;
+            }
+          }
+        }
 
         const rule = state.rules.find((r) =>
           matches(r, object.id, message.field, message.target),
