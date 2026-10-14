@@ -118,7 +118,27 @@ test("portable export imports directly with values, references, files, source sn
   assert.ok(exportedApplication);
   assert.equal(exportedApplication.without_template, undefined);
   assert.equal(exportedApplication.metadata.client_requirement, "Obowiązkowy");
-  assert.equal(exportedApplication.metadata.delivery_stage, "ZGLOSZENIE");
+  assert.equal(
+    Object.prototype.hasOwnProperty.call(
+      exportedApplication.metadata,
+      "delivery_stage",
+    ),
+    false,
+  );
+  assert.equal(
+    Object.prototype.hasOwnProperty.call(
+      exportedApplication.metadata,
+      "responsibility",
+    ),
+    false,
+  );
+  assert.equal(
+    Object.prototype.hasOwnProperty.call(
+      exportedApplication.metadata,
+      "required_evidence",
+    ),
+    false,
+  );
   const exportedServiceCard = exportedProject.files.find(
     (file) => file.key === "DOC_BUR_SERVICE_CARD",
   );
