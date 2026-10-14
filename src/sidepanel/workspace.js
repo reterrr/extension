@@ -1097,6 +1097,114 @@ export const workspaceReady = (() => {
       inheritButton.onclick = null;
     }
 
+    const projectForServices =
+      object.type === "project"
+        ? object
+        : object.type === "recruitment"
+          ? db.objects.find(
+              (candidate) =>
+                candidate.type === "project" &&
+                (candidate.id === object.values?.project_id ||
+                  candidate.importKey === object.values?.project_id),
+            )
+          : null;
+    const services = (db.serviceCategories || [])
+      .filter((row) => row.objectId === projectForServices?.id)
+      .sort((a, b) => String(a.label).localeCompare(String(b.label), "pl"));
+
+    if (object.type === "project") {
+      const manager = node("section", "project-service-manager");
+      const heading = node("div", "project-service-manager-heading");
+      const copy = node("div");
+      copy.append(
+        node("strong", "", "Usługi"),
+        node(
+          "small",
+          "",
+          "Twórz usługi projektu w runtime i przypisuj do nich warianty dofinansowania.",
+        ),
+      );
+      heading.append(copy);
+
+      const addRow = node("div", "project-service-add");
+      const input = node("input");
+      input.type = "text";
+      input.maxLength = 200;
+      input.placeholder = "np. Szkolenia, doradztwo, studia podyplomowe";
+      input.setAttribute("aria-label", "Nazwa nowej usługi");
+      const addButton = node("button", "text-button", "+ Dodaj usługę");
+      addButton.type = "button";
+      addButton.disabled = busy;
+      const addService = action(async () => {
+        const label = input.value.trim();
+        if (!label) {
+          notice("Wpisz nazwę usługi.", true);
+          input.focus();
+          return;
+        }
+        await data("ADD_SERVICE_CATEGORY", { objectId: object.id, label });
+      });
+      addButton.onclick = addService;
+      input.onkeydown = (event) => {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          addButton.click();
+        }
+      };
+      addRow.append(input, addButton);
+
+      manager.append(heading, addRow);
+
+      if (!services.length) {
+        manager.append(
+          node(
+            "p",
+            "project-service-empty",
+            "Brak usług. Wariant może pozostać bez przypisania do usługi.",
+          ),
+        );
+      } else {
+        const list = node("div", "project-service-list");
+        for (const service of services) {
+          const row = node("div", "project-service-row");
+          const serviceInput = node("input");
+          serviceInput.type = "text";
+          serviceInput.maxLength = 200;
+          serviceInput.value = service.label;
+          serviceInput.setAttribute("aria-label", "Nazwa usługi");
+          const save = node("button", "text-button", "Zapisz");
+          save.type = "button";
+          save.disabled = busy;
+          save.onclick = action(async () => {
+            await data("UPDATE_SERVICE_CATEGORY", {
+              objectId: object.id,
+              serviceId: service.id,
+              label: serviceInput.value,
+            });
+          });
+          const remove = node("button", "text-button danger", "Usuń");
+          remove.type = "button";
+          remove.disabled = busy;
+          remove.onclick = action(async () => {
+            if (
+              !confirm(
+                "Usunąć usługę? Przypisania wariantów do tej usługi zostaną wyczyszczone.",
+              )
+            )
+              return;
+            await data("REMOVE_SERVICE_CATEGORY", {
+              objectId: object.id,
+              serviceId: service.id,
+            });
+          });
+          row.append(serviceInput, save, remove);
+          list.append(row);
+        }
+        manager.append(list);
+      }
+      root.append(manager);
+    }
+
     const rows = (db.financingRules || []).filter(
       (r) => r.objectId === object.id,
     );
@@ -1126,6 +1234,14 @@ export const workspaceReady = (() => {
           "variant-summary",
           "Wariant " + variant.variant_no,
         );
+        const service = services.find(
+          (entry) => entry.id === variant.service_category_id,
+        );
+        if (service) {
+          summary.append(
+            node("span", "badge funding-service-badge", service.label),
+          );
+        }
         if (variant.copiedFromProjectId) {
           const inheritedBadge = node(
             "span",
@@ -1213,6 +1329,39 @@ export const workspaceReady = (() => {
           ),
         );
         details.append(summary);
+
+        const serviceField = node("label", "funding-service-field");
+        serviceField.append(node("span", "", "Usługa"));
+        const serviceSelect = node("select");
+        serviceSelect.append(new Option("Bez przypisanej usługi", ""));
+        for (const service of services) {
+          serviceSelect.append(new Option(service.label, service.id));
+        }
+        serviceSelect.value = variant.service_category_id || "";
+        serviceSelect.disabled = busy || !projectForServices;
+        serviceSelect.title = projectForServices
+          ? "Przypisz wariant do usługi zdefiniowanej na projekcie."
+          : "Najpierw przypisz projekt.";
+        serviceSelect.onchange = action(async () => {
+          await data("SET_FUNDING_SERVICE", {
+            objectId: object.id,
+            variantId: variant.id,
+            serviceId: serviceSelect.value,
+          });
+        });
+        serviceField.append(serviceSelect);
+        if (!services.length) {
+          serviceField.append(
+            node(
+              "small",
+              "hint",
+              object.type === "project"
+                ? "Najpierw dodaj usługę powyżej."
+                : "Przypisany projekt nie ma zdefiniowanych usług.",
+            ),
+          );
+        }
+        details.append(serviceField);
 
         const fundingFieldGroups = new Map();
         for (const [field, definition] of Object.entries(BurbotFunding.fields)) {
