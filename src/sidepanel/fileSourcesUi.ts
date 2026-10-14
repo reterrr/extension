@@ -21,11 +21,9 @@ import type {
   LegacyStoredObject,
 } from "../shared/types/legacy-storage";
 import type { RemoteFileSourceCandidate } from "../shared/types/source";
-import { buildProjectDownloadPlan } from "../shared/fileDownloads";
-import { buildRoundImportZip } from "../shared/export/roundImportZip";
+import { buildFundPilotExportZip } from "../shared/export/fundPilotExportZip";
 import {
   projectFileInheritanceStatus,
-  projectForRecruitment,
 } from "../shared/fileInheritance";
 import {
   hasRequirementForFile,
@@ -190,118 +188,46 @@ function objectDisplayName(object: LegacyStoredObject): string {
   return object.label?.trim() || object.importKey?.trim() || object.id;
 }
 
-async function downloadAllObjectFiles(
+async function exportFundPilot(
   object: LegacyStoredObject,
 ): Promise<void> {
   if (object.type !== "recruitment" && object.type !== "project") {
     throw new Error(
-      "Pobieranie wszystkich plików jest dostępne dla projektu i naboru.",
-    );
-  }
-
-  const sources = (state.fileSources ?? []).filter(
-    (source) => source.objectId === object.id,
-  );
-  if (!sources.length && object.type === "project") {
-    throw new Error("Ten projekt nie ma przypiętych plików.");
-  }
-
-  const project =
-    object.type === "recruitment"
-      ? projectForRecruitment(state, object)
-      : object;
-  if (!project) {
-    throw new Error(
-      "Najpierw przypisz projekt do naboru — paczka RoundImportManifestV1 wymaga docelowego programu/projektu.",
+      "Eksport FundPilot jest dostępny dla projektu i naboru.",
     );
   }
 
   fileDownloadBusy = true;
   render();
   try {
-    if (object.type === "recruitment") {
-      const result = await buildRoundImportZip(
-        state,
-        object,
-        (completed, total, fileName) => {
-          notice(
-            completed >= total
-              ? `Spakowano ${total}/${total} plików…`
-              : `Tworzenie ZIP ${completed + 1}/${total}: ${fileName}`,
-          );
-        },
-      );
-      const url = URL.createObjectURL(result.blob);
-      try {
-        await browser.downloads.download({
-          url,
-          filename: result.zipFileName,
-          conflictAction: "uniquify",
-          saveAs: false,
-        });
-      } finally {
-        window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
-      }
-      const warning = result.warnings.length
-        ? ` Uwaga: ${result.warnings.join(" ")}`
-        : "";
-      notice(
-        `Utworzono ZIP RoundImportManifestV1: „${result.zipFileName}” (${sources.length} plików + import.json).${warning}`,
-      );
-      return;
-    }
-
-    const platform = await browser.runtime.getPlatformInfo();
-    const plan = buildProjectDownloadPlan(
-      objectDisplayName(project),
-      sources.map((source) => ({
-        name: source.name,
-        url: source.url,
-      })),
-      platform.os === "win",
-    );
-    const results = await Promise.allSettled(
-      plan.files.map((file) =>
-        browser.downloads.download({
-          url: file.url,
-          filename: file.relativePath,
-          conflictAction: "uniquify",
-          saveAs: false,
-        }),
-      ),
+    const result = await buildFundPilotExportZip(
+      state,
+      object,
+      (completed, total, fileName) => {
+        notice(
+          completed >= total
+            ? `Spakowano ${total}/${total} plików…`
+            : `Eksport FundPilot ${completed + 1}/${total}: ${fileName}`,
+        );
+      },
     );
 
-    const failed = results
-      .map((result, index) => ({ result, file: plan.files[index] }))
-      .filter(
-        (
-          entry,
-        ): entry is {
-          result: PromiseRejectedResult;
-          file: (typeof plan.files)[number];
-        } => entry.result.status === "rejected",
-      );
-
-    if (failed.length) {
-      const downloaded = results.length - failed.length;
-      const details = failed
-        .slice(0, 3)
-        .map(({ result, file }) => {
-          const reason =
-            result.reason instanceof Error
-              ? result.reason.message
-              : String(result.reason);
-          return `${file.name}: ${reason}`;
-        })
-        .join(" | ");
-      console.error("Burbot bulk download failures", failed);
-      throw new Error(
-        `Pobrano ${downloaded}/${results.length} plików do katalogu „${plan.folderName}”. ${failed.length} pobrań nie udało się uruchomić. ${details}`,
-      );
+    const url = URL.createObjectURL(result.blob);
+    try {
+      await browser.downloads.download({
+        url,
+        filename: result.zipFileName,
+        conflictAction: "uniquify",
+        saveAs: false,
+      });
+    } finally {
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
     }
 
+    const files = result.document.package_files.length;
+    const objects = result.document.data.objects.length;
     notice(
-      `Pobieranie ${results.length} plików uruchomione. Katalog: „${plan.folderName}”.`,
+      `Utworzono eksport FundPilot „${result.zipFileName}”: fundpilot.json + ${files} plików; JSON zawiera ${objects} obiektów i pełne dane biznesowe zestawu.`,
     );
   } finally {
     fileDownloadBusy = false;
@@ -1191,26 +1117,13 @@ function render(): void {
   const canBulkDownload =
     object.type === "project" || object.type === "recruitment";
   downloadAll.hidden = !canBulkDownload;
-  downloadAll.disabled =
-    fileDownloadBusy ||
-    (!isRecruitment && sources.length === 0) ||
-    (isRecruitment && !project);
+  downloadAll.disabled = fileDownloadBusy;
   downloadAll.textContent = fileDownloadBusy
-    ? isRecruitment
-      ? "Tworzenie ZIP…"
-      : "Pobieranie…"
-    : isRecruitment
-      ? `↓ Pobierz import ZIP (${sources.length})`
-      : `↓ Pobierz wszystkie (${sources.length})`;
-  if (object.type === "project") {
-    downloadAll.title = `Pobierz do: ${objectDisplayName(object)}`;
-  } else if (isRecruitment) {
-    downloadAll.title = project
-      ? "Pobierz import.zip zgodny z RoundImportManifestV1: import.json + files/."
-      : "Przypisz projekt, aby utworzyć paczkę importu naboru.";
-  } else {
-    downloadAll.title = "";
-  }
+    ? "Tworzenie eksportu FundPilot…"
+    : "↓ Eksport FundPilot";
+  downloadAll.title = canBulkDownload
+    ? "Pobierz ZIP FundPilot: fundpilot.json z pełnymi danymi biznesowymi oraz wszystkie fizyczne pliki z eksportowanego zestawu w katalogu files/."
+    : "";
 
   renderMode();
 }
@@ -1312,7 +1225,7 @@ export async function initFileSourcesUi(): Promise<void> {
       notice("Wybierz projekt lub nabór przed pobieraniem plików.", true);
       return;
     }
-    void downloadAllObjectFiles(object).catch((error: unknown) => {
+    void exportFundPilot(object).catch((error: unknown) => {
       notice(error instanceof Error ? error.message : String(error), true);
     });
   };
