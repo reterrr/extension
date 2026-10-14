@@ -237,7 +237,7 @@ test("formats business values, validates enums, dates, NIP, percentages and refe
   assert.equal(s.context.BurbotFunding.sizes.NGO, "NGO");
   assert.equal(
     s.context.BurbotFunding.sizes.NON_PUBLIC_FINANCE_EMPLOYER,
-    "Pracodawca poza sektorem finansów publicznych",
+    "Pracodawcy niebędący jednostkami sektora finansów publicznych",
   );
   assert.equal(
     s.context.BurbotFunding.sizes.OTHER_EMPLOYER,
