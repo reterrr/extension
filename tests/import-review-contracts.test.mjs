@@ -619,6 +619,10 @@ test("portable import accepts NGO financing and recruitment condition fields", (
   recruitment.data.funding_conditions = "Refundacja do 85%";
   recruitment.data.application_instructions =
     "Złóż formularz elektronicznie w systemie operatora.";
+  project.data.eligible_entities = "MŚP objęte projektem";
+  project.data.funding_conditions = "Projektowo refundacja do 80%";
+  project.data.application_instructions =
+    "Zgłoszenie zgodnie z procedurą projektu.";
   project.data.project_url = "https://example.test/project/home";
   project.data.announcements_site_url =
     "https://example.test/project/announcements";
@@ -658,6 +662,18 @@ test("portable import accepts NGO financing and recruitment condition fields", (
   assert.equal(
     importedRecruitment.values.application_instructions,
     "Złóż formularz elektronicznie w systemie operatora.",
+  );
+  assert.equal(
+    importedProject.values.eligible_entities,
+    "MŚP objęte projektem",
+  );
+  assert.equal(
+    importedProject.values.funding_conditions,
+    "Projektowo refundacja do 80%",
+  );
+  assert.equal(
+    importedProject.values.application_instructions,
+    "Zgłoszenie zgodnie z procedurą projektu.",
   );
   assert.equal(
     importedProject.values.project_url,

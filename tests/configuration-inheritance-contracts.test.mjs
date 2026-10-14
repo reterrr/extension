@@ -411,6 +411,110 @@ test("funding copy avoids variant-number collisions with recruitment-local varia
 });
 
 
+test("project conditions inheritance fills only missing recruitment fields", () => {
+  const state = baseState();
+  const project = state.objects.find((object) => object.id === "PR_1");
+  const recruitment = state.objects.find((object) => object.id === "NAB_1");
+
+  project.values.eligible_entities = "MŚP z obszaru projektu";
+  project.values.funding_conditions = "Pomoc de minimis; refundacja do 80%.";
+  project.values.application_instructions =
+    "Złóż formularz elektronicznie w systemie operatora.";
+  recruitment.values.funding_conditions =
+    "Wyjątek dla tego naboru: pomoc publiczna.";
+
+  const before = inheritance.recruitmentConditionsInheritanceStatus(
+    state,
+    recruitment,
+  );
+  assert.deepEqual(before.pendingFields, [
+    "eligible_entities",
+    "application_instructions",
+  ]);
+  assert.deepEqual(before.protectedFields, ["funding_conditions"]);
+
+  state.rules.push({
+    id: "R_CONDITION",
+    objectId: "NAB_1",
+    field: "eligible_entities",
+    pageUrl: "https://example.test/old",
+    selector: "#eligibility",
+    extraction: { type: "text" },
+  });
+  state.fieldEvidence = [
+    {
+      id: "E_CONDITION",
+      objectId: "NAB_1",
+      field: "eligible_entities",
+      pageUrl: "https://example.test/old",
+      selector: "#eligibility",
+      extraction: { type: "text" },
+      rawValue: "Stara wartość",
+      createdAt: "2026-01-01T00:00:00Z",
+    },
+  ];
+
+  const result = inheritance.copyProjectConditionsToRecruitment(
+    state,
+    "NAB_1",
+  );
+
+  assert.deepEqual(result.copiedFields, [
+    "eligible_entities",
+    "application_instructions",
+  ]);
+  assert.equal(recruitment.values.eligible_entities, "MŚP z obszaru projektu");
+  assert.equal(
+    recruitment.values.funding_conditions,
+    "Wyjątek dla tego naboru: pomoc publiczna.",
+  );
+  assert.equal(
+    recruitment.values.application_instructions,
+    "Złóż formularz elektronicznie w systemie operatora.",
+  );
+  assert.equal(
+    state.rules.some((rule) => rule.id === "R_CONDITION"),
+    false,
+  );
+  assert.equal(
+    state.fieldEvidence.some((entry) => entry.id === "E_CONDITION"),
+    false,
+  );
+
+  project.values.eligible_entities = "Zmienione zasady projektu";
+  assert.equal(recruitment.values.eligible_entities, "MŚP z obszaru projektu");
+});
+
+test("project conditions inheritance requires project values and never overwrites recruitment values", () => {
+  const state = baseState();
+  const project = state.objects.find((object) => object.id === "PR_1");
+  const recruitment = state.objects.find((object) => object.id === "NAB_1");
+
+  assert.throws(
+    () => inheritance.copyProjectConditionsToRecruitment(state, "NAB_1"),
+    /nie ma uzupełnionych warunków projektu/,
+  );
+
+  project.values.eligible_entities = "MŚP";
+  recruitment.values.eligible_entities = "Tylko mikroprzedsiębiorstwa";
+
+  const status = inheritance.recruitmentConditionsInheritanceStatus(
+    state,
+    recruitment,
+  );
+  assert.deepEqual(status.pendingFields, []);
+  assert.deepEqual(status.protectedFields, ["eligible_entities"]);
+
+  assert.throws(
+    () => inheritance.copyProjectConditionsToRecruitment(state, "NAB_1"),
+    /Brak pustych warunków naboru/,
+  );
+  assert.equal(
+    recruitment.values.eligible_entities,
+    "Tylko mikroprzedsiębiorstwa",
+  );
+});
+
 test("funding metadata inheritance fills only missing recruitment fields", () => {
   const state = baseState();
   const project = state.objects.find((object) => object.id === "PR_1");

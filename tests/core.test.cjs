@@ -245,6 +245,13 @@ test("formats business values, validates enums, dates, NIP, percentages and refe
   );
   assert.equal(P.announcements_site_url.label, "Strona ogłoszeń");
   assert.equal(P.project_url.type, "url");
+  assert.equal(P.eligible_entities.group, "Warunki projektu");
+  assert.equal(P.eligible_entities.multiline, true);
+  assert.equal(P.eligible_entities.maxLength, 4000);
+  assert.equal(P.funding_conditions.group, "Warunki projektu");
+  assert.equal(P.funding_conditions.maxLength, 4000);
+  assert.equal(P.application_instructions.group, "Warunki projektu");
+  assert.equal(P.application_instructions.maxLength, 5000);
   assert.equal(P.funding_rules.group, "Dofinansowanie");
   assert.equal(P.funding_rules.multiline, true);
   assert.equal(P.funding_verified_at.type, "date");

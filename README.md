@@ -326,6 +326,8 @@ zrodlo_weryfikacji_finansow      -> funding_verification_url
 
 Funding variants support MICRO / SMALL / MEDIUM / LARGE / B2C / NGO / NON_PUBLIC_FINANCE_EMPLOYER / OTHER_EMPLOYER for both Projects and Recruitments. The two employer-specific groups represent respectively employers outside the public-finance sector and all remaining employers when a programme defines separate limits for them. The XLSX importer still derives its legacy B2B/B2C variants from the dedicated workbook columns; the additional groups can be added in Workspace or portable JSON.
 
+Projects and Recruitments both support `eligible_entities`, `funding_conditions` and `application_instructions`. Project stores the common programme-level rules under **Warunki projektu**. A Recruitment can use **Dziedzicz warunki z projektu** to copy only missing values into **Warunki naboru**. The copy is an independent snapshot: recruitment-specific values are never overwritten and later Project edits do not silently change existing Recruitments.
+
 Geography is normalized through the same canonical Burbot geography catalog as Projects. `include` becomes `OBEJMUJE`; `exclude` becomes `WYKLUCZA`.
 
 ## Excel export
@@ -338,7 +340,7 @@ The **Export Excel** action exports the committed SQLite state as a business wor
 - `Pola_Obiektow` — normalized object field/value dump so no current object value is lost,
 - the existing project/operator and geography relation sheets.
 
-`Operatorzy` exports address, email, phone, website and notes. `Nabory` includes all current recruitment date/planning/status/source fields. The final `Nabory` column is `ostatnia_zmiana`, sourced from the recruitment object's `updatedAt` timestamp. `ostatnio_sprawdzono` remains a separate system timestamp.
+`Operatorzy` exports address, email, phone, website and notes. `Projekty` and `Nabory` include their qualifying-entity, funding-condition and application-instruction fields. `Nabory` also includes all current recruitment date/planning/status/source fields. The final `Nabory` column is `ostatnia_zmiana`, sourced from the recruitment object's `updatedAt` timestamp. `ostatnio_sprawdzono` remains a separate system timestamp.
 
 ## Documents and local file uploads
 

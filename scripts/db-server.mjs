@@ -75,6 +75,9 @@ ensureColumn("projects", "documents_link_direct", "INTEGER");
 ensureColumn("projects", "notes", "TEXT");
 ensureColumn("projects", "schedule_note", "TEXT");
 ensureColumn("projects", "technical_notes", "TEXT");
+ensureColumn("projects", "eligible_entities", "TEXT");
+ensureColumn("projects", "funding_conditions", "TEXT");
+ensureColumn("projects", "application_instructions", "TEXT");
 ensureColumn("projects", "funding_rules", "TEXT");
 ensureColumn("projects", "funding_verified_at", "TEXT");
 ensureColumn("projects", "funding_verification_url", "TEXT");
@@ -140,10 +143,10 @@ ensureColumn("recruitments", "funding_rules", "TEXT");
 ensureColumn("recruitments", "funding_verified_at", "TEXT");
 ensureColumn("recruitments", "funding_verification_url", "TEXT");
 ensureColumn("geographies", "operator_object_id", "TEXT");
-db.pragma("user_version = 12");
+db.pragma("user_version = 13");
 
 db.prepare(
-  `INSERT INTO app_meta(key, value) VALUES ('schema_version', '12')
+  `INSERT INTO app_meta(key, value) VALUES ('schema_version', '13')
    ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
 ).run();
 
@@ -369,10 +372,11 @@ function syncBusinessTables(state, groupByObject) {
       refund_percent_min, refund_percent_max,
       start_date, end_date, announcements_site_url, project_url,
       documents_url, documents_link_direct, notes, schedule_note, technical_notes,
+      eligible_entities, funding_conditions, application_instructions,
       funding_rules, funding_verified_at, funding_verification_url,
       created_at, updated_at, last_checked_at,
       geography_group_id
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   const insertOperator = db.prepare(`
     INSERT INTO operators(
@@ -468,6 +472,9 @@ function syncBusinessTables(state, groupByObject) {
       nullableText(values.notes),
       nullableText(values.schedule_note),
       nullableText(values.technical_notes),
+      nullableText(values.eligible_entities),
+      nullableText(values.funding_conditions),
+      nullableText(values.application_instructions),
       nullableText(values.funding_rules),
       nullableText(values.funding_verified_at),
       nullableText(values.funding_verification_url),
