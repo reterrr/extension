@@ -137,10 +137,10 @@ ensureColumn("recruitments", "funding_rules", "TEXT");
 ensureColumn("recruitments", "funding_verified_at", "TEXT");
 ensureColumn("recruitments", "funding_verification_url", "TEXT");
 ensureColumn("geographies", "operator_object_id", "TEXT");
-db.pragma("user_version = 11");
+db.pragma("user_version = 12");
 
 db.prepare(
-  `INSERT INTO app_meta(key, value) VALUES ('schema_version', '11')
+  `INSERT INTO app_meta(key, value) VALUES ('schema_version', '12')
    ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
 ).run();
 
@@ -218,6 +218,7 @@ function clearMaterializedTables() {
     DELETE FROM file_sources;
     DELETE FROM import_sources;
     DELETE FROM financing_rules;
+    DELETE FROM service_definitions;
     DELETE FROM document_requirements;
   `);
 }
@@ -721,6 +722,11 @@ const persistStateTransaction = db.transaction((state) => {
   syncFileSources(state);
   syncImportSources(state);
   syncPayloadRows("financing_rules", "funding", state.financingRules ?? []);
+  syncPayloadRows(
+    "service_definitions",
+    "service",
+    state.serviceDefinitions ?? [],
+  );
   syncPayloadRows(
     "document_requirements",
     "document",
