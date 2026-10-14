@@ -50,6 +50,7 @@ import {
   isDocumentSignatureRequirement,
 } from "../shared/documentRequirements";
 import {
+  copyProjectConditionsToRecruitment,
   copyProjectFundingMetadataToRecruitment,
   copyProjectFundingToRecruitment,
   copyProjectGeographiesToRecruitment,
@@ -104,6 +105,7 @@ const ALLOWED_WRITES = new Set<string>([
   "ADD_FUNDING",
   "INHERIT_PROJECT_FUNDING",
   "INHERIT_PROJECT_FUNDING_METADATA",
+  "INHERIT_PROJECT_CONDITIONS",
   "REMOVE_FUNDING",
   "ADD_FIELD_EVIDENCE",
   "REMOVE_FIELD_EVIDENCE",
@@ -989,6 +991,8 @@ function mutateProjectConfigurationInheritance(
     );
   } else if (message.op === "INHERIT_PROJECT_FUNDING_METADATA") {
     copyProjectFundingMetadataToRecruitment(state, recruitment.id);
+  } else if (message.op === "INHERIT_PROJECT_CONDITIONS") {
+    copyProjectConditionsToRecruitment(state, recruitment.id);
   } else {
     throw new Error("Unknown project configuration inheritance operation.");
   }
@@ -1488,7 +1492,8 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
     } else if (
       message.op === "INHERIT_PROJECT_GEOGRAPHY" ||
       message.op === "INHERIT_PROJECT_FUNDING" ||
-      message.op === "INHERIT_PROJECT_FUNDING_METADATA"
+      message.op === "INHERIT_PROJECT_FUNDING_METADATA" ||
+      message.op === "INHERIT_PROJECT_CONDITIONS"
     ) {
       next = mutateProjectConfigurationInheritance(state, message, now);
     } else if (message.op === "ASSIGN_PDF") {
