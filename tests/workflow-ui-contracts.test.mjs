@@ -426,6 +426,36 @@ test("workspace exposes NGO funding and bounded recruitment condition fields", (
   assert.match(workspace, /definition\.maxLength/);
 });
 
+test("project and recruitment share condition fields with project inheritance", () => {
+  const schema = source("src/shared/domain/schema.js");
+  const workspace = source("src/sidepanel/workspace.js");
+  const inheritance = source("src/shared/configurationInheritance.ts");
+  const background = source("src/background/index.ts");
+  const messaging = source("src/shared/messaging/index.ts");
+
+  assert.match(
+    schema,
+    /eligible_entities: text\("Kwalifikujące się podmioty", "Warunki projektu"[\s\S]*?maxLength: 4000/,
+  );
+  assert.match(
+    schema,
+    /funding_conditions: text\([\s\S]*?"Warunki projektu"[\s\S]*?maxLength: 4000/,
+  );
+  assert.match(
+    schema,
+    /application_instructions: text\([\s\S]*?"Warunki projektu"[\s\S]*?maxLength: 5000/,
+  );
+  assert.match(workspace, /Dziedzicz warunki z projektu/);
+  assert.match(workspace, /project-conditions-inherit/);
+  assert.match(workspace, /INHERIT_PROJECT_CONDITIONS/);
+  assert.match(inheritance, /PROJECT_RECRUITMENT_CONDITION_FIELDS/);
+  assert.match(inheritance, /recruitmentConditionsInheritanceStatus/);
+  assert.match(inheritance, /copyProjectConditionsToRecruitment/);
+  assert.match(background, /copyProjectConditionsToRecruitment/);
+  assert.match(background, /INHERIT_PROJECT_CONDITIONS/);
+  assert.match(messaging, /INHERIT_PROJECT_CONDITIONS/);
+});
+
 test("recruitment can inherit project geography per operator and funding as copies", () => {
   const app = source("src/sidepanel/App.tsx");
   const geography = source("src/sidepanel/geographyUi.ts");
