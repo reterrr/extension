@@ -89,6 +89,8 @@ AI should output only values that are actually known from the sources. It does *
 
 Projects and recruitments now use `objects[].operators[]` for operator relations. The old single `data.operator_id` reference is still accepted as a backward-compatible import and is migrated to one `GLOWNY` assignment.
 
+The fields `eligible_entities`, `funding_conditions` and `application_instructions` are valid on both `project.data` and `recruitment.data`. Put programme-wide/common rules on the Project and recruitment-specific exceptions on the Recruitment. Workspace can copy only missing values from the referenced Project into a Recruitment; this is a one-time snapshot and never overwrites a value already present on the Recruitment.
+
 Refund percentages are **not object-level Project/Recruitment fields**. They belong to a concrete financing variant in `objects[].financing[]`. This avoids a second, conflicting "Dofinansowanie" section next to the normal financing variants.
 
 ## `objects[].operators[]`
