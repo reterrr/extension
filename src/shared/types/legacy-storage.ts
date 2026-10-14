@@ -169,6 +169,13 @@ export interface LegacyStoredFileSource {
   metadataInferenceVersion?: number;
 }
 
+export interface LegacyStoredServiceCategory {
+  id: string;
+  objectId: string;
+  importKey?: string;
+  label: string;
+}
+
 export interface LegacyStoredDocumentRequirement {
   id: string;
   objectId: string;
@@ -234,6 +241,7 @@ export interface LegacyStorageState {
   importSources?: ImportedSource[];
   importTargetEvidence?: ImportedTargetEvidence[];
   financingRules?: Array<Record<string, unknown>>;
+  serviceCategories?: LegacyStoredServiceCategory[];
   documentRequirements?: LegacyStoredDocumentRequirement[];
   fieldEvidence?: LegacyStoredFieldEvidence[];
 }
