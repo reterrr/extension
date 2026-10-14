@@ -218,34 +218,6 @@ function stageExistingObjectUpdate(
   const target = state.objects.find((object) => object.id === targetId)!;
   const schema = BurbotSchema[target.type];
 
-  if (selected.type === "recruitment") {
-    const projectPatch = plan.referencePatches.find(
-      (patch) => patch.field === "project_id",
-    );
-    if (projectPatch) {
-      for (const row of (state.financingRules ?? []).filter(
-        (candidate) => candidate.objectId === selected.id && candidate.serviceId,
-      )) {
-        const importedService = (state.serviceDefinitions ?? []).find(
-          (service) => service.id === row.serviceId,
-        );
-        if (!importedService) continue;
-        if (importedService.objectId === projectPatch.targetObjectId) continue;
-        const service = serviceMatch(
-          state,
-          projectPatch.targetObjectId,
-          importedService,
-        );
-        if (!service) {
-          throw new Error(
-            `Could not resolve project service for financing variant ${String(row.importKey ?? row.id)}. Approve or create the project service first.`,
-          );
-        }
-        row.serviceId = service.id;
-      }
-    }
-  }
-
   for (const patch of plan.referencePatches) {
     if (!state.objects.some((object) => object.id === patch.targetObjectId)) {
       throw new Error(
@@ -749,6 +721,34 @@ function stageNewObject(
   );
   if (!selected) {
     throw new Error("Could not resolve the reviewed object after import.");
+  }
+
+  if (selected.type === "recruitment") {
+    const projectPatch = plan.referencePatches.find(
+      (patch) => patch.field === "project_id",
+    );
+    if (projectPatch) {
+      for (const row of (state.financingRules ?? []).filter(
+        (candidate) => candidate.objectId === selected.id && candidate.serviceId,
+      )) {
+        const importedService = (state.serviceDefinitions ?? []).find(
+          (service) => service.id === row.serviceId,
+        );
+        if (!importedService) continue;
+        if (importedService.objectId === projectPatch.targetObjectId) continue;
+        const service = serviceMatch(
+          state,
+          projectPatch.targetObjectId,
+          importedService,
+        );
+        if (!service) {
+          throw new Error(
+            `Could not resolve project service for financing variant ${String(row.importKey ?? row.id)}. Approve or create the project service first.`,
+          );
+        }
+        row.serviceId = service.id;
+      }
+    }
   }
 
   for (const patch of plan.referencePatches) {
