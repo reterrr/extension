@@ -145,6 +145,105 @@ html[data-workflow-mode=import] .skip-link { display: none; }
 #root .funding-tab { min-height: 40px; color: #57685e; }
 .funding-tab-state { min-width: 20px; height: 20px; color: #57685e; }
 .funding-field-group-heading small { color: var(--text-soft); }
+.funding-services {
+  display: grid;
+  gap: 10px;
+  margin: 8px 0 12px;
+  padding: 12px;
+  border: 1px solid #d6e0d9;
+  border-radius: 10px;
+  background: #f8faf8;
+}
+.funding-services-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.funding-services-heading > div {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+.funding-services-heading strong { font-size: 13px; }
+.funding-services-heading small {
+  color: var(--text-soft);
+  font-size: 12px;
+  line-height: 1.35;
+}
+.funding-services-count {
+  flex: none;
+  color: #587064;
+  font-size: 12px;
+  font-weight: 700;
+}
+.funding-services-list {
+  display: grid;
+  gap: 7px;
+}
+.funding-service-row,
+.funding-service-add {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 6px;
+  align-items: center;
+}
+.funding-service-add {
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding-top: 4px;
+  border-top: 1px solid #e0e7e2;
+}
+#root .funding-service-row button,
+#root .funding-service-add button {
+  min-height: 40px;
+}
+.funding-service-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.funding-service-badge {
+  padding: 4px 7px;
+  border: 1px solid #cadbd0;
+  border-radius: 999px;
+  background: #edf6f0;
+  color: #315e47;
+}
+.funding-service-assignment {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(180px, 320px);
+  gap: 12px;
+  align-items: center;
+  margin: 9px 8px 0;
+  padding: 10px;
+  border: 1px solid #d9e2db;
+  border-radius: 8px;
+  background: #f7faf8;
+}
+.funding-service-assignment > span {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.funding-service-assignment strong { font-size: 12px; }
+.funding-service-assignment small {
+  color: var(--text-soft);
+  font-size: 12px;
+}
+@media (max-width: 560px) {
+  .funding-service-row,
+  .funding-service-add,
+  .funding-service-assignment {
+    grid-template-columns: 1fr;
+  }
+  .funding-service-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .funding-service-row .danger {
+    grid-column: 1 / -1;
+    justify-self: start;
+  }
+}
 .capture-area {
   bottom: 8px;
   max-height: min(52dvh, 520px);
