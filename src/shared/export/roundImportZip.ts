@@ -82,6 +82,11 @@ export interface RoundImportFileDeclaration {
   requiresCompletion: boolean;
 }
 
+export interface RoundImportServiceCategory {
+  id: string;
+  label: string;
+}
+
 export interface RoundImportFundingVariant {
   label: string;
   serviceCategoryId?: string | null;
@@ -144,6 +149,7 @@ export interface RoundImportManifestV1 {
       closesOn: string | null;
       closeMode: "unknown" | "dated" | "until_allocation" | "no_deadline";
     };
+    serviceCategories?: RoundImportServiceCategory[];
     conditions: RoundImportConditions;
     documents: RoundImportDocument[];
   };
@@ -443,6 +449,7 @@ function fundingLabel(row: Record<string, unknown>, index: number): string {
 
 function fundingVariants(
   rows: Array<Record<string, unknown>>,
+  serviceIds: Set<string>,
 ): RoundImportFundingVariant[] {
   if (rows.length > 30) {
     throw new Error(
@@ -450,8 +457,16 @@ function fundingVariants(
     );
   }
 
-  return rows.map((row, index) => ({
+  return rows.map((row, index) => {
+    const serviceCategoryId = cleanText(row.serviceId);
+    if (serviceCategoryId && !serviceIds.has(serviceCategoryId)) {
+      throw new Error(
+        `Wariant ${cleanText(row.importKey) || String(row.id ?? index + 1)} wskazuje usługę spoza projektu.`,
+      );
+    }
+    return {
     label: fundingLabel(row, index),
+    ...(serviceCategoryId ? { serviceCategoryId } : {}),
     mspSize: MSP_SIZE_MAP[String(row.company_size ?? "")] ?? null,
     refundPct: firstPercentage(row, [
       "refund_percent_max",
@@ -469,7 +484,8 @@ function fundingVariants(
         : row.own_contribution_form === "WAGES"
           ? "salary"
           : null,
-  }));
+    };
+  });
 }
 
 function aidBasis(description: string): RoundAidBasis {
@@ -744,6 +760,20 @@ export function buildRoundImportPackagePlan(
     packageFiles.map((file) => [file.source.id, file.id]),
   );
 
+  const services = project
+    ? (state.serviceDefinitions ?? [])
+        .filter((row) => row.objectId === project.id)
+        .map((row) => ({
+          id: boundedText(row.id, 100, "workspace.serviceCategories.id"),
+          label: boundedText(
+            row.name,
+            200,
+            "workspace.serviceCategories.label",
+          ),
+        }))
+    : [];
+  const serviceIds = new Set(services.map((service) => service.id));
+
   const rows = (state.financingRules ?? []).filter(
     (row) => String(row.objectId ?? "") === recruitment.id,
   );
@@ -783,7 +813,7 @@ export function buildRoundImportPackagePlan(
     eligibleBusinessCategories: categories,
     aidBasis: aidBasis(fundingDescription),
     aidBasisDescription: fundingDescription,
-    fundingVariants: fundingVariants(rows),
+    fundingVariants: fundingVariants(rows, serviceIds),
     submissionInstructions,
     sourceFileIds: declarations.map((file) => file.id),
   };
@@ -803,6 +833,7 @@ export function buildRoundImportPackagePlan(
     workspace: {
       notes,
       ...(roundSchedule ? { schedule: roundSchedule } : {}),
+      ...(services.length ? { serviceCategories: services } : {}),
       conditions,
       documents: (() => {
         const configured = (state.documentRequirements ?? []).filter(
