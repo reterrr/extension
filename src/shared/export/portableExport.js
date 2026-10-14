@@ -275,6 +275,58 @@ export function createPortableExport({
         (entries[proof.field] ??= []).push(proof);
     return evidenceMap(entries, values);
   };
+  const documentEvidenceForUnifiedFile = (object, row) => {
+    const values = {
+      label: row.label,
+      purpose: row.purpose,
+      requirement: row.requirement,
+      condition: row.condition,
+      delivery_stage: row.delivery_stage,
+      responsibility: row.responsibility,
+      required_evidence: row.required_evidence,
+      source_url: row.source_url,
+      source_description: row.source_description,
+      signature_requirement: row.signature_requirement,
+    };
+    const raw =
+      targetEvidence(
+        object,
+        "document",
+        row.id ?? row.document_type_key,
+        values,
+      ).evidence ?? {};
+    const fieldMap = {
+      label: "display_name",
+      purpose: "intended_use",
+      requirement: "client_requirement",
+      signature_requirement: "signature_requirement",
+      condition: "condition",
+      delivery_stage: "delivery_stage",
+      responsibility: "responsibility",
+      required_evidence: "required_evidence",
+      source_url: "source_url",
+      source_description: "source_description",
+    };
+    const evidence = {};
+    for (const [field, entries] of Object.entries(raw)) {
+      const targetField = fieldMap[field];
+      if (!targetField) continue;
+      evidence[targetField] = entries.map((entry) => {
+        if (!Object.hasOwn(entry, "normalized_value")) return entry;
+        const normalized =
+          field === "requirement"
+            ? DOCUMENT_TO_FILE_REQUIREMENT[entry.normalized_value] ??
+              entry.normalized_value
+            : field === "signature_requirement"
+              ? DOCUMENT_TO_FILE_SIGNATURE[entry.normalized_value] ??
+                entry.normalized_value
+              : entry.normalized_value;
+        return { ...entry, normalized_value: normalized };
+      });
+    }
+    return Object.keys(evidence).length ? { evidence } : {};
+  };
+
   const scoped = (collection, object) =>
     (state[collection] ?? []).filter(
       (row) => String(row.objectId) === String(object.id),
