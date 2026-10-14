@@ -336,10 +336,10 @@ test("repository portable-import example stays importable", async () => {
   assert.equal(documents.length, 3);
 
   const regulations = documents.find(
-    (entry) => entry.importKey === "DOC_REGULATIONS",
+    (entry) => entry.importKey === "FILE_REGULATIONS",
   );
   const application = documents.find(
-    (entry) => entry.importKey === "DOC_APPLICATION",
+    (entry) => entry.importKey === "FILE_APPLICATION",
   );
   const serviceCard = documents.find(
     (entry) => entry.importKey === "DOC_BUR_SERVICE_CARD",
@@ -356,13 +356,12 @@ test("repository portable-import example stays importable", async () => {
   assert.equal(application.requirement, "REQUIRED");
   assert.equal(application.fulfillment_mode, "OPERATOR_TEMPLATE");
   assert.equal(application.original_file_source_id, files[1].id);
-  assert.deepEqual(
-    new Set(application.source_file_source_ids),
-    new Set([files[0].id, files[1].id]),
-  );
+  assert.deepEqual(application.source_file_source_ids, [files[1].id]);
 
   assert.equal(serviceCard.fulfillment_mode, "WITHOUT_OPERATOR_TEMPLATE");
   assert.equal(serviceCard.original_file_source_id, undefined);
+  assert.equal(serviceCard.required_evidence, "Karta Usługi pobrana z BUR dla wybranej usługi.");
+  assert.equal(serviceCard.delivery_stage, "ZGLOSZENIE");
 
   const projectAssignments = (session.previewState.operatorAssignments ?? []).filter(
     (entry) => entry.objectId === project.id,
