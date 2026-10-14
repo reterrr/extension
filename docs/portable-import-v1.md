@@ -70,7 +70,6 @@ That example is covered by the import-review tests so its offsets, references, f
             "purpose": "Materiał informacyjny opisujący zasady udziału.",
             "requirement": "INFORMATIONAL",
             "fulfillment_mode": "WITHOUT_OPERATOR_TEMPLATE",
-            "responsibility": "CLIENT",
             "signature_requirement": "NOT_REQUIRED"
           }
         }
@@ -164,9 +163,6 @@ A physical operator file:
     "purpose": "Formularz do uzupełnienia",
     "has_fields": true,
     "client_requirement": "Obowiązkowy",
-    "delivery_stage": "ZGLOSZENIE",
-    "responsibility": "CLIENT",
-    "required_evidence": "Wypełniony formularz operatora.",
     "signature_requirement": "Wymagany podpisany plik"
   }
 }
@@ -200,7 +196,7 @@ Rules:
 - `without_template: true` — means the requirement exists but no operator-provided file/template exists. In that case `source` must be omitted.
 - `source_page` — optional page source for a physical file.
 - `name` — legacy input only; use `metadata.display_name` in new imports.
-- `metadata` — classification and workflow data for the same document.
+- `metadata` — classification for the same document. Workflow fields `delivery_stage`, `responsibility` and `required_evidence` apply only to `without_template: true`.
 - `evidence` — evidence for supplied metadata fields.
 
 Supported physical source types are `DOC`, `DOCX`, `PDF`, `XLSX`, `PNG`, `JPG`, `JPEG`, `ZIP`, `RAR`, `7Z`, `TAR`, `GZ`, `TGZ`.
@@ -213,9 +209,9 @@ Current metadata fields:
 - `intended_use`;
 - `client_requirement`: `Obowiązkowy`, `Warunkowy`, `Informacyjny`;
 - `condition`;
-- `delivery_stage`;
-- `responsibility`: `FUNDPILOT`, `CLIENT`, `SHARED`;
-- `required_evidence`;
+- `delivery_stage` — only for `without_template: true`;
+- `responsibility`: `FUNDPILOT`, `CLIENT`, `SHARED` — only for `without_template: true`;
+- `required_evidence` — only for `without_template: true`;
 - `signature_requirement`: `Nie jest wymagany`, `Wymagany podpisany plik`, `Dowód w systemie operatora`;
 - `source_url`;
 - `source_description`;
