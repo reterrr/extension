@@ -11,6 +11,8 @@ import type {
   ImportedSource,
   LegacyObjectType,
   LegacyStorageState,
+  LegacyStoredDocumentRequirement,
+  LegacyStoredFileSource,
   LegacyStoredObject,
 } from "../types/legacy-storage";
 
@@ -720,6 +722,91 @@ function isReference(value: unknown): value is ImportReference {
 
 function codepointSlice(text: string, start: number, end: number): string {
   return Array.from(text).slice(start, end).join("");
+}
+
+function unifiedRequirementFromMetadata(
+  metadata: ImportFileMetadata,
+  objectId: string,
+  id: string,
+  importKey: string,
+  linkedFile?: LegacyStoredFileSource,
+): LegacyStoredDocumentRequirement {
+  if (linkedFile) {
+    const row = documentRequirementFromFile(
+      linkedFile,
+      id,
+      objectId,
+      importKey,
+    );
+    if (metadata.condition) row.condition = metadata.condition.slice(0, 1000);
+    if (metadata.delivery_stage)
+      row.delivery_stage = metadata.delivery_stage.slice(0, 60);
+    if (
+      metadata.responsibility === "FUNDPILOT" ||
+      metadata.responsibility === "CLIENT" ||
+      metadata.responsibility === "SHARED"
+    ) {
+      row.responsibility = metadata.responsibility;
+    }
+    if (metadata.required_evidence)
+      row.required_evidence = metadata.required_evidence.slice(0, 4000);
+    if (metadata.source_url) row.source_url = metadata.source_url;
+    if (metadata.source_description)
+      row.source_description = metadata.source_description.slice(0, 1000);
+    return row;
+  }
+
+  const requirement =
+    metadata.client_requirement === "Obowiązkowy"
+      ? "REQUIRED"
+      : metadata.client_requirement === "Warunkowy"
+        ? "CONDITIONAL"
+        : metadata.client_requirement === "Informacyjny"
+          ? "INFORMATIONAL"
+          : "UNKNOWN";
+  const signature =
+    metadata.signature_requirement === "Nie jest wymagany"
+      ? "NOT_REQUIRED"
+      : metadata.signature_requirement === "Wymagany podpisany plik"
+        ? "REQUIRED_FILE"
+        : metadata.signature_requirement === "Dowód w systemie operatora"
+          ? "EXTERNAL_OPERATOR"
+          : "UNKNOWN";
+
+  return {
+    id,
+    objectId,
+    importKey,
+    label: metadata.display_name ?? "Dokument",
+    purpose: (metadata.intended_use ?? metadata.purpose ?? "").slice(0, 1000),
+    requirement,
+    ...(requirement === "CONDITIONAL" && metadata.condition
+      ? { condition: metadata.condition.slice(0, 1000) }
+      : {}),
+    fulfillment_mode: "WITHOUT_OPERATOR_TEMPLATE",
+    ...(metadata.delivery_stage
+      ? { delivery_stage: metadata.delivery_stage.slice(0, 60) }
+      : {}),
+    ...(metadata.responsibility === "FUNDPILOT" ||
+    metadata.responsibility === "CLIENT" ||
+    metadata.responsibility === "SHARED"
+      ? { responsibility: metadata.responsibility }
+      : requirement === "INFORMATIONAL"
+        ? {}
+        : { responsibility: "CLIENT" }),
+    ...(metadata.required_evidence
+      ? { required_evidence: metadata.required_evidence.slice(0, 4000) }
+      : {}),
+    ...(metadata.source_url ? { source_url: metadata.source_url } : {}),
+    ...(metadata.source_description
+      ? { source_description: metadata.source_description.slice(0, 1000) }
+      : {}),
+    signature_requirement:
+      requirement === "INFORMATIONAL" && signature === "UNKNOWN"
+        ? "NOT_REQUIRED"
+        : signature,
+    source_file_source_ids: [],
+  };
 }
 
 function fileNameFromUrl(url: string): string {
