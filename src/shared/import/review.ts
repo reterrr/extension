@@ -488,6 +488,11 @@ function financingViews(
     .filter((row) => row.objectId === object.id)
     .map((row) => {
       const companySize = String(row.company_size ?? "");
+      const service = row.serviceId
+        ? (session.previewState.serviceDefinitions ?? []).find(
+            (entry) => entry.id === row.serviceId,
+          )
+        : undefined;
       return {
         id: String(row.id),
         key: String(row.importKey ?? row.id),
@@ -495,6 +500,7 @@ function financingViews(
         companySizeLabel:
           BurbotFunding.sizes[companySize] ?? companySize,
         variantNo: Number(row.variant_no ?? 1),
+        ...(service ? { serviceName: service.name } : {}),
         fields: financingFieldViews(session, row),
       };
     });
@@ -858,14 +864,27 @@ function portableData(
   return data;
 }
 
-function dependencyStub(target: LegacyStoredObject) {
+function dependencyStub(
+  target: LegacyStoredObject,
+  state: LegacyStorageState,
+) {
   const schema = BurbotSchema[target.type];
   const primary = schema?.primary;
   if (!primary) throw new Error(`No primary field for ${target.type}.`);
+  const services =
+    target.type === "project"
+      ? (state.serviceDefinitions ?? [])
+          .filter((row) => row.objectId === target.id)
+          .map((row) => ({
+            key: String(row.importKey ?? row.id),
+            name: row.name,
+          }))
+      : [];
   return {
     key: target.importKey,
     type: target.type,
     data: { [primary]: target.values[primary] },
+    ...(services.length ? { services } : {}),
   };
 }
 
@@ -1206,6 +1225,35 @@ export function buildImportApprovalPlan(
       };
     });
 
+  const fundingProject =
+    object.type === "project"
+      ? object
+      : object.type === "recruitment"
+        ? session.previewState.objects.find(
+            (candidate) =>
+              candidate.type === "project" &&
+              candidate.id === object.values?.project_id,
+          )
+        : undefined;
+  const projectServices = fundingProject
+    ? (session.previewState.serviceDefinitions ?? []).filter(
+        (row) => row.objectId === fundingProject.id,
+      )
+    : [];
+  const serviceKeyById = new Map(
+    projectServices.map((row) => [
+      row.id,
+      String(row.importKey ?? row.id),
+    ]),
+  );
+  const portableServices =
+    object.type === "project"
+      ? projectServices.map((row) => ({
+          key: String(row.importKey ?? row.id),
+          name: row.name,
+        }))
+      : [];
+
   const selectedFinancing = (session.previewState.financingRules ?? []).filter(
     (row) => row.objectId === object.id,
   );
@@ -1230,9 +1278,18 @@ export function buildImportApprovalPlan(
       { kind: "funding", id: String(row.id) },
       sourceById,
     );
+    const serviceKey = row.serviceId
+      ? serviceKeyById.get(String(row.serviceId))
+      : undefined;
+    if (row.serviceId && !serviceKey) {
+      throw new Error(
+        `Wariant ${key} wskazuje usługę spoza przypisanego projektu.`,
+      );
+    }
     return {
       key,
       company_size: String(row.company_size),
+      ...(serviceKey ? { service: serviceKey } : {}),
       data,
       ...(evidence ? { evidence } : {}),
     };
@@ -1260,7 +1317,9 @@ export function buildImportApprovalPlan(
       offset_unit: "unicode_codepoint",
       sources,
       objects: [
-        ...[...dependencyMap.values()].map(dependencyStub),
+        ...[...dependencyMap.values()].map((dependency) =>
+          dependencyStub(dependency, session.previewState),
+        ),
         {
           key: object.importKey,
           type: object.type,
@@ -1275,6 +1334,7 @@ export function buildImportApprovalPlan(
             ? { geography: portableGeography }
             : {}),
           ...(portableContacts.length ? { contacts: portableContacts } : {}),
+          ...(portableServices.length ? { services: portableServices } : {}),
           ...(portableFinancing.length
             ? { financing: portableFinancing }
             : {}),
