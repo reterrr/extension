@@ -1191,6 +1191,11 @@ export function importDocumentIntoState(
             file.name ??
             technicalName,
         };
+        // Physical operator files/templates do not carry the workflow fields
+        // used by documents that must be prepared without an operator template.
+        delete resolvedMetadata.delivery_stage;
+        delete resolvedMetadata.responsibility;
+        delete resolvedMetadata.required_evidence;
         const row: LegacyStoredFileSource = {
           id: uuid(),
           objectId: object.id,
