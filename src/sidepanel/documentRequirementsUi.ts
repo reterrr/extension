@@ -139,6 +139,17 @@ function renderRequirement(
   const card = document.createElement("details");
   card.className = "document-requirement-row file-source-row";
   card.dataset.sortLabel = documentLabel(normalized).toLocaleLowerCase("pl-PL");
+  const requirementComplete =
+    Boolean(documentLabel(normalized).trim()) &&
+    normalized.requirement !== "UNKNOWN" &&
+    normalized.signature_requirement !== "UNKNOWN" &&
+    (normalized.requirement !== "CONDITIONAL" ||
+      Boolean(normalized.condition?.trim())) &&
+    (normalized.requirement === "INFORMATIONAL" ||
+      normalized.fulfillment_mode === "WITHOUT_OPERATOR_TEMPLATE" ||
+      (normalized.fulfillment_mode === "OPERATOR_TEMPLATE" &&
+        Boolean(linkedFile)));
+  card.dataset.classified = String(requirementComplete);
   card.open = row.label === "Nowy dokument";
 
   const summary = document.createElement("summary");
