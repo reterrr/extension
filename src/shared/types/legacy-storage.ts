@@ -147,6 +147,18 @@ export interface LegacyStoredFileSource {
   client_requirement?: FileClientRequirement | string;
   signature_requirement?: FileSignatureRequirement | string;
 
+  /**
+   * Unified document workflow metadata. These fields live on the same
+   * portable files[] row so AI does not need to duplicate a physical file in
+   * documents[] just to describe its business requirement.
+   */
+  condition?: string;
+  delivery_stage?: string;
+  responsibility?: "FUNDPILOT" | "CLIENT" | "SHARED" | string;
+  required_evidence?: string;
+  source_url?: string;
+  source_description?: string;
+
   /** Legacy metadata kept for backward-compatible imports/exports. */
   document_kind?: string;
   delivery_method?: string;
