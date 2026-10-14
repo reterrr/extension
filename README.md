@@ -387,8 +387,11 @@ with every physical attachment referenced by the exported set. The JSON embeds
 the complete portable business export, including related Project/Recruitment/
 Operator objects, operator relations and contacts, services, financing variants,
 geography, document semantics, file metadata, source snapshots/evidence and all
-current object fields. It also keeps object creation/update/last-checked
-timestamps in a separate `system` block.
+current object fields. A separate `complete_state` snapshot also preserves the
+full scoped workspace records (raw document/file relations, inheritance
+provenance, manual-field markers, extraction rules and referenced import
+sources), while `system` exposes object creation/update/last-checked timestamps
+in a compact form.
 
 For a Recruitment, the export includes that Recruitment plus its referenced
 Project and Operators, but not sibling Recruitments. For a Project, it includes
