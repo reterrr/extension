@@ -282,6 +282,17 @@ function stageExistingObjectUpdate(
         entry.label.trim().toLocaleLowerCase("pl-PL") ===
           importedService.label.trim().toLocaleLowerCase("pl-PL"),
     );
+
+    if (target.type === "recruitment") {
+      if (!service) {
+        throw new Error(
+          `Project service ${importedService.label} must be approved on the project before the recruitment.`,
+        );
+      }
+      serviceIdMap.set(importedService.id, service.id);
+      continue;
+    }
+
     if (!service) {
       service = {
         ...importedService,
