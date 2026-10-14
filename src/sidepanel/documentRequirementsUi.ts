@@ -138,6 +138,7 @@ function renderRequirement(
 
   const card = document.createElement("details");
   card.className = "document-requirement-row file-source-row";
+  card.dataset.sortLabel = documentLabel(normalized).toLocaleLowerCase("pl-PL");
   card.open = row.label === "Nowy dokument";
 
   const summary = document.createElement("summary");
