@@ -99,8 +99,15 @@ interface ImportFileAttachment {
 interface ImportFinancingVariant {
   key: string;
   company_size: string;
+  /** Project-local service key. Recruitment variants reference the assigned project's services. */
+  service?: string | null;
   data: Record<string, unknown>;
   evidence?: Record<string, ImportEvidence[]>;
+}
+
+interface ImportServiceDefinition {
+  key: string;
+  name: string;
 }
 
 interface ImportOperatorAssignment {
@@ -148,6 +155,7 @@ interface ImportObject {
   files?: ImportFileAttachment[];
   geography?: ImportGeography[];
   contacts?: ImportOperatorContact[];
+  services?: ImportServiceDefinition[];
   financing?: ImportFinancingVariant[];
   documents?: ImportDocumentRequirement[];
 }
@@ -531,6 +539,42 @@ function parseDocument(input: unknown): BurbotImportV1 {
 
     }
 
+    let services: ImportServiceDefinition[] | undefined;
+    if (raw.services !== undefined) {
+      if (type !== "project") {
+        throw new Error(`${path}.services is supported only for project objects.`);
+      }
+      if (!Array.isArray(raw.services)) {
+        throw new Error(`${path}.services must be an array.`);
+      }
+      if (raw.services.length > 100) {
+        throw new Error(`${path}.services can contain at most 100 entries.`);
+      }
+      services = raw.services.map((entry, serviceIndex) => {
+        const servicePath = `${path}.services[${serviceIndex}]`;
+        if (!isRecord(entry)) {
+          throw new Error(`${servicePath} must be an object.`);
+        }
+        const name = requiredString(entry.name, `${servicePath}.name`).trim();
+        if (!name || name.length > 200) {
+          throw new Error(`${servicePath}.name must contain 1-200 characters.`);
+        }
+        return {
+          key: requiredString(entry.key, `${servicePath}.key`),
+          name,
+        };
+      });
+      uniqueByKey(services, `${path} services`);
+      const serviceNames = new Set<string>();
+      for (const service of services) {
+        const normalized = service.name.toLocaleLowerCase("pl-PL");
+        if (serviceNames.has(normalized)) {
+          throw new Error(`Duplicate ${path} service name: ${service.name}`);
+        }
+        serviceNames.add(normalized);
+      }
+    }
+
     let financing: ImportFinancingVariant[] | undefined;
     if (raw.financing !== undefined) {
       if (!Array.isArray(raw.financing)) {
@@ -547,9 +591,14 @@ function parseDocument(input: unknown): BurbotImportV1 {
           throw new Error(`${financePath}.company_size must be MICRO, SMALL, MEDIUM, LARGE, B2C or NGO.`);
         }
         if (!isRecord(entry.data)) throw new Error(`${financePath}.data must be an object.`);
+        const service =
+          entry.service === null
+            ? null
+            : optionalString(entry.service, `${financePath}.service`);
         return {
           key: requiredString(entry.key, `${financePath}.key`),
           company_size: companySize,
+          ...(service !== undefined ? { service } : {}),
           data: entry.data,
           evidence: parseEvidenceMap(
             entry.evidence,
@@ -589,6 +638,7 @@ function parseDocument(input: unknown): BurbotImportV1 {
       files,
       geography,
       contacts,
+      services,
       financing,
       documents,
     };
