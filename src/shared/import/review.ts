@@ -488,12 +488,18 @@ function financingViews(
     .filter((row) => row.objectId === object.id)
     .map((row) => {
       const companySize = String(row.company_size ?? "");
+      const serviceLabel = row.service_category_id
+        ? session.previewState.serviceCategories?.find(
+            (service) => service.id === row.service_category_id,
+          )?.label
+        : undefined;
       return {
         id: String(row.id),
         key: String(row.importKey ?? row.id),
         companySize,
         companySizeLabel:
           BurbotFunding.sizes[companySize] ?? companySize,
+        ...(serviceLabel ? { serviceLabel } : {}),
         variantNo: Number(row.variant_no ?? 1),
         fields: financingFieldViews(session, row),
       };
