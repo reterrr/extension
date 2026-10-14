@@ -96,9 +96,15 @@ interface ImportFileAttachment {
   evidence?: Record<string, ImportEvidence[]>;
 }
 
+interface ImportServiceCategory {
+  key: string;
+  label: string;
+}
+
 interface ImportFinancingVariant {
   key: string;
   company_size: string;
+  service?: string;
   data: Record<string, unknown>;
   evidence?: Record<string, ImportEvidence[]>;
 }
@@ -148,6 +154,7 @@ interface ImportObject {
   files?: ImportFileAttachment[];
   geography?: ImportGeography[];
   contacts?: ImportOperatorContact[];
+  services?: ImportServiceCategory[];
   financing?: ImportFinancingVariant[];
   documents?: ImportDocumentRequirement[];
 }
@@ -531,6 +538,29 @@ function parseDocument(input: unknown): BurbotImportV1 {
 
     }
 
+    let services: ImportServiceCategory[] | undefined;
+    if (raw.services !== undefined) {
+      if (type !== "project") {
+        throw new Error(`${path}.services is supported only for project objects.`);
+      }
+      if (!Array.isArray(raw.services)) {
+        throw new Error(`${path}.services must be an array.`);
+      }
+      services = raw.services.map((entry, serviceIndex) => {
+        const servicePath = `${path}.services[${serviceIndex}]`;
+        if (!isRecord(entry)) throw new Error(`${servicePath} must be an object.`);
+        const label = requiredString(entry.label, `${servicePath}.label`).trim();
+        if (!label || label.length > 200) {
+          throw new Error(`${servicePath}.label must have 1-200 characters.`);
+        }
+        return {
+          key: requiredString(entry.key, `${servicePath}.key`),
+          label,
+        };
+      });
+      uniqueByKey(services, `${path} services`);
+    }
+
     let financing: ImportFinancingVariant[] | undefined;
     if (raw.financing !== undefined) {
       if (!Array.isArray(raw.financing)) {
@@ -550,6 +580,7 @@ function parseDocument(input: unknown): BurbotImportV1 {
         return {
           key: requiredString(entry.key, `${financePath}.key`),
           company_size: companySize,
+          service: optionalString(entry.service, `${financePath}.service`),
           data: entry.data,
           evidence: parseEvidenceMap(
             entry.evidence,
@@ -558,6 +589,16 @@ function parseDocument(input: unknown): BurbotImportV1 {
         };
       });
       uniqueByKey(financing, `${path} financing`);
+      if (type === "project") {
+        const serviceKeys = new Set((services ?? []).map((service) => service.key));
+        for (const variant of financing) {
+          if (variant.service && !serviceKeys.has(variant.service)) {
+            throw new Error(
+              `${path}.financing.${variant.key}.service references unknown services[].key ${variant.service}.`,
+            );
+          }
+        }
+      }
     }
 
     const declaredFileKeys = new Set(
@@ -589,6 +630,7 @@ function parseDocument(input: unknown): BurbotImportV1 {
       files,
       geography,
       contacts,
+      services,
       financing,
       documents,
     };
@@ -767,6 +809,22 @@ export function importDocumentIntoState(
     }
     state.objects.push(object);
     importedByKey.set(item.key, object);
+  }
+
+  const serviceIdByProjectAndKey = new Map<string, string>();
+  for (const item of document.objects) {
+    if (item.type !== "project" || !item.services?.length) continue;
+    const object = importedByKey.get(item.key)!;
+    for (const service of item.services) {
+      const id = uuid();
+      (state.serviceCategories ||= []).push({
+        id,
+        objectId: object.id,
+        importKey: service.key,
+        label: service.label,
+      });
+      serviceIdByProjectAndKey.set(`${item.key}\u001f${service.key}`, id);
+    }
   }
 
   for (const item of document.objects) {
@@ -1239,6 +1297,27 @@ export function importDocumentIntoState(
           variant_no: (variantsPerSize.get(variant.company_size) ?? 0) + 1,
           own_contribution_form: "UNSPECIFIED",
         };
+        if (variant.service) {
+          let projectKey = item.key;
+          if (item.type === "recruitment") {
+            const projectRef = item.data.project_id;
+            if (!isReference(projectRef)) {
+              throw new Error(
+                `${item.key}.financing.${variant.key}.service requires recruitment.data.project_id.`,
+              );
+            }
+            projectKey = projectRef.$ref;
+          }
+          const serviceId = serviceIdByProjectAndKey.get(
+            `${projectKey}\u001f${variant.service}`,
+          );
+          if (!serviceId) {
+            throw new Error(
+              `${item.key}.financing.${variant.key}.service references unknown project service ${variant.service}.`,
+            );
+          }
+          row.service_category_id = serviceId;
+        }
         variantsPerSize.set(variant.company_size, Number(row.variant_no));
 
         for (const [field, rawValue] of Object.entries(variant.data)) {
