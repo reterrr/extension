@@ -1064,10 +1064,7 @@
         if (!row) throw Error("Usługa nie istnieje.");
         state.serviceCategories = rows.filter((entry) => entry.id !== row.id);
         for (const funding of state.financingRules || []) {
-          if (
-            funding.objectId === object.id &&
-            funding.service_category_id === row.id
-          )
+          if (funding.service_category_id === row.id)
             delete funding.service_category_id;
         }
         object.updatedAt = now;
