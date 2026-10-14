@@ -143,6 +143,23 @@ export function copyProjectFundingMetadataToRecruitment(
         : value;
     if (recruitment.manualFields) delete recruitment.manualFields[field];
     if (recruitment.evidence) delete recruitment.evidence[field];
+
+    state.rules = state.rules.filter(
+      (rule) =>
+        !(
+          rule.objectId === recruitment.id &&
+          rule.field === field &&
+          (!rule.target || rule.target.kind === "object")
+        ),
+    );
+    state.fieldEvidence = (state.fieldEvidence ?? []).filter(
+      (entry) =>
+        !(
+          entry.objectId === recruitment.id &&
+          entry.field === field &&
+          (!entry.target || entry.target.kind === "object")
+        ),
+    );
   }
 
   return { copiedFields: status.pendingFields, project: status.project };
