@@ -541,6 +541,81 @@ test("field evidence supports page URL and configuration targets and is removed 
   assert.equal(s.state.fieldEvidence.length, 0);
 });
 
+test("project services are created at runtime and funding variants can reference them", () => {
+  const s = setup();
+  const project = s.create("project", "Projekt usługowy");
+  const recruitment = s.create("recruitment", "Nabór usługowy");
+
+  s.mutate({ op: "ADD_SERVICE", objectId: project.id, name: "Szkolenia" });
+  s.mutate({ op: "ADD_SERVICE", objectId: project.id, name: "Doradztwo" });
+  assert.deepEqual(
+    s.state.serviceDefinitions.map((row) => row.name),
+    ["Szkolenia", "Doradztwo"],
+  );
+
+  s.mutate({
+    op: "EDIT",
+    objectId: recruitment.id,
+    field: "project_id",
+    value: project.id,
+  });
+  s.mutate({
+    op: "ADD_FUNDING",
+    objectId: recruitment.id,
+    companySize: "MICRO",
+  });
+
+  const training = s.state.serviceDefinitions.find(
+    (row) => row.name === "Szkolenia",
+  );
+  const variant = s.state.financingRules.find(
+    (row) => row.objectId === recruitment.id,
+  );
+  s.mutate({
+    op: "SET_FUNDING_SERVICE",
+    objectId: recruitment.id,
+    variantId: variant.id,
+    serviceId: training.id,
+  });
+  assert.equal(
+    s.state.financingRules.find((row) => row.id === variant.id).serviceId,
+    training.id,
+  );
+
+  assert.throws(
+    () =>
+      s.mutate({
+        op: "REMOVE_SERVICE",
+        objectId: project.id,
+        serviceId: training.id,
+      }),
+    /przypisana do 1 wariantu/,
+  );
+
+  s.mutate({
+    op: "UPDATE_SERVICE",
+    objectId: project.id,
+    serviceId: training.id,
+    name: "Szkolenia specjalistyczne",
+  });
+  assert.equal(
+    s.state.serviceDefinitions.find((row) => row.id === training.id).name,
+    "Szkolenia specjalistyczne",
+  );
+
+  const otherProject = s.create("project", "Drugi projekt");
+  s.mutate({
+    op: "EDIT",
+    objectId: recruitment.id,
+    field: "project_id",
+    value: otherProject.id,
+  });
+  assert.equal(
+    s.state.financingRules.find((row) => row.id === variant.id).serviceId,
+    undefined,
+  );
+});
+
 test("stale writes and failed re-extraction batches leave the original snapshot untouched", () => {
   const s = setup(),
     object = s.create(),
