@@ -79,7 +79,9 @@ export interface ImportReviewDocumentView {
   key: string;
   label: string;
   fields: ImportReviewDocumentFieldView[];
-  originalFileName?: string;
+  isOperatorTemplate: boolean;
+  physicalFileName?: string;
+  physicalFileUrl?: string;
 }
 
 export interface ImportReviewFinancingView {

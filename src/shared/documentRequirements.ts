@@ -151,20 +151,25 @@ export function documentRequirementFromFile(
     fulfillment_mode: usesOperatorTemplate
       ? "OPERATOR_TEMPLATE"
       : "WITHOUT_OPERATOR_TEMPLATE",
-    ...(informational
-      ? {}
-      : {
+    ...(!informational && !usesOperatorTemplate
+      ? {
           responsibility:
             source.responsibility === "FUNDPILOT" ||
             source.responsibility === "SHARED" ||
             source.responsibility === "CLIENT"
               ? source.responsibility
               : "CLIENT",
-        }),
-    ...(typeof source.delivery_stage === "string" && source.delivery_stage.trim()
+        }
+      : {}),
+    ...(!informational &&
+    !usesOperatorTemplate &&
+    typeof source.delivery_stage === "string" &&
+    source.delivery_stage.trim()
       ? { delivery_stage: source.delivery_stage.trim().slice(0, 60) }
       : {}),
-    ...(typeof source.required_evidence === "string" &&
+    ...(!informational &&
+    !usesOperatorTemplate &&
+    typeof source.required_evidence === "string" &&
     source.required_evidence.trim()
       ? { required_evidence: source.required_evidence.trim().slice(0, 4000) }
       : {}),
@@ -227,7 +232,11 @@ export function normalizeDocumentRequirement(
   if (!normalized.signature_requirement) {
     normalized.signature_requirement = "UNKNOWN";
   }
-  if (!normalized.responsibility) {
+  if (
+    normalized.requirement !== "INFORMATIONAL" &&
+    normalized.fulfillment_mode === "WITHOUT_OPERATOR_TEMPLATE" &&
+    !normalized.responsibility
+  ) {
     normalized.responsibility = "CLIENT";
   }
   if (!Array.isArray(normalized.source_file_source_ids)) {

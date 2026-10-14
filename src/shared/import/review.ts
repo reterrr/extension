@@ -16,6 +16,7 @@ import type {
 import type {
   ImportedEvidence,
   ImportedSource,
+  LegacyStoredDocumentRequirement,
   LegacyStoredFileSource,
   LegacyStoredObject,
   LegacyStorageState,
@@ -373,13 +374,65 @@ export function allImportReviewEvidenceViews(
   });
 }
 
+function linkedPhysicalFile(
+  row: LegacyStoredDocumentRequirement,
+  files: LegacyStoredFileSource[],
+): LegacyStoredFileSource | undefined {
+  const mayHavePhysicalDocument =
+    row.requirement === "INFORMATIONAL" ||
+    row.fulfillment_mode === "OPERATOR_TEMPLATE";
+  if (!mayHavePhysicalDocument) return undefined;
+
+  if (row.original_file_source_id) {
+    const original = files.find(
+      (file) => file.id === row.original_file_source_id,
+    );
+    if (original) return original;
+  }
+
+  const sourceIds = new Set(row.source_file_source_ids ?? []);
+  if (!sourceIds.size) return undefined;
+
+  const label = String(row.label ?? "").trim().toLocaleLowerCase("pl-PL");
+  if (!label) return undefined;
+
+  return files.find(
+    (file) =>
+      sourceIds.has(file.id) &&
+      String(file.display_name?.trim() || file.name)
+        .trim()
+        .toLocaleLowerCase("pl-PL") === label,
+  );
+}
+
+function representedDocumentFileIds(
+  session: ImportReviewSession,
+  object: LegacyStoredObject | undefined,
+): Set<string> {
+  if (!object) return new Set();
+  const files = (session.previewState.fileSources ?? []).filter(
+    (source) => source.objectId === object.id,
+  );
+  const represented = new Set<string>();
+  for (const row of session.previewState.documentRequirements ?? []) {
+    if (row.objectId !== object.id) continue;
+    const linked = linkedPhysicalFile(row, files);
+    if (linked) represented.add(linked.id);
+  }
+  return represented;
+}
+
 function fileViews(
   session: ImportReviewSession,
   object: LegacyStoredObject | undefined,
 ): ImportReviewFileView[] {
   if (!object) return [];
+  const represented = representedDocumentFileIds(session, object);
   return (session.previewState.fileSources ?? [])
-    .filter((source) => source.objectId === object.id)
+    .filter(
+      (source) =>
+        source.objectId === object.id && !represented.has(source.id),
+    )
     .map((source) => ({
       id: source.id,
       name: source.name,
@@ -409,24 +462,40 @@ function documentViews(
   object: LegacyStoredObject | undefined,
 ): ImportReviewDocumentView[] {
   if (!object) return [];
-  const filesById = new Map(
-    (session.previewState.fileSources ?? [])
-      .filter((source) => source.objectId === object.id)
-      .map((source) => [
-        source.id,
-        source.display_name?.trim() || source.name,
-      ]),
+  const files = (session.previewState.fileSources ?? []).filter(
+    (source) => source.objectId === object.id,
   );
 
   return (session.previewState.documentRequirements ?? [])
     .filter((row) => row.objectId === object.id)
     .map((row) => {
-      const fields = Object.entries(BurbotDocuments.fields)
-        .filter(
-          ([field, definition]) =>
-            !definition.hidden &&
-            Object.prototype.hasOwnProperty.call(row, field),
-        )
+      const informational = row.requirement === "INFORMATIONAL";
+      const isOperatorTemplate =
+        !informational && row.fulfillment_mode === "OPERATOR_TEMPLATE";
+      const noTemplateWorkflowFields = new Set([
+        "delivery_stage",
+        "responsibility",
+        "required_evidence",
+      ]);
+      const physicalFile = linkedPhysicalFile(row, files);
+
+      const rowFields = Object.entries(BurbotDocuments.fields)
+        .filter(([field, definition]) => {
+          if (
+            definition.hidden ||
+            !Object.prototype.hasOwnProperty.call(row, field)
+          ) {
+            return false;
+          }
+          if (
+            (informational || isOperatorTemplate) &&
+            (field === "fulfillment_mode" ||
+              noTemplateWorkflowFields.has(field))
+          ) {
+            return false;
+          }
+          return true;
+        })
         .map(([field, definition]) => ({
           field,
           label: String(definition.label ?? field),
@@ -441,9 +510,35 @@ function documentViews(
             : "Nie ustawiono",
         }));
 
-      const originalFileName = row.original_file_source_id
-        ? filesById.get(row.original_file_source_id)
-        : undefined;
+      const physicalFields = physicalFile
+        ? [
+            ...(physicalFile.purpose
+              ? [
+                  {
+                    field: "physical_file_purpose",
+                    label: "Cel dokumentu",
+                    value: physicalFile.purpose,
+                  },
+                ]
+              : []),
+            ...(typeof physicalFile.has_fields === "boolean"
+              ? [
+                  {
+                    field: "physical_file_has_fields",
+                    label: "Czy plik zawiera pola do wypełnienia?",
+                    value: physicalFile.has_fields
+                      ? "Tak, pola lub deklaracje"
+                      : "Nie",
+                  },
+                ]
+              : []),
+          ]
+        : [];
+
+      const labelFields = rowFields.filter((field) => field.field === "label");
+      const otherFields = rowFields.filter((field) => field.field !== "label");
+      const fields = [...labelFields, ...physicalFields, ...otherFields];
+
       return {
         id: row.id,
         key: String(row.importKey ?? row.id),
@@ -451,7 +546,14 @@ function documentViews(
           row.label ||
           String(row.document_type_key ?? row.importKey ?? row.id),
         fields,
-        ...(originalFileName ? { originalFileName } : {}),
+        isOperatorTemplate,
+        ...(physicalFile
+          ? {
+              physicalFileName:
+                physicalFile.display_name?.trim() || physicalFile.name,
+              physicalFileUrl: physicalFile.url,
+            }
+          : {}),
       };
     });
 }
@@ -535,9 +637,7 @@ export function importReviewView(
         (sum, entries) => sum + entries.length,
         0,
       ),
-      fileCount: (session.previewState.fileSources ?? []).filter(
-        (source) => source.objectId === entry.id,
-      ).length,
+      fileCount: fileViews(session, entry).length,
       financingCount: (session.previewState.financingRules ?? []).filter(
         (row) => row.objectId === entry.id,
       ).length,

@@ -1022,10 +1022,12 @@ export function ImportReviewPanel() {
                     <section className="import-review-section">
                       <div className="import-review-section-heading">
                         <div>
-                          <span className="eyebrow">PLIKI</span>
-                          <strong>{view.files.length} przypiętych</strong>
+                          <span className="eyebrow">INNE PLIKI</span>
+                          <strong>{view.files.length} nieprzypisanych</strong>
                         </div>
-                        <small>AI wskazało te pliki jako źródła obiektu.</small>
+                        <small>
+                          Pliki źródłowe, które nie są reprezentowane przez pozycję w Dokumentach.
+                        </small>
                       </div>
                       <div className="import-review-files">
                         {view.files.map((file) => (
@@ -1102,11 +1104,25 @@ export function ImportReviewPanel() {
                                   </strong>
                                 </label>
                               ))}
-                              {documentRow.originalFileName && (
+                              {documentRow.physicalFileName && (
                                 <label className="import-review-workspace-field">
-                                  <small>Wzór operatora</small>
+                                  <small>
+                                    {documentRow.isOperatorTemplate
+                                      ? "Plik / wzór operatora"
+                                      : "Plik operatora"}
+                                  </small>
                                   <strong className="import-review-workspace-value">
-                                    {documentRow.originalFileName}
+                                    {documentRow.physicalFileUrl ? (
+                                      <a
+                                        href={documentRow.physicalFileUrl}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                      >
+                                        {documentRow.physicalFileName}
+                                      </a>
+                                    ) : (
+                                      documentRow.physicalFileName
+                                    )}
                                   </strong>
                                 </label>
                               )}

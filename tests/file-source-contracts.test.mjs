@@ -650,8 +650,9 @@ test("RoundImport exports configured documents including requirements without op
   assert.equal(form.originalFileId, "FILE_002");
   assert.equal(Object.prototype.hasOwnProperty.call(form, "sourceFileIds"), false);
   assert.equal(form.condition, "Gdy podmiot składa zgłoszenie w tej ścieżce.");
-  assert.equal(form.deliveryStage, "ZGLOSZENIE");
-  assert.equal(form.responsibility, "client");
+  assert.equal(Object.prototype.hasOwnProperty.call(form, "deliveryStage"), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(form, "responsibility"), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(form, "requiredEvidence"), false);
   assert.equal(form.signatureRequirement, "required_file");
   assert.equal(Object.prototype.hasOwnProperty.call(form, "versionLabel"), false);
 
@@ -1094,6 +1095,125 @@ test("re-inheriting adds only new project files and never overwrites recruitment
   assert.equal(firstCopy.display_name, "Nabór ma własną nazwę");
 });
 
+
+test("document migration separates operator-template and no-template fields", () => {
+  const state = {
+    version: 1,
+    revision: 1,
+    objects: [
+      {
+        id: "round",
+        type: "recruitment",
+        values: { external_number: "Nabór" },
+      },
+    ],
+    rules: [],
+    fileSources: [
+      {
+        id: "template-file",
+        objectId: "round",
+        fileType: "DOCX",
+        url: "https://example.test/form.docx",
+        sourcePageUrl: "https://example.test/nabor",
+        name: "form.docx",
+        addedAt: "2026-10-01T12:00:00Z",
+        delivery_stage: "ZGLOSZENIE",
+        responsibility: "CLIENT",
+        required_evidence: "Wypełniony formularz.",
+      },
+      {
+        id: "info-file",
+        objectId: "round",
+        fileType: "PDF",
+        url: "https://example.test/rules.pdf",
+        sourcePageUrl: "https://example.test/nabor",
+        name: "rules.pdf",
+        addedAt: "2026-10-01T12:00:00Z",
+      },
+    ],
+    documentRequirements: [
+      {
+        id: "doc-template",
+        objectId: "round",
+        label: "Formularz",
+        requirement: "REQUIRED",
+        fulfillment_mode: "OPERATOR_TEMPLATE",
+        original_file_source_id: "template-file",
+        source_file_source_ids: ["template-file"],
+        delivery_stage: "ZGLOSZENIE",
+        responsibility: "CLIENT",
+        required_evidence: "Wypełniony formularz.",
+        signature_requirement: "REQUIRED_FILE",
+      },
+      {
+        id: "doc-info",
+        objectId: "round",
+        label: "Regulamin",
+        requirement: "INFORMATIONAL",
+        fulfillment_mode: "OPERATOR_TEMPLATE",
+        original_file_source_id: "info-file",
+        source_file_source_ids: [],
+        delivery_stage: "ZGLOSZENIE",
+        responsibility: "CLIENT",
+        required_evidence: "Regulamin.",
+        signature_requirement: "NOT_REQUIRED",
+      },
+      {
+        id: "doc-no-template",
+        objectId: "round",
+        label: "Karta Usługi",
+        requirement: "REQUIRED",
+        fulfillment_mode: "WITHOUT_OPERATOR_TEMPLATE",
+        delivery_stage: "ZGLOSZENIE",
+        responsibility: "CLIENT",
+        required_evidence: "Karta Usługi z BUR.",
+        signature_requirement: "NOT_REQUIRED",
+        source_file_source_ids: [],
+      },
+    ],
+  };
+
+  assert.equal(
+    stateMigrations.migrateFileClassificationsToDocumentRequirements(state),
+    true,
+  );
+
+  const template = state.documentRequirements.find(
+    (row) => row.id === "doc-template",
+  );
+  const info = state.documentRequirements.find((row) => row.id === "doc-info");
+  const noTemplate = state.documentRequirements.find(
+    (row) => row.id === "doc-no-template",
+  );
+
+  assert.equal(template.original_file_source_id, "template-file");
+  assert.equal(template.delivery_stage, undefined);
+  assert.equal(template.responsibility, undefined);
+  assert.equal(template.required_evidence, undefined);
+
+  const templateFile = state.fileSources.find(
+    (source) => source.id === "template-file",
+  );
+  assert.equal(templateFile.delivery_stage, undefined);
+  assert.equal(templateFile.responsibility, undefined);
+  assert.equal(templateFile.required_evidence, undefined);
+
+  assert.equal(info.fulfillment_mode, "WITHOUT_OPERATOR_TEMPLATE");
+  assert.equal(info.original_file_source_id, undefined);
+  assert.deepEqual(info.source_file_source_ids, ["info-file"]);
+  assert.equal(info.delivery_stage, undefined);
+  assert.equal(info.responsibility, undefined);
+  assert.equal(info.required_evidence, undefined);
+
+  assert.equal(noTemplate.delivery_stage, "ZGLOSZENIE");
+  assert.equal(noTemplate.responsibility, "CLIENT");
+  assert.equal(noTemplate.required_evidence, "Karta Usługi z BUR.");
+
+  assert.equal(
+    stateMigrations.migrateFileClassificationsToDocumentRequirements(state),
+    false,
+  );
+});
 
 test("classified physical files migrate to first-class document requirements once", () => {
   const state = {

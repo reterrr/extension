@@ -477,14 +477,26 @@ test("dynamic documents support operator templates and no-template requirements"
   );
 
   const reviewView = reviewModule.importReviewView(session);
+  assert.equal(reviewView.files.length, 0);
   assert.equal(reviewView.documents.length, 2);
+  assert.equal(reviewView.objects[0].fileCount, 0);
   assert.equal(reviewView.objects[0].documentCount, 2);
   assert.equal(reviewView.documents[0].label, "Formularz operatora");
-  assert.equal(reviewView.documents[0].originalFileName, "regulamin.pdf");
-  assert.equal(
-    Object.prototype.hasOwnProperty.call(reviewView.documents[0], "sourceFileNames"),
-    false,
-  );
+  assert.equal(reviewView.documents[0].physicalFileName, "regulamin.pdf");
+  assert.equal(reviewView.documents[0].isOperatorTemplate, true);
+  for (const hiddenField of [
+    "fulfillment_mode",
+    "delivery_stage",
+    "responsibility",
+    "required_evidence",
+  ]) {
+    assert.equal(
+      reviewView.documents[0].fields.some(
+        (field) => field.field === hiddenField,
+      ),
+      false,
+    );
+  }
   assert.equal(
     reviewView.documents[1].fields.some((field) => field.field === "version_label"),
     false,
@@ -519,8 +531,25 @@ test("dynamic documents support operator templates and no-template requirements"
     "Gdy wnioskodawca korzysta z pomocy de minimis.",
   );
   assert.equal(
-    portableProject.files[0].metadata.required_evidence,
-    "Wypełniony formularz.",
+    Object.prototype.hasOwnProperty.call(
+      portableProject.files[0].metadata,
+      "required_evidence",
+    ),
+    false,
+  );
+  assert.equal(
+    Object.prototype.hasOwnProperty.call(
+      portableProject.files[0].metadata,
+      "delivery_stage",
+    ),
+    false,
+  );
+  assert.equal(
+    Object.prototype.hasOwnProperty.call(
+      portableProject.files[0].metadata,
+      "responsibility",
+    ),
+    false,
   );
   assert.equal(portableProject.files[1].key, "DOC_BANK");
   assert.equal(portableProject.files[1].without_template, true);
@@ -2334,10 +2363,28 @@ test("Import Review preserves dynamic file classification and file evidence", ()
     "2026-09-24T12:10:00.000Z",
   );
   const reviewView = reviewModule.importReviewView(session);
-  assert.equal(reviewView.files[0].name, "regulamin_naboru.pdf");
-  assert.equal(reviewView.files[0].purpose, "Regulamin");
-  assert.equal(reviewView.files[0].hasFields, false);
-  assert.equal(reviewView.files[0].clientRequirement, "Informacyjny");
+  assert.equal(reviewView.files.length, 0);
+  assert.equal(reviewView.documents.length, 1);
+  assert.equal(reviewView.documents[0].physicalFileName, "regulamin_naboru.pdf");
+  assert.equal(reviewView.documents[0].isOperatorTemplate, false);
+  assert.ok(
+    reviewView.documents[0].fields.some(
+      (field) => field.label === "Cel dokumentu" && field.value === "Regulamin",
+    ),
+  );
+  assert.ok(
+    reviewView.documents[0].fields.some(
+      (field) =>
+        field.label === "Czy plik zawiera pola do wypełnienia?" &&
+        field.value === "Nie",
+    ),
+  );
+  assert.equal(
+    reviewView.documents[0].fields.some(
+      (field) => field.field === "fulfillment_mode",
+    ),
+    false,
+  );
 
   const plan = reviewModule.buildImportApprovalPlan(
     session,

@@ -311,7 +311,55 @@ export function migrateFileClassificationsToDocumentRequirements(
   const rows = (state.documentRequirements ||= []);
   const linkedFiles = new Set<string>();
 
+  // Delivery workflow belongs to requirements without an operator template.
+  // A physical file source can never be that requirement itself.
+  for (const source of state.fileSources ?? []) {
+    const mutable = source as unknown as Record<string, unknown>;
+    for (const field of [
+      "delivery_stage",
+      "responsibility",
+      "required_evidence",
+    ]) {
+      if (!Object.prototype.hasOwnProperty.call(mutable, field)) continue;
+      delete mutable[field];
+      changed = true;
+    }
+  }
+
   for (const row of rows) {
+    const informational = row.requirement === "INFORMATIONAL";
+    const withoutTemplate =
+      informational || row.fulfillment_mode === "WITHOUT_OPERATOR_TEMPLATE";
+
+    if (informational && row.fulfillment_mode !== "WITHOUT_OPERATOR_TEMPLATE") {
+      row.fulfillment_mode = "WITHOUT_OPERATOR_TEMPLATE";
+      changed = true;
+    }
+
+    if (withoutTemplate && row.original_file_source_id) {
+      const sourceIds = new Set(row.source_file_source_ids ?? []);
+      sourceIds.add(row.original_file_source_id);
+      row.source_file_source_ids = [...sourceIds];
+      delete row.original_file_source_id;
+      changed = true;
+    }
+
+    if (
+      informational ||
+      row.fulfillment_mode === "OPERATOR_TEMPLATE"
+    ) {
+      const mutable = row as unknown as Record<string, unknown>;
+      for (const field of [
+        "delivery_stage",
+        "responsibility",
+        "required_evidence",
+      ]) {
+        if (!Object.prototype.hasOwnProperty.call(mutable, field)) continue;
+        delete mutable[field];
+        changed = true;
+      }
+    }
+
     if (row.original_file_source_id) linkedFiles.add(row.original_file_source_id);
     for (const sourceId of row.source_file_source_ids ?? []) {
       linkedFiles.add(sourceId);

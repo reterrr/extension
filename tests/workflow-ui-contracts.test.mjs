@@ -293,6 +293,33 @@ test("Documents section renders one unified list for files and no-template docum
     documents,
     /card\.className = "document-requirement-row file-source-row"/,
   );
+  assert.match(
+    documents,
+    /wantsOperatorTemplate[\s\S]*?Boolean\(originalFile\.value\)/,
+  );
+  assert.match(
+    documents,
+    /fulfillmentLabelNode\.hidden = isInfo \|\| usesOperatorTemplate/,
+  );
+  assert.match(documents, /originalFileLabel\.hidden = !wantsOperatorTemplate/);
+  assert.match(documents, /thirdRow\.hidden = isInfo/);
+  assert.match(documents, /fourthRow\.hidden = !withoutOperatorTemplate/);
+  assert.match(
+    documents,
+    /requiredEvidenceLabel\.hidden = !withoutOperatorTemplate/,
+  );
+  assert.match(
+    documents,
+    /fulfillment\.value === "WITHOUT_OPERATOR_TEMPLATE"[\s\S]*?deliveryStage\.value/,
+  );
+  assert.match(
+    documents,
+    /fulfillment\.value === "OPERATOR_TEMPLATE"[\s\S]*?originalFile\.value/,
+  );
+  assert.match(
+    documents,
+    /originalFile\.onchange = \(\) => \{[\s\S]*?fulfillment\.value = "WITHOUT_OPERATOR_TEMPLATE"/,
+  );
   assert.match(files, /const representedFileIds = supportsRequirements/);
   assert.match(
     files,
@@ -319,6 +346,26 @@ test("file display name comes from the actual PDF filename", () => {
   assert.equal(remote.includes("cleanHint || decodedFileName"), false);
 });
 
+
+test("Import Review keeps linked operator files inside unified document cards", () => {
+  const panel = source("src/sidepanel/ImportReviewPanel.tsx");
+  const review = source("src/shared/import/review.ts");
+
+  assert.match(panel, /INNE PLIKI/);
+  assert.match(panel, /documentRow\.physicalFileName/);
+  assert.match(panel, /Plik \/ wzór operatora/);
+  assert.match(panel, /Plik operatora/);
+  assert.match(review, /function representedDocumentFileIds/);
+  assert.match(review, /!represented\.has\(source\.id\)/);
+  assert.match(
+    review,
+    /\(informational \|\| isOperatorTemplate\)[\s\S]*?field === "fulfillment_mode"/,
+  );
+  assert.match(
+    review,
+    /noTemplateWorkflowFields[\s\S]*?"delivery_stage"[\s\S]*?"responsibility"[\s\S]*?"required_evidence"/,
+  );
+});
 
 test("Import Review colors are derived from concrete evidence entries", () => {
   const review = source("src/sidepanel/ImportReviewPanel.tsx");

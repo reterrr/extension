@@ -32,7 +32,13 @@ const DOCUMENT_TO_FILE_SIGNATURE = {
   EXTERNAL_OPERATOR: "Dowód w systemie operatora",
 };
 
-function documentMetadata(row) {
+const NO_TEMPLATE_ONLY_FILE_METADATA_FIELDS = new Set([
+  "delivery_stage",
+  "responsibility",
+  "required_evidence",
+]);
+
+function documentMetadata(row, includeNoTemplateDetails = false) {
   return compact({
     display_name: row.label,
     intended_use: row.purpose,
@@ -40,9 +46,13 @@ function documentMetadata(row) {
     signature_requirement:
       DOCUMENT_TO_FILE_SIGNATURE[row.signature_requirement],
     condition: row.condition,
-    delivery_stage: row.delivery_stage,
-    responsibility: row.responsibility,
-    required_evidence: row.required_evidence,
+    ...(includeNoTemplateDetails
+      ? {
+          delivery_stage: row.delivery_stage,
+          responsibility: row.responsibility,
+          required_evidence: row.required_evidence,
+        }
+      : {}),
     source_url: row.source_url,
     source_description: row.source_description,
   });
@@ -275,15 +285,23 @@ export function createPortableExport({
         (entries[proof.field] ??= []).push(proof);
     return evidenceMap(entries, values);
   };
-  const documentEvidenceForUnifiedFile = (object, row) => {
+  const documentEvidenceForUnifiedFile = (
+    object,
+    row,
+    includeNoTemplateDetails = false,
+  ) => {
     const values = {
       label: row.label,
       purpose: row.purpose,
       requirement: row.requirement,
       condition: row.condition,
-      delivery_stage: row.delivery_stage,
-      responsibility: row.responsibility,
-      required_evidence: row.required_evidence,
+      ...(includeNoTemplateDetails
+        ? {
+            delivery_stage: row.delivery_stage,
+            responsibility: row.responsibility,
+            required_evidence: row.required_evidence,
+          }
+        : {}),
       source_url: row.source_url,
       source_description: row.source_description,
       signature_requirement: row.signature_requirement,
@@ -301,9 +319,13 @@ export function createPortableExport({
       requirement: "client_requirement",
       signature_requirement: "signature_requirement",
       condition: "condition",
-      delivery_stage: "delivery_stage",
-      responsibility: "responsibility",
-      required_evidence: "required_evidence",
+      ...(includeNoTemplateDetails
+        ? {
+            delivery_stage: "delivery_stage",
+            responsibility: "responsibility",
+            required_evidence: "required_evidence",
+          }
+        : {}),
       source_url: "source_url",
       source_description: "source_description",
     };
@@ -433,7 +455,9 @@ export function createPortableExport({
       const linkedDocument = linkedDocumentByFileId.get(String(file.id));
       const physicalMetadata = compact(
         Object.fromEntries(
-          FILE_METADATA_FIELDS.map((field) => [field, file[field]]),
+          FILE_METADATA_FIELDS.filter(
+            (field) => !NO_TEMPLATE_ONLY_FILE_METADATA_FIELDS.has(field),
+          ).map((field) => [field, file[field]]),
         ),
       );
       const metadata = {
@@ -472,7 +496,7 @@ export function createPortableExport({
     }
 
     for (const row of unlinkedDocuments) {
-      const metadata = documentMetadata(row);
+      const metadata = documentMetadata(row, true);
       const key = uniqueUnifiedKey(
         row.importKey || documentKeys.get(rowIdentity(row)),
         row.id ?? row.document_type_key,
@@ -481,7 +505,7 @@ export function createPortableExport({
         key,
         without_template: true,
         metadata,
-        ...documentEvidenceForUnifiedFile(object, row),
+        ...documentEvidenceForUnifiedFile(object, row, true),
       });
     }
 

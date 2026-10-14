@@ -748,17 +748,12 @@ function unifiedRequirementFromMetadata(
       row.original_file_source_id = linkedFile.id;
     }
     if (metadata.condition) row.condition = metadata.condition.slice(0, 1000);
-    if (metadata.delivery_stage)
-      row.delivery_stage = metadata.delivery_stage.slice(0, 60);
-    if (
-      metadata.responsibility === "FUNDPILOT" ||
-      metadata.responsibility === "CLIENT" ||
-      metadata.responsibility === "SHARED"
-    ) {
-      row.responsibility = metadata.responsibility;
-    }
-    if (metadata.required_evidence)
-      row.required_evidence = metadata.required_evidence.slice(0, 4000);
+    // A physical operator file/template is one document, not a second
+    // no-template delivery requirement. delivery_stage, responsibility and
+    // required_evidence belong only to files[] entries with without_template.
+    delete row.delivery_stage;
+    delete row.responsibility;
+    delete row.required_evidence;
     if (metadata.source_url) row.source_url = metadata.source_url;
     if (metadata.source_description)
       row.source_description = metadata.source_description.slice(0, 1000);
@@ -1196,6 +1191,11 @@ export function importDocumentIntoState(
             file.name ??
             technicalName,
         };
+        // Physical operator files/templates do not carry the workflow fields
+        // used by documents that must be prepared without an operator template.
+        delete resolvedMetadata.delivery_stage;
+        delete resolvedMetadata.responsibility;
+        delete resolvedMetadata.required_evidence;
         const row: LegacyStoredFileSource = {
           id: uuid(),
           objectId: object.id,
@@ -1484,6 +1484,13 @@ export function importDocumentIntoState(
           if (row.requirement === "INFORMATIONAL") {
             row.fulfillment_mode = "WITHOUT_OPERATOR_TEMPLATE";
             delete row.original_file_source_id;
+            delete row.delivery_stage;
+            delete row.responsibility;
+            delete row.required_evidence;
+          } else if (row.fulfillment_mode === "OPERATOR_TEMPLATE") {
+            delete row.delivery_stage;
+            delete row.responsibility;
+            delete row.required_evidence;
           }
           if (
             row.fulfillment_mode === "OPERATOR_TEMPLATE" &&

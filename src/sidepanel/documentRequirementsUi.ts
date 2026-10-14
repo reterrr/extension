@@ -267,6 +267,19 @@ function renderRequirement(
     fulfillment,
   );
   const originalFileLabel = fieldLabel("Plik / wzór operatora", originalFile);
+  const conditionLabelNode = fieldLabel(
+    "Kiedy dokument jest wymagany",
+    conditionInput,
+  );
+  const deliveryStageLabel = fieldLabel("Etap dostarczenia", deliveryStage);
+  const responsibilityLabel = fieldLabel(
+    "Odpowiedzialność",
+    responsibility,
+  );
+  const requiredEvidenceLabel = fieldLabel(
+    "Co należy dostarczyć",
+    requiredEvidence,
+  );
 
   const thirdRow = document.createElement("div");
   thirdRow.className = "document-requirement-field-row";
@@ -274,18 +287,15 @@ function renderRequirement(
 
   const fourthRow = document.createElement("div");
   fourthRow.className = "document-requirement-field-row";
-  fourthRow.append(
-    fieldLabel("Etap dostarczenia", deliveryStage),
-    fieldLabel("Odpowiedzialność", responsibility),
-  );
+  fourthRow.append(deliveryStageLabel, responsibilityLabel);
 
   body.append(
     firstRow,
     secondRow,
     thirdRow,
-    fieldLabel("Kiedy dokument jest wymagany", conditionInput),
+    conditionLabelNode,
     fourthRow,
-    fieldLabel("Co należy dostarczyć", requiredEvidence),
+    requiredEvidenceLabel,
     fieldLabel("Oficjalne źródło", sourceUrl),
     fieldLabel("Opis źródła", sourceDescription),
   );
@@ -307,13 +317,37 @@ function renderRequirement(
   const informational = () => requirement.value === "INFORMATIONAL";
   const refreshMode = () => {
     const isInfo = informational();
-    fulfillmentLabelNode.hidden = isInfo;
-    originalFileLabel.hidden =
-      isInfo || fulfillment.value !== "OPERATOR_TEMPLATE";
-    conditionInput.closest("label")!.hidden = requirement.value !== "CONDITIONAL";
+    const wantsOperatorTemplate =
+      !isInfo && fulfillment.value === "OPERATOR_TEMPLATE";
+    const usesOperatorTemplate =
+      wantsOperatorTemplate && Boolean(originalFile.value);
+    const withoutOperatorTemplate =
+      !isInfo && fulfillment.value === "WITHOUT_OPERATOR_TEMPLATE";
+
+    // There are only two business cases in the Documents UI:
+    // 1. the operator supplies a physical file/template,
+    // 2. the required document has no operator template.
+    //
+    // Delivery workflow fields describe only case 2. For case 1 the physical
+    // operator file is the relevant input and showing both sets of controls
+    // makes the card look like two independent requirements. Keep the mode
+    // selector visible while a template is being chosen so the user can still
+    // switch back to "without template".
+    fulfillmentLabelNode.hidden = isInfo || usesOperatorTemplate;
+    originalFileLabel.hidden = !wantsOperatorTemplate;
+    thirdRow.hidden = isInfo;
+    fourthRow.hidden = !withoutOperatorTemplate;
+    requiredEvidenceLabel.hidden = !withoutOperatorTemplate;
+    conditionLabelNode.hidden = requirement.value !== "CONDITIONAL";
   };
   requirement.onchange = refreshMode;
   fulfillment.onchange = refreshMode;
+  originalFile.onchange = () => {
+    if (!originalFile.value && fulfillment.value === "OPERATOR_TEMPLATE") {
+      fulfillment.value = "WITHOUT_OPERATOR_TEMPLATE";
+    }
+    refreshMode();
+  };
   refreshMode();
 
   const save = document.createElement("button");
@@ -330,9 +364,18 @@ function renderRequirement(
       fulfillment_mode: informational()
         ? "WITHOUT_OPERATOR_TEMPLATE"
         : fulfillment.value,
-      delivery_stage: deliveryStage.value,
-      responsibility: responsibility.value || undefined,
-      required_evidence: requiredEvidence.value,
+      delivery_stage:
+        !informational() && fulfillment.value === "WITHOUT_OPERATOR_TEMPLATE"
+          ? deliveryStage.value
+          : undefined,
+      responsibility:
+        !informational() && fulfillment.value === "WITHOUT_OPERATOR_TEMPLATE"
+          ? responsibility.value || undefined
+          : undefined,
+      required_evidence:
+        !informational() && fulfillment.value === "WITHOUT_OPERATOR_TEMPLATE"
+          ? requiredEvidence.value
+          : undefined,
       original_file_source_id:
         !informational() && fulfillment.value === "OPERATOR_TEMPLATE"
           ? originalFile.value || undefined
