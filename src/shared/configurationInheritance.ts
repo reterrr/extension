@@ -37,6 +37,23 @@ export interface FundingMetadataInheritanceStatus {
   protectedFields: ProjectFundingMetadataField[];
 }
 
+export const PROJECT_RECRUITMENT_CONDITION_FIELDS = [
+  "eligible_entities",
+  "funding_conditions",
+  "application_instructions",
+] as const;
+
+export type ProjectRecruitmentConditionField =
+  (typeof PROJECT_RECRUITMENT_CONDITION_FIELDS)[number];
+
+export interface RecruitmentConditionsInheritanceStatus {
+  project?: LegacyStoredObject;
+  projectFields: ProjectRecruitmentConditionField[];
+  pendingFields: ProjectRecruitmentConditionField[];
+  matchingFields: ProjectRecruitmentConditionField[];
+  protectedFields: ProjectRecruitmentConditionField[];
+}
+
 function hasValue(value: unknown): boolean {
   if (value === undefined || value === null) return false;
   if (typeof value === "string") return value.trim().length > 0;
@@ -141,6 +158,108 @@ export function copyProjectFundingMetadataToRecruitment(
       value && typeof value === "object"
         ? JSON.parse(JSON.stringify(value))
         : value;
+    if (recruitment.manualFields) delete recruitment.manualFields[field];
+    if (recruitment.evidence) delete recruitment.evidence[field];
+
+    state.rules = state.rules.filter(
+      (rule) =>
+        !(
+          rule.objectId === recruitment.id &&
+          rule.field === field &&
+          (!rule.target || rule.target.kind === "object")
+        ),
+    );
+    state.fieldEvidence = (state.fieldEvidence ?? []).filter(
+      (entry) =>
+        !(
+          entry.objectId === recruitment.id &&
+          entry.field === field &&
+          (!entry.target || entry.target.kind === "object")
+        ),
+    );
+  }
+
+  return { copiedFields: status.pendingFields, project: status.project };
+}
+
+
+export function recruitmentConditionsInheritanceStatus(
+  state: LegacyStorageState,
+  recruitment: LegacyStoredObject,
+): RecruitmentConditionsInheritanceStatus {
+  const project = projectForRecruitment(state, recruitment);
+  if (!project) {
+    return {
+      project: undefined,
+      projectFields: [],
+      pendingFields: [],
+      matchingFields: [],
+      protectedFields: [],
+    };
+  }
+
+  const projectFields = PROJECT_RECRUITMENT_CONDITION_FIELDS.filter((field) =>
+    hasValue(project.values?.[field]),
+  );
+  const pendingFields = projectFields.filter(
+    (field) => !hasValue(recruitment.values?.[field]),
+  );
+  const matchingFields = projectFields.filter(
+    (field) =>
+      hasValue(recruitment.values?.[field]) &&
+      sameValue(recruitment.values?.[field], project.values?.[field]),
+  );
+  const protectedFields = projectFields.filter(
+    (field) =>
+      hasValue(recruitment.values?.[field]) &&
+      !sameValue(recruitment.values?.[field], project.values?.[field]),
+  );
+
+  return {
+    project,
+    projectFields,
+    pendingFields,
+    matchingFields,
+    protectedFields,
+  };
+}
+
+export function copyProjectConditionsToRecruitment(
+  state: LegacyStorageState,
+  recruitmentId: string,
+): {
+  copiedFields: ProjectRecruitmentConditionField[];
+  project: LegacyStoredObject;
+} {
+  const recruitment = state.objects.find(
+    (object) => object.id === recruitmentId,
+  );
+  if (!recruitment || recruitment.type !== "recruitment") {
+    throw new Error("Wybierz nabór.");
+  }
+
+  const status = recruitmentConditionsInheritanceStatus(state, recruitment);
+  if (!status.project) {
+    throw new Error("Najpierw przypisz projekt do naboru.");
+  }
+  if (!status.projectFields.length) {
+    throw new Error(
+      "Przypisany projekt nie ma uzupełnionych warunków projektu.",
+    );
+  }
+  if (!status.pendingFields.length) {
+    throw new Error(
+      "Brak pustych warunków naboru do uzupełnienia z projektu.",
+    );
+  }
+
+  for (const field of status.pendingFields) {
+    const value = status.project.values?.[field];
+    recruitment.values[field] =
+      value && typeof value === "object"
+        ? JSON.parse(JSON.stringify(value))
+        : value;
+
     if (recruitment.manualFields) delete recruitment.manualFields[field];
     if (recruitment.evidence) delete recruitment.evidence[field];
 
