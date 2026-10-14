@@ -55,6 +55,9 @@ CREATE TABLE IF NOT EXISTS projects (
   notes TEXT,
   schedule_note TEXT,
   technical_notes TEXT,
+  funding_rules TEXT,
+  funding_verified_at TEXT,
+  funding_verification_url TEXT,
   created_at TEXT,
   updated_at TEXT,
   last_checked_at TEXT,
@@ -335,4 +338,4 @@ CREATE TABLE IF NOT EXISTS document_requirements (
   FOREIGN KEY (object_id) REFERENCES workspace_objects(object_id) ON DELETE CASCADE
 );
 
-PRAGMA user_version = 11;
+PRAGMA user_version = 12;

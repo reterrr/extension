@@ -663,3 +663,31 @@ test("funding UI supports runtime project services", () => {
   assert.match(workspace, /Bez przypisanej usługi/);
   assert.match(workspace, /service_category_id/);
 });
+
+
+test("project funding verification fields can be inherited by recruitments", () => {
+  const schema = source("src/shared/domain/schema.js");
+  const workspace = source("src/sidepanel/workspace.js");
+  const background = source("src/background/index.ts");
+
+  assert.match(
+    schema,
+    /funding_rules: text\("Zasady dofinansowania", "Dofinansowanie"/,
+  );
+  assert.match(
+    workspace,
+    /Dziedzicz dane finansowania z projektu/,
+  );
+  assert.match(
+    workspace,
+    /INHERIT_PROJECT_FUNDING_METADATA/,
+  );
+  assert.match(
+    background,
+    /copyProjectFundingMetadataToRecruitment/,
+  );
+  assert.match(
+    background,
+    /INHERIT_PROJECT_FUNDING_METADATA/,
+  );
+});

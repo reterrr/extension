@@ -65,6 +65,9 @@ function snapshot() {
             end_date: "2026-12-31",
             announcements_site_url: "https://rarr.example/nabory",
             project_url: "https://rarr.example/projekt",
+            funding_rules: "Projektowe zasady finansowania.",
+            funding_verified_at: "2026-09-20",
+            funding_verification_url: "https://rarr.example/projekt/finansowanie",
             number: "FEPK.01.01-TEST",
             last_checked_at: "2026-09-20T11:00:00.000Z",
           },
@@ -290,6 +293,12 @@ test("BUR Excel export keeps complete business data and relations", () => {
   assert.equal(project.operator_id, "OP_1");
   assert.equal(project.numer_projektu, "FEPK.01.01-TEST");
   assert.equal(project.strona_projektu, "https://rarr.example/projekt");
+  assert.equal(project.zasady_dofinansowania, "Projektowe zasady finansowania.");
+  assert.ok(project.data_weryfikacji_finansow);
+  assert.equal(
+    project.zrodlo_weryfikacji_finansow,
+    "https://rarr.example/projekt/finansowanie",
+  );
 
   const projectGeography = asObjects("Geografia_Projekty")[0];
   assert.equal(projectGeography.projekt_id, "PR_1");

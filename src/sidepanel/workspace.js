@@ -13,7 +13,10 @@ import {
   aiViewExportFilename,
   createAiViewExport,
 } from "../shared/export/aiViewExport.js";
-import { fundingInheritanceStatus } from "../shared/configurationInheritance";
+import {
+  fundingInheritanceStatus,
+  fundingMetadataInheritanceStatus,
+} from "../shared/configurationInheritance";
 import {
   OBJECT_VIEW_STORAGE_KEY,
   addObjectToView,
@@ -1461,6 +1464,92 @@ export const workspaceReady = (() => {
       root.append(group);
     }
   }
+  function fundingMetadataGroupBody() {
+    const redesigned = Array.from(
+      $("fields").querySelectorAll(".workspace-section-card[data-section-key]"),
+    ).find(
+      (section) => section.dataset.sectionKey === "Dofinansowanie",
+    );
+    if (redesigned)
+      return redesigned.querySelector(".workspace-section-body");
+
+    return Array.from($("fields").querySelectorAll(".field-group")).find(
+      (section) =>
+        section.querySelector(":scope > h2")?.textContent?.trim() ===
+        "Dofinansowanie",
+    );
+  }
+
+  function renderFundingMetadataInheritance(object) {
+    let root = $("funding-metadata-inherit");
+    if (object.type !== "recruitment") {
+      root?.remove();
+      return;
+    }
+
+    const container = fundingMetadataGroupBody();
+    if (!container) {
+      root?.remove();
+      return;
+    }
+
+    if (!root) {
+      root = node("div", "configuration-inherit");
+      root.id = "funding-metadata-inherit";
+    }
+    if (root.parentElement !== container) container.prepend(root);
+    root.replaceChildren();
+
+    const status = fundingMetadataInheritanceStatus(db, object);
+    const copy = node("div");
+    copy.append(
+      node("strong", "", "Dziedzicz dane finansowania z projektu"),
+    );
+    const description = node("small");
+    copy.append(description);
+
+    const button = node(
+      "button",
+      "text-button",
+      "↳ Dziedzicz dane finansowania",
+    );
+    button.type = "button";
+
+    if (!status.project) {
+      button.disabled = true;
+      description.textContent = "Najpierw przypisz projekt do naboru.";
+    } else if (!status.projectFields.length) {
+      button.disabled = true;
+      description.textContent =
+        "Przypisany projekt nie ma uzupełnionych zasad, daty ani źródła weryfikacji finansowania.";
+    } else if (!status.pendingFields.length) {
+      button.disabled = true;
+      button.textContent = "✓ Pola finansowania są już ustawione";
+      description.textContent = status.protectedFields.length
+        ? "Dane naboru pozostają nadrzędne. Dziedziczenie nie nadpisuje istniejących wartości."
+        : "Nabór ma już wartości odpowiadające projektowi.";
+    } else {
+      button.disabled = busy;
+      button.textContent =
+        "↳ Uzupełnij z projektu (" + status.pendingFields.length + ")";
+      const protectedText = status.protectedFields.length
+        ? " " +
+          status.protectedFields.length +
+          " istniejących pól naboru pozostanie bez zmian."
+        : "";
+      description.textContent =
+        "Skopiuje tylko brakujące pola jako niezależny snapshot." +
+        protectedText;
+      button.onclick = action(async () => {
+        await data("INHERIT_PROJECT_FUNDING_METADATA", {
+          objectId: object.id,
+        });
+      });
+    }
+
+    root.append(copy, button);
+  }
+
   function renderReferenceObjectPicker(root, definition) {
     const referencedType = definition.references;
     const candidates = db.objects.filter((object) => object.type === referencedType);
@@ -2140,6 +2229,7 @@ export const workspaceReady = (() => {
           object.values,
         ));
       }
+      renderFundingMetadataInheritance(object);
       $("file-sources-section").hidden = false;
       $("geography-section").hidden = !BurbotSchema[object.type]?.geography;
       $("operator-assignments-section").hidden = !["project", "recruitment"].includes(object.type);

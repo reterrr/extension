@@ -202,6 +202,20 @@ def excel_date(value: str, field: str, project_id: str) -> str:
     return date.date().isoformat()
 
 
+def optional_date(value: str, field: str, project_id: str) -> str | None:
+    value = value.strip()
+    if not value:
+        return None
+    if re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
+        try:
+            return datetime.strptime(value, "%Y-%m-%d").date().isoformat()
+        except ValueError as exc:
+            raise ValueError(
+                f"{project_id}.{field}: invalid calendar date {value!r}."
+            ) from exc
+    return excel_date(value, field, project_id)
+
+
 def valid_url(value: str, label: str) -> str | None:
     value = value.strip()
     if not value:
@@ -676,12 +690,24 @@ def merge_projects(
             ("notes", "uwagi"),
             ("schedule_note", "Uwaga"),
             ("technical_notes", "uwagi_techniczne"),
+            ("funding_rules", "zasady_dofinansowania"),
+            ("funding_verification_url", "zrodlo_weryfikacji_finansow"),
         ):
             value = row.get(column, "").strip()
             if value:
                 values[field] = value
             else:
                 values.pop(field, None)
+
+        funding_verified_at = optional_date(
+            row.get("data_weryfikacji_finansow", ""),
+            "data_weryfikacji_finansow",
+            project_key,
+        )
+        if funding_verified_at:
+            values["funding_verified_at"] = funding_verified_at
+        else:
+            values.pop("funding_verified_at", None)
 
         values["last_checked_at"] = now
 

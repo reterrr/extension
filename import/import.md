@@ -258,9 +258,14 @@ Nie wpisuj kilku telefonów, nazwiska i godzin pracy do jednego numeru. Dodatkow
 | `notes` | tekst | Ogólne uwagi, zakres odbiorców, ograniczenia i nierozstrzygnięte kwestie. |
 | `schedule_note` | tekst | Uwagi do harmonogramu i naborów projektu. |
 | `technical_notes` | tekst | Problemy techniczne pozyskania/weryfikacji źródeł, identyfikacji lub importu. Nie zastępuje opisu merytorycznych warunków. |
+| `funding_rules` | tekst | Projektowe zasady dofinansowania wspólne dla naborów. Liczby porównawcze zapisuj również w `project.financing`. |
+| `funding_verified_at` | date | Data rzeczywistej weryfikacji zasad finansowania projektu przez analityka/AI. |
+| `funding_verification_url` | tekst | Rzeczywiście użyte URL-e do weryfikacji zasad finansowania projektu; przy wielu separator `; `. |
 | `last_checked_at` | systemowe — **nie wysyłaj** | Nadawane przez system; obecność w imporcie powoduje błąd. |
 
 Nowy projekt bez `status` otrzyma w podglądzie domyślne `PLANOWANY`. Nie traktuj domyślnej wartości jako ustalenia ze źródła. Przy **aktualizacji dopasowanego projektu** pominięty status pozostaje bez zmian. Jeżeli tworzysz nowy projekt i status jest nieznany, zaznacz to w uwagach, aby użytkownik nie uznał domyślnego statusu za potwierdzony.
+
+Pola `funding_rules`, `funding_verified_at` i `funding_verification_url` mogą być przechowywane zarówno na projekcie, jak i na naborze. W Workspace nabór może skopiować brakujące wartości z przypisanego projektu. Jest to snapshot: istniejące wartości naboru nie są nadpisywane, a późniejsze zmiany projektu nie synchronizują się automatycznie.
 
 `project.data.amount`, `operator_id` i stare procenty są opisane w sekcji zgodności wstecznej. Nowe importy nie mają pól `project.url`, `budget`, `region` ani dowolnej listy operatorów wewnątrz `data`.
 

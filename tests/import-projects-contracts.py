@@ -50,6 +50,9 @@ class ImportProjectsContracts(unittest.TestCase):
             "status_projektu": "aktywny",
             "link_do_harmonogramu": "",
             "link_do_dokumentow": "",
+            "zasady_dofinansowania": "Projektowe zasady finansowania",
+            "data_weryfikacji_finansow": "2026-10-14",
+            "zrodlo_weryfikacji_finansow": "https://example.test/project/funding",
             "operator_id": "OP_1",
         }
 
@@ -86,6 +89,18 @@ class ImportProjectsContracts(unittest.TestCase):
             )
         )
         self.assertNotIn("operator_id", project["values"])
+        self.assertEqual(
+            project["values"]["funding_rules"],
+            "Projektowe zasady finansowania",
+        )
+        self.assertEqual(
+            project["values"]["funding_verified_at"],
+            "2026-10-14",
+        )
+        self.assertEqual(
+            project["values"]["funding_verification_url"],
+            "https://example.test/project/funding",
+        )
 
     def test_same_geography_is_allowed_for_different_project_operators(self):
         class Catalog:

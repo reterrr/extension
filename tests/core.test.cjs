@@ -237,6 +237,11 @@ test("formats business values, validates enums, dates, NIP, percentages and refe
   assert.equal(s.context.BurbotFunding.sizes.NGO, "NGO");
   assert.equal(P.announcements_site_url.label, "Strona ogłoszeń");
   assert.equal(P.project_url.type, "url");
+  assert.equal(P.funding_rules.group, "Dofinansowanie");
+  assert.equal(P.funding_rules.multiline, true);
+  assert.equal(P.funding_verified_at.type, "date");
+  assert.equal(P.funding_verification_url.group, "Dofinansowanie");
+  assert.equal(P.funding_verification_url.multiline, true);
   assert.equal(F.refund_percent_base.label, "Bazowa refundacja (%)");
   assert.equal(F.refund_percent_base.group, "Refundacja (%)");
   assert.equal(F.refund_percent_max.group, "Refundacja (%)");
