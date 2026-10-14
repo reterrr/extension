@@ -88,6 +88,7 @@ export interface ImportReviewFinancingView {
   companySize: string;
   companySizeLabel: string;
   variantNo: number;
+  serviceName?: string;
   fields: ImportReviewFinancingFieldView[];
 }
 
