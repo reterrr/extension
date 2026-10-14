@@ -378,6 +378,11 @@ function linkedPhysicalFile(
   row: LegacyStoredDocumentRequirement,
   files: LegacyStoredFileSource[],
 ): LegacyStoredFileSource | undefined {
+  const mayHavePhysicalDocument =
+    row.requirement === "INFORMATIONAL" ||
+    row.fulfillment_mode === "OPERATOR_TEMPLATE";
+  if (!mayHavePhysicalDocument) return undefined;
+
   if (row.original_file_source_id) {
     const original = files.find(
       (file) => file.id === row.original_file_source_id,
