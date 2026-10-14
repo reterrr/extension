@@ -311,6 +311,10 @@ test("Documents section renders one unified list for files and no-template docum
     documents,
     /fulfillment\.value === "OPERATOR_TEMPLATE"[\s\S]*?originalFile\.value/,
   );
+  assert.match(
+    documents,
+    /originalFile\.onchange = \(\) => \{[\s\S]*?fulfillment\.value = "WITHOUT_OPERATOR_TEMPLATE"/,
+  );
   assert.match(files, /const representedFileIds = supportsRequirements/);
   assert.match(
     files,
