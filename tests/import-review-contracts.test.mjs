@@ -519,8 +519,25 @@ test("dynamic documents support operator templates and no-template requirements"
     "Gdy wnioskodawca korzysta z pomocy de minimis.",
   );
   assert.equal(
-    portableProject.files[0].metadata.required_evidence,
-    "Wypełniony formularz.",
+    Object.prototype.hasOwnProperty.call(
+      portableProject.files[0].metadata,
+      "required_evidence",
+    ),
+    false,
+  );
+  assert.equal(
+    Object.prototype.hasOwnProperty.call(
+      portableProject.files[0].metadata,
+      "delivery_stage",
+    ),
+    false,
+  );
+  assert.equal(
+    Object.prototype.hasOwnProperty.call(
+      portableProject.files[0].metadata,
+      "responsibility",
+    ),
+    false,
   );
   assert.equal(portableProject.files[1].key, "DOC_BANK");
   assert.equal(portableProject.files[1].without_template, true);
