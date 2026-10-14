@@ -233,6 +233,69 @@ function stageExistingObjectUpdate(
   }
   target.updatedAt = now;
 
+  const serviceIdMap = new Map<string, string>();
+  for (const importedService of importedState.serviceCategories ?? []) {
+    const importedOwner = importedState.objects.find(
+      (entry) => entry.id === importedService.objectId,
+    );
+    if (!importedOwner || importedOwner.type !== "project") continue;
+
+    let targetProjectId =
+      importedOwner.id === importedObject.id && target.type === "project"
+        ? target.id
+        : undefined;
+    if (!targetProjectId && importedOwner.importKey) {
+      targetProjectId = state.objects.find(
+        (entry) =>
+          entry.type === "project" &&
+          entry.importKey === importedOwner.importKey,
+      )?.id;
+    }
+    if (!targetProjectId && target.type === "recruitment") {
+      const projectId = String(target.values?.project_id ?? "");
+      const targetProject = state.objects.find(
+        (entry) =>
+          entry.type === "project" &&
+          (entry.id === projectId || entry.importKey === projectId),
+      );
+      if (
+        targetProject &&
+        (!importedOwner.importKey ||
+          !targetProject.importKey ||
+          targetProject.importKey === importedOwner.importKey)
+      ) {
+        targetProjectId = targetProject.id;
+      }
+    }
+    if (!targetProjectId) continue;
+
+    let service = (state.serviceCategories ?? []).find(
+      (entry) =>
+        entry.objectId === targetProjectId &&
+        importedService.importKey &&
+        (entry.importKey === importedService.importKey ||
+          String(entry.id) === importedService.importKey),
+    );
+    service ??= (state.serviceCategories ?? []).find(
+      (entry) =>
+        entry.objectId === targetProjectId &&
+        entry.label.trim().toLocaleLowerCase("pl-PL") ===
+          importedService.label.trim().toLocaleLowerCase("pl-PL"),
+    );
+    if (!service) {
+      service = {
+        ...importedService,
+        id: uuid(),
+        objectId: targetProjectId,
+      };
+      (state.serviceCategories ||= []).push(service);
+    } else {
+      service.importKey = importedService.importKey;
+      service.label = importedService.label;
+    }
+    serviceIdMap.set(importedService.id, service.id);
+  }
+
   const fundingIdByImportKey = new Map<string, string>();
   const importedTargetIdMap = new Map<string, string>();
   const importedFunding = (importedState.financingRules ?? []).filter(
@@ -291,6 +354,19 @@ function stageExistingObjectUpdate(
       if (Object.prototype.hasOwnProperty.call(importedRow, field)) {
         row[field] = importedRow[field];
       }
+    }
+    if (importedRow.service_category_id) {
+      const mappedServiceId = serviceIdMap.get(
+        String(importedRow.service_category_id),
+      );
+      if (!mappedServiceId) {
+        throw new Error(
+          `Could not resolve service for financing variant ${importKey}.`,
+        );
+      }
+      row.service_category_id = mappedServiceId;
+    } else {
+      delete row.service_category_id;
     }
     fundingIdByImportKey.set(importKey, String(row.id));
     importedTargetIdMap.set(
