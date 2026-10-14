@@ -41,6 +41,7 @@ test("SQLite schema creates typed business and provenance tables", () => {
     "file_sources",
     "import_sources",
     "financing_rules",
+    "service_definitions",
     "document_requirements",
   ]) {
     assert.ok(tables.has(table), `missing table ${table}`);
@@ -198,7 +199,7 @@ test("SQLite schema creates typed business and provenance tables", () => {
     assert.ok(evidenceColumns.has(column), `missing field_evidence.${column}`);
   }
 
-  assert.equal(db.pragma("user_version", { simple: true }), 11);
+  assert.equal(db.pragma("user_version", { simple: true }), 12);
   db.close();
 });
 
