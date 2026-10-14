@@ -644,6 +644,68 @@ test("portable import accepts NGO financing and recruitment condition fields", (
   );
 });
 
+test("portable import accepts employer funding groups", () => {
+  const document = documentFixture();
+  const project = document.objects.find((object) => object.type === "project");
+  const recruitment = document.objects.find(
+    (object) => object.type === "recruitment",
+  );
+
+  project.financing.push(
+    {
+      key: "non-public-employer-project",
+      company_size: "NON_PUBLIC_FINANCE_EMPLOYER",
+      data: { max_amount_pln: 50000 },
+    },
+    {
+      key: "other-employer-project",
+      company_size: "OTHER_EMPLOYER",
+      data: { max_amount_pln: 35000 },
+    },
+  );
+  recruitment.financing.push(
+    {
+      key: "non-public-employer-recruitment",
+      company_size: "NON_PUBLIC_FINANCE_EMPLOYER",
+      data: { max_amount_pln: 50000 },
+    },
+    {
+      key: "other-employer-recruitment",
+      company_size: "OTHER_EMPLOYER",
+      data: { max_amount_pln: 35000 },
+    },
+  );
+
+  const session = reviewModule.createImportReviewSession(
+    document,
+    "employer-groups.json",
+    ids(),
+    "2026-10-14T14:40:00.000Z",
+  );
+
+  const rows = session.previewState.financingRules ?? [];
+  assert.equal(
+    rows.filter(
+      (row) => row.company_size === "NON_PUBLIC_FINANCE_EMPLOYER",
+    ).length,
+    2,
+  );
+  assert.equal(
+    rows.filter((row) => row.company_size === "OTHER_EMPLOYER").length,
+    2,
+  );
+  assert.equal(
+    rows.find(
+      (row) => row.company_size === "NON_PUBLIC_FINANCE_EMPLOYER",
+    ).max_amount_pln,
+    50000,
+  );
+  assert.equal(
+    rows.find((row) => row.company_size === "OTHER_EMPLOYER").max_amount_pln,
+    35000,
+  );
+});
+
 test("legacy file name becomes display_name when metadata display_name is absent", () => {
   const session = reviewModule.createImportReviewSession(
     documentFixture(),
