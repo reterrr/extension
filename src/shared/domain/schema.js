@@ -108,6 +108,15 @@
       multiline: true,
     }),
     technical_notes: text("Uwagi techniczne", "Źródła", { multiline: true }),
+    funding_rules: text("Zasady dofinansowania", "Dofinansowanie", {
+      multiline: true,
+    }),
+    funding_verified_at: date("Data weryfikacji finansowania", "Dofinansowanie"),
+    funding_verification_url: text(
+      "Źródło weryfikacji finansowania / URL-e",
+      "Dofinansowanie",
+      { multiline: true },
+    ),
     last_checked_at: systemDateTime(),
     amount: {
       label: "Previously captured amount",
