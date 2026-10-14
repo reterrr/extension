@@ -381,10 +381,23 @@ the extension through the local DB service. Burbot never stores the original
 filesystem path, so moving or deleting the original file does not break the
 attachment.
 
-Portable JSON and RoundImport keep physical assets and document semantics
-normalized internally because the target contracts distinguish file bytes from
-document requirements, but Workspace intentionally presents them as one
-document card to avoid duplicate UI rows.
+The **Eksport FundPilot** action creates one ZIP for either a Project or a
+Recruitment. The archive contains `fundpilot.json` and a `files/` directory
+with every physical attachment referenced by the exported set. The JSON embeds
+the complete portable business export, including related Project/Recruitment/
+Operator objects, operator relations and contacts, services, financing variants,
+geography, document semantics, file metadata, source snapshots/evidence and all
+current object fields. It also keeps object creation/update/last-checked
+timestamps in a separate `system` block.
+
+For a Recruitment, the export includes that Recruitment plus its referenced
+Project and Operators, but not sibling Recruitments. For a Project, it includes
+the Project, all its Recruitments and their referenced Operators. Duplicate
+physical sources are stored once in the ZIP and `package_files` maps the
+portable source key to its `files/...` path.
+
+The older RoundImport V5 exporter remains in the codebase for compatibility
+tests, but the Documents panel no longer uses its reduced manifest.
 
 ## Przegląd i zapis zmian
 
