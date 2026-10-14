@@ -311,6 +311,21 @@ export function migrateFileClassificationsToDocumentRequirements(
   const rows = (state.documentRequirements ||= []);
   const linkedFiles = new Set<string>();
 
+  // Delivery workflow belongs to requirements without an operator template.
+  // A physical file source can never be that requirement itself.
+  for (const source of state.fileSources ?? []) {
+    const mutable = source as unknown as Record<string, unknown>;
+    for (const field of [
+      "delivery_stage",
+      "responsibility",
+      "required_evidence",
+    ]) {
+      if (!Object.prototype.hasOwnProperty.call(mutable, field)) continue;
+      delete mutable[field];
+      changed = true;
+    }
+  }
+
   for (const row of rows) {
     const informational = row.requirement === "INFORMATIONAL";
     const withoutTemplate =
