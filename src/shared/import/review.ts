@@ -1034,17 +1034,142 @@ export function buildImportApprovalPlan(
   const selectedFiles = (session.previewState.fileSources ?? []).filter(
     (file) => file.objectId === object.id,
   );
+  const selectedDocuments = (
+    session.previewState.documentRequirements ?? []
+  ).filter((row) => row.objectId === object.id);
   const usedFileKeys = new Set<string>();
   const fileKeyById = new Map<string, string>();
-  selectedFiles.forEach((file, index) => {
-    const preferred = String(file.importKey ?? `FILE_${index + 1}`);
+  const uniqueFileKey = (preferred: string): string => {
     let key = preferred;
     for (let suffix = 2; usedFileKeys.has(key); suffix++) {
       key = `${preferred}_${suffix}`;
     }
     usedFileKeys.add(key);
-    fileKeyById.set(file.id, key);
+    return key;
+  };
+  selectedFiles.forEach((file, index) => {
+    const preferred = String(file.importKey ?? `FILE_${index + 1}`);
+    fileKeyById.set(file.id, uniqueFileKey(preferred));
   });
+
+  const linkedDocumentByFileId = new Map<
+    string,
+    (typeof selectedDocuments)[number]
+  >();
+  const unlinkedDocuments: typeof selectedDocuments = [];
+  for (const row of selectedDocuments) {
+    let linkedFile = row.original_file_source_id
+      ? selectedFiles.find((file) => file.id === row.original_file_source_id)
+      : undefined;
+    if (!linkedFile) {
+      const label = String(row.label ?? "")
+        .trim()
+        .toLocaleLowerCase("pl-PL");
+      linkedFile = selectedFiles.find(
+        (file) =>
+          (row.source_file_source_ids ?? []).includes(file.id) &&
+          String(file.display_name ?? file.name)
+            .trim()
+            .toLocaleLowerCase("pl-PL") === label,
+      );
+    }
+    if (linkedFile && !linkedDocumentByFileId.has(linkedFile.id)) {
+      linkedDocumentByFileId.set(linkedFile.id, row);
+    } else if (!linkedFile) {
+      unlinkedDocuments.push(row);
+    }
+  }
+
+  const requirementLabel = (value: unknown): string | undefined =>
+    value === "REQUIRED"
+      ? "Obowiązkowy"
+      : value === "CONDITIONAL"
+        ? "Warunkowy"
+        : value === "INFORMATIONAL"
+          ? "Informacyjny"
+          : undefined;
+  const signatureLabel = (value: unknown): string | undefined =>
+    value === "NOT_REQUIRED"
+      ? "Nie jest wymagany"
+      : value === "REQUIRED_FILE"
+        ? "Wymagany podpisany plik"
+        : value === "EXTERNAL_OPERATOR"
+          ? "Dowód w systemie operatora"
+          : undefined;
+  const requirementMetadata = (
+    row: (typeof selectedDocuments)[number],
+  ): Record<string, unknown> =>
+    Object.fromEntries(
+      Object.entries({
+        display_name: row.label,
+        intended_use: row.purpose,
+        client_requirement: requirementLabel(row.requirement),
+        signature_requirement: signatureLabel(row.signature_requirement),
+        condition: row.condition,
+        delivery_stage: row.delivery_stage,
+        responsibility: row.responsibility,
+        required_evidence: row.required_evidence,
+        source_url: row.source_url,
+        source_description: row.source_description,
+      }).filter(([, value]) => value !== undefined && value !== null && value !== ""),
+    );
+
+  const mappedDocumentEvidence = (
+    row: (typeof selectedDocuments)[number],
+  ): Record<string, Array<Record<string, unknown>>> | undefined => {
+    const evidence = portableTargetEvidence(
+      session.previewState,
+      object.id,
+      { kind: "document", id: String(row.id) },
+      sourceById,
+    );
+    if (!evidence) return undefined;
+    const map: Record<string, string> = {
+      label: "display_name",
+      purpose: "intended_use",
+      requirement: "client_requirement",
+      signature_requirement: "signature_requirement",
+      condition: "condition",
+      delivery_stage: "delivery_stage",
+      responsibility: "responsibility",
+      required_evidence: "required_evidence",
+      source_url: "source_url",
+      source_description: "source_description",
+    };
+    const result: Record<string, Array<Record<string, unknown>>> = {};
+    for (const [field, entries] of Object.entries(evidence)) {
+      const target = map[field];
+      if (!target) continue;
+      result[target] = entries.map((entry) => {
+        if (!Object.prototype.hasOwnProperty.call(entry, "normalized_value")) {
+          return entry;
+        }
+        const normalized =
+          field === "requirement"
+            ? requirementLabel(entry.normalized_value) ?? entry.normalized_value
+            : field === "signature_requirement"
+              ? signatureLabel(entry.normalized_value) ?? entry.normalized_value
+              : entry.normalized_value;
+        return { ...entry, normalized_value: normalized };
+      });
+    }
+    return Object.keys(result).length ? result : undefined;
+  };
+
+  const mergePortableEvidence = (
+    ...parts: Array<
+      Record<string, Array<Record<string, unknown>>> | undefined
+    >
+  ): Record<string, Array<Record<string, unknown>>> | undefined => {
+    const result: Record<string, Array<Record<string, unknown>>> = {};
+    for (const part of parts) {
+      for (const [field, entries] of Object.entries(part ?? {})) {
+        result[field] = [...(result[field] ?? []), ...entries];
+      }
+    }
+    return Object.keys(result).length ? result : undefined;
+  };
+
   const portableFiles = selectedFiles.map((file) => {
     const source = importedSourceForFile(file, importedSources);
     usedSourceIds.add(source.id);
@@ -1054,6 +1179,7 @@ export function buildImportApprovalPlan(
       ) ?? importedSources.find((entry) => entry.url === file.sourcePageUrl);
     if (pageSource) usedSourceIds.add(pageSource.id);
 
+    const linkedDocument = linkedDocumentByFileId.get(file.id);
     const metadata = Object.fromEntries(
       [
         "display_name",
@@ -1064,6 +1190,12 @@ export function buildImportApprovalPlan(
         "client_requirement",
         "signature_requirement",
         "delivery_method",
+        "condition",
+        "delivery_stage",
+        "responsibility",
+        "required_evidence",
+        "source_url",
+        "source_description",
       ]
         .filter((field) => Object.prototype.hasOwnProperty.call(file, field))
         .map((field) => [
@@ -1071,11 +1203,20 @@ export function buildImportApprovalPlan(
           (file as unknown as Record<string, unknown>)[field],
         ]),
     );
-    const evidence = portableTargetEvidence(
+    Object.assign(
+      metadata,
+      linkedDocument ? requirementMetadata(linkedDocument) : {},
+    );
+
+    const fileEvidence = portableTargetEvidence(
       session.previewState,
       object.id,
       { kind: "file_source", id: String(file.id) },
       sourceById,
+    );
+    const evidence = mergePortableEvidence(
+      fileEvidence,
+      linkedDocument ? mappedDocumentEvidence(linkedDocument) : undefined,
     );
 
     return {
@@ -1086,6 +1227,20 @@ export function buildImportApprovalPlan(
       ...(evidence ? { evidence } : {}),
     };
   });
+
+  for (const row of unlinkedDocuments) {
+    const key = uniqueFileKey(
+      String(row.importKey ?? `DOC_${portableFiles.length + 1}`),
+    );
+    const metadata = requirementMetadata(row);
+    const evidence = mappedDocumentEvidence(row);
+    portableFiles.push({
+      key,
+      without_template: true,
+      metadata,
+      ...(evidence ? { evidence } : {}),
+    } as (typeof portableFiles)[number]);
+  }
 
   const sources = [...usedSourceIds].map((sourceId) => {
     const source = sourceById.get(sourceId);
@@ -1171,46 +1326,6 @@ export function buildImportApprovalPlan(
           }
         : {}),
     }));
-
-  const portableDocuments = (session.previewState.documentRequirements ?? [])
-    .filter((row) => row.objectId === object.id)
-    .map((row) => {
-      const data: Record<string, unknown> = {};
-      for (const [field, definition] of Object.entries(
-        BurbotDocuments.fields ?? {},
-      )) {
-        if (
-          !definition.hidden &&
-          Object.prototype.hasOwnProperty.call(row, field)
-        ) {
-          data[field] = (row as unknown as Record<string, unknown>)[field];
-        }
-      }
-
-      const originalFile = row.original_file_source_id
-        ? fileKeyById.get(row.original_file_source_id)
-        : undefined;
-      if (row.original_file_source_id && !originalFile) {
-        throw new Error(
-          `Nie udało się powiązać wzoru operatora dla dokumentu ${row.label ?? row.importKey ?? row.id}.`,
-        );
-      }
-      const evidence = portableTargetEvidence(
-        session.previewState,
-        object.id,
-        { kind: "document", id: String(row.id) },
-        sourceById,
-      );
-      return {
-        key: String(row.importKey ?? row.id),
-        ...(row.document_type_key
-          ? { document_type_key: String(row.document_type_key) }
-          : {}),
-        data,
-        ...(originalFile ? { original_file: originalFile } : {}),
-        ...(evidence ? { evidence } : {}),
-      };
-    });
 
   const serviceProject =
     object.type === "project"
@@ -1325,9 +1440,6 @@ export function buildImportApprovalPlan(
           ...(portableServices.length ? { services: portableServices } : {}),
           ...(portableFinancing.length
             ? { financing: portableFinancing }
-            : {}),
-          ...(portableDocuments.length
-            ? { documents: portableDocuments }
             : {}),
         },
       ],
