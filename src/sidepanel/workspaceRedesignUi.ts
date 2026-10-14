@@ -411,10 +411,10 @@ function enhanceStaticStatuses(): void {
     setText(
       fileStatus,
       !fileCount
-        ? "Brak plików"
+        ? "Brak dokumentów"
         : pendingFiles
-          ? `${itemLabel(fileCount, "plik", "pliki")} · ${pendingFiles} do oznaczenia`
-          : `${itemLabel(fileCount, "plik", "pliki")} · oznaczone`,
+          ? `${itemLabel(fileCount, "dokument", "dokumentów")} · ${pendingFiles} do uzupełnienia`
+          : `${itemLabel(fileCount, "dokument", "dokumentów")} · uzupełnione`,
     );
     fileStatus.dataset.state = !fileCount
       ? "muted"
