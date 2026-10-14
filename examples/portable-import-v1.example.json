@@ -214,9 +214,6 @@
             "client_requirement": "Obowiązkowy",
             "signature_requirement": "Wymagany podpisany plik",
             "condition": "Dotyczy zgłoszenia do projektu.",
-            "delivery_stage": "ZGLOSZENIE",
-            "responsibility": "CLIENT",
-            "required_evidence": "Wypełniony i podpisany formularz zgłoszeniowy operatora.",
             "source_url": "https://example.org/project"
           },
           "evidence": {
