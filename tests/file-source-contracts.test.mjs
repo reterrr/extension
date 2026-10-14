@@ -664,6 +664,61 @@ test("RoundImport exports configured documents including requirements without op
   );
 });
 
+test("RoundImport exports runtime project services and funding service assignments", () => {
+  const serviceId = "11111111-1111-4111-8111-111111111111";
+  const state = {
+    version: 1,
+    revision: 1,
+    objects: [
+      {
+        id: "project",
+        type: "project",
+        values: { name: "Projekt" },
+      },
+      {
+        id: "round",
+        type: "recruitment",
+        values: {
+          external_number: "Nabór usługowy",
+          project_id: "project",
+          status: "AKTYWNY",
+        },
+      },
+    ],
+    rules: [],
+    fileSources: [],
+    serviceCategories: [
+      {
+        id: serviceId,
+        objectId: "project",
+        label: "Szkolenia",
+      },
+    ],
+    financingRules: [
+      {
+        id: "funding-1",
+        objectId: "round",
+        company_size: "MICRO",
+        variant_no: 1,
+        service_category_id: serviceId,
+        refund_percent_max: 80,
+      },
+    ],
+  };
+
+  const plan = roundImportZip.buildRoundImportPackagePlan(
+    state,
+    state.objects[1],
+  );
+  assert.deepEqual(plan.manifest.workspace.serviceCategories, [
+    { id: serviceId, label: "Szkolenia" },
+  ]);
+  assert.equal(
+    plan.manifest.workspace.conditions.fundingVariants[0].serviceCategoryId,
+    serviceId,
+  );
+});
+
 test("RoundImport plan can export a data-only recruitment with no attachments", () => {
   const state = {
     version: 1,
