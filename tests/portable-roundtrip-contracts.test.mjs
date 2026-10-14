@@ -60,6 +60,7 @@ const counts = (state) =>
       "geographies",
       "fileSources",
       "financingRules",
+      "serviceDefinitions",
       "documentRequirements",
     ].map((key) => [key, state[key]?.length ?? 0]),
   );
@@ -113,6 +114,53 @@ test("portable export imports directly with values, references, files, source sn
   const staged = approve(document);
   assert.deepEqual(exported(staged), document);
   assert.deepEqual(counts(approve(document, staged)), counts(staged));
+});
+
+test("project services and funding assignments round-trip through portable import and review", () => {
+  const state = imported();
+  const project = state.objects.find((object) => object.type === "project");
+  const recruitment = state.objects.find(
+    (object) => object.type === "recruitment",
+  );
+  assert.ok(project);
+  assert.ok(recruitment);
+
+  state.serviceDefinitions = [
+    {
+      id: "service-training",
+      objectId: project.id,
+      importKey: "SERVICE_TRAINING",
+      name: "Szkolenia specjalistyczne",
+    },
+  ];
+
+  const projectFunding = state.financingRules.find(
+    (row) => row.objectId === project.id,
+  );
+  const recruitmentFunding = state.financingRules.find(
+    (row) => row.objectId === recruitment.id,
+  );
+  assert.ok(projectFunding);
+  assert.ok(recruitmentFunding);
+  projectFunding.serviceId = "service-training";
+  recruitmentFunding.serviceId = "service-training";
+
+  const document = exported(state);
+  const projectPortable = byKey(document, project.importKey);
+  const recruitmentPortable = byKey(document, recruitment.importKey);
+
+  assert.deepEqual(projectPortable.services, [
+    {
+      key: "SERVICE_TRAINING",
+      name: "Szkolenia specjalistyczne",
+    },
+  ]);
+  assert.equal(projectPortable.financing[0].service, "SERVICE_TRAINING");
+  assert.equal(recruitmentPortable.financing[0].service, "SERVICE_TRAINING");
+
+  assert.deepEqual(exported(imported(document)), document);
+  const staged = approve(document);
+  assert.deepEqual(exported(staged), document);
 });
 
 test("View includes each project recruitment and referenced operators once with local $ref targets", () => {
