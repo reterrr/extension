@@ -1132,6 +1132,7 @@ export function ImportReviewPanel() {
                             <summary>
                               <span>
                                 {variant.companySizeLabel} · wariant {variant.variantNo}
+                                {variant.serviceLabel ? ` · ${variant.serviceLabel}` : ""}
                               </span>
                               <small>{variant.key}</small>
                             </summary>
