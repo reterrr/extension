@@ -14,6 +14,7 @@ let fileInheritance;
 let fileMetadata;
 let stateMigrations;
 let roundImportZip;
+let fundPilotExportZip;
 
 before(async () => {
   outputDir = await mkdtemp(join(tmpdir(), "burbot-file-source-"));
@@ -26,6 +27,7 @@ before(async () => {
       fileMetadata: "src/shared/fileMetadata.ts",
       stateMigrations: "src/shared/domain/stateMigrations.ts",
       roundImportZip: "src/shared/export/roundImportZip.ts",
+      fundPilotExportZip: "src/shared/export/fundPilotExportZip.ts",
     },
     outdir: outputDir,
     bundle: true,
@@ -51,6 +53,9 @@ before(async () => {
   );
   roundImportZip = await import(
     pathToFileURL(join(outputDir, "roundImportZip.js")).href
+  );
+  fundPilotExportZip = await import(
+    pathToFileURL(join(outputDir, "fundPilotExportZip.js")).href
   );
 });
 
