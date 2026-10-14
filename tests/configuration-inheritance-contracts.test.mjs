@@ -96,12 +96,21 @@ function baseState() {
         value: "śląskie|powiat|katowicki",
       },
     ],
+    serviceDefinitions: [
+      {
+        id: "SERVICE_1",
+        objectId: "PR_1",
+        importKey: "SERVICE_TRAINING",
+        name: "Szkolenia",
+      },
+    ],
     financingRules: [
       {
         id: "F_1",
         objectId: "PR_1",
         company_size: "MICRO",
         variant_no: 1,
+        serviceId: "SERVICE_1",
         refund_percent_standard: 80,
         max_amount_pln: 10000,
       },
@@ -320,6 +329,7 @@ test("funding variants are inherited as independent copies", () => {
   assert.equal(result.copied[0].company_size, "MICRO");
   assert.equal(result.copied[0].variant_no, 1);
   assert.equal(result.copied[0].refund_percent_standard, 80);
+  assert.equal(result.copied[0].serviceId, "SERVICE_1");
   assert.equal(result.copied[0].copiedFromProjectId, "PR_1");
   assert.equal(result.copied[0].copiedFromFundingRuleId, "F_1");
   assert.equal(result.copied[0].importKey, undefined);
