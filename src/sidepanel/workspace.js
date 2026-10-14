@@ -16,6 +16,7 @@ import {
 import {
   fundingInheritanceStatus,
   fundingMetadataInheritanceStatus,
+  recruitmentConditionsInheritanceStatus,
 } from "../shared/configurationInheritance";
 import {
   OBJECT_VIEW_STORAGE_KEY,
@@ -1464,11 +1465,11 @@ export const workspaceReady = (() => {
       root.append(group);
     }
   }
-  function fundingMetadataGroupBody() {
+  function fieldGroupBody(groupName) {
     const redesigned = Array.from(
       $("fields").querySelectorAll(".workspace-section-card[data-section-key]"),
     ).find(
-      (section) => section.dataset.sectionKey === "Dofinansowanie",
+      (section) => section.dataset.sectionKey === groupName,
     );
     if (redesigned)
       return redesigned.querySelector(".workspace-section-body");
@@ -1476,8 +1477,82 @@ export const workspaceReady = (() => {
     return Array.from($("fields").querySelectorAll(".field-group")).find(
       (section) =>
         section.querySelector(":scope > h2")?.textContent?.trim() ===
-        "Dofinansowanie",
+        groupName,
     );
+  }
+
+  function fundingMetadataGroupBody() {
+    return fieldGroupBody("Dofinansowanie");
+  }
+
+  function renderProjectConditionsInheritance(object) {
+    let root = $("project-conditions-inherit");
+    if (object.type !== "recruitment") {
+      root?.remove();
+      return;
+    }
+
+    const container = fieldGroupBody("Warunki naboru");
+    if (!container) {
+      root?.remove();
+      return;
+    }
+
+    if (!root) {
+      root = node("div", "configuration-inherit");
+      root.id = "project-conditions-inherit";
+    }
+    if (root.parentElement !== container) container.prepend(root);
+    root.replaceChildren();
+
+    const status = recruitmentConditionsInheritanceStatus(db, object);
+    const copy = node("div");
+    copy.append(
+      node("strong", "", "Dziedzicz warunki z projektu"),
+    );
+    const description = node("small");
+    copy.append(description);
+
+    const button = node(
+      "button",
+      "text-button",
+      "↳ Dziedzicz warunki",
+    );
+    button.type = "button";
+
+    if (!status.project) {
+      button.disabled = true;
+      description.textContent = "Najpierw przypisz projekt do naboru.";
+    } else if (!status.projectFields.length) {
+      button.disabled = true;
+      description.textContent =
+        "Przypisany projekt nie ma uzupełnionych warunków projektu.";
+    } else if (!status.pendingFields.length) {
+      button.disabled = true;
+      button.textContent = "✓ Warunki są już ustawione";
+      description.textContent = status.protectedFields.length
+        ? "Wartości naboru pozostają nadrzędne. Dziedziczenie nie nadpisuje istniejących danych."
+        : "Nabór ma już wartości odpowiadające projektowi.";
+    } else {
+      button.disabled = busy;
+      button.textContent =
+        "↳ Uzupełnij z projektu (" + status.pendingFields.length + ")";
+      const protectedText = status.protectedFields.length
+        ? " " +
+          status.protectedFields.length +
+          " istniejących pól naboru pozostanie bez zmian."
+        : "";
+      description.textContent =
+        "Skopiuje tylko brakujące warunki jako niezależny snapshot." +
+        protectedText;
+      button.onclick = action(async () => {
+        await data("INHERIT_PROJECT_CONDITIONS", {
+          objectId: object.id,
+        });
+      });
+    }
+
+    root.append(copy, button);
   }
 
   function renderFundingMetadataInheritance(object) {
@@ -2229,6 +2304,7 @@ export const workspaceReady = (() => {
           object.values,
         ));
       }
+      renderProjectConditionsInheritance(object);
       renderFundingMetadataInheritance(object);
       $("file-sources-section").hidden = false;
       $("geography-section").hidden = !BurbotSchema[object.type]?.geography;
