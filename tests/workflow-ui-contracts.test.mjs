@@ -295,9 +295,13 @@ test("Documents section renders one unified list for files and no-template docum
   );
   assert.match(
     documents,
+    /wantsOperatorTemplate[\s\S]*?Boolean\(originalFile\.value\)/,
+  );
+  assert.match(
+    documents,
     /fulfillmentLabelNode\.hidden = isInfo \|\| usesOperatorTemplate/,
   );
-  assert.match(documents, /originalFileLabel\.hidden = !usesOperatorTemplate/);
+  assert.match(documents, /originalFileLabel\.hidden = !wantsOperatorTemplate/);
   assert.match(documents, /thirdRow\.hidden = isInfo/);
   assert.match(documents, /fourthRow\.hidden = !withoutOperatorTemplate/);
   assert.match(
