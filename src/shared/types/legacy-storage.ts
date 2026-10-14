@@ -169,6 +169,14 @@ export interface LegacyStoredFileSource {
   metadataInferenceVersion?: number;
 }
 
+export interface LegacyStoredServiceDefinition {
+  id: string;
+  /** Services are defined by a Project and reused by its Recruitment funding rows. */
+  objectId: string;
+  importKey?: string;
+  name: string;
+}
+
 export interface LegacyStoredDocumentRequirement {
   id: string;
   objectId: string;
@@ -234,6 +242,7 @@ export interface LegacyStorageState {
   importSources?: ImportedSource[];
   importTargetEvidence?: ImportedTargetEvidence[];
   financingRules?: Array<Record<string, unknown>>;
+  serviceDefinitions?: LegacyStoredServiceDefinition[];
   documentRequirements?: LegacyStoredDocumentRequirement[];
   fieldEvidence?: LegacyStoredFieldEvidence[];
 }
