@@ -14,6 +14,7 @@
     operatorAssignments: [],
     operatorContacts: [],
     financingRules: [],
+    serviceCategories: [],
     documentRequirements: [],
     fieldEvidence: [],
   });
@@ -652,6 +653,10 @@
           state.financingRules = state.financingRules.filter(
             (r) => r.objectId !== object.id,
           );
+        if (state.serviceCategories)
+          state.serviceCategories = state.serviceCategories.filter(
+            (r) => r.objectId !== object.id,
+          );
         if (state.documentRequirements)
           state.documentRequirements = state.documentRequirements.filter(
             (r) => r.objectId !== object.id,
@@ -1001,6 +1006,107 @@
               row.target.id === message.contactId
             ),
         );
+        object.updatedAt = now;
+      } else if (message.op === "ADD_SERVICE_CATEGORY") {
+        if (object.type !== "project")
+          throw Error("Usługi można definiować tylko na projekcie.");
+        const label = clean(message.label);
+        if (!label || label.length > 200)
+          throw Error("Nazwa usługi musi mieć od 1 do 200 znaków.");
+        const rows = (state.serviceCategories ||= []);
+        if (
+          rows.some(
+            (row) =>
+              row.objectId === object.id &&
+              clean(row.label).toLocaleLowerCase("pl-PL") ===
+                label.toLocaleLowerCase("pl-PL"),
+          )
+        )
+          throw Error("Taka usługa już istnieje w tym projekcie.");
+        rows.push({
+          id: uuid(),
+          objectId: object.id,
+          label,
+        });
+        object.updatedAt = now;
+      } else if (message.op === "UPDATE_SERVICE_CATEGORY") {
+        if (object.type !== "project")
+          throw Error("Usługi można definiować tylko na projekcie.");
+        const rows = (state.serviceCategories ||= []);
+        const row = rows.find(
+          (entry) =>
+            entry.id === message.serviceId && entry.objectId === object.id,
+        );
+        if (!row) throw Error("Usługa nie istnieje.");
+        const label = clean(message.label);
+        if (!label || label.length > 200)
+          throw Error("Nazwa usługi musi mieć od 1 do 200 znaków.");
+        if (
+          rows.some(
+            (entry) =>
+              entry !== row &&
+              entry.objectId === object.id &&
+              clean(entry.label).toLocaleLowerCase("pl-PL") ===
+                label.toLocaleLowerCase("pl-PL"),
+          )
+        )
+          throw Error("Taka usługa już istnieje w tym projekcie.");
+        row.label = label;
+        object.updatedAt = now;
+      } else if (message.op === "REMOVE_SERVICE_CATEGORY") {
+        if (object.type !== "project")
+          throw Error("Usługi można definiować tylko na projekcie.");
+        const rows = state.serviceCategories || [];
+        const row = rows.find(
+          (entry) =>
+            entry.id === message.serviceId && entry.objectId === object.id,
+        );
+        if (!row) throw Error("Usługa nie istnieje.");
+        state.serviceCategories = rows.filter((entry) => entry.id !== row.id);
+        for (const funding of state.financingRules || []) {
+          if (
+            funding.objectId === object.id &&
+            funding.service_category_id === row.id
+          )
+            delete funding.service_category_id;
+        }
+        object.updatedAt = now;
+      } else if (message.op === "SET_FUNDING_SERVICE") {
+        if (!globalThis.BurbotSchema[object.type]?.configuration)
+          throw Error("Ten obiekt nie obsługuje wariantów dofinansowania.");
+        const funding = (state.financingRules || []).find(
+          (row) =>
+            row.id === message.variantId && row.objectId === object.id,
+        );
+        if (!funding) throw Error("Wariant dofinansowania nie istnieje.");
+        const serviceId = clean(message.serviceId);
+        if (!serviceId) {
+          delete funding.service_category_id;
+        } else {
+          let service = (state.serviceCategories || []).find(
+            (row) => row.id === serviceId,
+          );
+          if (
+            service &&
+            object.type === "project" &&
+            service.objectId !== object.id
+          )
+            service = undefined;
+          if (object.type === "recruitment") {
+            const projectId = String(object.values?.project_id ?? "");
+            const project = state.objects.find(
+              (candidate) =>
+                candidate.type === "project" &&
+                (candidate.id === projectId ||
+                  candidate.importKey === projectId),
+            );
+            if (!project || service?.objectId !== project.id)
+              service = undefined;
+          }
+          if (!service)
+            throw Error("Wybrana usługa nie należy do projektu tego wariantu.");
+          funding.service_category_id = service.id;
+        }
         object.updatedAt = now;
       } else if (message.op === "ADD_FUNDING") {
         if (
