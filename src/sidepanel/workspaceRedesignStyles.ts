@@ -1345,6 +1345,12 @@ progress {
   }
 }
 
+
+#funding-metadata-inherit {
+  grid-column: 1 / -1;
+  margin: 4px 0 8px;
+}
+
 `;
   document.head.append(style);
 }
