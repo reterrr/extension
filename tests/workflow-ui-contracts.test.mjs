@@ -648,3 +648,18 @@ test("project and recruitment workspace expose multiple operators and operator-s
     /row\.operatorId === operatorId/,
   );
 });
+
+
+test("funding UI supports runtime project services", () => {
+  const workspace = source("src/sidepanel/workspace.js");
+  const app = source("src/sidepanel/App.tsx");
+
+  assert.match(app, /Twórz usługi projektu/);
+  assert.match(workspace, /ADD_SERVICE_CATEGORY/);
+  assert.match(workspace, /UPDATE_SERVICE_CATEGORY/);
+  assert.match(workspace, /REMOVE_SERVICE_CATEGORY/);
+  assert.match(workspace, /SET_FUNDING_SERVICE/);
+  assert.match(workspace, /\+ Dodaj usługę/);
+  assert.match(workspace, /Bez przypisanej usługi/);
+  assert.match(workspace, /service_category_id/);
+});

@@ -25,7 +25,7 @@ function copyObjectForUpdate(state: LegacyStorageState, objectId: string): Legac
   // Only this owner is edited below. Keep unrelated rows and immutable source
   // snapshots shared; copying multi-megabyte regulations dominated approval.
   const next = { ...state };
-  for (const key of ["objects", "rules", "fileSources", "financingRules",
+  for (const key of ["objects", "rules", "fileSources", "financingRules", "serviceCategories",
     "operatorAssignments", "geographies", "operatorContacts",
     "documentRequirements", "importTargetEvidence", "importSources"] as const) {
     const value = state[key];
@@ -233,6 +233,80 @@ function stageExistingObjectUpdate(
   }
   target.updatedAt = now;
 
+  const serviceIdMap = new Map<string, string>();
+  for (const importedService of importedState.serviceCategories ?? []) {
+    const importedOwner = importedState.objects.find(
+      (entry) => entry.id === importedService.objectId,
+    );
+    if (!importedOwner || importedOwner.type !== "project") continue;
+
+    let targetProjectId =
+      importedOwner.id === importedObject.id && target.type === "project"
+        ? target.id
+        : undefined;
+    if (!targetProjectId && importedOwner.importKey) {
+      targetProjectId = state.objects.find(
+        (entry) =>
+          entry.type === "project" &&
+          entry.importKey === importedOwner.importKey,
+      )?.id;
+    }
+    if (!targetProjectId && target.type === "recruitment") {
+      const projectId = String(target.values?.project_id ?? "");
+      const targetProject = state.objects.find(
+        (entry) =>
+          entry.type === "project" &&
+          (entry.id === projectId || entry.importKey === projectId),
+      );
+      if (
+        targetProject &&
+        (!importedOwner.importKey ||
+          !targetProject.importKey ||
+          targetProject.importKey === importedOwner.importKey)
+      ) {
+        targetProjectId = targetProject.id;
+      }
+    }
+    if (!targetProjectId) continue;
+
+    let service = (state.serviceCategories ?? []).find(
+      (entry) =>
+        entry.objectId === targetProjectId &&
+        importedService.importKey &&
+        (entry.importKey === importedService.importKey ||
+          String(entry.id) === importedService.importKey),
+    );
+    service ??= (state.serviceCategories ?? []).find(
+      (entry) =>
+        entry.objectId === targetProjectId &&
+        entry.label.trim().toLocaleLowerCase("pl-PL") ===
+          importedService.label.trim().toLocaleLowerCase("pl-PL"),
+    );
+
+    if (target.type === "recruitment") {
+      if (!service) {
+        throw new Error(
+          `Project service ${importedService.label} must be approved on the project before the recruitment.`,
+        );
+      }
+      serviceIdMap.set(importedService.id, service.id);
+      continue;
+    }
+
+    if (!service) {
+      service = {
+        ...importedService,
+        id: uuid(),
+        objectId: targetProjectId,
+      };
+      (state.serviceCategories ||= []).push(service);
+    } else {
+      service.importKey = importedService.importKey;
+      service.label = importedService.label;
+    }
+    serviceIdMap.set(importedService.id, service.id);
+  }
+
   const fundingIdByImportKey = new Map<string, string>();
   const importedTargetIdMap = new Map<string, string>();
   const importedFunding = (importedState.financingRules ?? []).filter(
@@ -291,6 +365,17 @@ function stageExistingObjectUpdate(
       if (Object.prototype.hasOwnProperty.call(importedRow, field)) {
         row[field] = importedRow[field];
       }
+    }
+    if (importedRow.service_category_id) {
+      const mappedServiceId = serviceIdMap.get(
+        String(importedRow.service_category_id),
+      );
+      if (!mappedServiceId) {
+        throw new Error(
+          `Could not resolve service for financing variant ${importKey}.`,
+        );
+      }
+      row.service_category_id = mappedServiceId;
     }
     fundingIdByImportKey.set(importKey, String(row.id));
     importedTargetIdMap.set(
@@ -679,6 +764,39 @@ function stageNewObject(
     }
   }
 
+  if (selected.type === "recruitment") {
+    const projectPatch = plan.referencePatches.find(
+      (patch) => patch.field === "project_id",
+    );
+    if (projectPatch) {
+      for (const funding of state.financingRules ?? []) {
+        if (
+          funding.objectId !== selected.id ||
+          !funding.service_category_id
+        )
+          continue;
+        const temporaryService = (state.serviceCategories ?? []).find(
+          (service) => service.id === funding.service_category_id,
+        );
+        if (!temporaryService) continue;
+        const actualService = (original.serviceCategories ?? []).find(
+          (service) =>
+            service.objectId === projectPatch.targetObjectId &&
+            ((temporaryService.importKey &&
+              service.importKey === temporaryService.importKey) ||
+              service.label.trim().toLocaleLowerCase("pl-PL") ===
+                temporaryService.label.trim().toLocaleLowerCase("pl-PL")),
+        );
+        if (!actualService) {
+          throw new Error(
+            `Could not map project service ${temporaryService.label} to the approved project.`,
+          );
+        }
+        funding.service_category_id = actualService.id;
+      }
+    }
+  }
+
   const fundingIdByImportKey = new Map(
     (state.financingRules ?? [])
       .filter((row) => row.objectId === selected.id && row.importKey)
@@ -716,7 +834,7 @@ function stageNewObject(
   }
 
   const merged = { ...original, revision: state.revision };
-  for (const key of ["objects", "rules", "fileSources", "financingRules",
+  for (const key of ["objects", "rules", "fileSources", "financingRules", "serviceCategories",
     "operatorAssignments", "geographies", "operatorContacts",
     "documentRequirements", "fieldEvidence", "importTargetEvidence", "importSources"] as const) {
     const additions = key === "objects"

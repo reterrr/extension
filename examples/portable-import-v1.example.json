@@ -333,7 +333,8 @@
                 "normalized_value": 5000
               }
             ]
-          }
+          },
+          "service": "SERVICE_TRAINING"
         }
       ],
       "operators": [
@@ -350,6 +351,16 @@
             "$ref": "operator-2"
           },
           "operator_type": "DODATKOWY"
+        }
+      ],
+      "services": [
+        {
+          "key": "SERVICE_TRAINING",
+          "label": "Szkolenia"
+        },
+        {
+          "key": "SERVICE_ADVISORY",
+          "label": "Doradztwo"
         }
       ]
     },

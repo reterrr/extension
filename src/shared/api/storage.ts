@@ -61,6 +61,7 @@ function emptyState(): LegacyStorageState {
     fileSources: [],
     importSources: [],
     financingRules: [],
+    serviceCategories: [],
     documentRequirements: [],
     fieldEvidence: [],
   };

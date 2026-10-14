@@ -60,6 +60,7 @@ const counts = (state) =>
       "geographies",
       "fileSources",
       "financingRules",
+      "serviceCategories",
       "documentRequirements",
     ].map((key) => [key, state[key]?.length ?? 0]),
   );
@@ -104,6 +105,12 @@ test("portable export imports directly with values, references, files, source sn
   );
   assert.ok(document.sources.some((source) => source.snapshot.text.length > 0));
   assert.ok(document.objects.some((object) => object.evidence));
+  const exportedProject = byKey(document, project.importKey);
+  assert.deepEqual(
+    exportedProject.services.map((service) => service.label),
+    ["Szkolenia", "Doradztwo"],
+  );
+  assert.equal(exportedProject.financing[0].service, "SERVICE_TRAINING");
   assert.ok(
     document.objects.some((object) =>
       object.files?.some((file) => file.evidence),
@@ -165,6 +172,7 @@ test("editing exported rows with database IDs updates existing rows, even with g
     "operatorContacts",
     "geographies",
     "financingRules",
+    "serviceCategories",
     "documentRequirements",
   ])
     for (const row of state[key] ?? []) delete row.importKey;

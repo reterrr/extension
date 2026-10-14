@@ -586,3 +586,82 @@ test("deleting an object removes only its own configuration and rules", () => {
   assert.equal(s.state.rules.length, 1);
   assert.equal(s.state.rules[0].objectId, b.id);
 });
+
+
+test("project services are runtime-defined and funding variants can reference them", () => {
+  const s = setup();
+  const project = s.create("project", "Projekt usługowy");
+
+  s.mutate({
+    op: "ADD_SERVICE_CATEGORY",
+    objectId: project.id,
+    label: "Szkolenia",
+  });
+  const service = s.state.serviceCategories[0];
+  assert.equal(service.objectId, project.id);
+  assert.equal(service.label, "Szkolenia");
+
+  s.mutate({
+    op: "ADD_FUNDING",
+    objectId: project.id,
+    companySize: "MICRO",
+  });
+  const projectVariant = s.state.financingRules[0];
+  s.mutate({
+    op: "SET_FUNDING_SERVICE",
+    objectId: project.id,
+    variantId: projectVariant.id,
+    serviceId: service.id,
+  });
+  assert.equal(
+    s.state.financingRules.find((row) => row.id === projectVariant.id)
+      .service_category_id,
+    service.id,
+  );
+
+  const recruitment = s.create("recruitment", "Nabór 1/2026");
+  s.mutate({
+    op: "EDIT",
+    objectId: recruitment.id,
+    field: "project_id",
+    value: project.id,
+  });
+  s.mutate({
+    op: "ADD_FUNDING",
+    objectId: recruitment.id,
+    companySize: "SMALL",
+  });
+  const recruitmentVariant = s.state.financingRules.find(
+    (row) => row.objectId === recruitment.id,
+  );
+  s.mutate({
+    op: "SET_FUNDING_SERVICE",
+    objectId: recruitment.id,
+    variantId: recruitmentVariant.id,
+    serviceId: service.id,
+  });
+  assert.equal(
+    s.state.financingRules.find((row) => row.id === recruitmentVariant.id)
+      .service_category_id,
+    service.id,
+  );
+
+  s.mutate({
+    op: "UPDATE_SERVICE_CATEGORY",
+    objectId: project.id,
+    serviceId: service.id,
+    label: "Szkolenia zawodowe",
+  });
+  assert.equal(s.state.serviceCategories[0].label, "Szkolenia zawodowe");
+
+  s.mutate({
+    op: "REMOVE_SERVICE_CATEGORY",
+    objectId: project.id,
+    serviceId: service.id,
+  });
+  assert.equal(s.state.serviceCategories.length, 0);
+  assert.equal(
+    s.state.financingRules.some((row) => row.service_category_id),
+    false,
+  );
+});

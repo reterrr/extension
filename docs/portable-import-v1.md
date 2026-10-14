@@ -259,12 +259,45 @@ Example using an operator template:
 
 The old `document_type_key`, `auto_fill`, and `notes` representation is still accepted for backward compatibility. New imports should use the dynamic fields above instead.
 
+## `objects[].services[]`
+
+Project services are runtime-defined; there is no fixed service catalog.
+
+Only a `project` object may declare `services[]`:
+
+```json
+{
+  "services": [
+    { "key": "SERVICE_TRAINING", "label": "Szkolenia" },
+    { "key": "SERVICE_ADVISORY", "label": "Doradztwo" }
+  ]
+}
+```
+
+Each row has a stable project-local `key` and a `label` of 1–200 characters. Do not create generic services when the source does not actually distinguish financing by service.
+
+A financing row can reference a service through `service`:
+
+```json
+{
+  "key": "micro-training",
+  "company_size": "MICRO",
+  "service": "SERVICE_TRAINING",
+  "data": {
+    "refund_percent_max": 80
+  }
+}
+```
+
+For Project financing, `service` must reference that Project's own `services[].key`. Recruitment financing may reference a service declared on its referenced Project. The Project and its services therefore need to be present in the same portable document. Omitting `service` means the financing variant is not scoped to one particular service.
+
 ## `objects[].financing[]`
 
 Each financing entry becomes one Burbot financing variant. Project and Recruitment use the same financing structure.
 
 - `key` — required stable key unique within the object's financing list.
 - `company_size` — one of `MICRO`, `SMALL`, `MEDIUM`, `LARGE`, `B2C`, `NGO`.
+- `service` — optional project-local `services[].key` that scopes the variant to a runtime-defined service.
 - `data` — any supported financing fields:
   - `refund_percent_min` — minimum refund percentage, `0..100`;
   - `refund_percent_avg` — average refund percentage, `0..100`;
