@@ -143,6 +143,11 @@ export function projectFileInheritanceStatus(
       .map((row) => linkedFileIdForRequirement(row, projectFiles))
       .filter((value): value is string => Boolean(value)),
   );
+  const representedPendingFileIds = new Set(
+    pendingRequirements
+      .map((row) => linkedFileIdForRequirement(row, projectFiles))
+      .filter((value): value is string => Boolean(value)),
+  );
   const representedInheritedFileIds = new Set(
     inheritedRequirements
       .map((row) => linkedFileIdForRequirement(row, recruitmentFiles))
@@ -153,7 +158,7 @@ export function projectFileInheritanceStatus(
     projectFiles.filter((file) => !representedProjectFileIds.has(file.id)).length;
   const pendingDocumentCount =
     pendingRequirements.length +
-    pendingFiles.filter((file) => !representedProjectFileIds.has(file.id)).length;
+    pendingFiles.filter((file) => !representedPendingFileIds.has(file.id)).length;
   const inheritedDocumentCount =
     inheritedRequirements.length +
     inheritedFiles.filter((file) => !representedInheritedFileIds.has(file.id)).length;
