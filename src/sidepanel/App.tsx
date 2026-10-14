@@ -223,7 +223,7 @@ export function App() {
                     type="button"
                     hidden
                   >
-                    ↓ Pobierz wszystkie
+                    ↓ Eksport FundPilot
                   </button>
                 </div>
                 <p

@@ -14,6 +14,7 @@ let fileInheritance;
 let fileMetadata;
 let stateMigrations;
 let roundImportZip;
+let fundPilotExportZip;
 
 before(async () => {
   outputDir = await mkdtemp(join(tmpdir(), "burbot-file-source-"));
@@ -26,6 +27,7 @@ before(async () => {
       fileMetadata: "src/shared/fileMetadata.ts",
       stateMigrations: "src/shared/domain/stateMigrations.ts",
       roundImportZip: "src/shared/export/roundImportZip.ts",
+      fundPilotExportZip: "src/shared/export/fundPilotExportZip.ts",
     },
     outdir: outputDir,
     bundle: true,
@@ -51,6 +53,9 @@ before(async () => {
   );
   roundImportZip = await import(
     pathToFileURL(join(outputDir, "roundImportZip.js")).href
+  );
+  fundPilotExportZip = await import(
+    pathToFileURL(join(outputDir, "fundPilotExportZip.js")).href
   );
 });
 
@@ -330,6 +335,507 @@ test("download path sanitizer removes Firefox-rejected invisible characters", ()
 });
 
 
+
+
+test("FundPilot recruitment export keeps the complete portable business dataset and package files", () => {
+  const state = {
+    version: 1,
+    revision: 17,
+    objects: [
+      {
+        id: "OP_1",
+        importKey: "OP_1",
+        type: "operator",
+        label: "Operator Test",
+        createdAt: "2026-01-01T08:00:00.000Z",
+        updatedAt: "2026-10-14T12:00:00.000Z",
+        values: {
+          name: "Operator Test",
+          role: "OPERATOR",
+          nip: "1234567890",
+          email: "kontakt@example.test",
+          last_checked_at: "2026-10-14T11:55:00.000Z",
+        },
+      },
+      {
+        id: "PR_1",
+        importKey: "PR_1",
+        type: "project",
+        label: "Projekt Test",
+        createdAt: "2026-01-02T08:00:00.000Z",
+        updatedAt: "2026-10-14T12:10:00.000Z",
+        values: {
+          name: "Projekt Test",
+          type: "B2B",
+          status: "AKTYWNY",
+          number: "FEPK.TEST",
+          project_url: "https://example.test/project",
+          eligible_entities: "MŚP z obszaru projektu.",
+          funding_conditions: "Projektowo refundacja do 80%.",
+          application_instructions: "Zgłoszenie przez system operatora.",
+          funding_rules: "Reguły wspólne dla projektu.",
+        },
+      },
+      {
+        id: "NAB_1",
+        importKey: "NAB_1",
+        type: "recruitment",
+        label: "Nabór 1/2026",
+        createdAt: "2026-10-01T08:00:00.000Z",
+        updatedAt: "2026-10-14T13:00:00.000Z",
+        values: {
+          external_number: "Nabór 1/2026",
+          project_id: "PR_1",
+          source_number: "BUR-I/1/2026",
+          status: "AKTYWNY",
+          continuous: false,
+          dataRozpoczeciaOd: "2026-10-10",
+          godzinaRozpoczecia: "08:00",
+          dataZakonczeniaDo: "2026-10-31",
+          godzinaZakonczenia: "16:00",
+          eligible_entities: "Mikro i małe firmy.",
+          funding_conditions: "Pomoc de minimis.",
+          application_instructions: "Wyślij podpisany formularz.",
+          notes: "Pełne dane naboru.",
+          last_checked_at: "2026-10-14T12:59:00.000Z",
+        },
+        evidence: {
+          notes: [
+            {
+              sourceId: "SRC_NOTE_ID",
+              charStart: 0,
+              charEnd: 18,
+              rawValue: "Pełne dane naboru.",
+            },
+          ],
+        },
+        manualFields: { application_instructions: true },
+      },
+      {
+        id: "NAB_2",
+        importKey: "NAB_2",
+        type: "recruitment",
+        label: "Nabór 2/2026",
+        values: {
+          external_number: "Nabór 2/2026",
+          project_id: "PR_1",
+          status: "PLANOWANY",
+        },
+      },
+    ],
+    rules: [
+      {
+        id: "RULE_1",
+        objectId: "NAB_1",
+        field: "notes",
+        pageUrl: "https://example.test/nabor",
+        selector: "#notes",
+        extraction: { type: "text" },
+      },
+    ],
+    importSources: [
+      {
+        id: "SRC_NOTE_ID",
+        importKey: "SRC_NOTE",
+        type: "HTML",
+        url: "https://example.test/nabor",
+        snapshot: { text: "Pełne dane naboru." },
+        importedAt: "2026-10-14T12:58:00.000Z",
+      },
+    ],
+    operatorAssignments: [
+      {
+        id: "ASSIGN_PR",
+        objectId: "PR_1",
+        operatorId: "OP_1",
+        operatorType: "GLOWNY",
+      },
+      {
+        id: "ASSIGN_NAB",
+        objectId: "NAB_1",
+        operatorId: "OP_1",
+        operatorType: "GLOWNY",
+      },
+      {
+        id: "ASSIGN_NAB_2",
+        objectId: "NAB_2",
+        operatorId: "OP_1",
+        operatorType: "GLOWNY",
+      },
+    ],
+    operatorContacts: [
+      {
+        id: "CONTACT_1",
+        objectId: "OP_1",
+        kind: "PHONE",
+        variant_no: 1,
+        value: "+48 17 123 45 67",
+      },
+    ],
+    serviceCategories: [
+      {
+        id: "SERVICE_1",
+        objectId: "PR_1",
+        label: "Szkolenia",
+      },
+    ],
+    financingRules: [
+      {
+        id: "FUND_PROJECT",
+        objectId: "PR_1",
+        company_size: "MICRO",
+        variant_no: 1,
+        refund_percent_base: 50,
+        refund_percent_max: 80,
+        max_amount_pln: 20000,
+        notes: "Wariant projektu",
+      },
+      {
+        id: "FUND_NAB",
+        objectId: "NAB_1",
+        company_size: "MICRO",
+        variant_no: 1,
+        service_category_id: "SERVICE_1",
+        refund_percent_base: 60,
+        refund_percent_standard: 70,
+        refund_percent_max: 85,
+        own_contribution_percent_min: 15,
+        max_amount_pln: 15000,
+        max_per_person_pln: 5000,
+        notes: "Wariant naboru",
+        copiedFromProjectId: "PR_1",
+        copiedFromFundingRuleId: "FUND_PROJECT",
+        copiedAt: "2026-10-14T12:30:00.000Z",
+      },
+    ],
+    geographies: [
+      {
+        id: "GEO_1",
+        objectId: "NAB_1",
+        operatorId: "OP_1",
+        type: "WOJEWODZTWO",
+        role: "OBEJMUJE",
+        value: "podkarpackie",
+      },
+    ],
+    fileSources: [
+      {
+        id: "FILE_PROJECT",
+        objectId: "PR_1",
+        fileType: "PDF",
+        url: "https://example.test/project/regulamin.pdf",
+        sourcePageUrl: "https://example.test/project",
+        name: "regulamin-projektu.pdf",
+        addedAt: "2026-10-01T10:00:00.000Z",
+        display_name: "Regulamin projektu",
+        purpose: "Regulamin",
+        has_fields: false,
+        intended_use: "Zasady projektu",
+        client_requirement: "Informacyjny",
+        signature_requirement: "Nie jest wymagany",
+      },
+      {
+        id: "FILE_NAB",
+        objectId: "NAB_1",
+        fileType: "DOCX",
+        url: "https://example.test/nabor/formularz.docx",
+        sourcePageUrl: "https://example.test/nabor",
+        name: "formularz.docx",
+        addedAt: "2026-10-01T11:00:00.000Z",
+        display_name: "Formularz zgłoszeniowy",
+        purpose: "Formularz do uzupełnienia",
+        has_fields: true,
+        intended_use: "Zgłoszenie do naboru",
+        client_requirement: "Obowiązkowy",
+        signature_requirement: "Wymagany podpisany plik",
+      },
+    ],
+    documentRequirements: [
+      {
+        id: "DOC_PROJECT",
+        importKey: "DOC_PROJECT",
+        objectId: "PR_1",
+        label: "Regulamin projektu",
+        purpose: "Materiał informacyjny.",
+        requirement: "INFORMATIONAL",
+        fulfillment_mode: "WITHOUT_OPERATOR_TEMPLATE",
+        source_file_source_ids: ["FILE_PROJECT"],
+        signature_requirement: "NOT_REQUIRED",
+      },
+      {
+        id: "DOC_NAB",
+        importKey: "DOC_NAB",
+        objectId: "NAB_1",
+        label: "Formularz zgłoszeniowy",
+        purpose: "Formularz składany przy zgłoszeniu.",
+        requirement: "REQUIRED",
+        fulfillment_mode: "OPERATOR_TEMPLATE",
+        original_file_source_id: "FILE_NAB",
+        source_file_source_ids: ["FILE_NAB"],
+        signature_requirement: "REQUIRED_FILE",
+      },
+      {
+        id: "DOC_NO_TEMPLATE",
+        importKey: "DOC_NO_TEMPLATE",
+        objectId: "NAB_1",
+        label: "Karta Usługi BUR",
+        purpose: "Potwierdza wybraną usługę.",
+        requirement: "REQUIRED",
+        fulfillment_mode: "WITHOUT_OPERATOR_TEMPLATE",
+        delivery_stage: "ZGLOSZENIE",
+        responsibility: "CLIENT",
+        required_evidence: "Wydruk Karty Usługi z BUR.",
+        source_file_source_ids: ["FILE_PROJECT"],
+        version_label: "legacy-v1",
+        signature_requirement: "NOT_REQUIRED",
+      },
+    ],
+  };
+
+  const plan = fundPilotExportZip.buildFundPilotExportPackagePlan(
+    state,
+    state.objects.find((object) => object.id === "NAB_1"),
+    "2026-10-14T17:00:00.000Z",
+  );
+  const exported = plan.document;
+
+  assert.equal(exported.format, "FundPilotExportV1");
+  assert.equal(exported.root_object.key, "NAB_1");
+  assert.equal(exported.root_object.type, "recruitment");
+  assert.equal(exported.system.workspace_revision, 17);
+
+  const keys = exported.data.objects.map((object) => object.key);
+  assert.deepEqual(keys, ["OP_1", "PR_1", "NAB_1"]);
+  assert.equal(keys.includes("NAB_2"), false);
+
+  const project = exported.data.objects.find((object) => object.key === "PR_1");
+  const recruitment = exported.data.objects.find((object) => object.key === "NAB_1");
+  const operator = exported.data.objects.find((object) => object.key === "OP_1");
+
+  assert.equal(project.data.eligible_entities, "MŚP z obszaru projektu.");
+  assert.equal(project.data.funding_conditions, "Projektowo refundacja do 80%.");
+  assert.equal(
+    project.data.application_instructions,
+    "Zgłoszenie przez system operatora.",
+  );
+  assert.deepEqual(project.services, [
+    { key: "SERVICE_1", label: "Szkolenia" },
+  ]);
+  assert.equal(project.financing[0].data.refund_percent_base, 50);
+  assert.equal(project.financing[0].data.refund_percent_max, 80);
+
+  assert.equal(recruitment.data.status, "AKTYWNY");
+  assert.equal(recruitment.data.dataRozpoczeciaOd, "2026-10-10");
+  assert.equal(recruitment.data.godzinaZakonczenia, "16:00");
+  assert.equal(recruitment.data.eligible_entities, "Mikro i małe firmy.");
+  assert.equal(recruitment.financing[0].data.refund_percent_base, 60);
+  assert.equal(recruitment.financing[0].data.refund_percent_standard, 70);
+  assert.equal(recruitment.financing[0].data.refund_percent_max, 85);
+  assert.equal(recruitment.financing[0].data.max_per_person_pln, 5000);
+  assert.equal(recruitment.financing[0].service, "SERVICE_1");
+  assert.equal(recruitment.geography[0].value, "podkarpackie");
+  assert.equal(recruitment.geography[0].operator.$ref, "OP_1");
+
+  const withoutTemplate = recruitment.files.find(
+    (file) => file.key === "DOC_NO_TEMPLATE",
+  );
+  assert.equal(withoutTemplate.without_template, true);
+  assert.equal(withoutTemplate.metadata.delivery_stage, "ZGLOSZENIE");
+  assert.equal(withoutTemplate.metadata.responsibility, "CLIENT");
+  assert.equal(
+    withoutTemplate.metadata.required_evidence,
+    "Wydruk Karty Usługi z BUR.",
+  );
+
+  assert.equal(operator.contacts[0].value, "+48 17 123 45 67");
+
+  assert.equal(exported.package_files.length, 2);
+  assert.deepEqual(
+    exported.package_files.map((file) => file.path).sort(),
+    ["files/formularz.docx", "files/regulamin-projektu.pdf"],
+  );
+  assert.ok(
+    exported.package_files.some((file) =>
+      file.references.some(
+        (reference) =>
+          reference.object === "PR_1" && reference.file === "DOC_PROJECT",
+      ),
+    ),
+  );
+  assert.ok(
+    exported.package_files.some((file) =>
+      file.references.some(
+        (reference) =>
+          reference.object === "NAB_1" && reference.file === "DOC_NAB",
+      ),
+    ),
+  );
+
+  const systemRecruitment = exported.system.objects.find(
+    (object) => object.key === "NAB_1",
+  );
+  assert.equal(systemRecruitment.updated_at, "2026-10-14T13:00:00.000Z");
+  assert.equal(systemRecruitment.last_checked_at, "2026-10-14T12:59:00.000Z");
+
+  const complete = exported.complete_state;
+  assert.equal(complete.revision, 17);
+  assert.deepEqual(
+    complete.objects.map((object) => object.id),
+    ["OP_1", "PR_1", "NAB_1"],
+  );
+  assert.equal(
+    complete.objects.find((object) => object.id === "NAB_1").manualFields
+      .application_instructions,
+    true,
+  );
+  assert.equal(complete.rules[0].id, "RULE_1");
+  assert.equal(complete.importSources[0].importKey, "SRC_NOTE");
+  assert.equal(
+    complete.financingRules.find((row) => row.id === "FUND_NAB")
+      .copiedFromFundingRuleId,
+    "FUND_PROJECT",
+  );
+  const completeNoTemplate = complete.documentRequirements.find(
+    (row) => row.id === "DOC_NO_TEMPLATE",
+  );
+  assert.deepEqual(completeNoTemplate.source_file_source_ids, ["FILE_PROJECT"]);
+  assert.equal(completeNoTemplate.version_label, "legacy-v1");
+
+  assert.equal(plan.files.length, 2);
+  assert.match(plan.zipFileName, /^FundPilot - Nabór 1 - 2026\.zip$/);
+});
+
+test("FundPilot project export expands to all project recruitments", () => {
+  const state = {
+    version: 1,
+    revision: 1,
+    objects: [
+      {
+        id: "project-id",
+        importKey: "PR",
+        type: "project",
+        values: { name: "Projekt", status: "AKTYWNY", type: "B2B" },
+      },
+      {
+        id: "N1",
+        importKey: "N1",
+        type: "recruitment",
+        values: {
+          external_number: "Nabór 1",
+          project_id: "PR",
+          status: "AKTYWNY",
+        },
+      },
+      {
+        id: "N2",
+        importKey: "N2",
+        type: "recruitment",
+        values: {
+          external_number: "Nabór 2",
+          project_id: "PR",
+          status: "PLANOWANY",
+        },
+      },
+    ],
+    rules: [],
+    fileSources: [],
+  };
+
+  const plan = fundPilotExportZip.buildFundPilotExportPackagePlan(
+    state,
+    state.objects[0],
+    "2026-10-14T17:05:00.000Z",
+  );
+
+  assert.deepEqual(
+    plan.document.data.objects.map((object) => object.key),
+    ["PR", "N1", "N2"],
+  );
+  assert.deepEqual(plan.document.package_files, []);
+  assert.deepEqual(plan.files, []);
+});
+
+test("FundPilot package accepts archive attachments and maps them into files/", () => {
+  const state = {
+    version: 1,
+    revision: 1,
+    objects: [
+      {
+        id: "NAB",
+        importKey: "NAB",
+        type: "recruitment",
+        values: {
+          external_number: "Nabór z archiwum",
+          status: "AKTYWNY",
+        },
+      },
+    ],
+    rules: [],
+    fileSources: [
+      {
+        id: "ARCHIVE",
+        importKey: "ARCHIVE",
+        objectId: "NAB",
+        fileType: "ZIP",
+        url: "https://example.test/files/dokumenty.zip",
+        sourcePageUrl: "https://example.test/nabor",
+        name: "dokumenty.zip",
+        addedAt: "2026-10-14T10:00:00.000Z",
+        display_name: "Pakiet dokumentów",
+        purpose: "Inny dokument",
+        has_fields: false,
+        client_requirement: "Informacyjny",
+        signature_requirement: "Nie jest wymagany",
+      },
+    ],
+  };
+
+  const plan = fundPilotExportZip.buildFundPilotExportPackagePlan(
+    state,
+    state.objects[0],
+    "2026-10-14T17:10:00.000Z",
+  );
+
+  assert.equal(plan.document.package_files.length, 1);
+  assert.equal(plan.document.package_files[0].file_type, "ZIP");
+  assert.equal(plan.document.package_files[0].path, "files/dokumenty.zip");
+  assert.equal(plan.document.data.objects[0].files[0].source, plan.document.package_files[0].source);
+});
+
+test("FundPilot ZIP writer creates fundpilot.json plus declared package files", () => {
+  const encoder = new TextEncoder();
+  const zip = fundPilotExportZip.buildFundPilotStoreZip(
+    [
+      {
+        path: "fundpilot.json",
+        data: encoder.encode('{"format":"FundPilotExportV1"}'),
+      },
+      {
+        path: "files/dokumenty.zip",
+        data: new Uint8Array([1, 2, 3]),
+      },
+    ],
+    new Date("2026-10-14T17:15:00.000Z"),
+  );
+
+  const view = new DataView(zip.buffer, zip.byteOffset, zip.byteLength);
+  const decoder = new TextDecoder();
+  const paths = [];
+  let offset = 0;
+  while (view.getUint32(offset, true) === 0x04034b50) {
+    const size = view.getUint32(offset + 18, true);
+    const nameLength = view.getUint16(offset + 26, true);
+    const extraLength = view.getUint16(offset + 28, true);
+    const nameStart = offset + 30;
+    paths.push(
+      decoder.decode(zip.subarray(nameStart, nameStart + nameLength)),
+    );
+    offset = nameStart + nameLength + extraLength + size;
+  }
+
+  assert.deepEqual(paths, ["fundpilot.json", "files/dokumenty.zip"]);
+  assert.equal(view.getUint32(offset, true), 0x02014b50);
+});
 
 test("recruitment RoundImport ZIP plan matches the strict V5 manifest contract", () => {
   const state = {
