@@ -296,7 +296,7 @@ For Project financing, `service` must reference that Project's own `services[].k
 Each financing entry becomes one Burbot financing variant. Project and Recruitment use the same financing structure.
 
 - `key` — required stable key unique within the object's financing list.
-- `company_size` — one of `MICRO`, `SMALL`, `MEDIUM`, `LARGE`, `B2C`, `NGO`.
+- `company_size` — one of `MICRO`, `SMALL`, `MEDIUM`, `LARGE`, `B2C`, `NGO`, `NON_PUBLIC_FINANCE_EMPLOYER`, `OTHER_EMPLOYER`. The last two are programme-specific employer groups: employers outside the public-finance sector and remaining employers.
 - `service` — optional project-local `services[].key` that scopes the variant to a runtime-defined service.
 - `data` — any supported financing fields:
   - `refund_percent_min` — minimum refund percentage, `0..100`;
