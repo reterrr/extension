@@ -106,6 +106,7 @@ const FIELD_LABELS: Record<string, string> = {
   operatorType: "Rola operatora",
   company_size: "Wielkość firmy",
   variant_no: "Numer wariantu",
+  serviceId: "Usługa",
   value: "Wartość",
   terytCode: "Kod TERYT",
   kind: "Rodzaj",
