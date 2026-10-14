@@ -1074,10 +1074,10 @@ export function ImportReviewPanel() {
                       <div className="import-review-section-heading">
                         <div>
                           <span className="eyebrow">DOKUMENTY</span>
-                          <strong>{view.documents.length} wymagań</strong>
+                          <strong>{view.documents.length} dokumentów</strong>
                         </div>
                         <small>
-                          Wymagania są niezależne od fizycznych plików operatora.
+                          Dokument może mieć plik operatora albo być bez wzoru.
                         </small>
                       </div>
                       <div className="import-review-financing">
