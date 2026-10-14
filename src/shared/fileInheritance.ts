@@ -17,6 +17,9 @@ export interface ProjectFileInheritanceStatus {
   projectRequirements: LegacyStoredDocumentRequirement[];
   pendingRequirements: LegacyStoredDocumentRequirement[];
   inheritedRequirements: LegacyStoredDocumentRequirement[];
+  projectDocumentCount: number;
+  pendingDocumentCount: number;
+  inheritedDocumentCount: number;
 }
 
 function recruitmentProjectId(recruitment: LegacyStoredObject): string | null {
@@ -36,6 +39,26 @@ export function projectForRecruitment(
       object.type === "project" &&
       (object.id === projectId || object.importKey === projectId),
   );
+}
+
+function linkedFileIdForRequirement(
+  row: LegacyStoredDocumentRequirement,
+  files: LegacyStoredFileSource[],
+): string | undefined {
+  if (
+    row.original_file_source_id &&
+    files.some((file) => file.id === row.original_file_source_id)
+  ) {
+    return row.original_file_source_id;
+  }
+  const label = row.label?.trim().toLocaleLowerCase("pl-PL") ?? "";
+  return files.find(
+    (file) =>
+      (row.source_file_source_ids ?? []).includes(file.id) &&
+      (file.display_name?.trim() || file.name)
+        .trim()
+        .toLocaleLowerCase("pl-PL") === label,
+  )?.id;
 }
 
 function requirementSignature(row: LegacyStoredDocumentRequirement): string {
@@ -61,6 +84,9 @@ export function projectFileInheritanceStatus(
       projectRequirements: [],
       pendingRequirements: [],
       inheritedRequirements: [],
+      projectDocumentCount: 0,
+      pendingDocumentCount: 0,
+      inheritedDocumentCount: 0,
     };
   }
 
@@ -112,6 +138,26 @@ export function projectFileInheritanceStatus(
       !existingRequirementSignatures.has(requirementSignature(row)),
   );
 
+  const representedProjectFileIds = new Set(
+    projectRequirements
+      .map((row) => linkedFileIdForRequirement(row, projectFiles))
+      .filter((value): value is string => Boolean(value)),
+  );
+  const representedInheritedFileIds = new Set(
+    inheritedRequirements
+      .map((row) => linkedFileIdForRequirement(row, recruitmentFiles))
+      .filter((value): value is string => Boolean(value)),
+  );
+  const projectDocumentCount =
+    projectRequirements.length +
+    projectFiles.filter((file) => !representedProjectFileIds.has(file.id)).length;
+  const pendingDocumentCount =
+    pendingRequirements.length +
+    pendingFiles.filter((file) => !representedProjectFileIds.has(file.id)).length;
+  const inheritedDocumentCount =
+    inheritedRequirements.length +
+    inheritedFiles.filter((file) => !representedInheritedFileIds.has(file.id)).length;
+
   return {
     project,
     projectFiles,
@@ -120,6 +166,9 @@ export function projectFileInheritanceStatus(
     projectRequirements,
     pendingRequirements,
     inheritedRequirements,
+    projectDocumentCount,
+    pendingDocumentCount,
+    inheritedDocumentCount,
   };
 }
 
