@@ -241,6 +241,20 @@ export function createPortableExport({
     return result;
   };
 
+  const serviceKeyById = new Map();
+  const servicesByProjectId = new Map();
+  for (const service of state.serviceCategories ?? []) {
+    const projectId = String(service.objectId);
+    if (!servicesByProjectId.has(projectId)) servicesByProjectId.set(projectId, []);
+    servicesByProjectId.get(projectId).push(service);
+  }
+  for (const [projectId, services] of servicesByProjectId) {
+    const keys = keysFor(services);
+    for (const service of services) {
+      serviceKeyById.set(String(service.id), keys.get(String(service.id)));
+    }
+  }
+
   const objects = ordered.map((object) => {
     const type = typeOf(object);
     const operators = assignmentsFor(object);
@@ -264,6 +278,15 @@ export function createPortableExport({
         operator: ref(row.operatorId),
         operator_type: row.operatorType,
       }));
+    }
+    if (type === "project") {
+      const services = servicesByProjectId.get(String(object.id)) ?? [];
+      if (services.length) {
+        result.services = services.map((service) => ({
+          key: serviceKeyById.get(String(service.id)),
+          label: service.label,
+        }));
+      }
     }
     const files = scoped("fileSources", object);
     const fileKeys = keysFor(files);
@@ -348,14 +371,24 @@ export function createPortableExport({
               "importKey",
               "company_size",
               "variant_no",
+              "service_category_id",
               "copiedAt",
               "copiedFromProjectId",
               "copiedFromFundingRuleId",
             ],
           );
+          const serviceKey = row.service_category_id
+            ? serviceKeyById.get(String(row.service_category_id))
+            : undefined;
+          if (row.service_category_id && !serviceKey) {
+            throw new Error(
+              `Wariant ${row.importKey ?? row.id} wskazuje nieistniejącą usługę projektu.`,
+            );
+          }
           return {
             key: keys.get(rowIdentity(row)),
             company_size: row.company_size,
+            ...(serviceKey ? { service: serviceKey } : {}),
             data,
             ...targetEvidence(object, "funding", row.id, data),
           };
