@@ -741,7 +741,7 @@ Te ułatwienia nie oznaczają swobody dla strukturalnych enumów: `objects[].typ
 
 ### 15.3. Legacy pola dokumentów
 
-Importer nadal przyjmuje starsze pola `documents[].data.version_label` oraz `documents[].source_files` wyłącznie dla zgodności z istniejącymi eksportami. **Nowe importy AI nie powinny ich generować.** Bieżący model opiera się na `source_url`, `source_description` i — jeśli operator udostępnia konkretny wzór — `original_file`.
+Importer nadal przyjmuje starsze pola `documents[].data.version_label`, `documents[].source_files` i `documents[].original_file` wyłącznie dla zgodności z istniejącymi eksportami. **Nowe importy AI nie powinny generować całego `documents[]`.** Bieżący model zapisuje dokument raz w `files[]`; wzór operatora rozpoznaje się po obecności `source`, a brak wzoru po `without_template: true`.
 
 ### 15.4. Legacy `document_type_key` — stary zamknięty katalog
 
