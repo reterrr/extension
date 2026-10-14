@@ -114,11 +114,24 @@ export function documentRequirementFromFile(
     source.name;
 
   const informational = requirement === "INFORMATIONAL";
-  // This constructor is called only for a real physical file attached to the
-  // object. For non-informational requirements that means the operator has
-  // supplied the document/template. "Without template" is represented by a
-  // requirement row created without any physical file.
-  const usesOperatorTemplate = !informational;
+  const legacyDelivery = String(source.delivery_method ?? "")
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/gu, "")
+    .toLocaleLowerCase("pl-PL");
+  const explicitlyWithoutTemplate =
+    legacyDelivery.includes("bez wzoru") ||
+    legacyDelivery.includes("without operator template");
+  const explicitlyOperatorTemplate =
+    legacyDelivery.includes("oryginalu operatora") ||
+    legacyDelivery.includes("original operator") ||
+    legacyDelivery.includes("operator template");
+  const looksLikeOperatorTemplate =
+    source.purpose === "Formularz do uzupełnienia" ||
+    source.has_fields === true;
+  const usesOperatorTemplate =
+    !informational &&
+    !explicitlyWithoutTemplate &&
+    (explicitlyOperatorTemplate || looksLikeOperatorTemplate);
   return {
     id,
     objectId,
