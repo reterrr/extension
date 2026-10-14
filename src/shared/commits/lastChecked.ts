@@ -10,6 +10,7 @@ const RELATED_COLLECTIONS = [
   "operatorContacts",
   "fileSources",
   "financingRules",
+  "serviceDefinitions",
   "documentRequirements",
   "fieldEvidence",
   "importTargetEvidence",
