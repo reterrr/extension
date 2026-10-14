@@ -1346,7 +1346,8 @@ progress {
 }
 
 
-#funding-metadata-inherit {
+#funding-metadata-inherit,
+#project-conditions-inherit {
   grid-column: 1 / -1;
   margin: 4px 0 8px;
 }
