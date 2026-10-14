@@ -15,6 +15,7 @@ type Row = Record<string, unknown>;
 const COLLECTIONS: Record<string, { label: string; kind: string }> = {
   fileSources: { label: "Pliki", kind: "file_source" },
   financingRules: { label: "Warianty dofinansowania", kind: "funding" },
+  serviceDefinitions: { label: "Usługi", kind: "service" },
   geographies: { label: "Geografia", kind: "geography" },
   operatorAssignments: { label: "Operatorzy", kind: "operator_assignment" },
   operatorContacts: { label: "Kontakty", kind: "operator_contact" },
@@ -140,6 +141,8 @@ function rowLabel(key: string, row: Row, index: ReviewStateIndex): string {
     ]
       .filter(Boolean)
       .join(" · ");
+  if (key === "serviceDefinitions")
+    return String(row.name || "Usługa");
   if (key === "geographies")
     return [row.role, row.value || row.name || row.terytCode]
       .filter(Boolean)
