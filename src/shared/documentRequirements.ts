@@ -139,19 +139,48 @@ export function documentRequirementFromFile(
     label,
     purpose: intendedUse.slice(0, 1000),
     requirement,
-    ...(requirement === "CONDITIONAL" && intendedUse
-      ? { condition: intendedUse.slice(0, 1000) }
+    ...(requirement === "CONDITIONAL"
+      ? {
+          condition:
+            (typeof source.condition === "string" && source.condition.trim()
+              ? source.condition.trim()
+              : intendedUse
+            ).slice(0, 1000),
+        }
       : {}),
     fulfillment_mode: usesOperatorTemplate
       ? "OPERATOR_TEMPLATE"
       : "WITHOUT_OPERATOR_TEMPLATE",
-    ...(informational ? {} : { responsibility: "CLIENT" }),
+    ...(informational
+      ? {}
+      : {
+          responsibility:
+            source.responsibility === "FUNDPILOT" ||
+            source.responsibility === "SHARED" ||
+            source.responsibility === "CLIENT"
+              ? source.responsibility
+              : "CLIENT",
+        }),
+    ...(typeof source.delivery_stage === "string" && source.delivery_stage.trim()
+      ? { delivery_stage: source.delivery_stage.trim().slice(0, 60) }
+      : {}),
+    ...(typeof source.required_evidence === "string" &&
+    source.required_evidence.trim()
+      ? { required_evidence: source.required_evidence.trim().slice(0, 4000) }
+      : {}),
+    ...(typeof source.source_description === "string" &&
+    source.source_description.trim()
+      ? { source_description: source.source_description.trim().slice(0, 1000) }
+      : {}),
     signature_requirement: signatureFromFileSource(source),
     ...(usesOperatorTemplate ? { original_file_source_id: source.id } : {}),
     // The physical file remains useful as provenance even when it is only an
     // informational regulation/instruction rather than a client template.
     source_file_source_ids: [source.id],
-    source_url: source.sourcePageUrl || source.url,
+    source_url:
+      (typeof source.source_url === "string" && source.source_url.trim()) ||
+      source.sourcePageUrl ||
+      source.url,
   };
 }
 

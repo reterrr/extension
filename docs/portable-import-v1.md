@@ -148,116 +148,90 @@ If a Project or Recruitment has exactly one assigned operator, old imports witho
 
 ## `objects[].files[]`
 
-A file attachment references an existing entry from `sources[]`; the URL is not duplicated.
+Portable v1 now uses **one canonical document list**. A real-world document must appear exactly once in `files[]`.
 
-Supported file source types are:
+There are two forms.
 
-`DOC`, `DOCX`, `PDF`, `XLSX`, `PNG`, `JPG`, `JPEG`, `ZIP`, `RAR`,
-`7Z`, `TAR`, `GZ`, `TGZ`.
-
-Archive attachments use the same business metadata fields as other files.
-Burbot does not extract field values from inside archives; the dedicated
-value-extraction workflow remains PDF-only.
-
-- `key` — optional stable attachment key, but required when a `documents[]` row references this file through `original_file`. Exports emit it whenever the attachment already has a stable key or a document requirement uses it as an operator template; unrelated legacy physical-only attachments may remain keyless for backward-compatible round trips.
-- `source` — required source key. It must point to one of the supported file source types with an HTTP(S) `url`. ZIP/RAR/7Z/TAR/GZ/TGZ sources are valid attachments and can be classified normally.
-- `source_page` — optional source key for the page where the file link was found. If supplied, that source must have a URL.
-- `name` — legacy-only input. The stored technical filename is always derived from the remote file URL; when `metadata.display_name` is absent, legacy `name` is used as the business display-name fallback.
-- `metadata` — optional business classification of the concrete file.
-- `evidence` — optional evidence for individual metadata fields, using the same Unicode code-point ranges as object evidence.
-
-Current file metadata fields are:
-
-- `display_name` — editable business name of the document. It does not overwrite the technical filename.
-- `purpose` — one of:
-  - `Formularz do uzupełnienia`
-  - `Regulamin`
-  - `Instrukcja`
-  - `Inny dokument`
-- `has_fields` — boolean. `true` means the file contains fields/declarations to complete; `false` means it does not.
-- `intended_use` — free-text description of what the document is used for.
-- `client_requirement` — one of:
-  - `Obowiązkowy`
-  - `Warunkowy`
-  - `Informacyjny`
-- `signature_requirement` — one of:
-  - `Nie jest wymagany`
-  - `Wymagany podpisany plik`
-  - `Dowód w systemie operatora`
-
-In the UI, every unset file-classification value is presented consistently as `Nie ustalono`. It is a UI placeholder/unset state, not a stored enum value. For `has_fields`, the empty value is distinct from both `true` and `false`.
-
-When file metadata is missing, Burbot may apply conservative filename-based defaults for common BUR/PSF document names. Explicit import metadata always wins. Examples: a real `Regulamin...` file defaults to `purpose: "Regulamin"`, `has_fields: false`, `client_requirement: "Informacyjny"`; PUR/formularz/instrukcja/ranking/umowa patterns use their own more specific rules. An attachment whose name merely contains `do_Regulaminu` is not treated as a regulation when a more specific document pattern such as PUR or karta oceny is present.
-
-Older v1 imports may still contain `document_kind` and `delivery_method`. They remain accepted for backward compatibility but are not part of the current file editor/export model.
-
-Older document requirements may also contain `data.version_label` and `source_files`. They remain importable for compatibility, but current exports and AI-generated imports omit both fields.
-
-This creates an object-level Burbot file source that remains available after approval.
-
-## `objects[].documents[]`
-
-Document requirements are first-class business rows and are deliberately separate from physical file attachments.
-
-Use them for all documents that matter in the process, including documents for which the operator does **not** provide a template: a BUR Service Card, bank-account proof, KRS/CEIDG printout, invoice, payment confirmation, certificate, power of attorney or another externally obtained document.
-
-A dynamic document row contains:
-
-- `key` — required stable document-requirement key;
-- `data.label` — required readable name, up to 500 characters;
-- `data.purpose` — free-text purpose, up to 1000 characters;
-- `data.requirement` — `UNKNOWN`, `REQUIRED`, `CONDITIONAL`, or `INFORMATIONAL`;
-- `data.condition` — condition for a conditional requirement, up to 1000 characters;
-- `data.fulfillment_mode` — `OPERATOR_TEMPLATE` or `WITHOUT_OPERATOR_TEMPLATE`;
-- `data.delivery_stage` — process stage, up to 60 characters;
-- `data.responsibility` — `FUNDPILOT`, `CLIENT`, or `SHARED`;
-- `data.required_evidence` — what must actually be delivered/shown, up to 4000 characters;
-- `data.source_url` — optional official HTTP(S) URL;
-- `data.source_description` — explanation of the source/basis, up to 1000 characters;
-- `data.signature_requirement` — `UNKNOWN`, `NOT_REQUIRED`, `REQUIRED_FILE`, or `EXTERNAL_OPERATOR`;
-- `original_file` — optional `files[].key` identifying the operator-provided template. It is required when `fulfillment_mode` is `OPERATOR_TEMPLATE`;
-- `evidence` — optional evidence for fields inside `data`.
-
-For an informational document, Burbot normalizes the fulfillment mode to `WITHOUT_OPERATOR_TEMPLATE` and does not treat the physical file as a client template.
-
-Example without an operator template:
+A physical operator file:
 
 ```json
 {
-  "key": "DOC_BUR_SERVICE_CARD",
-  "data": {
-    "label": "Karta Usługi opublikowana w BUR",
-    "purpose": "Potwierdzenie wybranej usługi przy zgłoszeniu.",
-    "requirement": "REQUIRED",
-    "fulfillment_mode": "WITHOUT_OPERATOR_TEMPLATE",
+  "key": "DOC_APPLICATION",
+  "source": "SRC_APPLICATION",
+  "source_page": "SRC_ROUND_PAGE",
+  "metadata": {
+    "display_name": "Formularz zgłoszeniowy",
+    "purpose": "Formularz do uzupełnienia",
+    "has_fields": true,
+    "client_requirement": "Obowiązkowy",
     "delivery_stage": "ZGLOSZENIE",
     "responsibility": "CLIENT",
-    "required_evidence": "Karta Usługi pobrana z BUR dla wybranej usługi.",
-    "signature_requirement": "NOT_REQUIRED"
+    "required_evidence": "Wypełniony formularz operatora.",
+    "signature_requirement": "Wymagany podpisany plik"
   }
 }
 ```
 
-Example using an operator template:
+A requirement for which the operator provides no template:
 
 ```json
 {
-  "key": "DOC_DE_MINIMIS",
-  "data": {
-    "label": "Wniosek o udzielenie pomocy de minimis",
-    "requirement": "CONDITIONAL",
-    "condition": "Gdy wsparcie stanowi pomoc de minimis.",
-    "fulfillment_mode": "OPERATOR_TEMPLATE",
+  "key": "DOC_BUR_SERVICE_CARD",
+  "without_template": true,
+  "metadata": {
+    "display_name": "Karta Usługi opublikowana w BUR",
+    "purpose": "Inny dokument",
+    "intended_use": "Potwierdzenie wybranej usługi.",
+    "client_requirement": "Obowiązkowy",
     "delivery_stage": "ZGLOSZENIE",
     "responsibility": "CLIENT",
-    "required_evidence": "Wypełniony i podpisany formularz operatora.",
-    "signature_requirement": "REQUIRED_FILE"
-  },
-  "original_file": "FILE_DE_MINIMIS"
+    "required_evidence": "Karta Usługi pobrana z BUR.",
+    "signature_requirement": "Nie jest wymagany",
+    "source_url": "https://operator.example/round",
+    "source_description": "Requirement from the recruitment regulation."
+  }
 }
 ```
 
-The old `document_type_key`, `auto_fill`, and `notes` representation is still accepted for backward compatibility. New imports should use the dynamic fields above instead.
+Rules:
+
+- `key` — stable object-local document key; required for new canonical imports.
+- `source` — physical attachment source; required unless `without_template: true`.
+- `without_template: true` — means the requirement exists but no operator-provided file/template exists. In that case `source` must be omitted.
+- `source_page` — optional page source for a physical file.
+- `name` — legacy input only; use `metadata.display_name` in new imports.
+- `metadata` — classification and workflow data for the same document.
+- `evidence` — evidence for supplied metadata fields.
+
+Supported physical source types are `DOC`, `DOCX`, `PDF`, `XLSX`, `PNG`, `JPG`, `JPEG`, `ZIP`, `RAR`, `7Z`, `TAR`, `GZ`, `TGZ`.
+
+Current metadata fields:
+
+- `display_name`;
+- `purpose`: `Formularz do uzupełnienia`, `Regulamin`, `Instrukcja`, `Inny dokument`;
+- `has_fields`;
+- `intended_use`;
+- `client_requirement`: `Obowiązkowy`, `Warunkowy`, `Informacyjny`;
+- `condition`;
+- `delivery_stage`;
+- `responsibility`: `FUNDPILOT`, `CLIENT`, `SHARED`;
+- `required_evidence`;
+- `signature_requirement`: `Nie jest wymagany`, `Wymagany podpisany plik`, `Dowód w systemie operatora`;
+- `source_url`;
+- `source_description`;
+- legacy `document_kind` and `delivery_method`.
+
+Do not represent one operator form once as a physical `files[]` entry and again as a `documents[]` row. That is a duplicate.
+
+An informational physical PDF such as a regulation is still a single `files[]` entry with `source` and `client_requirement: "Informacyjny"`.
+
+### Legacy `objects[].documents[]`
+
+Older portable v1 documents may contain a separate `documents[]` collection with `original_file`. It remains accepted for backward compatibility only. **New exports and AI-generated imports must not emit `documents[]`.**
+
+When converting old data, merge the requirement fields into the matching `files[].metadata`. A legacy document without `original_file` becomes a single `files[]` row with `without_template: true`.
+
+Older document requirements may also contain `data.version_label` and `source_files`; these remain readable only for compatibility.
 
 ## `objects[].services[]`
 

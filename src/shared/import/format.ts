@@ -4,12 +4,15 @@ import {
 } from "../fileMetadata";
 import { isSourceFileType, type SourceFileType } from "../types/source";
 import { normalizePortableInput } from "./normalizePortableInput.js";
+import { documentRequirementFromFile } from "../documentRequirements";
 import type {
   ImportSourceType,
   ImportedEvidence,
   ImportedSource,
   LegacyObjectType,
   LegacyStorageState,
+  LegacyStoredDocumentRequirement,
+  LegacyStoredFileSource,
   LegacyStoredObject,
 } from "../types/legacy-storage";
 
@@ -89,15 +92,29 @@ interface ImportFileMetadata {
   client_requirement?: string;
   signature_requirement?: string;
 
+  /** Canonical document-workflow fields. Kept on the same files[] row. */
+  condition?: string;
+  delivery_stage?: string;
+  responsibility?: string;
+  required_evidence?: string;
+  source_url?: string;
+  source_description?: string;
+
   // Backward-compatible metadata accepted from older portable imports.
   document_kind?: string;
   delivery_method?: string;
 }
 
 interface ImportFileAttachment {
-  /** Stable object-local attachment key. Required when documents reference this file. */
+  /** Stable object-local document key. Required for canonical new imports. */
   key?: string;
-  source: string;
+  /**
+   * Physical operator file. Omit only when without_template=true.
+   * Legacy physical attachments still require this field.
+   */
+  source?: string;
+  /** True means this is a document requirement with no operator-provided file. */
+  without_template?: boolean;
   source_page?: string;
   /** Legacy-only. Canonical name is derived from the source URL filename. */
   name?: string;
@@ -215,11 +232,21 @@ function parseFileMetadata(
     "client_requirement",
     "signature_requirement",
     "delivery_method",
+    "condition",
+    "delivery_stage",
+    "responsibility",
+    "required_evidence",
+    "source_url",
+    "source_description",
   ] as const;
 
   for (const field of textFields) {
     if (value[field] === undefined) continue;
     result[field] = requiredString(value[field], `${path}.${field}`);
+  }
+
+  if (result.source_url !== undefined) {
+    BurbotCore.coerce(result.source_url, "url");
   }
 
   if (value.has_fields !== undefined) {
@@ -241,6 +268,12 @@ const FILE_METADATA_EVIDENCE_FIELDS = Object.freeze({
   client_requirement: true,
   signature_requirement: true,
   delivery_method: true,
+  condition: true,
+  delivery_stage: true,
+  responsibility: true,
+  required_evidence: true,
+  source_url: true,
+  source_description: true,
 });
 
 
@@ -347,12 +380,45 @@ function parseDocument(input: unknown): BurbotImportV1 {
       files = raw.files.map((entry, fileIndex) => {
         const filePath = `${path}.files[${fileIndex}]`;
         if (!isRecord(entry)) throw new Error(`${filePath} must be an object.`);
+        const withoutTemplate =
+          entry.without_template === undefined
+            ? false
+            : typeof entry.without_template === "boolean"
+              ? entry.without_template
+              : (() => {
+                  throw new Error(`${filePath}.without_template must be true or false.`);
+                })();
+        const source = optionalString(entry.source, `${filePath}.source`);
+        const key = optionalString(entry.key, `${filePath}.key`);
+        const metadata = parseFileMetadata(entry.metadata, `${filePath}.metadata`);
+
+        if (withoutTemplate) {
+          if (source !== undefined) {
+            throw new Error(
+              `${filePath}: without_template=true must not contain source. Use one files[] row, not a physical file plus a duplicate document row.`,
+            );
+          }
+          if (!key) {
+            throw new Error(`${filePath}.key is required when without_template=true.`);
+          }
+          if (!metadata?.display_name) {
+            throw new Error(
+              `${filePath}.metadata.display_name is required when without_template=true.`,
+            );
+          }
+        } else if (!source) {
+          throw new Error(
+            `${filePath}.source is required unless without_template=true.`,
+          );
+        }
+
         return {
-          key: optionalString(entry.key, `${filePath}.key`),
-          source: requiredString(entry.source, `${filePath}.source`),
+          ...(key ? { key } : {}),
+          ...(source ? { source } : {}),
+          ...(withoutTemplate ? { without_template: true } : {}),
           source_page: optionalString(entry.source_page, `${filePath}.source_page`),
           name: optionalString(entry.name, `${filePath}.name`),
-          metadata: parseFileMetadata(entry.metadata, `${filePath}.metadata`),
+          metadata,
           evidence: parseEvidenceMap(entry.evidence, `${filePath}.evidence`),
         };
       });
@@ -658,6 +724,100 @@ function codepointSlice(text: string, start: number, end: number): string {
   return Array.from(text).slice(start, end).join("");
 }
 
+function unifiedRequirementFromMetadata(
+  metadata: ImportFileMetadata,
+  objectId: string,
+  id: string,
+  importKey: string,
+  linkedFile?: LegacyStoredFileSource,
+): LegacyStoredDocumentRequirement {
+  if (linkedFile) {
+    const row = documentRequirementFromFile(
+      linkedFile,
+      id,
+      objectId,
+      importKey,
+    );
+    if (row.requirement === "INFORMATIONAL") {
+      row.fulfillment_mode = "WITHOUT_OPERATOR_TEMPLATE";
+      delete row.original_file_source_id;
+    } else {
+      // In the canonical one-list format, the presence of source means this
+      // very row is backed by an operator-provided physical file/template.
+      row.fulfillment_mode = "OPERATOR_TEMPLATE";
+      row.original_file_source_id = linkedFile.id;
+    }
+    if (metadata.condition) row.condition = metadata.condition.slice(0, 1000);
+    if (metadata.delivery_stage)
+      row.delivery_stage = metadata.delivery_stage.slice(0, 60);
+    if (
+      metadata.responsibility === "FUNDPILOT" ||
+      metadata.responsibility === "CLIENT" ||
+      metadata.responsibility === "SHARED"
+    ) {
+      row.responsibility = metadata.responsibility;
+    }
+    if (metadata.required_evidence)
+      row.required_evidence = metadata.required_evidence.slice(0, 4000);
+    if (metadata.source_url) row.source_url = metadata.source_url;
+    if (metadata.source_description)
+      row.source_description = metadata.source_description.slice(0, 1000);
+    return row;
+  }
+
+  const requirement =
+    metadata.client_requirement === "Obowiązkowy"
+      ? "REQUIRED"
+      : metadata.client_requirement === "Warunkowy"
+        ? "CONDITIONAL"
+        : metadata.client_requirement === "Informacyjny"
+          ? "INFORMATIONAL"
+          : "UNKNOWN";
+  const signature =
+    metadata.signature_requirement === "Nie jest wymagany"
+      ? "NOT_REQUIRED"
+      : metadata.signature_requirement === "Wymagany podpisany plik"
+        ? "REQUIRED_FILE"
+        : metadata.signature_requirement === "Dowód w systemie operatora"
+          ? "EXTERNAL_OPERATOR"
+          : "UNKNOWN";
+
+  return {
+    id,
+    objectId,
+    importKey,
+    label: metadata.display_name ?? "Dokument",
+    purpose: (metadata.intended_use ?? metadata.purpose ?? "").slice(0, 1000),
+    requirement,
+    ...(requirement === "CONDITIONAL" && metadata.condition
+      ? { condition: metadata.condition.slice(0, 1000) }
+      : {}),
+    fulfillment_mode: "WITHOUT_OPERATOR_TEMPLATE",
+    ...(metadata.delivery_stage
+      ? { delivery_stage: metadata.delivery_stage.slice(0, 60) }
+      : {}),
+    ...(metadata.responsibility === "FUNDPILOT" ||
+    metadata.responsibility === "CLIENT" ||
+    metadata.responsibility === "SHARED"
+      ? { responsibility: metadata.responsibility }
+      : requirement === "INFORMATIONAL"
+        ? {}
+        : { responsibility: "CLIENT" }),
+    ...(metadata.required_evidence
+      ? { required_evidence: metadata.required_evidence.slice(0, 4000) }
+      : {}),
+    ...(metadata.source_url ? { source_url: metadata.source_url } : {}),
+    ...(metadata.source_description
+      ? { source_description: metadata.source_description.slice(0, 1000) }
+      : {}),
+    signature_requirement:
+      requirement === "INFORMATIONAL" && signature === "UNKNOWN"
+        ? "NOT_REQUIRED"
+        : signature,
+    source_file_source_ids: [],
+  };
+}
+
 function fileNameFromUrl(url: string): string {
   try {
     const pathname = new URL(url).pathname;
@@ -939,9 +1099,76 @@ export function importDocumentIntoState(
     }
 
     const fileIdByKey = new Map<string, string>();
+    const legacyDocumentFileKeys = new Set(
+      (item.documents ?? [])
+        .map((row) => row.original_file)
+        .filter((key): key is string => typeof key === "string" && !!key),
+    );
 
     if (item.files?.length) {
       for (const [fileIndex, file] of item.files.entries()) {
+        const metadata = file.metadata ?? {};
+
+        if (file.without_template) {
+          if (!schema.configuration) {
+            throw new Error(
+              `objects.${item.key}.files[${fileIndex}] uses without_template but ${item.type} does not support document requirements.`,
+            );
+          }
+          const documentId = uuid();
+          const importKey = file.key!;
+          const requirement = unifiedRequirementFromMetadata(
+            metadata,
+            object.id,
+            documentId,
+            importKey,
+          );
+          (state.documentRequirements ||= []).push(requirement);
+
+          validateTargetEvidenceFields(
+            file.evidence,
+            FILE_METADATA_EVIDENCE_FIELDS,
+            metadata,
+            `${item.key}.files[${fileIndex}]`,
+          );
+          const documentEvidenceField = {
+            display_name: "label",
+            intended_use: "purpose",
+            client_requirement: "requirement",
+            signature_requirement: "signature_requirement",
+            condition: "condition",
+            delivery_stage: "delivery_stage",
+            responsibility: "responsibility",
+            required_evidence: "required_evidence",
+            source_url: "source_url",
+            source_description: "source_description",
+          } as const;
+          for (const [field, entries] of Object.entries(file.evidence ?? {})) {
+            const targetField =
+              documentEvidenceField[
+                field as keyof typeof documentEvidenceField
+              ];
+            if (!targetField) continue;
+            storeTargetEvidence(
+              state,
+              object.id,
+              { kind: "document", id: requirement.id },
+              requirement.importKey ?? requirement.id,
+              item.key,
+              targetField,
+              entries,
+              sourceByKey,
+              uuid,
+            );
+          }
+          continue;
+        }
+
+        if (!file.source) {
+          throw new Error(
+            `objects.${item.key}.files[${fileIndex}].source is required for a physical operator file.`,
+          );
+        }
         const source = sourceByKey.get(file.source);
         if (!source) throw new Error(`Unknown file source: ${file.source}.`);
         if (!isSourceFileType(source.type) || !source.url) {
@@ -961,32 +1188,27 @@ export function importDocumentIntoState(
           );
         }
         const technicalName = fileNameFromUrl(source.url);
-        const metadata = {
+        const resolvedMetadata = {
           ...inferFileMetadataFromName(technicalName),
-          ...(file.metadata ?? {}),
-          // Current imports use metadata.display_name. Older imports used
-          // files[].name, and very old/minimal imports may provide neither.
-          // Always expose a usable business name in Workspace without
-          // overwriting the canonical technical filename.
+          ...metadata,
           display_name:
-            file.metadata?.display_name ??
+            metadata.display_name ??
             file.name ??
             technicalName,
         };
-        const row = {
+        const row: LegacyStoredFileSource = {
           id: uuid(),
           objectId: object.id,
           ...(file.key ? { importKey: file.key } : {}),
           fileType: source.type as SourceFileType,
           url: source.url,
-          // Canonical technical filename always comes from the remote URL.
           name: technicalName,
           sourcePageUrl: pageSource?.url ?? object.sourceUrl ?? source.url,
           addedAt: now,
           metadataInferenceVersion: FILE_METADATA_INFERENCE_VERSION,
           sourceImportKey: source.importKey,
           ...(pageSource ? { sourcePageImportKey: pageSource.importKey } : {}),
-          ...metadata,
+          ...resolvedMetadata,
         };
         (state.fileSources ||= []).push(row);
         if (file.key) fileIdByKey.set(file.key, row.id);
@@ -994,7 +1216,7 @@ export function importDocumentIntoState(
         validateTargetEvidenceFields(
           file.evidence,
           FILE_METADATA_EVIDENCE_FIELDS,
-          metadata,
+          resolvedMetadata,
           `${item.key}.files[${fileIndex}]`,
         );
         for (const [field, entries] of Object.entries(file.evidence ?? {})) {
@@ -1009,6 +1231,25 @@ export function importDocumentIntoState(
             sourceByKey,
             uuid,
           );
+        }
+
+        // Canonical v1 represents a physical operator document only once in
+        // files[]. Internally we still keep the richer requirement row so the
+        // unified Documents UI can edit it. Legacy imports that explicitly
+        // provide documents[].original_file keep their old path and are not
+        // promoted twice.
+        if (
+          schema.configuration &&
+          !(file.key && legacyDocumentFileKeys.has(file.key))
+        ) {
+          const requirement = unifiedRequirementFromMetadata(
+            resolvedMetadata,
+            object.id,
+            uuid(),
+            file.key ?? `DOC_FILE_${row.id}`,
+            row,
+          );
+          (state.documentRequirements ||= []).push(requirement);
         }
       }
     }

@@ -5,6 +5,12 @@ const FILE_METADATA_FIELDS = [
   "intended_use",
   "client_requirement",
   "signature_requirement",
+  "condition",
+  "delivery_stage",
+  "responsibility",
+  "required_evidence",
+  "source_url",
+  "source_description",
   "document_kind",
   "delivery_method",
 ];
@@ -15,6 +21,61 @@ const compact = (value) =>
 const typeOf = (object) =>
   object.type === "nabor" ? "recruitment" : object.type;
 const rowIdentity = (row) => String(row.id ?? row.document_type_key);
+const DOCUMENT_TO_FILE_REQUIREMENT = {
+  REQUIRED: "Obowiązkowy",
+  CONDITIONAL: "Warunkowy",
+  INFORMATIONAL: "Informacyjny",
+};
+const DOCUMENT_TO_FILE_SIGNATURE = {
+  NOT_REQUIRED: "Nie jest wymagany",
+  REQUIRED_FILE: "Wymagany podpisany plik",
+  EXTERNAL_OPERATOR: "Dowód w systemie operatora",
+};
+
+function documentMetadata(row) {
+  return compact({
+    display_name: row.label,
+    intended_use: row.purpose,
+    client_requirement: DOCUMENT_TO_FILE_REQUIREMENT[row.requirement],
+    signature_requirement:
+      DOCUMENT_TO_FILE_SIGNATURE[row.signature_requirement],
+    condition: row.condition,
+    delivery_stage: row.delivery_stage,
+    responsibility: row.responsibility,
+    required_evidence: row.required_evidence,
+    source_url: row.source_url,
+    source_description: row.source_description,
+  });
+}
+
+function linkedPhysicalFile(row, files) {
+  if (row.original_file_source_id) {
+    const original = files.find(
+      (file) => String(file.id) === String(row.original_file_source_id),
+    );
+    if (original) return original;
+  }
+  const label = String(row.label ?? "").trim().toLocaleLowerCase("pl-PL");
+  if (!label) return undefined;
+  return files.find(
+    (file) =>
+      (row.source_file_source_ids ?? []).map(String).includes(String(file.id)) &&
+      String(file.display_name ?? file.name ?? "")
+        .trim()
+        .toLocaleLowerCase("pl-PL") === label,
+  );
+}
+
+function mergeEvidence(...parts) {
+  const merged = {};
+  for (const part of parts) {
+    for (const [field, entries] of Object.entries(part?.evidence ?? {})) {
+      merged[field] = [...(merged[field] ?? []), ...entries];
+    }
+  }
+  return Object.keys(merged).length ? { evidence: merged } : {};
+}
+
 
 /** Prefer existing portable keys; fall back to database IDs on key collisions. */
 function keysFor(entries) {
@@ -214,6 +275,58 @@ export function createPortableExport({
         (entries[proof.field] ??= []).push(proof);
     return evidenceMap(entries, values);
   };
+  const documentEvidenceForUnifiedFile = (object, row) => {
+    const values = {
+      label: row.label,
+      purpose: row.purpose,
+      requirement: row.requirement,
+      condition: row.condition,
+      delivery_stage: row.delivery_stage,
+      responsibility: row.responsibility,
+      required_evidence: row.required_evidence,
+      source_url: row.source_url,
+      source_description: row.source_description,
+      signature_requirement: row.signature_requirement,
+    };
+    const raw =
+      targetEvidence(
+        object,
+        "document",
+        row.id ?? row.document_type_key,
+        values,
+      ).evidence ?? {};
+    const fieldMap = {
+      label: "display_name",
+      purpose: "intended_use",
+      requirement: "client_requirement",
+      signature_requirement: "signature_requirement",
+      condition: "condition",
+      delivery_stage: "delivery_stage",
+      responsibility: "responsibility",
+      required_evidence: "required_evidence",
+      source_url: "source_url",
+      source_description: "source_description",
+    };
+    const evidence = {};
+    for (const [field, entries] of Object.entries(raw)) {
+      const targetField = fieldMap[field];
+      if (!targetField) continue;
+      evidence[targetField] = entries.map((entry) => {
+        if (!Object.hasOwn(entry, "normalized_value")) return entry;
+        const normalized =
+          field === "requirement"
+            ? DOCUMENT_TO_FILE_REQUIREMENT[entry.normalized_value] ??
+              entry.normalized_value
+            : field === "signature_requirement"
+              ? DOCUMENT_TO_FILE_SIGNATURE[entry.normalized_value] ??
+                entry.normalized_value
+              : entry.normalized_value;
+        return { ...entry, normalized_value: normalized };
+      });
+    }
+    return Object.keys(evidence).length ? { evidence } : {};
+  };
+
   const scoped = (collection, object) =>
     (state[collection] ?? []).filter(
       (row) => String(row.objectId) === String(object.id),
@@ -291,41 +404,88 @@ export function createPortableExport({
     const files = scoped("fileSources", object);
     const fileKeys = keysFor(files);
     const documentRows = scoped("documentRequirements", object);
-    const referencedFileIds = new Set(
-      documentRows.flatMap((row) => [
-        ...(row.original_file_source_id
-          ? [String(row.original_file_source_id)]
-          : []),
-        ...(row.source_file_source_ids ?? []).map(String),
-      ]),
-    );
-    if (files.length)
-      result.files = files.map((file) => {
-        const metadata = compact(
-          Object.fromEntries(
-            FILE_METADATA_FIELDS.map((field) => [field, file[field]]),
-          ),
-        );
-        return {
-          ...(
-            file.importKey || referencedFileIds.has(String(file.id))
-              ? { key: fileKeys.get(String(file.id)) }
-              : {}
-          ),
-          source: useUrl(file.url, file.fileType, file.sourceImportKey),
-          ...(file.sourcePageUrl
-            ? {
-                source_page: useUrl(
-                  file.sourcePageUrl,
-                  "HTML",
-                  file.sourcePageImportKey,
-                ),
-              }
-            : {}),
-          ...(Object.keys(metadata).length ? { metadata } : {}),
-          ...targetEvidence(object, "file_source", file.id, metadata),
-        };
+    const documentKeys = keysFor(documentRows);
+    const linkedDocumentByFileId = new Map();
+    const unlinkedDocuments = [];
+
+    for (const row of documentRows) {
+      const linked = linkedPhysicalFile(row, files);
+      if (linked && !linkedDocumentByFileId.has(String(linked.id))) {
+        linkedDocumentByFileId.set(String(linked.id), row);
+      } else if (!linked) {
+        unlinkedDocuments.push(row);
+      }
+    }
+
+    const unifiedFiles = [];
+    const usedUnifiedKeys = new Set();
+    const uniqueUnifiedKey = (preferred, fallback) => {
+      const base = String(preferred || fallback);
+      let key = base;
+      for (let suffix = 2; usedUnifiedKeys.has(key); suffix++) {
+        key = `${base}:${suffix}`;
+      }
+      usedUnifiedKeys.add(key);
+      return key;
+    };
+
+    for (const file of files) {
+      const linkedDocument = linkedDocumentByFileId.get(String(file.id));
+      const physicalMetadata = compact(
+        Object.fromEntries(
+          FILE_METADATA_FIELDS.map((field) => [field, file[field]]),
+        ),
+      );
+      const metadata = {
+        ...physicalMetadata,
+        ...(linkedDocument ? documentMetadata(linkedDocument) : {}),
+      };
+      const key = uniqueUnifiedKey(
+        file.importKey || linkedDocument?.importKey || fileKeys.get(String(file.id)),
+        file.id,
+      );
+      const fileEvidence = targetEvidence(
+        object,
+        "file_source",
+        file.id,
+        physicalMetadata,
+      );
+      const documentEvidence = linkedDocument
+        ? documentEvidenceForUnifiedFile(object, linkedDocument)
+        : {};
+
+      unifiedFiles.push({
+        key,
+        source: useUrl(file.url, file.fileType, file.sourceImportKey),
+        ...(file.sourcePageUrl
+          ? {
+              source_page: useUrl(
+                file.sourcePageUrl,
+                "HTML",
+                file.sourcePageImportKey,
+              ),
+            }
+          : {}),
+        ...(Object.keys(metadata).length ? { metadata } : {}),
+        ...mergeEvidence(fileEvidence, documentEvidence),
       });
+    }
+
+    for (const row of unlinkedDocuments) {
+      const metadata = documentMetadata(row);
+      const key = uniqueUnifiedKey(
+        row.importKey || documentKeys.get(rowIdentity(row)),
+        row.id ?? row.document_type_key,
+      );
+      unifiedFiles.push({
+        key,
+        without_template: true,
+        metadata,
+        ...documentEvidenceForUnifiedFile(object, row),
+      });
+    }
+
+    if (unifiedFiles.length) result.files = unifiedFiles;
     const geography = scoped("geographies", object);
     if (geography.length) {
       const keys = keysFor(geography);
@@ -396,52 +556,6 @@ export function createPortableExport({
       }
     }
 
-    {
-      const rows = documentRows;
-      if (rows.length) {
-        const keys = keysFor(rows);
-        result.documents = rows.map((row) => {
-          const data = dataFor(
-            row,
-            globalThis.BurbotDocuments?.fields,
-            "documents",
-            [
-              "id",
-              "objectId",
-              "importKey",
-              "document_type_key",
-              "original_file_source_id",
-              "source_file_source_ids",
-              "version_label",
-            ],
-          );
-
-          const originalFileKey = row.original_file_source_id
-            ? fileKeys.get(String(row.original_file_source_id))
-            : undefined;
-          if (row.original_file_source_id && !originalFileKey) {
-            throw new Error(
-              `Dokument „${row.label ?? row.importKey ?? row.id}” wskazuje wzór, który nie należy do tego samego obiektu.`,
-            );
-          }
-
-          return {
-            key: keys.get(rowIdentity(row)),
-            ...(row.document_type_key
-              ? { document_type_key: row.document_type_key }
-              : {}),
-            data,
-            ...(originalFileKey ? { original_file: originalFileKey } : {}),
-            ...targetEvidence(
-              object,
-              "document",
-              row.id ?? row.document_type_key,
-              data,
-            ),
-          };
-        });
-      }
-    }
     return result;
   });
   return {

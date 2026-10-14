@@ -336,10 +336,10 @@ test("repository portable-import example stays importable", async () => {
   assert.equal(documents.length, 3);
 
   const regulations = documents.find(
-    (entry) => entry.importKey === "DOC_REGULATIONS",
+    (entry) => entry.importKey === "FILE_REGULATIONS",
   );
   const application = documents.find(
-    (entry) => entry.importKey === "DOC_APPLICATION",
+    (entry) => entry.importKey === "FILE_APPLICATION",
   );
   const serviceCard = documents.find(
     (entry) => entry.importKey === "DOC_BUR_SERVICE_CARD",
@@ -356,13 +356,12 @@ test("repository portable-import example stays importable", async () => {
   assert.equal(application.requirement, "REQUIRED");
   assert.equal(application.fulfillment_mode, "OPERATOR_TEMPLATE");
   assert.equal(application.original_file_source_id, files[1].id);
-  assert.deepEqual(
-    new Set(application.source_file_source_ids),
-    new Set([files[0].id, files[1].id]),
-  );
+  assert.deepEqual(application.source_file_source_ids, [files[1].id]);
 
   assert.equal(serviceCard.fulfillment_mode, "WITHOUT_OPERATOR_TEMPLATE");
   assert.equal(serviceCard.original_file_source_id, undefined);
+  assert.equal(serviceCard.required_evidence, "Karta Usługi pobrana z BUR dla wybranej usługi.");
+  assert.equal(serviceCard.delivery_stage, "ZGLOSZENIE");
 
   const projectAssignments = (session.previewState.operatorAssignments ?? []).filter(
     (entry) => entry.objectId === project.id,
@@ -507,22 +506,28 @@ test("dynamic documents support operator templates and no-template requirements"
   );
   assert.ok(portableProject);
 
+  assert.equal(portableProject.documents, undefined);
+  assert.equal(portableProject.files.length, 2);
   assert.equal(portableProject.files[0].key, "FILE_RULES");
-  assert.equal(portableProject.documents[0].original_file, "FILE_RULES");
+  assert.equal(portableProject.files[0].without_template, undefined);
   assert.equal(
-    Object.prototype.hasOwnProperty.call(portableProject.documents[0], "source_files"),
-    false,
+    portableProject.files[0].metadata.client_requirement,
+    "Warunkowy",
   );
   assert.equal(
-    Object.prototype.hasOwnProperty.call(
-      portableProject.documents[1].data,
-      "version_label",
-    ),
-    false,
+    portableProject.files[0].metadata.condition,
+    "Gdy wnioskodawca korzysta z pomocy de minimis.",
   );
   assert.equal(
-    portableProject.documents[1].data.fulfillment_mode,
-    "WITHOUT_OPERATOR_TEMPLATE",
+    portableProject.files[0].metadata.required_evidence,
+    "Wypełniony formularz.",
+  );
+  assert.equal(portableProject.files[1].key, "DOC_BANK");
+  assert.equal(portableProject.files[1].without_template, true);
+  assert.equal(portableProject.files[1].source, undefined);
+  assert.equal(
+    portableProject.files[1].metadata.display_name,
+    "Potwierdzenie rachunku bankowego",
   );
 
   const staged = stageModule.stageImportReviewObject(
@@ -534,7 +539,7 @@ test("dynamic documents support operator templates and no-template requirements"
   const stagedDocs = staged.state.documentRequirements.filter(
     (entry) => entry.objectId === staged.stagedObjectId,
   );
-  const stagedForm = stagedDocs.find((entry) => entry.importKey === "DOC_FORM");
+  const stagedForm = stagedDocs.find((entry) => entry.importKey === "FILE_RULES");
   const stagedBank = stagedDocs.find((entry) => entry.importKey === "DOC_BANK");
   assert.ok(stagedForm);
   assert.ok(stagedBank);

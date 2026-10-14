@@ -111,6 +111,24 @@ test("portable export imports directly with values, references, files, source sn
     ["Szkolenia", "Doradztwo"],
   );
   assert.equal(exportedProject.financing[0].service, "SERVICE_TRAINING");
+  assert.equal(exportedProject.documents, undefined);
+  const exportedApplication = exportedProject.files.find(
+    (file) => file.key === "FILE_APPLICATION",
+  );
+  assert.ok(exportedApplication);
+  assert.equal(exportedApplication.without_template, undefined);
+  assert.equal(exportedApplication.metadata.client_requirement, "Obowiązkowy");
+  assert.equal(exportedApplication.metadata.delivery_stage, "ZGLOSZENIE");
+  const exportedServiceCard = exportedProject.files.find(
+    (file) => file.key === "DOC_BUR_SERVICE_CARD",
+  );
+  assert.ok(exportedServiceCard);
+  assert.equal(exportedServiceCard.without_template, true);
+  assert.equal(exportedServiceCard.source, undefined);
+  assert.equal(
+    exportedServiceCard.metadata.display_name,
+    "Karta Usługi opublikowana w BUR",
+  );
   assert.ok(
     document.objects.some((object) =>
       object.files?.some((file) => file.evidence),
@@ -201,6 +219,20 @@ test("editing exported rows with database IDs updates existing rows, even with g
   assert.equal(
     result.operatorContacts.find((row) => row.id === contact.id).value,
     contactRow.value,
+  );
+});
+
+test("canonical no-template documents cannot also declare a physical source", () => {
+  const document = structuredClone(example);
+  const project = byKey(document, "project-1");
+  const noTemplate = project.files.find(
+    (file) => file.key === "DOC_BUR_SERVICE_CARD",
+  );
+  noTemplate.source = "regulations-pdf";
+
+  assert.throws(
+    () => imported(document),
+    /without_template=true must not contain source/,
   );
 });
 
