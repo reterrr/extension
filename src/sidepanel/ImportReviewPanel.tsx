@@ -1102,11 +1102,25 @@ export function ImportReviewPanel() {
                                   </strong>
                                 </label>
                               ))}
-                              {documentRow.originalFileName && (
+                              {documentRow.physicalFileName && (
                                 <label className="import-review-workspace-field">
-                                  <small>Wzór operatora</small>
+                                  <small>
+                                    {documentRow.isOperatorTemplate
+                                      ? "Plik / wzór operatora"
+                                      : "Plik operatora"}
+                                  </small>
                                   <strong className="import-review-workspace-value">
-                                    {documentRow.originalFileName}
+                                    {documentRow.physicalFileUrl ? (
+                                      <a
+                                        href={documentRow.physicalFileUrl}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                      >
+                                        {documentRow.physicalFileName}
+                                      </a>
+                                    ) : (
+                                      documentRow.physicalFileName
+                                    )}
                                   </strong>
                                 </label>
                               )}
