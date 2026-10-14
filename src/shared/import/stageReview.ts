@@ -26,7 +26,7 @@ function copyObjectForUpdate(state: LegacyStorageState, objectId: string): Legac
   // snapshots shared; copying multi-megabyte regulations dominated approval.
   const next = { ...state };
   for (const key of ["objects", "rules", "fileSources", "financingRules",
-    "operatorAssignments", "geographies", "operatorContacts",
+    "serviceDefinitions", "operatorAssignments", "geographies", "operatorContacts",
     "documentRequirements", "importTargetEvidence", "importSources"] as const) {
     const value = state[key];
     if (!Array.isArray(value)) continue;
@@ -121,6 +121,47 @@ function replaceReviewedRules(
     );
     state.rules.push(copied);
   }
+}
+
+function normalizedServiceName(value: unknown): string {
+  return String(value ?? "").trim().toLocaleLowerCase("pl-PL");
+}
+
+function projectForFundingObject(
+  state: LegacyStorageState,
+  object: LegacyStoredObject,
+): LegacyStoredObject | undefined {
+  if (object.type === "project") return object;
+  if (object.type !== "recruitment") return undefined;
+  const projectId = String(object.values?.project_id ?? "");
+  return state.objects.find(
+    (candidate) =>
+      candidate.type === "project" &&
+      (candidate.id === projectId || candidate.importKey === projectId),
+  );
+}
+
+function serviceMatch(
+  state: LegacyStorageState,
+  projectId: string,
+  imported: NonNullable<LegacyStorageState["serviceDefinitions"]>[number],
+) {
+  const candidates = (state.serviceDefinitions ?? []).filter(
+    (row) => row.objectId === projectId,
+  );
+  if (imported.importKey) {
+    const byKey = candidates.find(
+      (row) =>
+        row.importKey === imported.importKey ||
+        String(row.id) === imported.importKey,
+    );
+    if (byKey) return byKey;
+  }
+  const name = normalizedServiceName(imported.name);
+  const byName = candidates.filter(
+    (row) => normalizedServiceName(row.name) === name,
+  );
+  return byName.length === 1 ? byName[0] : undefined;
 }
 
 function nextVariantNo(
@@ -233,6 +274,45 @@ function stageExistingObjectUpdate(
   }
   target.updatedAt = now;
 
+  const serviceIdMap = new Map<string, string>();
+  const importedServiceProject = projectForFundingObject(
+    importedState,
+    importedObject,
+  );
+  const targetServiceProject = projectForFundingObject(state, target);
+
+  if (target.type === "project") {
+    for (const importedService of (importedState.serviceDefinitions ?? []).filter(
+      (row) => row.objectId === importedObject.id,
+    )) {
+      let service = serviceMatch(state, target.id, importedService);
+      if (!service) {
+        service = {
+          id: uuid(),
+          objectId: target.id,
+          importKey: importedService.importKey,
+          name: importedService.name,
+        };
+        (state.serviceDefinitions ||= []).push(service);
+      } else {
+        if (importedService.importKey) service.importKey = importedService.importKey;
+        service.name = importedService.name;
+      }
+      serviceIdMap.set(importedService.id, service.id);
+    }
+  } else if (importedServiceProject && targetServiceProject) {
+    for (const importedService of (importedState.serviceDefinitions ?? []).filter(
+      (row) => row.objectId === importedServiceProject.id,
+    )) {
+      const service = serviceMatch(
+        state,
+        targetServiceProject.id,
+        importedService,
+      );
+      if (service) serviceIdMap.set(importedService.id, service.id);
+    }
+  }
+
   const fundingIdByImportKey = new Map<string, string>();
   const importedTargetIdMap = new Map<string, string>();
   const importedFunding = (importedState.financingRules ?? []).filter(
@@ -291,6 +371,15 @@ function stageExistingObjectUpdate(
       if (Object.prototype.hasOwnProperty.call(importedRow, field)) {
         row[field] = importedRow[field];
       }
+    }
+    if (importedRow.serviceId) {
+      const mappedServiceId = serviceIdMap.get(String(importedRow.serviceId));
+      if (!mappedServiceId) {
+        throw new Error(
+          `Could not resolve project service for financing variant ${importKey}. Approve or create the project service first.`,
+        );
+      }
+      row.serviceId = mappedServiceId;
     }
     fundingIdByImportKey.set(importKey, String(row.id));
     importedTargetIdMap.set(
@@ -615,6 +704,9 @@ function stageNewObject(
   const seed = BurbotCore.empty() as LegacyStorageState;
   seed.revision = original.revision;
   seed.objects = original.objects.filter((object) => dependencyIds.has(object.id));
+  seed.serviceDefinitions = (original.serviceDefinitions ?? [])
+    .filter((row) => dependencyIds.has(row.objectId))
+    .map((row) => structuredClone(row));
   let state = importDocumentIntoState(
     seed,
     plan.document,
@@ -679,6 +771,28 @@ function stageNewObject(
     }
   }
 
+  if (selected.type === "recruitment") {
+    const targetProject = projectForFundingObject(state, selected);
+    if (targetProject) {
+      for (const row of (state.financingRules ?? []).filter(
+        (candidate) => candidate.objectId === selected.id && candidate.serviceId,
+      )) {
+        const importedService = (state.serviceDefinitions ?? []).find(
+          (service) => service.id === row.serviceId,
+        );
+        if (!importedService) continue;
+        if (importedService.objectId === targetProject.id) continue;
+        const service = serviceMatch(state, targetProject.id, importedService);
+        if (!service) {
+          throw new Error(
+            `Could not resolve project service for financing variant ${String(row.importKey ?? row.id)}. Approve or create the project service first.`,
+          );
+        }
+        row.serviceId = service.id;
+      }
+    }
+  }
+
   const fundingIdByImportKey = new Map(
     (state.financingRules ?? [])
       .filter((row) => row.objectId === selected.id && row.importKey)
@@ -717,7 +831,7 @@ function stageNewObject(
 
   const merged = { ...original, revision: state.revision };
   for (const key of ["objects", "rules", "fileSources", "financingRules",
-    "operatorAssignments", "geographies", "operatorContacts",
+    "serviceDefinitions", "operatorAssignments", "geographies", "operatorContacts",
     "documentRequirements", "fieldEvidence", "importTargetEvidence", "importSources"] as const) {
     const additions = key === "objects"
       ? state.objects.filter((object) => !beforeIds.has(object.id))
