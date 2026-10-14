@@ -4,6 +4,7 @@ import {
 } from "../fileMetadata";
 import { isSourceFileType, type SourceFileType } from "../types/source";
 import { normalizePortableInput } from "./normalizePortableInput.js";
+import { documentRequirementFromFile } from "../documentRequirements";
 import type {
   ImportSourceType,
   ImportedEvidence,
@@ -89,15 +90,29 @@ interface ImportFileMetadata {
   client_requirement?: string;
   signature_requirement?: string;
 
+  /** Canonical document-workflow fields. Kept on the same files[] row. */
+  condition?: string;
+  delivery_stage?: string;
+  responsibility?: string;
+  required_evidence?: string;
+  source_url?: string;
+  source_description?: string;
+
   // Backward-compatible metadata accepted from older portable imports.
   document_kind?: string;
   delivery_method?: string;
 }
 
 interface ImportFileAttachment {
-  /** Stable object-local attachment key. Required when documents reference this file. */
+  /** Stable object-local document key. Required for canonical new imports. */
   key?: string;
-  source: string;
+  /**
+   * Physical operator file. Omit only when without_template=true.
+   * Legacy physical attachments still require this field.
+   */
+  source?: string;
+  /** True means this is a document requirement with no operator-provided file. */
+  without_template?: boolean;
   source_page?: string;
   /** Legacy-only. Canonical name is derived from the source URL filename. */
   name?: string;
@@ -215,11 +230,21 @@ function parseFileMetadata(
     "client_requirement",
     "signature_requirement",
     "delivery_method",
+    "condition",
+    "delivery_stage",
+    "responsibility",
+    "required_evidence",
+    "source_url",
+    "source_description",
   ] as const;
 
   for (const field of textFields) {
     if (value[field] === undefined) continue;
     result[field] = requiredString(value[field], `${path}.${field}`);
+  }
+
+  if (result.source_url !== undefined) {
+    BurbotCore.coerce(result.source_url, "url");
   }
 
   if (value.has_fields !== undefined) {
@@ -241,6 +266,12 @@ const FILE_METADATA_EVIDENCE_FIELDS = Object.freeze({
   client_requirement: true,
   signature_requirement: true,
   delivery_method: true,
+  condition: true,
+  delivery_stage: true,
+  responsibility: true,
+  required_evidence: true,
+  source_url: true,
+  source_description: true,
 });
 
 
@@ -347,12 +378,45 @@ function parseDocument(input: unknown): BurbotImportV1 {
       files = raw.files.map((entry, fileIndex) => {
         const filePath = `${path}.files[${fileIndex}]`;
         if (!isRecord(entry)) throw new Error(`${filePath} must be an object.`);
+        const withoutTemplate =
+          entry.without_template === undefined
+            ? false
+            : typeof entry.without_template === "boolean"
+              ? entry.without_template
+              : (() => {
+                  throw new Error(`${filePath}.without_template must be true or false.`);
+                })();
+        const source = optionalString(entry.source, `${filePath}.source`);
+        const key = optionalString(entry.key, `${filePath}.key`);
+        const metadata = parseFileMetadata(entry.metadata, `${filePath}.metadata`);
+
+        if (withoutTemplate) {
+          if (source !== undefined) {
+            throw new Error(
+              `${filePath}: without_template=true must not contain source. Use one files[] row, not a physical file plus a duplicate document row.`,
+            );
+          }
+          if (!key) {
+            throw new Error(`${filePath}.key is required when without_template=true.`);
+          }
+          if (!metadata?.display_name) {
+            throw new Error(
+              `${filePath}.metadata.display_name is required when without_template=true.`,
+            );
+          }
+        } else if (!source) {
+          throw new Error(
+            `${filePath}.source is required unless without_template=true.`,
+          );
+        }
+
         return {
-          key: optionalString(entry.key, `${filePath}.key`),
-          source: requiredString(entry.source, `${filePath}.source`),
+          ...(key ? { key } : {}),
+          ...(source ? { source } : {}),
+          ...(withoutTemplate ? { without_template: true } : {}),
           source_page: optionalString(entry.source_page, `${filePath}.source_page`),
           name: optionalString(entry.name, `${filePath}.name`),
-          metadata: parseFileMetadata(entry.metadata, `${filePath}.metadata`),
+          metadata,
           evidence: parseEvidenceMap(entry.evidence, `${filePath}.evidence`),
         };
       });
