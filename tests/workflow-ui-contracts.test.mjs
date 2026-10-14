@@ -347,6 +347,26 @@ test("file display name comes from the actual PDF filename", () => {
 });
 
 
+test("Import Review keeps linked operator files inside unified document cards", () => {
+  const panel = source("src/sidepanel/ImportReviewPanel.tsx");
+  const review = source("src/shared/import/review.ts");
+
+  assert.match(panel, /INNE PLIKI/);
+  assert.match(panel, /documentRow\.physicalFileName/);
+  assert.match(panel, /Plik \/ wzór operatora/);
+  assert.match(panel, /Plik operatora/);
+  assert.match(review, /function representedDocumentFileIds/);
+  assert.match(review, /!represented\.has\(source\.id\)/);
+  assert.match(
+    review,
+    /\(informational \|\| isOperatorTemplate\)[\s\S]*?field === "fulfillment_mode"/,
+  );
+  assert.match(
+    review,
+    /noTemplateWorkflowFields[\s\S]*?"delivery_stage"[\s\S]*?"responsibility"[\s\S]*?"required_evidence"/,
+  );
+});
+
 test("Import Review colors are derived from concrete evidence entries", () => {
   const review = source("src/sidepanel/ImportReviewPanel.tsx");
   const palette = source("src/shared/selectorPalette.ts");
