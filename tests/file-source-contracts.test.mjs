@@ -389,10 +389,19 @@ test("recruitment RoundImport ZIP plan matches the strict V5 manifest contract",
         value: "podkarpackie|powiat|rzeszowski",
       },
     ],
+    serviceDefinitions: [
+      {
+        id: "11111111-1111-4111-8111-111111111111",
+        objectId: "project-1",
+        importKey: "SERVICE_TRAINING",
+        name: "Szkolenia specjalistyczne",
+      },
+    ],
     financingRules: [
       {
         id: "fund-1",
         objectId: "recruitment-1",
+        serviceId: "11111111-1111-4111-8111-111111111111",
         company_size: "MICRO",
         variant_no: 1,
         refund_percent_max: 80,
@@ -473,6 +482,12 @@ test("recruitment RoundImport ZIP plan matches the strict V5 manifest contract",
     closeMode: "dated",
   });
   assert.equal(manifest.workspace.notes, "Import testowy.");
+  assert.deepEqual(manifest.workspace.serviceCategories, [
+    {
+      id: "11111111-1111-4111-8111-111111111111",
+      label: "Szkolenia specjalistyczne",
+    },
+  ]);
   assert.equal(
     manifest.workspace.conditions.officialRoundIdentifier,
     "BUR-I/3/2026",
@@ -506,6 +521,10 @@ test("recruitment RoundImport ZIP plan matches the strict V5 manifest contract",
   assert.equal(
     manifest.workspace.conditions.fundingVariants[0].refundPct,
     80,
+  );
+  assert.equal(
+    manifest.workspace.conditions.fundingVariants[0].serviceCategoryId,
+    "11111111-1111-4111-8111-111111111111",
   );
   assert.equal(
     manifest.workspace.conditions.fundingVariants[0].ownContributionForm,
