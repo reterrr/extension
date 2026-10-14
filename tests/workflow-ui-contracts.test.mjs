@@ -473,24 +473,27 @@ test("recruitment can inherit project geography per operator and funding as copi
   assert.match(background, /copyProjectFundingToRecruitment/);
 });
 
-test("project bulk download stays intact and recruitment download creates RoundImport ZIP", () => {
+test("document panel exports Project or Recruitment as a complete FundPilot ZIP", () => {
+  const app = source("src/sidepanel/App.tsx");
   const files = source("src/sidepanel/fileSourcesUi.ts");
-  const downloads = source("src/shared/fileDownloads.ts");
-  const roundImport = source("src/shared/export/roundImportZip.ts");
+  const fundPilot = source("src/shared/export/fundPilotExportZip.ts");
 
   assert.match(
     files,
     /const canBulkDownload =\s*object\.type === "project" \|\| object\.type === "recruitment"/,
   );
   assert.match(files, /downloadAll\.hidden = !canBulkDownload/);
-  assert.match(files, /downloadAllObjectFiles/);
-  assert.match(files, /buildProjectDownloadPlan/);
-  assert.match(files, /buildRoundImportZip/);
-  assert.match(files, /Pobierz import ZIP/);
-  assert.match(downloads, /export function buildProjectDownloadPlan/);
-  assert.match(roundImport, /format: "RoundImportManifestV1"/);
-  assert.match(roundImport, /path: `files\/\$\{fileNames\[index\]\}`/);
-  assert.match(roundImport, /buildStoreZip/);
+  assert.match(files, /exportFundPilot/);
+  assert.match(files, /buildFundPilotExportZip/);
+  assert.match(files, /Eksport FundPilot/);
+  assert.match(app, /↓ Eksport FundPilot/);
+  assert.match(fundPilot, /format: "FundPilotExportV1"/);
+  assert.match(fundPilot, /createPortableExport/);
+  assert.match(fundPilot, /path: "fundpilot\.json"/);
+  assert.match(fundPilot, /package_files/);
+  assert.match(fundPilot, /buildFundPilotStoreZip/);
+  assert.equal(files.includes("buildRoundImportZip"), false);
+  assert.equal(files.includes("buildProjectDownloadPlan"), false);
 });
 
 test("Import tab can set Active View without importing data", () => {
