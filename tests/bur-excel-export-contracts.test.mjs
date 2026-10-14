@@ -65,6 +65,9 @@ function snapshot() {
             end_date: "2026-12-31",
             announcements_site_url: "https://rarr.example/nabory",
             project_url: "https://rarr.example/projekt",
+            eligible_entities: "MŚP działające na obszarze projektu.",
+            funding_conditions: "Projektowo wsparcie do 80% kosztów.",
+            application_instructions: "Zgłoszenie zgodnie z procedurą projektu.",
             funding_rules: "Projektowe zasady finansowania.",
             funding_verified_at: "2026-09-20",
             funding_verification_url: "https://rarr.example/projekt/finansowanie",
@@ -293,6 +296,18 @@ test("BUR Excel export keeps complete business data and relations", () => {
   assert.equal(project.operator_id, "OP_1");
   assert.equal(project.numer_projektu, "FEPK.01.01-TEST");
   assert.equal(project.strona_projektu, "https://rarr.example/projekt");
+  assert.equal(
+    project.kwalifikujace_sie_podmioty,
+    "MŚP działające na obszarze projektu.",
+  );
+  assert.equal(
+    project.warunki_pomocy_i_dofinansowania,
+    "Projektowo wsparcie do 80% kosztów.",
+  );
+  assert.equal(
+    project.instrukcja_skladania_wniosku,
+    "Zgłoszenie zgodnie z procedurą projektu.",
+  );
   assert.equal(project.zasady_dofinansowania, "Projektowe zasady finansowania.");
   assert.ok(project.data_weryfikacji_finansow);
   assert.equal(
