@@ -863,14 +863,41 @@ function mutateDocumentRequirement(
         "Dla dokumentu warunkowego opisz, kiedy dokument jest wymagany.",
       );
     }
+
+    const clearNoTemplateOnlyFields = () => {
+      for (const field of [
+        "delivery_stage",
+        "responsibility",
+        "required_evidence",
+      ] as const) {
+        if (
+          Object.prototype.hasOwnProperty.call(
+            row as unknown as Record<string, unknown>,
+            field,
+          )
+        ) {
+          delete (row as unknown as Record<string, unknown>)[field];
+          changedFields.add(field);
+        }
+      }
+    };
+
     if (row.requirement === "INFORMATIONAL") {
-      // Informational materials are not delivered by the client. Keep the
-      // storage contract deterministic while the UI hides this irrelevant field.
+      // Informational materials are physical/operator materials to read, not
+      // documents that the client prepares and delivers.
       row.fulfillment_mode = "WITHOUT_OPERATOR_TEMPLATE";
       delete row.original_file_source_id;
+      clearNoTemplateOnlyFields();
     } else if (row.fulfillment_mode === "WITHOUT_OPERATOR_TEMPLATE") {
+      // A no-template requirement has no operator file. Its delivery workflow
+      // fields remain editable and meaningful.
       delete row.original_file_source_id;
+    } else if (row.fulfillment_mode === "OPERATOR_TEMPLATE") {
+      // The operator-provided template is the document source. Do not store a
+      // second, parallel delivery specification on the same requirement.
+      clearNoTemplateOnlyFields();
     }
+
     if (
       row.fulfillment_mode === "OPERATOR_TEMPLATE" &&
       !row.original_file_source_id
