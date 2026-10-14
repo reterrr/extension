@@ -405,8 +405,7 @@ export function App() {
                 <span className="workspace-section-title">
                   <strong>Warianty dofinansowania</strong>
                   <small>
-                    Przełączaj wielkość firmy bez przewijania powtarzalnych
-                    bloków
+                    Usługi projektu oraz warianty według wielkości firmy
                   </small>
                 </span>
                 <span id="funding-status" className="workspace-section-status">
