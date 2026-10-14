@@ -704,9 +704,6 @@ function stageNewObject(
   const seed = BurbotCore.empty() as LegacyStorageState;
   seed.revision = original.revision;
   seed.objects = original.objects.filter((object) => dependencyIds.has(object.id));
-  seed.serviceDefinitions = (original.serviceDefinitions ?? [])
-    .filter((row) => dependencyIds.has(row.objectId))
-    .map((row) => structuredClone(row));
   let state = importDocumentIntoState(
     seed,
     plan.document,
@@ -782,7 +779,11 @@ function stageNewObject(
         );
         if (!importedService) continue;
         if (importedService.objectId === targetProject.id) continue;
-        const service = serviceMatch(state, targetProject.id, importedService);
+        const service = serviceMatch(
+          original,
+          targetProject.id,
+          importedService,
+        );
         if (!service) {
           throw new Error(
             `Could not resolve project service for financing variant ${String(row.importKey ?? row.id)}. Approve or create the project service first.`,
