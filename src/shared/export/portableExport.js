@@ -404,41 +404,88 @@ export function createPortableExport({
     const files = scoped("fileSources", object);
     const fileKeys = keysFor(files);
     const documentRows = scoped("documentRequirements", object);
-    const referencedFileIds = new Set(
-      documentRows.flatMap((row) => [
-        ...(row.original_file_source_id
-          ? [String(row.original_file_source_id)]
-          : []),
-        ...(row.source_file_source_ids ?? []).map(String),
-      ]),
-    );
-    if (files.length)
-      result.files = files.map((file) => {
-        const metadata = compact(
-          Object.fromEntries(
-            FILE_METADATA_FIELDS.map((field) => [field, file[field]]),
-          ),
-        );
-        return {
-          ...(
-            file.importKey || referencedFileIds.has(String(file.id))
-              ? { key: fileKeys.get(String(file.id)) }
-              : {}
-          ),
-          source: useUrl(file.url, file.fileType, file.sourceImportKey),
-          ...(file.sourcePageUrl
-            ? {
-                source_page: useUrl(
-                  file.sourcePageUrl,
-                  "HTML",
-                  file.sourcePageImportKey,
-                ),
-              }
-            : {}),
-          ...(Object.keys(metadata).length ? { metadata } : {}),
-          ...targetEvidence(object, "file_source", file.id, metadata),
-        };
+    const documentKeys = keysFor(documentRows);
+    const linkedDocumentByFileId = new Map();
+    const unlinkedDocuments = [];
+
+    for (const row of documentRows) {
+      const linked = linkedPhysicalFile(row, files);
+      if (linked && !linkedDocumentByFileId.has(String(linked.id))) {
+        linkedDocumentByFileId.set(String(linked.id), row);
+      } else if (!linked) {
+        unlinkedDocuments.push(row);
+      }
+    }
+
+    const unifiedFiles = [];
+    const usedUnifiedKeys = new Set();
+    const uniqueUnifiedKey = (preferred, fallback) => {
+      const base = String(preferred || fallback);
+      let key = base;
+      for (let suffix = 2; usedUnifiedKeys.has(key); suffix++) {
+        key = `${base}:${suffix}`;
+      }
+      usedUnifiedKeys.add(key);
+      return key;
+    };
+
+    for (const file of files) {
+      const linkedDocument = linkedDocumentByFileId.get(String(file.id));
+      const physicalMetadata = compact(
+        Object.fromEntries(
+          FILE_METADATA_FIELDS.map((field) => [field, file[field]]),
+        ),
+      );
+      const metadata = {
+        ...physicalMetadata,
+        ...(linkedDocument ? documentMetadata(linkedDocument) : {}),
+      };
+      const key = uniqueUnifiedKey(
+        file.importKey || linkedDocument?.importKey || fileKeys.get(String(file.id)),
+        file.id,
+      );
+      const fileEvidence = targetEvidence(
+        object,
+        "file_source",
+        file.id,
+        physicalMetadata,
+      );
+      const documentEvidence = linkedDocument
+        ? documentEvidenceForUnifiedFile(object, linkedDocument)
+        : {};
+
+      unifiedFiles.push({
+        key,
+        source: useUrl(file.url, file.fileType, file.sourceImportKey),
+        ...(file.sourcePageUrl
+          ? {
+              source_page: useUrl(
+                file.sourcePageUrl,
+                "HTML",
+                file.sourcePageImportKey,
+              ),
+            }
+          : {}),
+        ...(Object.keys(metadata).length ? { metadata } : {}),
+        ...mergeEvidence(fileEvidence, documentEvidence),
       });
+    }
+
+    for (const row of unlinkedDocuments) {
+      const metadata = documentMetadata(row);
+      const key = uniqueUnifiedKey(
+        row.importKey || documentKeys.get(rowIdentity(row)),
+        row.id ?? row.document_type_key,
+      );
+      unifiedFiles.push({
+        key,
+        without_template: true,
+        metadata,
+        ...documentEvidenceForUnifiedFile(object, row),
+      });
+    }
+
+    if (unifiedFiles.length) result.files = unifiedFiles;
     const geography = scoped("geographies", object);
     if (geography.length) {
       const keys = keysFor(geography);
@@ -509,52 +556,6 @@ export function createPortableExport({
       }
     }
 
-    {
-      const rows = documentRows;
-      if (rows.length) {
-        const keys = keysFor(rows);
-        result.documents = rows.map((row) => {
-          const data = dataFor(
-            row,
-            globalThis.BurbotDocuments?.fields,
-            "documents",
-            [
-              "id",
-              "objectId",
-              "importKey",
-              "document_type_key",
-              "original_file_source_id",
-              "source_file_source_ids",
-              "version_label",
-            ],
-          );
-
-          const originalFileKey = row.original_file_source_id
-            ? fileKeys.get(String(row.original_file_source_id))
-            : undefined;
-          if (row.original_file_source_id && !originalFileKey) {
-            throw new Error(
-              `Dokument „${row.label ?? row.importKey ?? row.id}” wskazuje wzór, który nie należy do tego samego obiektu.`,
-            );
-          }
-
-          return {
-            key: keys.get(rowIdentity(row)),
-            ...(row.document_type_key
-              ? { document_type_key: row.document_type_key }
-              : {}),
-            data,
-            ...(originalFileKey ? { original_file: originalFileKey } : {}),
-            ...targetEvidence(
-              object,
-              "document",
-              row.id ?? row.document_type_key,
-              data,
-            ),
-          };
-        });
-      }
-    }
     return result;
   });
   return {
