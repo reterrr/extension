@@ -669,9 +669,9 @@ function mutateFileSource(
       () => crypto.randomUUID(),
       now,
     );
-    if (!inherited.copied.length) {
+    if (!inherited.copied.length && !inherited.copiedRequirements.length) {
       throw new Error(
-        "Brak nowych plików projektu do skopiowania. Istniejące kopie naboru pozostają bez zmian.",
+        "Brak nowych dokumentów projektu do skopiowania. Istniejące kopie naboru pozostają bez zmian.",
       );
     }
   } else {
