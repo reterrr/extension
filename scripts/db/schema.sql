@@ -338,4 +338,4 @@ CREATE TABLE IF NOT EXISTS document_requirements (
   FOREIGN KEY (object_id) REFERENCES workspace_objects(object_id) ON DELETE CASCADE
 );
 
-PRAGMA user_version = 11;
+PRAGMA user_version = 12;
