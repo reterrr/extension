@@ -188,6 +188,12 @@ function copyOptionalMetadata(
     "intended_use",
     "client_requirement",
     "signature_requirement",
+    "condition",
+    "delivery_stage",
+    "responsibility",
+    "required_evidence",
+    "source_url",
+    "source_description",
     "document_kind",
     "delivery_method",
   ] as const) {
