@@ -324,7 +324,7 @@ zrodlo_weryfikacji_finansow      -> funding_verification_url
 
 `continuous` is set only when the source explicitly describes the recruitment as continuous (including `CIAGLY`/ `ciągły` in the source ID/name/notes/rules).
 
-Funding variants support MICRO / SMALL / MEDIUM / LARGE / B2C / NGO for both Projects and Recruitments. The XLSX importer still derives its legacy B2B/B2C variants from the dedicated workbook columns; NGO variants can be added in Workspace or portable JSON unless the workbook contains a dedicated NGO representation.
+Funding variants support MICRO / SMALL / MEDIUM / LARGE / B2C / NGO / NON_PUBLIC_FINANCE_EMPLOYER / OTHER_EMPLOYER for both Projects and Recruitments. The two employer-specific groups represent respectively employers outside the public-finance sector and all remaining employers when a programme defines separate limits for them. The XLSX importer still derives its legacy B2B/B2C variants from the dedicated workbook columns; the additional groups can be added in Workspace or portable JSON.
 
 Geography is normalized through the same canonical Burbot geography catalog as Projects. `include` becomes `OBEJMUJE`; `exclude` becomes `WYKLUCZA`.
 
