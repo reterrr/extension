@@ -119,9 +119,30 @@ export function createPortableExport({
   const objectsById = new Map(
     (state.objects ?? []).map((object) => [String(object.id), object]),
   );
+  const objectIdsByImportKey = new Map();
+  for (const object of state.objects ?? []) {
+    const importKey = String(object.importKey ?? "").trim();
+    if (!importKey) continue;
+    const ids = objectIdsByImportKey.get(importKey) ?? [];
+    ids.push(String(object.id));
+    objectIdsByImportKey.set(importKey, ids);
+  }
+  const resolveObjectId = (value) => {
+    const raw = String(value ?? "");
+    if (objectsById.has(raw)) return raw;
+    const matches = objectIdsByImportKey.get(raw) ?? [];
+    if (matches.length === 1) return matches[0];
+    if (matches.length > 1)
+      throw new Error(
+        `Niejednoznaczne powiązanie ${raw}: kilka obiektów ma ten sam klucz importu.`,
+      );
+    return raw;
+  };
   const requested = view?.objectIds ?? [...objectsById.keys()];
   const selected = new Set(
-    requested.map(String).filter((id) => objectsById.has(id)),
+    requested
+      .map(resolveObjectId)
+      .filter((id) => objectsById.has(id)),
   );
   if (!selected.size) throw new Error("Brak obiektów do eksportu.");
   // Only explicitly selected projects expand to all their recruitments. A
@@ -131,7 +152,7 @@ export function createPortableExport({
     for (const object of objectsById.values())
       if (
         typeOf(object) === "recruitment" &&
-        String(object.values?.project_id) === id
+        resolveObjectId(object.values?.project_id) === id
       )
         selected.add(String(object.id));
   }
@@ -156,11 +177,12 @@ export function createPortableExport({
         (schema[typeOf(object)]?.fields?.[field]?.type === "reference" ||
           ["project_id", "operator_id"].includes(field))
       )
-        ids.push(String(value));
-    for (const row of assignmentsFor(object)) ids.push(String(row.operatorId));
+        ids.push(resolveObjectId(value));
+    for (const row of assignmentsFor(object))
+      ids.push(resolveObjectId(row.operatorId));
     for (const row of state.geographies ?? [])
       if (String(row.objectId) === String(object.id) && row.operatorId)
-        ids.push(String(row.operatorId));
+        ids.push(resolveObjectId(row.operatorId));
     return ids;
   };
   const ordered = [],
@@ -184,7 +206,8 @@ export function createPortableExport({
   for (const id of selected) visit(id);
   const objectKeys = keysFor(ordered);
   const ref = (id) => {
-    const key = objectKeys.get(String(id));
+    const resolvedId = resolveObjectId(id);
+    const key = objectKeys.get(resolvedId);
     if (!key) throw new Error(`Brak powiązanego obiektu ${id}.`);
     return { $ref: key };
   };
