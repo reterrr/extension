@@ -1237,7 +1237,7 @@ export function importDocumentIntoState(
             resolvedMetadata,
             object.id,
             uuid(),
-            file.key ? `DOC_${file.key}` : `DOC_FILE_${row.id}`,
+            file.key ?? `DOC_FILE_${row.id}`,
             row,
           );
           (state.documentRequirements ||= []).push(requirement);
