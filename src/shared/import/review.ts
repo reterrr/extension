@@ -1170,7 +1170,7 @@ export function buildImportApprovalPlan(
     return Object.keys(result).length ? result : undefined;
   };
 
-  const portableFiles = selectedFiles.map((file) => {
+  const portableFiles: Array<Record<string, unknown>> = selectedFiles.map((file) => {
     const source = importedSourceForFile(file, importedSources);
     usedSourceIds.add(source.id);
     const pageSource =
@@ -1239,7 +1239,7 @@ export function buildImportApprovalPlan(
       without_template: true,
       metadata,
       ...(evidence ? { evidence } : {}),
-    } as (typeof portableFiles)[number]);
+    });
   }
 
   const sources = [...usedSourceIds].map((sourceId) => {
