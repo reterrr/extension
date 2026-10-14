@@ -783,6 +783,9 @@ async function removeFileSource(source: LegacyStoredFileSource): Promise<void> {
 function renderSource(source: LegacyStoredFileSource): HTMLElement {
   const row = document.createElement("details");
   row.className = "file-source-row";
+  row.dataset.sortLabel = (
+    source.display_name?.trim() || source.name
+  ).toLocaleLowerCase("pl-PL");
   row.open = expandedFileSources.has(source.id);
 
   const progress = metadataProgress(source);
@@ -1116,6 +1119,16 @@ function render(): void {
   );
 
   for (const source of looseFiles) root.append(renderSource(source));
+
+  const cards = Array.from(
+    root.querySelectorAll<HTMLElement>(":scope > details[data-sort-label]"),
+  ).sort((left, right) =>
+    (left.dataset.sortLabel ?? "").localeCompare(
+      right.dataset.sortLabel ?? "",
+      "pl",
+    ),
+  );
+  for (const card of cards) root.append(card);
 
   const requirementCount = (state.documentRequirements ?? []).filter(
     (row) => row.objectId === object.id,
