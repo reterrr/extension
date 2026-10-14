@@ -488,6 +488,8 @@ Są tylko dwa przypadki:
 1. **Operator udostępnia fizyczny plik / wzór** — wpis ma `source`; `without_template` pomiń albo ustaw `false`.
 2. **Dokument jest wymagany, ale operator nie udostępnia wzoru** — wpis ma `without_template: true` i **nie ma `source`**.
 
+**Nie mieszaj pól tych dwóch przypadków.** Dla pliku/wzoru operatora nie generuj `delivery_stage`, `responsibility` ani `required_evidence` — sam fizyczny plik jest wzorem, który należy wykorzystać. Te trzy pola służą wyłącznie dokumentom `without_template: true`, gdzie trzeba opisać kiedy, przez kogo i w jakiej postaci dokument ma zostać przygotowany/dostarczony.
+
 Przykład fizycznego wzoru operatora:
 
 ```json
@@ -502,9 +504,6 @@ Przykład fizycznego wzoru operatora:
     "intended_use": "Załącznik składany przy zgłoszeniu.",
     "client_requirement": "Warunkowy",
     "condition": "Gdy wsparcie jest udzielane jako pomoc de minimis.",
-    "delivery_stage": "ZGLOSZENIE",
-    "responsibility": "CLIENT",
-    "required_evidence": "Wypełniony i podpisany formularz operatora.",
     "signature_requirement": "Wymagany podpisany plik",
     "source_url": "https://operator.example/nabor",
     "source_description": "Wymóg wskazany w regulaminie naboru."
@@ -557,9 +556,9 @@ Przykład dokumentu bez wzoru operatora:
 | `intended_use` | tekst | Do czego służy dokument i jak jest używany. |
 | `client_requirement` | `Obowiązkowy`, `Warunkowy`, `Informacyjny` | Wymagalność wobec klienta. |
 | `condition` | tekst do 1000 | Warunek dla dokumentu warunkowego. |
-| `delivery_stage` | tekst do 60 | Etap procesu, np. `ZGLOSZENIE`, `UMOWA`, `REALIZACJA`, `REFUNDACJA`, `KONTROLA`. |
-| `responsibility` | `FUNDPILOT`, `CLIENT`, `SHARED` | Kto przygotowuje/dostarcza dokument. |
-| `required_evidence` | tekst do 4000 | Co konkretnie klient ma dostarczyć/okazać. |
+| `delivery_stage` | tekst do 60 | **Tylko dla `without_template: true`.** Etap procesu, np. `ZGLOSZENIE`, `UMOWA`, `REALIZACJA`, `REFUNDACJA`, `KONTROLA`. |
+| `responsibility` | `FUNDPILOT`, `CLIENT`, `SHARED` | **Tylko dla `without_template: true`.** Kto przygotowuje/dostarcza dokument. |
+| `required_evidence` | tekst do 4000 | **Tylko dla `without_template: true`.** Co konkretnie klient ma dostarczyć/okazać. |
 | `signature_requirement` | `Nie jest wymagany`, `Wymagany podpisany plik`, `Dowód w systemie operatora` | Wymóg podpisu/dowodu. |
 | `source_url` | URL HTTP/HTTPS | Oficjalne źródło wymagania. Dla dokumentu bez wzoru może wskazywać regulamin/ogłoszenie. |
 | `source_description` | tekst do 1000 | Krótkie wskazanie podstawy, np. „Regulamin § 6 ust. 4”. |
@@ -570,11 +569,10 @@ Przykład dokumentu bez wzoru operatora:
 Dla każdego dokumentu ustal z regulaminu/instrukcji:
 - czy klient go składa, czy jest tylko informacyjny;
 - czy operator daje własny wzór;
-- kiedy i pod jakim warunkiem jest wymagany;
-- kto go przygotowuje;
-- co dokładnie trzeba dostarczyć;
+- pod jakim warunkiem jest wymagany;
 - czy potrzebny jest podpis;
-- jakie oficjalne źródło potwierdza wymaganie.
+- jakie oficjalne źródło potwierdza wymaganie;
+- **tylko gdy operator nie daje wzoru:** etap dostarczenia, odpowiedzialność i co dokładnie trzeba dostarczyć.
 
 Nie twórz osobnej pozycji tylko dlatego, że ten sam plik jest jednocześnie „załącznikiem” i „wymaganiem”. To nadal **jeden wpis `files[]`**.
 
