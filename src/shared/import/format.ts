@@ -819,6 +819,25 @@ export function importDocumentIntoState(
     importedByKey.set(item.key, object);
   }
 
+  const serviceIdByProjectKeyAndServiceKey = new Map<string, string>();
+  for (const item of document.objects) {
+    if (item.type !== "project" || !item.services?.length) continue;
+    const project = importedByKey.get(item.key)!;
+    for (const service of item.services) {
+      const id = uuid();
+      (state.serviceDefinitions ||= []).push({
+        id,
+        objectId: project.id,
+        importKey: service.key,
+        name: service.name,
+      });
+      serviceIdByProjectKeyAndServiceKey.set(
+        `${item.key}\u0000${service.key}`,
+        id,
+      );
+    }
+  }
+
   for (const item of document.objects) {
     const object = importedByKey.get(item.key)!;
     const schema = BurbotSchema[item.type];
@@ -1281,6 +1300,30 @@ export function importDocumentIntoState(
       }
       const variantsPerSize = new Map<string, number>();
       for (const variant of item.financing) {
+        const projectKey =
+          item.type === "project"
+            ? item.key
+            : item.type === "recruitment" &&
+                isReference(item.data.project_id)
+              ? item.data.project_id.$ref
+              : undefined;
+        let serviceId: string | undefined;
+        if (variant.service) {
+          if (!projectKey) {
+            throw new Error(
+              `${item.key}.financing.${variant.key}.service requires an assigned project.`,
+            );
+          }
+          serviceId = serviceIdByProjectKeyAndServiceKey.get(
+            `${projectKey}\u0000${variant.service}`,
+          );
+          if (!serviceId) {
+            throw new Error(
+              `${item.key}.financing.${variant.key}.service references unknown project service ${variant.service}.`,
+            );
+          }
+        }
+
         const row: Record<string, unknown> = {
           id: uuid(),
           objectId: object.id,
@@ -1288,6 +1331,7 @@ export function importDocumentIntoState(
           company_size: variant.company_size,
           variant_no: (variantsPerSize.get(variant.company_size) ?? 0) + 1,
           own_contribution_form: "UNSPECIFIED",
+          ...(serviceId ? { serviceId } : {}),
         };
         variantsPerSize.set(variant.company_size, Number(row.variant_no));
 
