@@ -88,6 +88,8 @@ const FIELD_LABELS: Record<string, string> = {
   funding_conditions: "Warunki pomocy i dofinansowania",
   application_instructions: "Instrukcja składania wniosku",
   funding_rules: "Zasady dofinansowania",
+  funding_verified_at: "Data weryfikacji finansowania",
+  funding_verification_url: "Źródło weryfikacji finansowania / URL-e",
   metadata: "Pozostałe informacje",
   importKey: "Identyfikator importu",
   evidence: "Źródła potwierdzające",
