@@ -25,7 +25,7 @@ function copyObjectForUpdate(state: LegacyStorageState, objectId: string): Legac
   // Only this owner is edited below. Keep unrelated rows and immutable source
   // snapshots shared; copying multi-megabyte regulations dominated approval.
   const next = { ...state };
-  for (const key of ["objects", "rules", "fileSources", "financingRules",
+  for (const key of ["objects", "rules", "fileSources", "financingRules", "serviceCategories",
     "operatorAssignments", "geographies", "operatorContacts",
     "documentRequirements", "importTargetEvidence", "importSources"] as const) {
     const value = state[key];
