@@ -603,9 +603,7 @@ export function importReviewView(
         (sum, entries) => sum + entries.length,
         0,
       ),
-      fileCount: (session.previewState.fileSources ?? []).filter(
-        (source) => source.objectId === entry.id,
-      ).length,
+      fileCount: fileViews(session, entry).length,
       financingCount: (session.previewState.financingRules ?? []).filter(
         (row) => row.objectId === entry.id,
       ).length,
