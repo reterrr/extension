@@ -1206,6 +1206,33 @@ export function buildImportApprovalPlan(
       };
     });
 
+  const serviceProject =
+    object.type === "project"
+      ? object
+      : object.type === "recruitment"
+        ? session.previewState.objects.find(
+            (entry) =>
+              entry.type === "project" &&
+              entry.id === object.values?.project_id,
+          )
+        : undefined;
+  const projectServices = (session.previewState.serviceCategories ?? []).filter(
+    (row) => row.objectId === serviceProject?.id,
+  );
+  const serviceKeyById = new Map(
+    projectServices.map((row) => [
+      row.id,
+      String(row.importKey ?? row.id),
+    ]),
+  );
+  const portableServices =
+    object.type === "project"
+      ? projectServices.map((row) => ({
+          key: String(row.importKey ?? row.id),
+          label: row.label,
+        }))
+      : [];
+
   const selectedFinancing = (session.previewState.financingRules ?? []).filter(
     (row) => row.objectId === object.id,
   );
@@ -1230,9 +1257,13 @@ export function buildImportApprovalPlan(
       { kind: "funding", id: String(row.id) },
       sourceById,
     );
+    const serviceKey = row.service_category_id
+      ? serviceKeyById.get(String(row.service_category_id))
+      : undefined;
     return {
       key,
       company_size: String(row.company_size),
+      ...(serviceKey ? { service: serviceKey } : {}),
       data,
       ...(evidence ? { evidence } : {}),
     };
@@ -1260,7 +1291,17 @@ export function buildImportApprovalPlan(
       offset_unit: "unicode_codepoint",
       sources,
       objects: [
-        ...[...dependencyMap.values()].map(dependencyStub),
+        ...[...dependencyMap.values()].map((dependency) => {
+          const stub = dependencyStub(dependency);
+          if (dependency.type !== "project") return stub;
+          const services = (session.previewState.serviceCategories ?? [])
+            .filter((row) => row.objectId === dependency.id)
+            .map((row) => ({
+              key: String(row.importKey ?? row.id),
+              label: row.label,
+            }));
+          return services.length ? { ...stub, services } : stub;
+        }),
         {
           key: object.importKey,
           type: object.type,
@@ -1275,6 +1316,7 @@ export function buildImportApprovalPlan(
             ? { geography: portableGeography }
             : {}),
           ...(portableContacts.length ? { contacts: portableContacts } : {}),
+          ...(portableServices.length ? { services: portableServices } : {}),
           ...(portableFinancing.length
             ? { financing: portableFinancing }
             : {}),
