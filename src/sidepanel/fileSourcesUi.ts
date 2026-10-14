@@ -313,19 +313,23 @@ async function inheritProjectFiles(
   recruitment: LegacyStoredObject,
 ): Promise<void> {
   if (recruitment.type !== "recruitment") {
-    throw new Error("Dziedziczenie plików jest dostępne dla naboru.");
+    throw new Error("Dziedziczenie dokumentów jest dostępne dla naboru.");
   }
 
   const before = projectFileInheritanceStatus(state, recruitment);
   if (!before.project) {
     throw new Error("Najpierw przypisz projekt do naboru.");
   }
-  if (!before.projectFiles.length) {
-    throw new Error("Przypisany projekt nie ma plików do skopiowania.");
+  const projectDocumentCount =
+    before.projectFiles.length + before.projectRequirements.length;
+  const pendingCount =
+    before.pendingFiles.length + before.pendingRequirements.length;
+  if (!projectDocumentCount) {
+    throw new Error("Przypisany projekt nie ma dokumentów do skopiowania.");
   }
-  if (!before.pendingFiles.length) {
+  if (!pendingCount) {
     notice(
-      "Wszystkie aktualne pliki projektu są już skopiowane do naboru. Kopie pozostają niezależne od projektu.",
+      "Wszystkie aktualne dokumenty projektu są już skopiowane do naboru. Kopie pozostają niezależne od projektu.",
     );
     return;
   }
@@ -333,7 +337,8 @@ async function inheritProjectFiles(
   fileInheritanceBusy = true;
   render();
   try {
-    const expected = before.pendingFiles.length;
+    const expectedFiles = before.pendingFiles.length;
+    const expectedRequirements = before.pendingRequirements.length;
     await data("INHERIT_PROJECT_FILES", {
       objectId: recruitment.id,
     });
@@ -343,12 +348,18 @@ async function inheritProjectFiles(
     const after = refreshed
       ? projectFileInheritanceStatus(state, refreshed)
       : undefined;
-    const copied = after
-      ? Math.max(0, expected - after.pendingFiles.length)
-      : expected;
+    const copiedFiles = after
+      ? Math.max(0, expectedFiles - after.pendingFiles.length)
+      : expectedFiles;
+    const copiedRequirements = after
+      ? Math.max(
+          0,
+          expectedRequirements - after.pendingRequirements.length,
+        )
+      : expectedRequirements;
 
     notice(
-      `Skopiowano ${copied} plików z projektu do naboru. To niezależne kopie — późniejsze zmiany projektu ich nie zmienią.`,
+      `Skopiowano dokumenty z projektu: ${copiedRequirements} pozycji i ${copiedFiles} fizycznych plików. To niezależne kopie — późniejsze zmiany projektu ich nie zmienią.`,
     );
   } finally {
     fileInheritanceBusy = false;
@@ -1089,43 +1100,41 @@ function render(): void {
 
   const supportsRequirements =
     object.type === "project" || object.type === "recruitment";
-  const requirementHeading = $("document-requirement-heading");
-  const requirementRoot = $("document-requirement-list");
   const addRequirement = $("add-document-requirement") as HTMLButtonElement;
-  requirementHeading.hidden = !supportsRequirements;
-  requirementRoot.hidden = !supportsRequirements;
   addRequirement.hidden = !supportsRequirements;
-  if (supportsRequirements) {
-    renderDocumentRequirementsUi({
-      root: requirementRoot,
-      state,
-      object,
-      mutate: data,
-      notice,
-      onChanged: render,
-    });
-  } else {
-    requirementRoot.replaceChildren();
-  }
 
-  if (!sources.length) {
-    const empty = document.createElement("p");
-    empty.className = "file-source-empty";
-    empty.textContent = "Brak przypiętych plików.";
-    root.append(empty);
-  } else {
-    for (const source of sources) root.append(renderSource(source));
-  }
+  const representedFileIds = supportsRequirements
+    ? renderDocumentRequirementsUi({
+        root,
+        state,
+        object,
+        mutate: data,
+        notice,
+        onChanged: render,
+      })
+    : new Set<string>();
+  const looseFiles = sources.filter(
+    (source) => !representedFileIds.has(source.id),
+  );
+
+  for (const source of looseFiles) root.append(renderSource(source));
 
   const requirementCount = (state.documentRequirements ?? []).filter(
     (row) => row.objectId === object.id,
   ).length;
+  const documentCount = requirementCount + looseFiles.length;
+  if (!documentCount) {
+    const empty = document.createElement("p");
+    empty.className = "file-source-empty";
+    empty.textContent =
+      "Brak dokumentów. Dodaj plik operatora albo dokument bez wzoru.";
+    root.append(empty);
+  }
+
   const count = $("file-source-count");
-  count.textContent = supportsRequirements
-    ? `${sources.length} plików · ${requirementCount} wymagań`
-    : sources.length
-      ? `${sources.length} plików`
-      : "Brak plików";
+  count.textContent = documentCount
+    ? `${documentCount} ${documentCount === 1 ? "dokument" : "dokumentów"}`
+    : "Brak dokumentów";
 
   const isRecruitment = object.type === "recruitment";
   const inheritance = isRecruitment
@@ -1138,30 +1147,34 @@ function render(): void {
   inherit.hidden = !isRecruitment;
   inheritanceHint.hidden = !isRecruitment;
   if (isRecruitment && inheritance) {
-    const pending = inheritance.pendingFiles.length;
-    const projectFileCount = inheritance.projectFiles.length;
-    const alreadyInherited = inheritance.inheritedFiles.length;
+    const pending =
+      inheritance.pendingFiles.length + inheritance.pendingRequirements.length;
+    const projectDocumentCount =
+      inheritance.projectFiles.length + inheritance.projectRequirements.length;
+    const alreadyInherited =
+      inheritance.inheritedFiles.length +
+      inheritance.inheritedRequirements.length;
     inherit.disabled =
       fileInheritanceBusy ||
       !project ||
-      projectFileCount === 0 ||
+      projectDocumentCount === 0 ||
       pending === 0;
     inherit.textContent = fileInheritanceBusy
-      ? "Kopiowanie plików…"
+      ? "Kopiowanie dokumentów…"
       : !project
-        ? "↳ Dziedzicz pliki z projektu"
-        : projectFileCount === 0
-          ? "Projekt nie ma plików"
+        ? "↳ Dziedzicz dokumenty z projektu"
+        : projectDocumentCount === 0
+          ? "Projekt nie ma dokumentów"
           : pending > 0
             ? alreadyInherited > 0
               ? `↳ Skopiuj nowe z projektu (${pending})`
-              : `↳ Dziedzicz pliki z projektu (${pending})`
-            : `✓ Pliki projektu skopiowane (${projectFileCount})`;
+              : `↳ Dziedzicz dokumenty z projektu (${pending})`
+            : `✓ Dokumenty projektu skopiowane (${projectDocumentCount})`;
     inherit.title = !project
       ? "Najpierw przypisz projekt do naboru."
       : pending > 0
-        ? "Tworzy niezależne kopie brakujących plików projektu."
-        : "Kopie naboru są niezależne. Zmiany plików projektu nie aktualizują ich automatycznie.";
+        ? "Tworzy niezależne kopie dokumentów projektu, także pozycji bez wzoru operatora."
+        : "Kopie naboru są niezależne. Zmiany dokumentów projektu nie aktualizują ich automatycznie.";
   } else {
     inherit.disabled = true;
     inherit.title = "";
@@ -1278,7 +1291,7 @@ export async function initFileSourcesUi(): Promise<void> {
   $("inherit-project-files").onclick = () => {
     const object = chosenObject();
     if (!object) {
-      notice("Wybierz nabór przed dziedziczeniem plików.", true);
+      notice("Wybierz nabór przed dziedziczeniem dokumentów.", true);
       return;
     }
     void inheritProjectFiles(object).catch((error: unknown) => {
