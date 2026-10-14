@@ -5,6 +5,12 @@ const FILE_METADATA_FIELDS = [
   "intended_use",
   "client_requirement",
   "signature_requirement",
+  "condition",
+  "delivery_stage",
+  "responsibility",
+  "required_evidence",
+  "source_url",
+  "source_description",
   "document_kind",
   "delivery_method",
 ];
@@ -15,6 +21,61 @@ const compact = (value) =>
 const typeOf = (object) =>
   object.type === "nabor" ? "recruitment" : object.type;
 const rowIdentity = (row) => String(row.id ?? row.document_type_key);
+const DOCUMENT_TO_FILE_REQUIREMENT = {
+  REQUIRED: "Obowiązkowy",
+  CONDITIONAL: "Warunkowy",
+  INFORMATIONAL: "Informacyjny",
+};
+const DOCUMENT_TO_FILE_SIGNATURE = {
+  NOT_REQUIRED: "Nie jest wymagany",
+  REQUIRED_FILE: "Wymagany podpisany plik",
+  EXTERNAL_OPERATOR: "Dowód w systemie operatora",
+};
+
+function documentMetadata(row) {
+  return compact({
+    display_name: row.label,
+    intended_use: row.purpose,
+    client_requirement: DOCUMENT_TO_FILE_REQUIREMENT[row.requirement],
+    signature_requirement:
+      DOCUMENT_TO_FILE_SIGNATURE[row.signature_requirement],
+    condition: row.condition,
+    delivery_stage: row.delivery_stage,
+    responsibility: row.responsibility,
+    required_evidence: row.required_evidence,
+    source_url: row.source_url,
+    source_description: row.source_description,
+  });
+}
+
+function linkedPhysicalFile(row, files) {
+  if (row.original_file_source_id) {
+    const original = files.find(
+      (file) => String(file.id) === String(row.original_file_source_id),
+    );
+    if (original) return original;
+  }
+  const label = String(row.label ?? "").trim().toLocaleLowerCase("pl-PL");
+  if (!label) return undefined;
+  return files.find(
+    (file) =>
+      (row.source_file_source_ids ?? []).map(String).includes(String(file.id)) &&
+      String(file.display_name ?? file.name ?? "")
+        .trim()
+        .toLocaleLowerCase("pl-PL") === label,
+  );
+}
+
+function mergeEvidence(...parts) {
+  const merged = {};
+  for (const part of parts) {
+    for (const [field, entries] of Object.entries(part?.evidence ?? {})) {
+      merged[field] = [...(merged[field] ?? []), ...entries];
+    }
+  }
+  return Object.keys(merged).length ? { evidence: merged } : {};
+}
+
 
 /** Prefer existing portable keys; fall back to database IDs on key collisions. */
 function keysFor(entries) {
