@@ -337,6 +337,12 @@ function renderRequirement(
   };
   requirement.onchange = refreshMode;
   fulfillment.onchange = refreshMode;
+  originalFile.onchange = () => {
+    if (!originalFile.value && fulfillment.value === "OPERATOR_TEMPLATE") {
+      fulfillment.value = "WITHOUT_OPERATOR_TEMPLATE";
+    }
+    refreshMode();
+  };
   refreshMode();
 
   const save = document.createElement("button");
