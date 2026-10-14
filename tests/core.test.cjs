@@ -235,6 +235,14 @@ test("formats business values, validates enums, dates, NIP, percentages and refe
   );
   assert.equal(s.context.BurbotFunding.sizes.B2C, "B2C / osoba dorosła");
   assert.equal(s.context.BurbotFunding.sizes.NGO, "NGO");
+  assert.equal(
+    s.context.BurbotFunding.sizes.NON_PUBLIC_FINANCE_EMPLOYER,
+    "Pracodawca poza sektorem finansów publicznych",
+  );
+  assert.equal(
+    s.context.BurbotFunding.sizes.OTHER_EMPLOYER,
+    "Pozostali pracodawcy",
+  );
   assert.equal(P.announcements_site_url.label, "Strona ogłoszeń");
   assert.equal(P.project_url.type, "url");
   assert.equal(P.funding_rules.group, "Dofinansowanie");
@@ -360,6 +368,44 @@ test("funding variants remain independent and have separately targeted extractio
     70,
   );
 });
+test("employer funding groups work for projects and recruitments", () => {
+  const s = setup();
+  const project = s.create("project", "Projekt pracodawców");
+  const recruitment = s.create("recruitment", "Nabór pracodawców");
+
+  for (const companySize of [
+    "NON_PUBLIC_FINANCE_EMPLOYER",
+    "OTHER_EMPLOYER",
+  ]) {
+    s.mutate({
+      op: "ADD_FUNDING",
+      objectId: project.id,
+      companySize,
+    });
+    s.mutate({
+      op: "ADD_FUNDING",
+      objectId: recruitment.id,
+      companySize,
+    });
+  }
+
+  const rows = s.state.financingRules.filter((row) =>
+    ["NON_PUBLIC_FINANCE_EMPLOYER", "OTHER_EMPLOYER"].includes(
+      row.company_size,
+    ),
+  );
+  assert.equal(rows.length, 4);
+  assert.equal(
+    rows.filter((row) => row.company_size === "NON_PUBLIC_FINANCE_EMPLOYER")
+      .length,
+    2,
+  );
+  assert.equal(
+    rows.filter((row) => row.company_size === "OTHER_EMPLOYER").length,
+    2,
+  );
+});
+
 test("NGO funding variants work for projects and recruitments", () => {
   const s = setup();
   const project = s.create("project", "Projekt NGO");
