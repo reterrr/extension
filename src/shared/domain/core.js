@@ -621,6 +621,11 @@
       if (!object) throw Error("Choose an object.");
 
       if (message.op === "DELETE") {
+        const removedServiceIds = new Set(
+          (state.serviceCategories || [])
+            .filter((row) => row.objectId === object.id)
+            .map((row) => row.id),
+        );
         const removedGeographyIds = new Set(
           (state.geographies || [])
             .filter(
@@ -657,6 +662,12 @@
           state.serviceCategories = state.serviceCategories.filter(
             (r) => r.objectId !== object.id,
           );
+        if (removedServiceIds.size) {
+          for (const funding of state.financingRules || []) {
+            if (removedServiceIds.has(funding.service_category_id))
+              delete funding.service_category_id;
+          }
+        }
         if (state.documentRequirements)
           state.documentRequirements = state.documentRequirements.filter(
             (r) => r.objectId !== object.id,
