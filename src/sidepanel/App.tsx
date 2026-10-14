@@ -165,7 +165,7 @@ export function App() {
                   id="file-source-count"
                   className="workspace-section-status"
                 >
-                  Brak plików
+                  Brak dokumentów
                 </span>
               </summary>
               <div className="workspace-section-body">
