@@ -265,6 +265,26 @@ export function createPortableExport({
         operator_type: row.operatorType,
       }));
     }
+
+    const fundingProject =
+      type === "project"
+        ? object
+        : type === "recruitment"
+          ? objectsById.get(String(object.values?.project_id ?? ""))
+          : undefined;
+    const projectServices = fundingProject
+      ? (state.serviceDefinitions ?? []).filter(
+          (row) => String(row.objectId) === String(fundingProject.id),
+        )
+      : [];
+    const serviceKeys = keysFor(projectServices);
+    if (type === "project" && projectServices.length) {
+      result.services = projectServices.map((row) => ({
+        key: serviceKeys.get(String(row.id)),
+        name: row.name,
+      }));
+    }
+
     const files = scoped("fileSources", object);
     const fileKeys = keysFor(files);
     const documentRows = scoped("documentRequirements", object);
@@ -348,14 +368,24 @@ export function createPortableExport({
               "importKey",
               "company_size",
               "variant_no",
+              "serviceId",
               "copiedAt",
               "copiedFromProjectId",
               "copiedFromFundingRuleId",
             ],
           );
+          const serviceKey = row.serviceId
+            ? serviceKeys.get(String(row.serviceId))
+            : undefined;
+          if (row.serviceId && !serviceKey) {
+            throw new Error(
+              `Wariant „${row.importKey ?? row.id}” wskazuje usługę spoza przypisanego projektu.`,
+            );
+          }
           return {
             key: keys.get(rowIdentity(row)),
             company_size: row.company_size,
+            ...(serviceKey ? { service: serviceKey } : {}),
             data,
             ...targetEvidence(object, "funding", row.id, data),
           };
