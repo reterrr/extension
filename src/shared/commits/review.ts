@@ -15,6 +15,7 @@ type Row = Record<string, unknown>;
 const COLLECTIONS: Record<string, { label: string; kind: string }> = {
   fileSources: { label: "Pliki", kind: "file_source" },
   financingRules: { label: "Warianty dofinansowania", kind: "funding" },
+  serviceCategories: { label: "Usługi", kind: "service_category" },
   geographies: { label: "Geografia", kind: "geography" },
   operatorAssignments: { label: "Operatorzy", kind: "operator_assignment" },
   operatorContacts: { label: "Kontakty", kind: "operator_contact" },
