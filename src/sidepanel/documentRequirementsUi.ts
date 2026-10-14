@@ -331,6 +331,7 @@ function renderRequirement(
     // makes the card look like two independent requirements.
     fulfillmentLabelNode.hidden = isInfo || usesOperatorTemplate;
     originalFileLabel.hidden = !usesOperatorTemplate;
+    thirdRow.hidden = isInfo;
     fourthRow.hidden = !withoutOperatorTemplate;
     requiredEvidenceLabel.hidden = !withoutOperatorTemplate;
     conditionLabelNode.hidden = requirement.value !== "CONDITIONAL";
