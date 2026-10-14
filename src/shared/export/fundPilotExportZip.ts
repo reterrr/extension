@@ -389,6 +389,17 @@ export function buildFundPilotExportPackagePlan(
 
 export const buildFundPilotStoreZip = buildStoreZip;
 
+function concatBytes(parts: readonly Uint8Array[]): Uint8Array {
+  const size = parts.reduce((sum, part) => sum + part.byteLength, 0);
+  const output = new Uint8Array(size);
+  let offset = 0;
+  for (const part of parts) {
+    output.set(part, offset);
+    offset += part.byteLength;
+  }
+  return output;
+}
+
 async function readResponseWithLimit(
   response: Response,
   sourceName: string,
