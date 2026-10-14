@@ -1090,9 +1090,76 @@ export function importDocumentIntoState(
     }
 
     const fileIdByKey = new Map<string, string>();
+    const legacyDocumentFileKeys = new Set(
+      (item.documents ?? [])
+        .map((row) => row.original_file)
+        .filter((key): key is string => typeof key === "string" && !!key),
+    );
 
     if (item.files?.length) {
       for (const [fileIndex, file] of item.files.entries()) {
+        const metadata = file.metadata ?? {};
+
+        if (file.without_template) {
+          if (!schema.configuration) {
+            throw new Error(
+              `objects.${item.key}.files[${fileIndex}] uses without_template but ${item.type} does not support document requirements.`,
+            );
+          }
+          const documentId = uuid();
+          const importKey = file.key!;
+          const requirement = unifiedRequirementFromMetadata(
+            metadata,
+            object.id,
+            documentId,
+            importKey,
+          );
+          (state.documentRequirements ||= []).push(requirement);
+
+          validateTargetEvidenceFields(
+            file.evidence,
+            FILE_METADATA_EVIDENCE_FIELDS,
+            metadata,
+            `${item.key}.files[${fileIndex}]`,
+          );
+          const documentEvidenceField = {
+            display_name: "label",
+            intended_use: "purpose",
+            client_requirement: "requirement",
+            signature_requirement: "signature_requirement",
+            condition: "condition",
+            delivery_stage: "delivery_stage",
+            responsibility: "responsibility",
+            required_evidence: "required_evidence",
+            source_url: "source_url",
+            source_description: "source_description",
+          } as const;
+          for (const [field, entries] of Object.entries(file.evidence ?? {})) {
+            const targetField =
+              documentEvidenceField[
+                field as keyof typeof documentEvidenceField
+              ];
+            if (!targetField) continue;
+            storeTargetEvidence(
+              state,
+              object.id,
+              { kind: "document", id: requirement.id },
+              requirement.importKey ?? requirement.id,
+              item.key,
+              targetField,
+              entries,
+              sourceByKey,
+              uuid,
+            );
+          }
+          continue;
+        }
+
+        if (!file.source) {
+          throw new Error(
+            `objects.${item.key}.files[${fileIndex}].source is required for a physical operator file.`,
+          );
+        }
         const source = sourceByKey.get(file.source);
         if (!source) throw new Error(`Unknown file source: ${file.source}.`);
         if (!isSourceFileType(source.type) || !source.url) {
@@ -1112,32 +1179,27 @@ export function importDocumentIntoState(
           );
         }
         const technicalName = fileNameFromUrl(source.url);
-        const metadata = {
+        const resolvedMetadata = {
           ...inferFileMetadataFromName(technicalName),
-          ...(file.metadata ?? {}),
-          // Current imports use metadata.display_name. Older imports used
-          // files[].name, and very old/minimal imports may provide neither.
-          // Always expose a usable business name in Workspace without
-          // overwriting the canonical technical filename.
+          ...metadata,
           display_name:
-            file.metadata?.display_name ??
+            metadata.display_name ??
             file.name ??
             technicalName,
         };
-        const row = {
+        const row: LegacyStoredFileSource = {
           id: uuid(),
           objectId: object.id,
           ...(file.key ? { importKey: file.key } : {}),
           fileType: source.type as SourceFileType,
           url: source.url,
-          // Canonical technical filename always comes from the remote URL.
           name: technicalName,
           sourcePageUrl: pageSource?.url ?? object.sourceUrl ?? source.url,
           addedAt: now,
           metadataInferenceVersion: FILE_METADATA_INFERENCE_VERSION,
           sourceImportKey: source.importKey,
           ...(pageSource ? { sourcePageImportKey: pageSource.importKey } : {}),
-          ...metadata,
+          ...resolvedMetadata,
         };
         (state.fileSources ||= []).push(row);
         if (file.key) fileIdByKey.set(file.key, row.id);
@@ -1145,7 +1207,7 @@ export function importDocumentIntoState(
         validateTargetEvidenceFields(
           file.evidence,
           FILE_METADATA_EVIDENCE_FIELDS,
-          metadata,
+          resolvedMetadata,
           `${item.key}.files[${fileIndex}]`,
         );
         for (const [field, entries] of Object.entries(file.evidence ?? {})) {
@@ -1160,6 +1222,26 @@ export function importDocumentIntoState(
             sourceByKey,
             uuid,
           );
+        }
+
+        // Canonical v1 represents a physical operator document only once in
+        // files[]. Internally we still keep the richer requirement row so the
+        // unified Documents UI can edit it. Legacy imports that explicitly
+        // provide documents[].original_file keep their old path and are not
+        // promoted twice.
+        if (
+          schema.configuration &&
+          !file.key?.startsWith("FILE_ONLY_") &&
+          !(file.key && legacyDocumentFileKeys.has(file.key))
+        ) {
+          const requirement = unifiedRequirementFromMetadata(
+            resolvedMetadata,
+            object.id,
+            uuid(),
+            file.key ? `DOC_${file.key}` : `DOC_FILE_${row.id}`,
+            row,
+          );
+          (state.documentRequirements ||= []).push(requirement);
         }
       }
     }
