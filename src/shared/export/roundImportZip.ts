@@ -144,6 +144,7 @@ export interface RoundImportManifestV1 {
       closesOn: string | null;
       closeMode: "unknown" | "dated" | "until_allocation" | "no_deadline";
     };
+    serviceCategories?: Array<{ id: string; label: string }>;
     conditions: RoundImportConditions;
     documents: RoundImportDocument[];
   };
@@ -443,6 +444,7 @@ function fundingLabel(row: Record<string, unknown>, index: number): string {
 
 function fundingVariants(
   rows: Array<Record<string, unknown>>,
+  serviceIds: Set<string>,
 ): RoundImportFundingVariant[] {
   if (rows.length > 30) {
     throw new Error(
@@ -450,8 +452,16 @@ function fundingVariants(
     );
   }
 
-  return rows.map((row, index) => ({
+  return rows.map((row, index) => {
+    const serviceCategoryId = cleanText(row.service_category_id);
+    if (serviceCategoryId && !serviceIds.has(serviceCategoryId)) {
+      throw new Error(
+        `Wariant „${fundingLabel(row, index)}” wskazuje usługę, której nie ma w projekcie.`,
+      );
+    }
+    return {
     label: fundingLabel(row, index),
+    ...(serviceCategoryId ? { serviceCategoryId } : {}),
     mspSize: MSP_SIZE_MAP[String(row.company_size ?? "")] ?? null,
     refundPct: firstPercentage(row, [
       "refund_percent_max",
@@ -469,7 +479,8 @@ function fundingVariants(
         : row.own_contribution_form === "WAGES"
           ? "salary"
           : null,
-  }));
+    };
+  });
 }
 
 function aidBasis(description: string): RoundAidBasis {
@@ -744,6 +755,25 @@ export function buildRoundImportPackagePlan(
     packageFiles.map((file) => [file.source.id, file.id]),
   );
 
+  const projectServices = (state.serviceCategories ?? []).filter(
+    (row) => row.objectId === project.id,
+  );
+  if (projectServices.length > 30) {
+    throw new Error(
+      `Projekt ma ${projectServices.length} usług; RoundImportManifestV1 dopuszcza maksymalnie 30.`,
+    );
+  }
+  const uuidPattern =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
+  for (const service of projectServices) {
+    if (!uuidPattern.test(service.id)) {
+      throw new Error(
+        `Usługa „${service.label}” nie ma identyfikatora UUID wymaganego przez RoundImportManifestV1.`,
+      );
+    }
+  }
+  const serviceIds = new Set(projectServices.map((service) => service.id));
+
   const rows = (state.financingRules ?? []).filter(
     (row) => String(row.objectId ?? "") === recruitment.id,
   );
@@ -783,7 +813,7 @@ export function buildRoundImportPackagePlan(
     eligibleBusinessCategories: categories,
     aidBasis: aidBasis(fundingDescription),
     aidBasisDescription: fundingDescription,
-    fundingVariants: fundingVariants(rows),
+    fundingVariants: fundingVariants(rows, serviceIds),
     submissionInstructions,
     sourceFileIds: declarations.map((file) => file.id),
   };
@@ -803,6 +833,14 @@ export function buildRoundImportPackagePlan(
     workspace: {
       notes,
       ...(roundSchedule ? { schedule: roundSchedule } : {}),
+      ...(projectServices.length
+        ? {
+            serviceCategories: projectServices.map((service) => ({
+              id: service.id,
+              label: service.label.slice(0, 200),
+            })),
+          }
+        : {}),
       conditions,
       documents: (() => {
         const configured = (state.documentRequirements ?? []).filter(
