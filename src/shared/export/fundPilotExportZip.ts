@@ -51,6 +51,7 @@ export interface FundPilotExportV1 {
   };
   package_files: FundPilotPackageFile[];
   data: ReturnType<typeof createPortableExport>;
+  complete_state: LegacyStorageState;
   system: {
     workspace_revision: number;
     objects: FundPilotSystemObject[];
@@ -293,6 +294,77 @@ function packageSources(
   };
 }
 
+function cloneJson<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T;
+}
+
+function completeStateForPortableObjects(
+  state: LegacyStorageState,
+  portableObjects: PortableObject[],
+): LegacyStorageState {
+  const selectedObjects = portableObjects
+    .map((portableObject) =>
+      storedObjectForPortableObject(state, portableObject),
+    )
+    .filter((object): object is LegacyStoredObject => !!object);
+  const objectIds = new Set(selectedObjects.map((object) => String(object.id)));
+  const belongsToExport = (row: { objectId?: unknown }) =>
+    objectIds.has(String(row.objectId ?? ""));
+
+  const fileSources = (state.fileSources ?? []).filter(belongsToExport);
+  const importTargetEvidence = (state.importTargetEvidence ?? []).filter(
+    belongsToExport,
+  );
+
+  const referencedSourceIds = new Set<string>();
+  const referencedSourceKeys = new Set<string>();
+  for (const object of selectedObjects) {
+    for (const proofs of Object.values(object.evidence ?? {})) {
+      for (const proof of proofs) {
+        if (proof?.sourceId) referencedSourceIds.add(String(proof.sourceId));
+      }
+    }
+  }
+  for (const proof of importTargetEvidence) {
+    if (proof.sourceId) referencedSourceIds.add(String(proof.sourceId));
+  }
+  for (const file of fileSources) {
+    if (file.sourceImportKey) {
+      referencedSourceKeys.add(String(file.sourceImportKey));
+    }
+    if (file.sourcePageImportKey) {
+      referencedSourceKeys.add(String(file.sourcePageImportKey));
+    }
+  }
+
+  const importSources = (state.importSources ?? []).filter(
+    (source) =>
+      referencedSourceIds.has(String(source.id)) ||
+      referencedSourceKeys.has(String(source.importKey)),
+  );
+
+  return cloneJson({
+    version: 1,
+    revision: state.revision,
+    objects: selectedObjects,
+    rules: (state.rules ?? []).filter(belongsToExport),
+    geographies: (state.geographies ?? []).filter(belongsToExport),
+    operatorAssignments: (state.operatorAssignments ?? []).filter(
+      belongsToExport,
+    ),
+    operatorContacts: (state.operatorContacts ?? []).filter(belongsToExport),
+    fileSources,
+    importSources,
+    importTargetEvidence,
+    financingRules: (state.financingRules ?? []).filter(belongsToExport),
+    serviceCategories: (state.serviceCategories ?? []).filter(belongsToExport),
+    documentRequirements: (state.documentRequirements ?? []).filter(
+      belongsToExport,
+    ),
+    fieldEvidence: (state.fieldEvidence ?? []).filter(belongsToExport),
+  });
+}
+
 function systemObjects(
   state: LegacyStorageState,
   portableObjects: PortableObject[],
@@ -363,6 +435,7 @@ export function buildFundPilotExportPackagePlan(
     },
     package_files: packageFiles,
     data: portable,
+    complete_state: completeStateForPortableObjects(state, portableObjects),
     system: {
       workspace_revision: state.revision,
       objects: systemObjects(state, portableObjects),
