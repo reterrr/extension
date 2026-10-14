@@ -430,7 +430,7 @@ const FUNDING_LABEL: Record<string, string> = {
   B2C: "B2C",
   NGO: "NGO",
   NON_PUBLIC_FINANCE_EMPLOYER:
-    "Pracodawca poza sektorem finansów publicznych",
+    "Pracodawcy niebędący jednostkami sektora finansów publicznych",
   OTHER_EMPLOYER: "Pozostali pracodawcy",
 };
 
