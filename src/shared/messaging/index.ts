@@ -25,6 +25,7 @@ export type DataOperation =
   | "SET_FUNDING_SERVICE"
   | "ADD_FUNDING"
   | "INHERIT_PROJECT_FUNDING"
+  | "INHERIT_PROJECT_FUNDING_METADATA"
   | "REMOVE_FUNDING";
 
 export interface DataResponse<T = LegacyStorageState> {
