@@ -108,6 +108,26 @@
       multiline: true,
     }),
     technical_notes: text("Uwagi techniczne", "Źródła", { multiline: true }),
+    eligible_entities: text("Kwalifikujące się podmioty", "Warunki projektu", {
+      multiline: true,
+      maxLength: 4000,
+    }),
+    funding_conditions: text(
+      "Warunki pomocy i dofinansowania",
+      "Warunki projektu",
+      {
+        multiline: true,
+        maxLength: 4000,
+      },
+    ),
+    application_instructions: text(
+      "Instrukcja składania wniosku",
+      "Warunki projektu",
+      {
+        multiline: true,
+        maxLength: 5000,
+      },
+    ),
     funding_rules: text("Zasady dofinansowania", "Dofinansowanie", {
       multiline: true,
     }),
