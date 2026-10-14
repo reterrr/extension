@@ -472,8 +472,9 @@ function documentViews(
         "responsibility",
         "required_evidence",
       ]);
+      const physicalFile = linkedPhysicalFile(row, files);
 
-      const fields = Object.entries(BurbotDocuments.fields)
+      const rowFields = Object.entries(BurbotDocuments.fields)
         .filter(([field, definition]) => {
           if (
             definition.hidden ||
@@ -504,7 +505,35 @@ function documentViews(
             : "Nie ustawiono",
         }));
 
-      const physicalFile = linkedPhysicalFile(row, files);
+      const physicalFields = physicalFile
+        ? [
+            ...(physicalFile.purpose
+              ? [
+                  {
+                    field: "physical_file_purpose",
+                    label: "Cel dokumentu",
+                    value: physicalFile.purpose,
+                  },
+                ]
+              : []),
+            ...(typeof physicalFile.has_fields === "boolean"
+              ? [
+                  {
+                    field: "physical_file_has_fields",
+                    label: "Czy plik zawiera pola do wypełnienia?",
+                    value: physicalFile.has_fields
+                      ? "Tak, pola lub deklaracje"
+                      : "Nie",
+                  },
+                ]
+              : []),
+          ]
+        : [];
+
+      const labelFields = rowFields.filter((field) => field.field === "label");
+      const otherFields = rowFields.filter((field) => field.field !== "label");
+      const fields = [...labelFields, ...physicalFields, ...otherFields];
+
       return {
         id: row.id,
         key: String(row.importKey ?? row.id),
