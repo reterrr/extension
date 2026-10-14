@@ -320,10 +320,8 @@ async function inheritProjectFiles(
   if (!before.project) {
     throw new Error("Najpierw przypisz projekt do naboru.");
   }
-  const projectDocumentCount =
-    before.projectFiles.length + before.projectRequirements.length;
-  const pendingCount =
-    before.pendingFiles.length + before.pendingRequirements.length;
+  const projectDocumentCount = before.projectDocumentCount;
+  const pendingCount = before.pendingDocumentCount;
   if (!projectDocumentCount) {
     throw new Error("Przypisany projekt nie ma dokumentów do skopiowania.");
   }
@@ -1147,13 +1145,9 @@ function render(): void {
   inherit.hidden = !isRecruitment;
   inheritanceHint.hidden = !isRecruitment;
   if (isRecruitment && inheritance) {
-    const pending =
-      inheritance.pendingFiles.length + inheritance.pendingRequirements.length;
-    const projectDocumentCount =
-      inheritance.projectFiles.length + inheritance.projectRequirements.length;
-    const alreadyInherited =
-      inheritance.inheritedFiles.length +
-      inheritance.inheritedRequirements.length;
+    const pending = inheritance.pendingDocumentCount;
+    const projectDocumentCount = inheritance.projectDocumentCount;
+    const alreadyInherited = inheritance.inheritedDocumentCount;
     inherit.disabled =
       fileInheritanceBusy ||
       !project ||
