@@ -1231,7 +1231,6 @@ export function importDocumentIntoState(
         // promoted twice.
         if (
           schema.configuration &&
-          !file.key?.startsWith("FILE_ONLY_") &&
           !(file.key && legacyDocumentFileKeys.has(file.key))
         ) {
           const requirement = unifiedRequirementFromMetadata(
