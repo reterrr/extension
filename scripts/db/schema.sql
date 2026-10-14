@@ -327,6 +327,14 @@ CREATE TABLE IF NOT EXISTS financing_rules (
   FOREIGN KEY (object_id) REFERENCES workspace_objects(object_id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS service_definitions (
+  row_key TEXT PRIMARY KEY,
+  object_id TEXT NOT NULL,
+  position INTEGER NOT NULL,
+  payload_json TEXT NOT NULL,
+  FOREIGN KEY (object_id) REFERENCES workspace_objects(object_id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS document_requirements (
   row_key TEXT PRIMARY KEY,
   object_id TEXT NOT NULL,
@@ -335,4 +343,4 @@ CREATE TABLE IF NOT EXISTS document_requirements (
   FOREIGN KEY (object_id) REFERENCES workspace_objects(object_id) ON DELETE CASCADE
 );
 
-PRAGMA user_version = 11;
+PRAGMA user_version = 12;
