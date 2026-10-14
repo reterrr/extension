@@ -1117,6 +1117,9 @@ test("document migration separates operator-template and no-template fields", ()
         sourcePageUrl: "https://example.test/nabor",
         name: "form.docx",
         addedAt: "2026-10-01T12:00:00Z",
+        delivery_stage: "ZGLOSZENIE",
+        responsibility: "CLIENT",
+        required_evidence: "Wypełniony formularz.",
       },
       {
         id: "info-file",
@@ -1187,6 +1190,13 @@ test("document migration separates operator-template and no-template fields", ()
   assert.equal(template.delivery_stage, undefined);
   assert.equal(template.responsibility, undefined);
   assert.equal(template.required_evidence, undefined);
+
+  const templateFile = state.fileSources.find(
+    (source) => source.id === "template-file",
+  );
+  assert.equal(templateFile.delivery_stage, undefined);
+  assert.equal(templateFile.responsibility, undefined);
+  assert.equal(templateFile.required_evidence, undefined);
 
   assert.equal(info.fulfillment_mode, "WITHOUT_OPERATOR_TEMPLATE");
   assert.equal(info.original_file_source_id, undefined);
