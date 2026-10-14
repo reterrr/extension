@@ -738,6 +738,15 @@ function unifiedRequirementFromMetadata(
       objectId,
       importKey,
     );
+    if (row.requirement === "INFORMATIONAL") {
+      row.fulfillment_mode = "WITHOUT_OPERATOR_TEMPLATE";
+      delete row.original_file_source_id;
+    } else {
+      // In the canonical one-list format, the presence of source means this
+      // very row is backed by an operator-provided physical file/template.
+      row.fulfillment_mode = "OPERATOR_TEMPLATE";
+      row.original_file_source_id = linkedFile.id;
+    }
     if (metadata.condition) row.condition = metadata.condition.slice(0, 1000);
     if (metadata.delivery_stage)
       row.delivery_stage = metadata.delivery_stage.slice(0, 60);
