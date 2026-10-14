@@ -20,6 +20,33 @@ export interface FundingInheritanceStatus {
   pendingVariants: Array<Record<string, unknown>>;
 }
 
+export const PROJECT_FUNDING_METADATA_FIELDS = [
+  "funding_rules",
+  "funding_verified_at",
+  "funding_verification_url",
+] as const;
+
+export type ProjectFundingMetadataField =
+  (typeof PROJECT_FUNDING_METADATA_FIELDS)[number];
+
+export interface FundingMetadataInheritanceStatus {
+  project?: LegacyStoredObject;
+  projectFields: ProjectFundingMetadataField[];
+  pendingFields: ProjectFundingMetadataField[];
+  matchingFields: ProjectFundingMetadataField[];
+  protectedFields: ProjectFundingMetadataField[];
+}
+
+function hasValue(value: unknown): boolean {
+  if (value === undefined || value === null) return false;
+  if (typeof value === "string") return value.trim().length > 0;
+  return true;
+}
+
+function sameValue(left: unknown, right: unknown): boolean {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
 function projectForRecruitment(
   state: LegacyStorageState,
   recruitment: LegacyStoredObject,
@@ -36,6 +63,89 @@ function projectForRecruitment(
 
 function geographyKey(row: Pick<LegacyStoredGeography, "type" | "role" | "value">): string {
   return [row.type, row.role, row.value].join("\u001f");
+}
+
+export function fundingMetadataInheritanceStatus(
+  state: LegacyStorageState,
+  recruitment: LegacyStoredObject,
+): FundingMetadataInheritanceStatus {
+  const project = projectForRecruitment(state, recruitment);
+  if (!project) {
+    return {
+      project: undefined,
+      projectFields: [],
+      pendingFields: [],
+      matchingFields: [],
+      protectedFields: [],
+    };
+  }
+
+  const projectFields = PROJECT_FUNDING_METADATA_FIELDS.filter((field) =>
+    hasValue(project.values?.[field]),
+  );
+  const pendingFields = projectFields.filter(
+    (field) => !hasValue(recruitment.values?.[field]),
+  );
+  const matchingFields = projectFields.filter(
+    (field) =>
+      hasValue(recruitment.values?.[field]) &&
+      sameValue(recruitment.values?.[field], project.values?.[field]),
+  );
+  const protectedFields = projectFields.filter(
+    (field) =>
+      hasValue(recruitment.values?.[field]) &&
+      !sameValue(recruitment.values?.[field], project.values?.[field]),
+  );
+
+  return {
+    project,
+    projectFields,
+    pendingFields,
+    matchingFields,
+    protectedFields,
+  };
+}
+
+export function copyProjectFundingMetadataToRecruitment(
+  state: LegacyStorageState,
+  recruitmentId: string,
+): {
+  copiedFields: ProjectFundingMetadataField[];
+  project: LegacyStoredObject;
+} {
+  const recruitment = state.objects.find(
+    (object) => object.id === recruitmentId,
+  );
+  if (!recruitment || recruitment.type !== "recruitment") {
+    throw new Error("Wybierz nabór.");
+  }
+
+  const status = fundingMetadataInheritanceStatus(state, recruitment);
+  if (!status.project) {
+    throw new Error("Najpierw przypisz projekt do naboru.");
+  }
+  if (!status.projectFields.length) {
+    throw new Error(
+      "Przypisany projekt nie ma uzupełnionych pól weryfikacji finansowania.",
+    );
+  }
+  if (!status.pendingFields.length) {
+    throw new Error(
+      "Brak pustych pól finansowania do uzupełnienia z projektu.",
+    );
+  }
+
+  for (const field of status.pendingFields) {
+    const value = status.project.values?.[field];
+    recruitment.values[field] =
+      value && typeof value === "object"
+        ? JSON.parse(JSON.stringify(value))
+        : value;
+    if (recruitment.manualFields) delete recruitment.manualFields[field];
+    if (recruitment.evidence) delete recruitment.evidence[field];
+  }
+
+  return { copiedFields: status.pendingFields, project: status.project };
 }
 
 export function geographyInheritanceStatus(
