@@ -755,6 +755,39 @@ function stageNewObject(
     }
   }
 
+  if (selected.type === "recruitment") {
+    const projectPatch = plan.referencePatches.find(
+      (patch) => patch.field === "project_id",
+    );
+    if (projectPatch) {
+      for (const funding of state.financingRules ?? []) {
+        if (
+          funding.objectId !== selected.id ||
+          !funding.service_category_id
+        )
+          continue;
+        const temporaryService = (state.serviceCategories ?? []).find(
+          (service) => service.id === funding.service_category_id,
+        );
+        if (!temporaryService) continue;
+        const actualService = (original.serviceCategories ?? []).find(
+          (service) =>
+            service.objectId === projectPatch.targetObjectId &&
+            ((temporaryService.importKey &&
+              service.importKey === temporaryService.importKey) ||
+              service.label.trim().toLocaleLowerCase("pl-PL") ===
+                temporaryService.label.trim().toLocaleLowerCase("pl-PL")),
+        );
+        if (!actualService) {
+          throw new Error(
+            `Could not map project service ${temporaryService.label} to the approved project.`,
+          );
+        }
+        funding.service_category_id = actualService.id;
+      }
+    }
+  }
+
   const fundingIdByImportKey = new Map(
     (state.financingRules ?? [])
       .filter((row) => row.objectId === selected.id && row.importKey)
@@ -792,7 +825,7 @@ function stageNewObject(
   }
 
   const merged = { ...original, revision: state.revision };
-  for (const key of ["objects", "rules", "fileSources", "financingRules",
+  for (const key of ["objects", "rules", "fileSources", "financingRules", "serviceCategories",
     "operatorAssignments", "geographies", "operatorContacts",
     "documentRequirements", "fieldEvidence", "importTargetEvidence", "importSources"] as const) {
     const additions = key === "objects"
