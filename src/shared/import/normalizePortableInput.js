@@ -53,6 +53,7 @@ export function normalizePortableInput(input) {
     operatorContacts: [],
     fileSources: [],
     financingRules: [],
+    serviceDefinitions: [],
     documentRequirements: [],
   };
   const byId = new Map();
