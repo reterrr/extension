@@ -211,6 +211,11 @@ export interface LegacyStoredDocumentRequirement {
     | "REQUIRED_FILE"
     | "EXTERNAL_OPERATOR";
 
+  /** Snapshot provenance for Project → Recruitment document inheritance. */
+  copiedFromProjectId?: string;
+  copiedFromDocumentRequirementId?: string;
+  copiedAt?: string;
+
   /** Legacy fields retained for round-trip compatibility. */
   auto_fill?: boolean;
   notes?: string;
