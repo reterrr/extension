@@ -108,7 +108,7 @@ test("portable export imports directly with values, references, files, source sn
   const exportedProject = byKey(document, project.importKey);
   assert.deepEqual(
     exportedProject.services.map((service) => service.label),
-    ["Doradztwo", "Szkolenia"],
+    ["Szkolenia", "Doradztwo"],
   );
   assert.equal(exportedProject.financing[0].service, "SERVICE_TRAINING");
   assert.ok(
