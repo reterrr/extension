@@ -252,6 +252,29 @@ test("React sidepanel has a visible crash recovery boundary", () => {
 });
 
 
+test("funding workspace manages runtime project services and variant assignments", () => {
+  const app = source("src/sidepanel/App.tsx");
+  const workspace = source("src/sidepanel/workspace.js");
+  const background = source("src/background/index.ts");
+
+  assert.match(app, /Usługi projektu oraz warianty według wielkości firmy/);
+  assert.match(workspace, /function renderFundingServices/);
+  assert.match(workspace, /\+ Dodaj usługę/);
+  assert.match(workspace, /SET_FUNDING_SERVICE/);
+  assert.match(workspace, /Bez przypisanej usługi/);
+  for (const operation of [
+    "ADD_SERVICE",
+    "UPDATE_SERVICE",
+    "REMOVE_SERVICE",
+    "SET_FUNDING_SERVICE",
+  ]) {
+    assert.ok(
+      background.includes(`"${operation}"`),
+      `missing data operation ${operation}`,
+    );
+  }
+});
+
 test("Documents section separates physical files from document requirements", () => {
   const app = source("src/sidepanel/App.tsx");
   const workspace = source("src/sidepanel/workspace.js");
