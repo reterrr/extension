@@ -401,12 +401,47 @@ zachodniopomorskie
 
 Zakres „województwo oprócz X” można zapisać jako wiersz `OBEJMUJE` dla województwa i wiersz `WYKLUCZA` dla X, przy tym samym operatorze. Sam wpis wykluczenia nie określa całego zakresu naboru. Adres zamieszkania, zatrudnienia, siedziby lub oddziału jako warunek kwalifikowalności doprecyzuj w `notes` — model geografii nie ma osobnego pola na ten warunek.
 
+## 10.1. `services[]` — usługi projektu tworzone w runtime
+
+Usługi **nie mają zamkniętego słownika**. Twórz je na poziomie projektu tylko wtedy, gdy źródła rozróżniają rodzaje usług, dla których obowiązują inne warianty finansowania, limity albo zasady.
+
+`services[]` jest dozwolone wyłącznie dla obiektu `project`:
+
+```json
+"services": [
+  { "key": "SERVICE_TRAINING", "label": "Szkolenia" },
+  { "key": "SERVICE_ADVISORY", "label": "Doradztwo" }
+]
+```
+
+Każda usługa ma:
+- `key` — stabilny, unikalny w projekcie klucz używany przez warianty finansowania;
+- `label` — nazwę 1–200 znaków widoczną w Workspace.
+
+Nie twórz sztucznego katalogu typu „szkolenie / doradztwo / studia” dla każdego projektu. Jeśli projekt nie rozróżnia usług w zasadach finansowania, `services[]` może być pominięte, a wariant pozostaje bez przypisanej usługi.
+
+Wariant dofinansowania może wskazać usługę przez opcjonalne `financing[].service`:
+
+```json
+{
+  "key": "MICRO_TRAINING",
+  "company_size": "MICRO",
+  "service": "SERVICE_TRAINING",
+  "data": {
+    "refund_percent_max": 80
+  }
+}
+```
+
+Dla wariantu projektu `service` musi wskazywać `services[].key` tego samego projektu. Dla wariantu naboru może wskazywać usługę projektu referowanego przez `recruitment.data.project_id`; ten projekt wraz z jego `services[]` musi znajdować się w tym samym JSON. Pominięte `service` oznacza „bez przypisanej usługi” i przy aktualizacji nie powinno być używane do kasowania istniejącego przypisania.
+
 ## 11. `financing[]` — warianty dofinansowania
 
 | Pole | Typ / wymagalność | Znaczenie |
 | --- | --- | --- |
 | `key` | niepusty tekst, wymagane | Stabilny klucz wariantu, np. `NAB_001_MICRO_STANDARD`. Przy aktualizacji zachowaj dotychczasowy klucz. |
 | `company_size` | enum, wymagane | `MICRO`, `SMALL`, `MEDIUM`, `LARGE`, `B2C`, `NGO`. Nie `MSP`, `SME`, `ALL`, `OSOBA` ani lista rozmiarów. |
+| `service` | `services[].key`, opcjonalne | Usługa projektu, której dotyczy wariant. Nie wkładaj nazwy usługi bezpośrednio — najpierw utwórz ją w `project.services[]`. |
 | `data` | obiekt, wymagane | Wyłącznie pola poniższej tabeli. Nie twórz pustego wariantu dla każdej wielkości firmy bez potwierdzonego zastosowania. |
 | `evidence` | mapa, opcjonalne | Nazwy obecnych pól `data` → tablice cytatów. Bez kluczy `company_size`, `key` czy `variant_no`. |
 
