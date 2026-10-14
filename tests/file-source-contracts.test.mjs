@@ -929,6 +929,18 @@ test("project documents are inherited as independent recruitment copies", () => 
   assert.equal(result.copied.length, 2);
   assert.equal(result.copiedRequirements.length, 3);
 
+  const inheritanceStatus = fileInheritance.projectFileInheritanceStatus(
+    state,
+    state.objects.find((object) => object.id === "recruitment-1"),
+  );
+  assert.equal(
+    inheritanceStatus.projectDocumentCount,
+    3,
+    "two file-backed requirements plus one no-template requirement are three documents, not five rows",
+  );
+  assert.equal(inheritanceStatus.pendingDocumentCount, 0);
+  assert.equal(inheritanceStatus.inheritedDocumentCount, 3);
+
   const copiedFiles = state.fileSources.filter(
     (file) => file.objectId === "recruitment-1",
   );
