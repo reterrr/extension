@@ -259,12 +259,37 @@ Example using an operator template:
 
 The old `document_type_key`, `auto_fill`, and `notes` representation is still accepted for backward compatibility. New imports should use the dynamic fields above instead.
 
+## `objects[].services[]`
+
+Projects can define their own service catalog at runtime. There is no fixed global list.
+
+```json
+{
+  "key": "project-1",
+  "type": "project",
+  "data": { "name": "Projekt" },
+  "services": [
+    { "key": "SERVICE_TRAINING", "name": "Szkolenia" },
+    { "key": "SERVICE_ADVISORY", "name": "Doradztwo" }
+  ]
+}
+```
+
+- `services[]` is supported only on a Project;
+- `key` is a stable project-local service key;
+- `name` is 1–200 characters;
+- service names are created and edited at runtime;
+- a Recruitment reuses the services of its referenced Project and does not define a separate catalog.
+
+A financing variant can optionally reference one of these services through its top-level `service` field.
+
 ## `objects[].financing[]`
 
 Each financing entry becomes one Burbot financing variant. Project and Recruitment use the same financing structure.
 
 - `key` — required stable key unique within the object's financing list.
 - `company_size` — one of `MICRO`, `SMALL`, `MEDIUM`, `LARGE`, `B2C`, `NGO`.
+- `service` — optional project-local `services[].key`. For a Recruitment it must belong to the referenced Project. Omit it when the variant is not tied to one specific service.
 - `data` — any supported financing fields:
   - `refund_percent_min` — minimum refund percentage, `0..100`;
   - `refund_percent_avg` — average refund percentage, `0..100`;
