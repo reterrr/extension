@@ -176,17 +176,6 @@ function host(url: string): string {
   }
 }
 
-function objectDisplayName(object: LegacyStoredObject): string {
-  if (object.type === "recruitment") {
-    const name = object.values?.external_number;
-    if (typeof name === "string" && name.trim()) return name.trim();
-  }
-  if (object.type === "project" || object.type === "operator") {
-    const name = object.values?.name;
-    if (typeof name === "string" && name.trim()) return name.trim();
-  }
-  return object.label?.trim() || object.importKey?.trim() || object.id;
-}
 
 async function exportFundPilot(
   object: LegacyStoredObject,
