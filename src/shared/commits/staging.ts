@@ -14,6 +14,7 @@ const OBJECT_SCOPED_KEYS = [
   "operatorContacts",
   "fileSources",
   "financingRules",
+  "serviceDefinitions",
   "documentRequirements",
   "fieldEvidence",
   "importTargetEvidence",
