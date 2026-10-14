@@ -142,6 +142,7 @@ const RELATED_COLLECTIONS: Array<{
   { key: "operatorAssignments", label: "Operatorzy" },
   { key: "operatorContacts", label: "Kontakty" },
   { key: "financingRules", label: "Dofinansowanie" },
+  { key: "serviceCategories", label: "Usługi" },
   { key: "documentRequirements", label: "Dokumenty" },
   { key: "fileSources", label: "Pliki" },
   { key: "rules", label: "Reguły ekstrakcji" },
