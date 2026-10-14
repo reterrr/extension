@@ -445,14 +445,14 @@ Dla wariantu projektu `service` musi wskazywać `services[].key` tego samego pro
 | Pole | Typ / wymagalność | Znaczenie |
 | --- | --- | --- |
 | `key` | niepusty tekst, wymagane | Stabilny klucz wariantu, np. `NAB_001_MICRO_STANDARD`. Przy aktualizacji zachowaj dotychczasowy klucz. |
-| `company_size` | enum, wymagane | `MICRO`, `SMALL`, `MEDIUM`, `LARGE`, `B2C`, `NGO`. Nie `MSP`, `SME`, `ALL`, `OSOBA` ani lista rozmiarów. |
+| `company_size` | enum, wymagane | `MICRO`, `SMALL`, `MEDIUM`, `LARGE`, `B2C`, `NGO`, `NON_PUBLIC_FINANCE_EMPLOYER`, `OTHER_EMPLOYER`. Nie `MSP`, `SME`, `ALL`, `OSOBA` ani lista rozmiarów. |
 | `service` | `services[].key`, opcjonalne | Usługa projektu, której dotyczy wariant. Nie wkładaj nazwy usługi bezpośrednio — najpierw utwórz ją w `project.services[]`. |
 | `data` | obiekt, wymagane | Wyłącznie pola poniższej tabeli. Nie twórz pustego wariantu dla każdej wielkości firmy bez potwierdzonego zastosowania. |
 | `evidence` | mapa, opcjonalne | Nazwy obecnych pól `data` → tablice cytatów. Bez kluczy `company_size`, `key` czy `variant_no`. |
 
-`MICRO` = mikroprzedsiębiorstwo, `SMALL` = małe, `MEDIUM` = średnie, `LARGE` = duże, `B2C` = osoba fizyczna/osoba dorosła w projekcie tego typu, `NGO` = organizacja pozarządowa / podmiot non-profit objęty odrębnymi zasadami finansowania. Jeśli wspólne warunki dotyczą MŚP, możesz utworzyć trzy warianty MICRO/SMALL/MEDIUM, ale tylko jeśli źródło obejmuje te grupy. Nie dodawaj LARGE ani NGO bez potwierdzenia w źródle. Samozatrudnienie kwalifikuj według definicji programu, nie automatycznie jako B2C.
+`MICRO` = mikroprzedsiębiorstwo, `SMALL` = małe, `MEDIUM` = średnie, `LARGE` = duże, `B2C` = osoba fizyczna/osoba dorosła w projekcie tego typu, `NGO` = organizacja pozarządowa / podmiot non-profit objęty odrębnymi zasadami finansowania, `NON_PUBLIC_FINANCE_EMPLOYER` = pracodawca niebędący jednostką sektora finansów publicznych, `OTHER_EMPLOYER` = pozostali pracodawcy. Te dwie ostatnie grupy stosuj wyłącznie wtedy, gdy źródło rzeczywiście wydziela je jako osobne podstawy limitu lub finansowania. Jeśli wspólne warunki dotyczą MŚP, możesz utworzyć trzy warianty MICRO/SMALL/MEDIUM, ale tylko jeśli źródło obejmuje te grupy. Nie dodawaj LARGE, NGO ani grup pracodawców bez potwierdzenia w źródle. Samozatrudnienie kwalifikuj według definicji programu, nie automatycznie jako B2C.
 
-Wiele wariantów tego samego `company_size` jest dozwolone. Opisz różnice w `notes`, np. standard/premia, operator, typ usługi, obszar lub forma wkładu. Numery wariantów nadaje system według kolejności osobno dla każdej wielkości firmy. Nie łącz w jednym wariancie dwóch różnych podstaw limitów tylko dlatego, że dotyczą tej samej firmy.
+Nazwa techniczna `company_size` jest historyczna — pole obejmuje również dwie grupy pracodawców `NON_PUBLIC_FINANCE_EMPLOYER` i `OTHER_EMPLOYER`, nawet jeśli nie są one wielkością przedsiębiorstwa. Wiele wariantów tego samego `company_size` jest dozwolone. Opisz różnice w `notes`, np. standard/premia, operator, typ usługi, obszar lub forma wkładu. Numery wariantów nadaje system według kolejności osobno dla każdej wielkości firmy. Nie łącz w jednym wariancie dwóch różnych podstaw limitów tylko dlatego, że dotyczą tej samej firmy.
 
 ### Wszystkie bieżące pola `financing[].data`
 

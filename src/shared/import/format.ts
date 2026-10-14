@@ -34,7 +34,16 @@ const IMPORT_SOURCE_TYPES = new Set<ImportSourceType>([
   "GZ",
   "TGZ",
 ]);
-const FUNDING_SIZES = new Set(["MICRO", "SMALL", "MEDIUM", "LARGE", "B2C", "NGO"]);
+const FUNDING_SIZES = new Set([
+  "MICRO",
+  "SMALL",
+  "MEDIUM",
+  "LARGE",
+  "B2C",
+  "NGO",
+  "NON_PUBLIC_FINANCE_EMPLOYER",
+  "OTHER_EMPLOYER",
+]);
 const GEOGRAPHY_TYPES = new Set([
   "POLSKA",
   "WOJEWODZTWO",
@@ -574,7 +583,7 @@ function parseDocument(input: unknown): BurbotImportV1 {
           `${financePath}.company_size`,
         );
         if (!FUNDING_SIZES.has(companySize)) {
-          throw new Error(`${financePath}.company_size must be MICRO, SMALL, MEDIUM, LARGE, B2C or NGO.`);
+          throw new Error(`${financePath}.company_size must be MICRO, SMALL, MEDIUM, LARGE, B2C, NGO, NON_PUBLIC_FINANCE_EMPLOYER or OTHER_EMPLOYER.`);
         }
         if (!isRecord(entry.data)) throw new Error(`${financePath}.data must be an object.`);
         return {
