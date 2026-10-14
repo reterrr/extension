@@ -639,24 +639,24 @@ function documentRequirement(
   };
 
   const condition = boundedText(row.condition, 1000, "documents.condition");
-  const deliveryStage = boundedText(
-    row.delivery_stage,
-    60,
-    "documents.deliveryStage",
-  );
-  const requiredEvidence = boundedText(
-    row.required_evidence,
-    4000,
-    "documents.requiredEvidence",
-  );
+  const noTemplateWorkflow =
+    normalizedFulfillment === "without_operator_template" &&
+    normalizedRequirement !== "informational";
+  const deliveryStage = noTemplateWorkflow
+    ? boundedText(row.delivery_stage, 60, "documents.deliveryStage")
+    : "";
+  const requiredEvidence = noTemplateWorkflow
+    ? boundedText(row.required_evidence, 4000, "documents.requiredEvidence")
+    : "";
   const sourceDescription = boundedText(
     row.source_description,
     1000,
     "documents.sourceDescription",
   );
   const sourceUrl = httpUrl(row.source_url);
-  const responsibility =
-    responsibilityMap[String(row.responsibility ?? "")] ?? null;
+  const responsibility = noTemplateWorkflow
+    ? responsibilityMap[String(row.responsibility ?? "")] ?? null
+    : null;
 
   if (condition) document.condition = condition;
   if (deliveryStage) document.deliveryStage = deliveryStage;
