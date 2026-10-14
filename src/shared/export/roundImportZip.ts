@@ -429,6 +429,9 @@ const FUNDING_LABEL: Record<string, string> = {
   LARGE: "Duże",
   B2C: "B2C",
   NGO: "NGO",
+  NON_PUBLIC_FINANCE_EMPLOYER:
+    "Pracodawca poza sektorem finansów publicznych",
+  OTHER_EMPLOYER: "Pozostali pracodawcy",
 };
 
 function fundingLabel(row: Record<string, unknown>, index: number): string {
