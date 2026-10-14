@@ -365,8 +365,6 @@ function stageExistingObjectUpdate(
         );
       }
       row.service_category_id = mappedServiceId;
-    } else {
-      delete row.service_category_id;
     }
     fundingIdByImportKey.set(importKey, String(row.id));
     importedTargetIdMap.set(
