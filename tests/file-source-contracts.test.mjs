@@ -642,7 +642,7 @@ test("FundPilot recruitment export keeps the complete portable business dataset 
   assert.equal(systemRecruitment.updated_at, "2026-10-14T13:00:00.000Z");
   assert.equal(systemRecruitment.last_checked_at, "2026-10-14T12:59:00.000Z");
   assert.equal(plan.files.length, 2);
-  assert.match(plan.zipFileName, /^FundPilot - Nabór 1_2026\.zip$/);
+  assert.match(plan.zipFileName, /^FundPilot - Nabór 1 - 2026\.zip$/);
 });
 
 test("FundPilot project export expands to all project recruitments", () => {
