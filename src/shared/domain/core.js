@@ -14,6 +14,7 @@
     operatorAssignments: [],
     operatorContacts: [],
     financingRules: [],
+    serviceDefinitions: [],
     documentRequirements: [],
     fieldEvidence: [],
   });
@@ -652,6 +653,20 @@
           state.financingRules = state.financingRules.filter(
             (r) => r.objectId !== object.id,
           );
+        const removedServiceIds = new Set(
+          (state.serviceDefinitions || [])
+            .filter((row) => row.objectId === object.id)
+            .map((row) => row.id),
+        );
+        if (state.serviceDefinitions)
+          state.serviceDefinitions = state.serviceDefinitions.filter(
+            (row) => row.objectId !== object.id,
+          );
+        if (removedServiceIds.size) {
+          for (const row of state.financingRules || []) {
+            if (removedServiceIds.has(row.serviceId)) delete row.serviceId;
+          }
+        }
         if (state.documentRequirements)
           state.documentRequirements = state.documentRequirements.filter(
             (r) => r.objectId !== object.id,
@@ -1001,6 +1016,104 @@
               row.target.id === message.contactId
             ),
         );
+        object.updatedAt = now;
+      } else if (message.op === "ADD_SERVICE") {
+        if (object.type !== "project")
+          throw Error("Usługi można definiować tylko na projekcie.");
+        const name = clean(message.name);
+        if (!name || name.length > 200)
+          throw Error("Nazwa usługi musi mieć od 1 do 200 znaków.");
+        const rows = (state.serviceDefinitions ||= []);
+        if (
+          rows.some(
+            (row) =>
+              row.objectId === object.id &&
+              clean(row.name).toLocaleLowerCase("pl-PL") ===
+                name.toLocaleLowerCase("pl-PL"),
+          )
+        )
+          throw Error("Projekt ma już usługę o tej nazwie.");
+        const id = uuid();
+        rows.push({
+          id,
+          objectId: object.id,
+          importKey: "SERVICE_" + String(id).replace(/-/g, "").slice(0, 16),
+          name,
+        });
+        object.updatedAt = now;
+      } else if (message.op === "UPDATE_SERVICE") {
+        if (object.type !== "project")
+          throw Error("Usługi można edytować tylko na projekcie.");
+        const rows = (state.serviceDefinitions ||= []);
+        const service = rows.find(
+          (row) => row.id === message.serviceId && row.objectId === object.id,
+        );
+        if (!service) throw Error("Usługa nie istnieje.");
+        const name = clean(message.name);
+        if (!name || name.length > 200)
+          throw Error("Nazwa usługi musi mieć od 1 do 200 znaków.");
+        if (
+          rows.some(
+            (row) =>
+              row.objectId === object.id &&
+              row.id !== service.id &&
+              clean(row.name).toLocaleLowerCase("pl-PL") ===
+                name.toLocaleLowerCase("pl-PL"),
+          )
+        )
+          throw Error("Projekt ma już usługę o tej nazwie.");
+        service.name = name;
+        object.updatedAt = now;
+      } else if (message.op === "REMOVE_SERVICE") {
+        if (object.type !== "project")
+          throw Error("Usługi można usuwać tylko z projektu.");
+        const rows = state.serviceDefinitions || [];
+        const service = rows.find(
+          (row) => row.id === message.serviceId && row.objectId === object.id,
+        );
+        if (!service) throw Error("Usługa nie istnieje.");
+        const usedBy = (state.financingRules || []).filter(
+          (row) => row.serviceId === service.id,
+        );
+        if (usedBy.length)
+          throw Error(
+            "Nie można usunąć usługi, ponieważ jest przypisana do " +
+              usedBy.length +
+              (usedBy.length === 1 ? " wariantu dofinansowania." : " wariantów dofinansowania."),
+          );
+        state.serviceDefinitions = rows.filter((row) => row.id !== service.id);
+        object.updatedAt = now;
+      } else if (message.op === "SET_FUNDING_SERVICE") {
+        if (!globalThis.BurbotSchema[object.type]?.configuration)
+          throw Error("Ten obiekt nie obsługuje wariantów dofinansowania.");
+        const variant = (state.financingRules || []).find(
+          (row) =>
+            row.id === message.variantId && row.objectId === object.id,
+        );
+        if (!variant) throw Error("Wariant dofinansowania nie istnieje.");
+
+        const requested = clean(message.serviceId);
+        if (!requested) {
+          delete variant.serviceId;
+        } else {
+          const project =
+            object.type === "project"
+              ? object
+              : state.objects.find(
+                  (candidate) =>
+                    candidate.type === "project" &&
+                    (candidate.id === object.values?.project_id ||
+                      candidate.importKey === object.values?.project_id),
+                );
+          if (!project)
+            throw Error("Najpierw przypisz projekt do naboru.");
+          const service = (state.serviceDefinitions || []).find(
+            (row) => row.id === requested && row.objectId === project.id,
+          );
+          if (!service)
+            throw Error("Wybrana usługa nie należy do przypisanego projektu.");
+          variant.serviceId = service.id;
+        }
         object.updatedAt = now;
       } else if (message.op === "ADD_FUNDING") {
         if (
