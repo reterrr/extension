@@ -399,6 +399,17 @@ test("FundPilot recruitment export keeps the complete portable business dataset 
           notes: "Pełne dane naboru.",
           last_checked_at: "2026-10-14T12:59:00.000Z",
         },
+        evidence: {
+          notes: [
+            {
+              sourceId: "SRC_NOTE_ID",
+              charStart: 0,
+              charEnd: 18,
+              rawValue: "Pełne dane naboru.",
+            },
+          ],
+        },
+        manualFields: { application_instructions: true },
       },
       {
         id: "NAB_2",
@@ -412,7 +423,26 @@ test("FundPilot recruitment export keeps the complete portable business dataset 
         },
       },
     ],
-    rules: [],
+    rules: [
+      {
+        id: "RULE_1",
+        objectId: "NAB_1",
+        field: "notes",
+        pageUrl: "https://example.test/nabor",
+        selector: "#notes",
+        extraction: { type: "text" },
+      },
+    ],
+    importSources: [
+      {
+        id: "SRC_NOTE_ID",
+        importKey: "SRC_NOTE",
+        type: "HTML",
+        url: "https://example.test/nabor",
+        snapshot: { text: "Pełne dane naboru." },
+        importedAt: "2026-10-14T12:58:00.000Z",
+      },
+    ],
     operatorAssignments: [
       {
         id: "ASSIGN_PR",
@@ -473,6 +503,9 @@ test("FundPilot recruitment export keeps the complete portable business dataset 
         max_amount_pln: 15000,
         max_per_person_pln: 5000,
         notes: "Wariant naboru",
+        copiedFromProjectId: "PR_1",
+        copiedFromFundingRuleId: "FUND_PROJECT",
+        copiedAt: "2026-10-14T12:30:00.000Z",
       },
     ],
     geographies: [
@@ -552,6 +585,8 @@ test("FundPilot recruitment export keeps the complete portable business dataset 
         delivery_stage: "ZGLOSZENIE",
         responsibility: "CLIENT",
         required_evidence: "Wydruk Karty Usługi z BUR.",
+        source_file_source_ids: ["FILE_PROJECT"],
+        version_label: "legacy-v1",
         signature_requirement: "NOT_REQUIRED",
       },
     ],
@@ -641,6 +676,31 @@ test("FundPilot recruitment export keeps the complete portable business dataset 
   );
   assert.equal(systemRecruitment.updated_at, "2026-10-14T13:00:00.000Z");
   assert.equal(systemRecruitment.last_checked_at, "2026-10-14T12:59:00.000Z");
+
+  const complete = exported.complete_state;
+  assert.equal(complete.revision, 17);
+  assert.deepEqual(
+    complete.objects.map((object) => object.id),
+    ["OP_1", "PR_1", "NAB_1"],
+  );
+  assert.equal(
+    complete.objects.find((object) => object.id === "NAB_1").manualFields
+      .application_instructions,
+    true,
+  );
+  assert.equal(complete.rules[0].id, "RULE_1");
+  assert.equal(complete.importSources[0].importKey, "SRC_NOTE");
+  assert.equal(
+    complete.financingRules.find((row) => row.id === "FUND_NAB")
+      .copiedFromFundingRuleId,
+    "FUND_PROJECT",
+  );
+  const completeNoTemplate = complete.documentRequirements.find(
+    (row) => row.id === "DOC_NO_TEMPLATE",
+  );
+  assert.deepEqual(completeNoTemplate.source_file_source_ids, ["FILE_PROJECT"]);
+  assert.equal(completeNoTemplate.version_label, "legacy-v1");
+
   assert.equal(plan.files.length, 2);
   assert.match(plan.zipFileName, /^FundPilot - Nabór 1 - 2026\.zip$/);
 });
