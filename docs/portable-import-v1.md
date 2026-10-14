@@ -293,7 +293,7 @@ For Project financing, `service` must reference that Project's own `services[].k
 
 ## `objects[].financing[]`
 
-Each financing entry becomes one Burbot financing variant. Project and Recruitment use the same financing structure.
+Each financing entry becomes one Burbot financing variant. Project and Recruitment use the same financing structure. The field name `company_size` is retained for compatibility, but it also covers the two employer-category values `NON_PUBLIC_FINANCE_EMPLOYER` and `OTHER_EMPLOYER`.
 
 - `key` — required stable key unique within the object's financing list.
 - `company_size` — one of `MICRO`, `SMALL`, `MEDIUM`, `LARGE`, `B2C`, `NGO`, `NON_PUBLIC_FINANCE_EMPLOYER`, `OTHER_EMPLOYER`. The last two are programme-specific employer groups: employers outside the public-finance sector and remaining employers.
