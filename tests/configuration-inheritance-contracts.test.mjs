@@ -409,3 +409,101 @@ test("funding copy avoids variant-number collisions with recruitment-local varia
   );
   assert.equal(copiedMicro.variant_no, 2);
 });
+
+
+test("funding metadata inheritance fills only missing recruitment fields", () => {
+  const state = baseState();
+  const project = state.objects.find((object) => object.id === "PR_1");
+  const recruitment = state.objects.find((object) => object.id === "NAB_1");
+
+  project.values.funding_rules = "Zasady projektu";
+  project.values.funding_verified_at = "2026-10-14";
+  project.values.funding_verification_url =
+    "https://example.test/project/funding";
+  recruitment.values.funding_rules = "Wyjątek właściwy dla naboru";
+
+  const before = inheritance.fundingMetadataInheritanceStatus(
+    state,
+    recruitment,
+  );
+  assert.deepEqual(before.pendingFields, [
+    "funding_verified_at",
+    "funding_verification_url",
+  ]);
+  assert.deepEqual(before.protectedFields, ["funding_rules"]);
+
+  state.rules.push({
+    id: "R_1",
+    objectId: "NAB_1",
+    field: "funding_verified_at",
+    pageUrl: "https://example.test/old",
+    selector: "#date",
+    extraction: { type: "text" },
+  });
+  state.fieldEvidence = [
+    {
+      id: "E_1",
+      objectId: "NAB_1",
+      field: "funding_verified_at",
+      pageUrl: "https://example.test/old",
+      selector: "#date",
+      extraction: { type: "text" },
+      rawValue: "2026-01-01",
+      createdAt: "2026-01-01T00:00:00Z",
+    },
+  ];
+
+  const result = inheritance.copyProjectFundingMetadataToRecruitment(
+    state,
+    "NAB_1",
+  );
+
+  assert.deepEqual(result.copiedFields, [
+    "funding_verified_at",
+    "funding_verification_url",
+  ]);
+  assert.equal(recruitment.values.funding_rules, "Wyjątek właściwy dla naboru");
+  assert.equal(recruitment.values.funding_verified_at, "2026-10-14");
+  assert.equal(
+    recruitment.values.funding_verification_url,
+    "https://example.test/project/funding",
+  );
+  assert.equal(
+    state.rules.some((rule) => rule.id === "R_1"),
+    false,
+  );
+  assert.equal(
+    state.fieldEvidence.some((entry) => entry.id === "E_1"),
+    false,
+  );
+
+  project.values.funding_verified_at = "2026-10-15";
+  assert.equal(recruitment.values.funding_verified_at, "2026-10-14");
+});
+
+test("funding metadata inheritance requires project values and never overwrites recruitment values", () => {
+  const state = baseState();
+  const project = state.objects.find((object) => object.id === "PR_1");
+  const recruitment = state.objects.find((object) => object.id === "NAB_1");
+
+  assert.throws(
+    () =>
+      inheritance.copyProjectFundingMetadataToRecruitment(state, "NAB_1"),
+    /nie ma uzupełnionych pól/,
+  );
+
+  project.values.funding_rules = "Zasady projektu";
+  recruitment.values.funding_rules = "Zasady naboru";
+  const status = inheritance.fundingMetadataInheritanceStatus(
+    state,
+    recruitment,
+  );
+  assert.deepEqual(status.pendingFields, []);
+  assert.deepEqual(status.protectedFields, ["funding_rules"]);
+  assert.throws(
+    () =>
+      inheritance.copyProjectFundingMetadataToRecruitment(state, "NAB_1"),
+    /Brak pustych pól/,
+  );
+  assert.equal(recruitment.values.funding_rules, "Zasady naboru");
+});
