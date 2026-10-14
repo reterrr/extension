@@ -165,7 +165,7 @@ export function App() {
                   id="file-source-count"
                   className="workspace-section-status"
                 >
-                  Brak plików
+                  Brak dokumentów
                 </span>
               </summary>
               <div className="workspace-section-body">
@@ -174,34 +174,6 @@ export function App() {
                   Obsługiwane pliki: .doc, .docx, .pdf, .xlsx, .png, .jpg,
                   .jpeg, .zip, .rar, .7z, .tar, .gz, .tgz.
                 </p>
-                <div
-                  id="document-requirement-heading"
-                  className="document-requirement-heading"
-                >
-                  <div>
-                    <strong>Wymagania dokumentowe</strong>
-                    <small>
-                      Dokument może mieć wzór operatora albo być dostarczany przez klienta bez wzoru.
-                    </small>
-                  </div>
-                  <button
-                    id="add-document-requirement"
-                    className="text-button"
-                    type="button"
-                  >
-                    + Dodaj dokument bez wzoru
-                  </button>
-                </div>
-                <div
-                  id="document-requirement-list"
-                  className="document-requirement-list"
-                />
-                <div className="file-source-subheading">
-                  <strong>Pliki operatora</strong>
-                  <small>
-                    Fizyczne załączniki pozostają osobno od wymagań dokumentowych.
-                  </small>
-                </div>
                 <div id="file-source-list" className="file-source-list" />
                 <div
                   id="local-file-drop-zone"
@@ -224,6 +196,13 @@ export function App() {
                 </div>
                 <div className="file-source-toolbar">
                   <button
+                    id="add-document-requirement"
+                    className="text-button"
+                    type="button"
+                  >
+                    + Dodaj bez wzoru
+                  </button>
+                  <button
                     id="read-from-file"
                     className="text-button"
                     type="button"
@@ -236,7 +215,7 @@ export function App() {
                     type="button"
                     hidden
                   >
-                    ↳ Dziedzicz pliki z projektu
+                    ↳ Dziedzicz dokumenty z projektu
                   </button>
                   <button
                     id="download-all-files"
@@ -252,8 +231,8 @@ export function App() {
                   className="file-source-inheritance-hint"
                   hidden
                 >
-                  Dziedziczenie tworzy niezależne kopie plików projektu.
-                  Późniejsze zmiany projektu nie zmieniają plików tego naboru.
+                  Dziedziczenie tworzy niezależne kopie dokumentów projektu — zarówno z plikiem operatora, jak i bez wzoru.
+                  Późniejsze zmiany projektu nie zmieniają dokumentów tego naboru.
                 </p>
                 <p
                   id="file-source-mode-hint"

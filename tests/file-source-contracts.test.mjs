@@ -830,7 +830,7 @@ test("RoundImport export rejects archive attachments unsupported by V5", () => {
   );
 });
 
-test("project files are inherited as independent recruitment copies", () => {
+test("project documents are inherited as independent recruitment copies", () => {
   const state = {
     version: 1,
     revision: 1,
@@ -862,10 +862,58 @@ test("project files are inherited as independent recruitment copies", () => {
         purpose: "Regulamin / zasady",
         has_fields: false,
         intended_use: "Warunki udziału",
-        client_requirement: "Wymagany",
-        signature_requirement: "Nie wymaga podpisu",
+        client_requirement: "Informacyjny",
+        signature_requirement: "Nie jest wymagany",
         sourceImportKey: "project-pdf-import",
         sourcePageImportKey: "project-page-import",
+      },
+      {
+        id: "project-file-2",
+        objectId: "project-1",
+        fileType: "DOCX",
+        url: "https://example.test/formularz.docx",
+        name: "formularz.docx",
+        sourcePageUrl: "https://example.test/project",
+        addedAt: "2026-09-01T10:00:00.000Z",
+        display_name: "Formularz",
+      },
+    ],
+    documentRequirements: [
+      {
+        id: "project-doc-rules",
+        objectId: "project-1",
+        importKey: "DOC_RULES",
+        label: "Regulamin projektu",
+        purpose: "Materiał informacyjny",
+        requirement: "INFORMATIONAL",
+        fulfillment_mode: "WITHOUT_OPERATOR_TEMPLATE",
+        source_file_source_ids: ["project-file-1"],
+        signature_requirement: "NOT_REQUIRED",
+      },
+      {
+        id: "project-doc-form",
+        objectId: "project-1",
+        importKey: "DOC_FORM",
+        label: "Formularz",
+        purpose: "Wniosek",
+        requirement: "REQUIRED",
+        fulfillment_mode: "OPERATOR_TEMPLATE",
+        original_file_source_id: "project-file-2",
+        source_file_source_ids: ["project-file-2"],
+        responsibility: "CLIENT",
+        signature_requirement: "REQUIRED_FILE",
+      },
+      {
+        id: "project-doc-bank",
+        objectId: "project-1",
+        importKey: "DOC_BANK",
+        label: "Potwierdzenie rachunku bankowego",
+        purpose: "Potwierdzenie rachunku",
+        requirement: "REQUIRED",
+        fulfillment_mode: "WITHOUT_OPERATOR_TEMPLATE",
+        source_file_source_ids: [],
+        responsibility: "CLIENT",
+        signature_requirement: "UNKNOWN",
       },
     ],
   };
@@ -878,46 +926,94 @@ test("project files are inherited as independent recruitment copies", () => {
     "2026-09-28T16:00:00.000Z",
   );
 
-  assert.equal(result.copied.length, 1);
-  const copy = state.fileSources.find(
+  assert.equal(result.copied.length, 2);
+  assert.equal(result.copiedRequirements.length, 3);
+
+  const inheritanceStatus = fileInheritance.projectFileInheritanceStatus(
+    state,
+    state.objects.find((object) => object.id === "recruitment-1"),
+  );
+  assert.equal(
+    inheritanceStatus.projectDocumentCount,
+    3,
+    "two file-backed requirements plus one no-template requirement are three documents, not five rows",
+  );
+  assert.equal(inheritanceStatus.pendingDocumentCount, 0);
+  assert.equal(inheritanceStatus.inheritedDocumentCount, 3);
+
+  const copiedFiles = state.fileSources.filter(
     (file) => file.objectId === "recruitment-1",
   );
-  assert.ok(copy);
-  assert.notEqual(copy.id, "project-file-1");
-  assert.equal(copy.url, "https://example.test/regulamin.pdf");
-  assert.equal(copy.display_name, "Regulamin projektu");
-  assert.equal(copy.purpose, "Regulamin / zasady");
-  assert.equal(copy.copiedFromProjectId, "project-1");
-  assert.equal(copy.copiedFromFileSourceId, "project-file-1");
-  assert.equal(copy.copiedAt, "2026-09-28T16:00:00.000Z");
-  assert.equal(copy.sourceImportKey, undefined);
-  assert.equal(copy.sourcePageImportKey, undefined);
+  const copiedRequirements = state.documentRequirements.filter(
+    (row) => row.objectId === "recruitment-1",
+  );
+  assert.equal(copiedFiles.length, 2);
+  assert.equal(copiedRequirements.length, 3);
+
+  const rulesCopy = copiedRequirements.find(
+    (row) => row.copiedFromDocumentRequirementId === "project-doc-rules",
+  );
+  const formCopy = copiedRequirements.find(
+    (row) => row.copiedFromDocumentRequirementId === "project-doc-form",
+  );
+  const bankCopy = copiedRequirements.find(
+    (row) => row.copiedFromDocumentRequirementId === "project-doc-bank",
+  );
+  assert.ok(rulesCopy);
+  assert.ok(formCopy);
+  assert.ok(bankCopy);
+
+  assert.equal(rulesCopy.copiedFromProjectId, "project-1");
+  assert.equal(bankCopy.fulfillment_mode, "WITHOUT_OPERATOR_TEMPLATE");
+  assert.equal(bankCopy.original_file_source_id, undefined);
+
+  const copiedFormFile = copiedFiles.find(
+    (file) => file.copiedFromFileSourceId === "project-file-2",
+  );
+  assert.ok(copiedFormFile);
+  assert.equal(formCopy.original_file_source_id, copiedFormFile.id);
+  assert.deepEqual(formCopy.source_file_source_ids, [copiedFormFile.id]);
+
+  const copiedRulesFile = copiedFiles.find(
+    (file) => file.copiedFromFileSourceId === "project-file-1",
+  );
+  assert.ok(copiedRulesFile);
+  assert.deepEqual(rulesCopy.source_file_source_ids, [copiedRulesFile.id]);
 
   const projectFile = state.fileSources.find(
     (file) => file.id === "project-file-1",
   );
   projectFile.display_name = "NOWA nazwa na projekcie";
-  projectFile.purpose = "Inny cel";
   projectFile.url = "https://example.test/regulamin-v2.pdf";
+  const projectBank = state.documentRequirements.find(
+    (row) => row.id === "project-doc-bank",
+  );
+  projectBank.label = "NOWA nazwa wymagania";
 
-  assert.equal(copy.display_name, "Regulamin projektu");
-  assert.equal(copy.purpose, "Regulamin / zasady");
-  assert.equal(copy.url, "https://example.test/regulamin.pdf");
+  assert.equal(copiedRulesFile.display_name, "Regulamin projektu");
+  assert.equal(copiedRulesFile.url, "https://example.test/regulamin.pdf");
+  assert.equal(bankCopy.label, "Potwierdzenie rachunku bankowego");
 
   state.fileSources = state.fileSources.filter(
-    (file) => file.id !== "project-file-1",
+    (file) => file.objectId !== "project-1",
+  );
+  state.documentRequirements = state.documentRequirements.filter(
+    (row) => row.objectId !== "project-1",
   );
   state.objects = state.objects.filter((object) => object.id !== "project-1");
 
-  assert.ok(
-    state.fileSources.some(
-      (file) =>
-        file.id === copy.id &&
-        file.objectId === "recruitment-1" &&
-        file.url === "https://example.test/regulamin.pdf",
-    ),
+  assert.equal(
+    state.fileSources.filter((file) => file.objectId === "recruitment-1").length,
+    2,
+  );
+  assert.equal(
+    state.documentRequirements.filter(
+      (row) => row.objectId === "recruitment-1",
+    ).length,
+    3,
   );
 });
+
 
 test("re-inheriting adds only new project files and never overwrites recruitment copies", () => {
   const state = {

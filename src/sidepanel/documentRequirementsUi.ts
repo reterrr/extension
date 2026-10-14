@@ -30,9 +30,7 @@ interface RenderOptions {
   onChanged: () => void;
 }
 
-function text(
-  value: unknown,
-): string {
+function text(value: unknown): string {
   return typeof value === "string" ? value : "";
 }
 
@@ -99,24 +97,65 @@ function physicalFileOptions(
   selectNode.value = current ?? "";
 }
 
+function linkedFileForRequirement(
+  row: LegacyStoredDocumentRequirement,
+  state: LegacyStorageState,
+  objectId: string,
+): LegacyStoredFileSource | undefined {
+  const files = (state.fileSources ?? []).filter(
+    (source) => source.objectId === objectId,
+  );
+  if (row.original_file_source_id) {
+    const original = files.find(
+      (source) => source.id === row.original_file_source_id,
+    );
+    if (original) return original;
+  }
+
+  const label = documentLabel(row).trim().toLocaleLowerCase("pl-PL");
+  return files.find(
+    (source) =>
+      (row.source_file_source_ids ?? []).includes(source.id) &&
+      fileLabel(source).trim().toLocaleLowerCase("pl-PL") === label,
+  );
+}
+
 function renderRequirement(
   row: LegacyStoredDocumentRequirement,
   options: RenderOptions,
-): HTMLElement {
+): { node: HTMLElement; linkedFileId?: string } {
   const normalized = normalizeDocumentRequirement(
     row as unknown as Record<string, unknown>,
   ) as unknown as LegacyStoredDocumentRequirement;
   const files = (options.state.fileSources ?? []).filter(
     (source) => source.objectId === options.object.id,
   );
+  const linkedFile = linkedFileForRequirement(
+    normalized,
+    options.state,
+    options.object.id,
+  );
 
   const card = document.createElement("details");
-  card.className = "document-requirement-row";
+  card.className = "document-requirement-row file-source-row";
+  card.dataset.sortLabel = documentLabel(normalized).toLocaleLowerCase("pl-PL");
+  const requirementComplete =
+    Boolean(documentLabel(normalized).trim()) &&
+    normalized.requirement !== "UNKNOWN" &&
+    normalized.signature_requirement !== "UNKNOWN" &&
+    (normalized.requirement !== "CONDITIONAL" ||
+      Boolean(normalized.condition?.trim())) &&
+    (normalized.requirement === "INFORMATIONAL" ||
+      normalized.fulfillment_mode === "WITHOUT_OPERATOR_TEMPLATE" ||
+      (normalized.fulfillment_mode === "OPERATOR_TEMPLATE" &&
+        Boolean(linkedFile)));
+  card.dataset.classified = String(requirementComplete);
   card.open = row.label === "Nowy dokument";
 
   const summary = document.createElement("summary");
+  summary.className = "file-source-summary";
   const summaryCopy = document.createElement("span");
-  summaryCopy.className = "document-requirement-summary-copy";
+  summaryCopy.className = "document-requirement-summary-copy file-source-summary-copy";
   const title = document.createElement("strong");
   title.textContent = documentLabel(normalized);
   const meta = document.createElement("small");
@@ -130,15 +169,30 @@ function renderRequirement(
       : DOCUMENT_FULFILLMENT_MODE_LABELS[
           normalized.fulfillment_mode as keyof typeof DOCUMENT_FULFILLMENT_MODE_LABELS
         ] ?? normalized.fulfillment_mode;
-  meta.textContent = `${requirementLabel} · ${fulfillmentLabel}`;
+  const physicalMeta = linkedFile
+    ? ` · ${linkedFile.fileType} · ${linkedFile.name}`
+    : "";
+  meta.textContent = `${requirementLabel} · ${fulfillmentLabel}${physicalMeta}`;
   summaryCopy.append(title, meta);
+
+  if (row.copiedFromProjectId) {
+    const inherited = document.createElement("span");
+    inherited.className = "file-source-inherited-badge";
+    inherited.textContent = "kopia z projektu";
+    summaryCopy.append(inherited);
+  }
 
   const remove = document.createElement("button");
   remove.type = "button";
   remove.className = "document-requirement-remove icon-button danger";
   remove.textContent = "×";
-  remove.title = "Usuń wymaganie dokumentowe";
-  remove.setAttribute("aria-label", `Usuń wymaganie ${documentLabel(normalized)}`);
+  remove.title = linkedFile
+    ? "Usuń wymaganie; plik operatora pozostanie"
+    : "Usuń dokument";
+  remove.setAttribute(
+    "aria-label",
+    `Usuń dokument ${documentLabel(normalized)}`,
+  );
   remove.onclick = (event) => {
     event.preventDefault();
     event.stopPropagation();
@@ -148,7 +202,7 @@ function renderRequirement(
         documentId: row.id,
       })
       .then(() => {
-        options.notice(`Usunięto wymaganie: ${documentLabel(normalized)}.`);
+        options.notice(`Usunięto dokument: ${documentLabel(normalized)}.`);
         options.onChanged();
       })
       .catch((error: unknown) =>
@@ -158,7 +212,7 @@ function renderRequirement(
   summary.append(summaryCopy, remove);
 
   const body = document.createElement("div");
-  body.className = "document-requirement-body";
+  body.className = "document-requirement-body file-source-body";
 
   const labelInput = input(text(normalized.label), 500);
   const purposeInput = textarea(text(normalized.purpose), 1000);
@@ -212,7 +266,7 @@ function renderRequirement(
     "Źródło / sposób przygotowania",
     fulfillment,
   );
-  const originalFileLabel = fieldLabel("Wzór operatora", originalFile);
+  const originalFileLabel = fieldLabel("Plik / wzór operatora", originalFile);
 
   const thirdRow = document.createElement("div");
   thirdRow.className = "document-requirement-field-row";
@@ -236,6 +290,20 @@ function renderRequirement(
     fieldLabel("Opis źródła", sourceDescription),
   );
 
+  if (linkedFile) {
+    const physical = document.createElement("div");
+    physical.className = "document-linked-file";
+    const copy = document.createElement("span");
+    copy.textContent = `Plik: ${linkedFile.name} · ${linkedFile.fileType}`;
+    const open = document.createElement("a");
+    open.href = linkedFile.url;
+    open.target = "_blank";
+    open.rel = "noopener noreferrer";
+    open.textContent = "Otwórz plik ↗";
+    physical.append(copy, open);
+    body.append(physical);
+  }
+
   const informational = () => requirement.value === "INFORMATIONAL";
   const refreshMode = () => {
     const isInfo = informational();
@@ -251,7 +319,7 @@ function renderRequirement(
   const save = document.createElement("button");
   save.type = "button";
   save.className = "primary document-requirement-save";
-  save.textContent = "Zapisz wymaganie";
+  save.textContent = "Zapisz dokument";
   save.onclick = () => {
     const values: Record<string, unknown> = {
       label: labelInput.value,
@@ -280,7 +348,7 @@ function renderRequirement(
         values,
       })
       .then(() => {
-        options.notice(`Zapisano wymaganie: ${labelInput.value || "Dokument"}.`);
+        options.notice(`Zapisano dokument: ${labelInput.value || "Dokument"}.`);
         options.onChanged();
       })
       .catch((error: unknown) =>
@@ -290,7 +358,7 @@ function renderRequirement(
   body.append(save);
 
   card.append(summary, body);
-  return card;
+  return { node: card, linkedFileId: linkedFile?.id };
 }
 
 export function hasRequirementForFile(
@@ -298,42 +366,28 @@ export function hasRequirementForFile(
   objectId: string,
   fileSourceId: string,
 ): boolean {
-  const source = (state.fileSources ?? []).find(
-    (entry) => entry.id === fileSourceId && entry.objectId === objectId,
+  return (state.documentRequirements ?? []).some(
+    (row) =>
+      row.objectId === objectId &&
+      linkedFileForRequirement(row, state, objectId)?.id === fileSourceId,
   );
-  const sourceLabel = source
-    ? (source.display_name?.trim() || source.name).trim()
-    : "";
-
-  return (state.documentRequirements ?? []).some((row) => {
-    if (row.objectId !== objectId) return false;
-    if (row.original_file_source_id === fileSourceId) return true;
-    if (!(row.source_file_source_ids ?? []).includes(fileSourceId)) return false;
-    return Boolean(
-      sourceLabel &&
-        row.label?.trim() &&
-        row.label.trim().toLocaleLowerCase("pl-PL") ===
-          sourceLabel.toLocaleLowerCase("pl-PL"),
-    );
-  });
 }
 
-export function renderDocumentRequirementsUi(options: RenderOptions): void {
+/**
+ * Appends document cards to the shared document list and returns physical files
+ * represented by those cards, so the caller does not render the same document
+ * for a second time as a raw attachment.
+ */
+export function renderDocumentRequirementsUi(options: RenderOptions): Set<string> {
   const rows = (options.state.documentRequirements ?? []).filter(
     (row) => row.objectId === options.object.id,
   );
-  options.root.replaceChildren();
-
-  if (!rows.length) {
-    const empty = document.createElement("p");
-    empty.className = "document-requirement-empty";
-    empty.textContent =
-      "Brak wymagań dokumentowych. Dodaj dokument bez wzoru albo utwórz wymaganie z pliku operatora.";
-    options.root.append(empty);
-    return;
-  }
+  const representedFileIds = new Set<string>();
 
   for (const row of rows) {
-    options.root.append(renderRequirement(row, options));
+    const rendered = renderRequirement(row, options);
+    options.root.append(rendered.node);
+    if (rendered.linkedFileId) representedFileIds.add(rendered.linkedFileId);
   }
+  return representedFileIds;
 }

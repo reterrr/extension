@@ -2233,8 +2233,43 @@ export const workspaceReady = (() => {
       $("file-sources-section").hidden = false;
       $("geography-section").hidden = !BurbotSchema[object.type]?.geography;
       $("operator-assignments-section").hidden = !["project", "recruitment"].includes(object.type);
+
+      const objectFiles = (db.fileSources || []).filter(
+        (row) => row.objectId === object.id,
+      );
+      const objectRequirements = (db.documentRequirements || []).filter(
+        (row) => row.objectId === object.id,
+      );
+      const representedFileIds = new Set();
+      for (const requirement of objectRequirements) {
+        if (requirement.original_file_source_id) {
+          representedFileIds.add(requirement.original_file_source_id);
+          continue;
+        }
+        const label = String(requirement.label || "")
+          .trim()
+          .toLocaleLowerCase("pl-PL");
+        for (const fileId of requirement.source_file_source_ids || []) {
+          const file = objectFiles.find((row) => row.id === fileId);
+          const fileLabel = String(file?.display_name || file?.name || "")
+            .trim()
+            .toLocaleLowerCase("pl-PL");
+          if (label && fileLabel === label) representedFileIds.add(fileId);
+        }
+      }
+      const documentCount =
+        objectRequirements.length +
+        objectFiles.filter((row) => !representedFileIds.has(row.id)).length;
+      const documentForm = pluralRules.select(documentCount);
+      $("file-source-count").textContent = documentCount
+        ? documentCount +
+          " " +
+          ["dokument", "dokumenty", "dokumentów"][
+            documentForm === "one" ? 0 : documentForm === "few" ? 1 : 2
+          ]
+        : "Brak dokumentów";
+
       for (const [key, countId, forms] of [
-        ["fileSources", "file-source-count", ["plik", "pliki", "plików"]],
         ["geographies", "geography-count", ["zakres", "zakresy", "zakresów"]],
         ["operatorAssignments", "operator-assignment-count", ["operator", "operatorzy", "operatorów"]],
         ["financingRules", "funding-status", ["wariant", "warianty", "wariantów"]],

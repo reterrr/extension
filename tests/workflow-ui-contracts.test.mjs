@@ -252,11 +252,12 @@ test("React sidepanel has a visible crash recovery boundary", () => {
 });
 
 
-test("Documents section separates physical files from document requirements", () => {
+test("Documents section renders one unified list for files and no-template documents", () => {
   const app = source("src/sidepanel/App.tsx");
   const workspace = source("src/sidepanel/workspace.js");
   const files = source("src/sidepanel/fileSourcesUi.ts");
   const documents = source("src/sidepanel/documentRequirementsUi.ts");
+  const inheritance = source("src/shared/fileInheritance.ts");
   const background = source("src/background/index.ts");
 
   assert.equal(app.includes('id="documents-panel"'), false);
@@ -264,10 +265,12 @@ test("Documents section separates physical files from document requirements", ()
   assert.equal(workspace.includes("renderDocuments(object)"), false);
 
   assert.match(app, /<strong>Dokumenty<\/strong>/);
-  assert.match(app, /id="document-requirement-list"/);
+  assert.match(app, /id="file-source-list"/);
   assert.match(app, /id="add-document-requirement"/);
-  assert.match(app, /Dodaj dokument bez wzoru/);
-  assert.match(app, /Pliki operatora/);
+  assert.match(app, /\+ Dodaj bez wzoru/);
+  assert.equal(app.includes('id="document-requirement-list"'), false);
+  assert.equal(app.includes("Pliki operatora"), false);
+  assert.equal(app.includes("Wymagania dokumentowe"), false);
 
   for (const label of [
     "Nazwa",
@@ -275,7 +278,7 @@ test("Documents section separates physical files from document requirements", ()
     "Wymagalność",
     "Podpis",
     "Źródło / sposób przygotowania",
-    "Wzór operatora",
+    "Plik / wzór operatora",
     "Kiedy dokument jest wymagany",
     "Etap dostarczenia",
     "Odpowiedzialność",
@@ -283,34 +286,29 @@ test("Documents section separates physical files from document requirements", ()
     "Oficjalne źródło",
     "Opis źródła",
   ]) {
-    assert.ok(
-      documents.includes(label),
-      `missing document requirement label: ${label}`,
-    );
+    assert.ok(documents.includes(label), `missing document field: ${label}`);
   }
 
-  assert.equal(documents.includes("Wersja dokumentu"), false);
-  assert.equal(documents.includes("Pliki źródłowe / dowodowe"), false);
+  assert.match(
+    documents,
+    /card\.className = "document-requirement-row file-source-row"/,
+  );
+  assert.match(files, /const representedFileIds = supportsRequirements/);
+  assert.match(
+    files,
+    /const looseFiles = sources\.filter\([\s\S]*?!representedFileIds\.has\(source\.id\)/,
+  );
+  assert.match(files, /Dziedzicz dokumenty z projektu/);
+  assert.match(files, /inheritance\.pendingRequirements\.length/);
+  assert.match(inheritance, /copiedRequirements/);
+  assert.match(inheritance, /copiedFromDocumentRequirementId/);
+  assert.match(background, /inherited\.copiedRequirements\.length/);
 
   assert.match(files, /Dodaj jako wymaganie/);
-  assert.match(files, /renderDocumentRequirementsUi/);
   assert.match(files, /ADD_DOCUMENT_REQUIREMENT/);
   assert.match(background, /message\.op === "ADD_DOCUMENT_REQUIREMENT"/);
   assert.match(background, /message\.op === "UPDATE_DOCUMENT_REQUIREMENT"/);
   assert.match(background, /message\.op === "REMOVE_DOCUMENT_REQUIREMENT"/);
-
-  // Physical file classification remains available independently.
-  for (const label of [
-    "Nazwa",
-    "Cel dokumentu",
-    "Czy plik zawiera pola do wypełnienia?",
-    "Przeznaczenie",
-    "Wymagalność",
-    "Podpis",
-  ]) {
-    assert.ok(files.includes(label), `missing file classification label: ${label}`);
-  }
-  assert.match(files, /UPDATE_FILE_SOURCE/);
 });
 
 

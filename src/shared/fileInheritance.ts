@@ -4,6 +4,7 @@ import {
 } from "./fileMetadata";
 import type {
   LegacyStorageState,
+  LegacyStoredDocumentRequirement,
   LegacyStoredFileSource,
   LegacyStoredObject,
 } from "./types/legacy-storage";
@@ -13,6 +14,12 @@ export interface ProjectFileInheritanceStatus {
   projectFiles: LegacyStoredFileSource[];
   pendingFiles: LegacyStoredFileSource[];
   inheritedFiles: LegacyStoredFileSource[];
+  projectRequirements: LegacyStoredDocumentRequirement[];
+  pendingRequirements: LegacyStoredDocumentRequirement[];
+  inheritedRequirements: LegacyStoredDocumentRequirement[];
+  projectDocumentCount: number;
+  pendingDocumentCount: number;
+  inheritedDocumentCount: number;
 }
 
 function recruitmentProjectId(recruitment: LegacyStoredObject): string | null {
@@ -34,6 +41,35 @@ export function projectForRecruitment(
   );
 }
 
+function linkedFileIdForRequirement(
+  row: LegacyStoredDocumentRequirement,
+  files: LegacyStoredFileSource[],
+): string | undefined {
+  if (
+    row.original_file_source_id &&
+    files.some((file) => file.id === row.original_file_source_id)
+  ) {
+    return row.original_file_source_id;
+  }
+  const label = row.label?.trim().toLocaleLowerCase("pl-PL") ?? "";
+  return files.find(
+    (file) =>
+      (row.source_file_source_ids ?? []).includes(file.id) &&
+      (file.display_name?.trim() || file.name)
+        .trim()
+        .toLocaleLowerCase("pl-PL") === label,
+  )?.id;
+}
+
+function requirementSignature(row: LegacyStoredDocumentRequirement): string {
+  return [
+    row.importKey || "",
+    row.label?.trim().toLocaleLowerCase("pl-PL") || "",
+    row.fulfillment_mode || "",
+    row.requirement || "",
+  ].join("\u001f");
+}
+
 export function projectFileInheritanceStatus(
   state: LegacyStorageState,
   recruitment: LegacyStoredObject,
@@ -45,6 +81,12 @@ export function projectFileInheritanceStatus(
       projectFiles: [],
       pendingFiles: [],
       inheritedFiles: [],
+      projectRequirements: [],
+      pendingRequirements: [],
+      inheritedRequirements: [],
+      projectDocumentCount: 0,
+      pendingDocumentCount: 0,
+      inheritedDocumentCount: 0,
     };
   }
 
@@ -72,11 +114,66 @@ export function projectFileInheritanceStatus(
       !recruitmentUrls.has(file.url),
   );
 
+  const allRequirements = state.documentRequirements ?? [];
+  const projectRequirements = allRequirements.filter(
+    (row) => row.objectId === project.id,
+  );
+  const recruitmentRequirements = allRequirements.filter(
+    (row) => row.objectId === recruitment.id,
+  );
+  const inheritedRequirements = recruitmentRequirements.filter(
+    (row) => row.copiedFromProjectId === project.id,
+  );
+  const inheritedRequirementIds = new Set(
+    inheritedRequirements
+      .map((row) => row.copiedFromDocumentRequirementId)
+      .filter((value): value is string => typeof value === "string" && !!value),
+  );
+  const existingRequirementSignatures = new Set(
+    recruitmentRequirements.map(requirementSignature),
+  );
+  const pendingRequirements = projectRequirements.filter(
+    (row) =>
+      !inheritedRequirementIds.has(row.id) &&
+      !existingRequirementSignatures.has(requirementSignature(row)),
+  );
+
+  const representedProjectFileIds = new Set(
+    projectRequirements
+      .map((row) => linkedFileIdForRequirement(row, projectFiles))
+      .filter((value): value is string => Boolean(value)),
+  );
+  const representedPendingFileIds = new Set(
+    pendingRequirements
+      .map((row) => linkedFileIdForRequirement(row, projectFiles))
+      .filter((value): value is string => Boolean(value)),
+  );
+  const representedInheritedFileIds = new Set(
+    inheritedRequirements
+      .map((row) => linkedFileIdForRequirement(row, recruitmentFiles))
+      .filter((value): value is string => Boolean(value)),
+  );
+  const projectDocumentCount =
+    projectRequirements.length +
+    projectFiles.filter((file) => !representedProjectFileIds.has(file.id)).length;
+  const pendingDocumentCount =
+    pendingRequirements.length +
+    pendingFiles.filter((file) => !representedPendingFileIds.has(file.id)).length;
+  const inheritedDocumentCount =
+    inheritedRequirements.length +
+    inheritedFiles.filter((file) => !representedInheritedFileIds.has(file.id)).length;
+
   return {
     project,
     projectFiles,
     pendingFiles,
     inheritedFiles,
+    projectRequirements,
+    pendingRequirements,
+    inheritedRequirements,
+    projectDocumentCount,
+    pendingDocumentCount,
+    inheritedDocumentCount,
   };
 }
 
@@ -101,6 +198,51 @@ function copyOptionalMetadata(
   }
 }
 
+function fileCopyMap(
+  status: ProjectFileInheritanceStatus,
+  recruitmentFiles: LegacyStoredFileSource[],
+): Map<string, string> {
+  const mapping = new Map<string, string>();
+
+  for (const projectFile of status.projectFiles) {
+    const inherited = recruitmentFiles.find(
+      (file) => file.copiedFromFileSourceId === projectFile.id,
+    );
+    const sameUrl = recruitmentFiles.find(
+      (file) => file.url && file.url === projectFile.url,
+    );
+    const target = inherited ?? sameUrl;
+    if (target) mapping.set(projectFile.id, target.id);
+  }
+  return mapping;
+}
+
+function remapRequirementFiles(
+  source: LegacyStoredDocumentRequirement,
+  copy: LegacyStoredDocumentRequirement,
+  mapping: Map<string, string>,
+): void {
+  if (source.original_file_source_id) {
+    const mapped = mapping.get(source.original_file_source_id);
+    if (!mapped) {
+      throw new Error(
+        `Nie udało się skopiować wzoru operatora dla dokumentu „${source.label}”.`,
+      );
+    }
+    copy.original_file_source_id = mapped;
+  } else {
+    delete copy.original_file_source_id;
+  }
+
+  if (source.source_file_source_ids?.length) {
+    copy.source_file_source_ids = source.source_file_source_ids
+      .map((sourceId) => mapping.get(sourceId))
+      .filter((value): value is string => Boolean(value));
+  } else {
+    copy.source_file_source_ids = [];
+  }
+}
+
 export function inheritProjectFilesAsCopies(
   state: LegacyStorageState,
   recruitmentId: string,
@@ -109,7 +251,9 @@ export function inheritProjectFilesAsCopies(
 ): {
   project: LegacyStoredObject;
   copied: LegacyStoredFileSource[];
+  copiedRequirements: LegacyStoredDocumentRequirement[];
   skipped: number;
+  skippedRequirements: number;
 } {
   const recruitment = state.objects.find(
     (object) => object.id === recruitmentId,
@@ -122,8 +266,8 @@ export function inheritProjectFilesAsCopies(
   if (!status.project) {
     throw new Error("Najpierw przypisz projekt do naboru.");
   }
-  if (!status.projectFiles.length) {
-    throw new Error("Przypisany projekt nie ma plików do skopiowania.");
+  if (!status.projectFiles.length && !status.projectRequirements.length) {
+    throw new Error("Przypisany projekt nie ma dokumentów do skopiowania.");
   }
 
   const sources = (state.fileSources ||= []);
@@ -147,9 +291,31 @@ export function inheritProjectFilesAsCopies(
     return copy;
   });
 
+  const recruitmentFiles = sources.filter(
+    (file) => file.objectId === recruitment.id,
+  );
+  const mapping = fileCopyMap(status, recruitmentFiles);
+  const requirements = (state.documentRequirements ||= []);
+  const copiedRequirements = status.pendingRequirements.map((source) => {
+    const copy: LegacyStoredDocumentRequirement = JSON.parse(
+      JSON.stringify(source),
+    );
+    copy.id = idFactory();
+    copy.objectId = recruitment.id;
+    copy.copiedFromProjectId = status.project!.id;
+    copy.copiedFromDocumentRequirementId = source.id;
+    copy.copiedAt = now;
+    remapRequirementFiles(source, copy, mapping);
+    requirements.push(copy);
+    return copy;
+  });
+
   return {
     project: status.project,
     copied,
+    copiedRequirements,
     skipped: status.projectFiles.length - copied.length,
+    skippedRequirements:
+      status.projectRequirements.length - copiedRequirements.length,
   };
 }
