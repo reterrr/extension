@@ -476,7 +476,12 @@ test("FundPilot recruitment export keeps the complete portable business dataset 
       {
         id: "SERVICE_1",
         objectId: "PR_1",
-        label: "Szkolenia",
+        label: "Szkolenia / walidacja / certyfikacja",
+      },
+      {
+        id: "SERVICE_2",
+        objectId: "PR_1",
+        label: "Doradztwo",
       },
     ],
     financingRules: [
@@ -506,6 +511,17 @@ test("FundPilot recruitment export keeps the complete portable business dataset 
         copiedFromProjectId: "PR_1",
         copiedFromFundingRuleId: "FUND_PROJECT",
         copiedAt: "2026-10-14T12:30:00.000Z",
+      },
+      {
+        id: "FUND_NAB_2",
+        objectId: "NAB_1",
+        company_size: "MICRO",
+        variant_no: 2,
+        service_category_id: "SERVICE_2",
+        refund_percent_base: 50,
+        refund_percent_max: 70,
+        max_amount_pln: 12000,
+        notes: "Wariant doradczy",
       },
     ],
     geographies: [
