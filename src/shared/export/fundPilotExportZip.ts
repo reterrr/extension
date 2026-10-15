@@ -314,9 +314,8 @@ function portableStateForRecruitment(
   const object = cloneJson(recruitment);
   const values = { ...(object.values ?? {}) };
 
-  // FundPilot package scope is exactly one Recruitment. Relations may still be
-  // present in complete_state for traceability, but the portable business
-  // payload must not pull Project / Operator objects into objects[].
+  // Internal portable state is used only to collect the current recruitment's
+  // physical files. It is never serialized into fundpilot.json.
   delete values.project_id;
   delete values.operator_id;
   object.values = values;
