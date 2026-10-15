@@ -14,6 +14,7 @@ export const ROUND_IMPORT_MANIFEST_MAX_BYTES = 1 * MIB;
 export const ROUND_IMPORT_FILE_MAX_BYTES = 10 * MIB;
 export const ROUND_IMPORT_TOTAL_FILE_MAX_BYTES = 99 * MIB;
 export const ROUND_IMPORT_MAX_FILES = 30;
+export const ROUND_IMPORT_MAX_DOCUMENTS = 30;
 
 const TARGET_EXTENSIONS = new Set([
   "pdf",
@@ -434,20 +435,32 @@ const FUNDING_LABEL: Record<string, string> = {
   OTHER_EMPLOYER: "Pozostali pracodawcy",
 };
 
-function fundingLabel(row: Record<string, unknown>, index: number): string {
+function localServiceUuid(index: number): string {
+  return `00000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`;
+}
+
+function fundingLabel(
+  row: Record<string, unknown>,
+  index: number,
+  serviceLabel?: string,
+): string {
   const size = String(row.company_size ?? "");
   const base = FUNDING_LABEL[size] ?? "Wariant";
   const variantNo = Number(row.variant_no);
   const variant =
     Number.isInteger(variantNo) && variantNo > 0 ? variantNo : index + 1;
   const note = cleanText(row.notes).replace(/\s+/gu, " ");
-  const label = note ? `${base} — ${note}` : `${base} — wariant ${variant}`;
-  return label.slice(0, 200).trim() || `Wariant ${index + 1}`;
+  const parts = [
+    base,
+    serviceLabel,
+    note || `wariant ${variant}`,
+  ].filter(Boolean);
+  return parts.join(" — ").slice(0, 200).trim() || `Wariant ${index + 1}`;
 }
 
 function fundingVariants(
   rows: Array<Record<string, unknown>>,
-  serviceIds: Set<string>,
+  serviceIdMap: Map<string, { id: string; label: string }>,
 ): RoundImportFundingVariant[] {
   if (rows.length > 30) {
     throw new Error(
@@ -456,32 +469,35 @@ function fundingVariants(
   }
 
   return rows.map((row, index) => {
-    const serviceCategoryId = cleanText(row.service_category_id);
-    if (serviceCategoryId && !serviceIds.has(serviceCategoryId)) {
+    const sourceServiceId = cleanText(row.service_category_id);
+    const service = sourceServiceId
+      ? serviceIdMap.get(sourceServiceId)
+      : undefined;
+    if (sourceServiceId && !service) {
       throw new Error(
         `Wariant „${fundingLabel(row, index)}” wskazuje usługę, której nie ma w projekcie.`,
       );
     }
     return {
-    label: fundingLabel(row, index),
-    ...(serviceCategoryId ? { serviceCategoryId } : {}),
-    mspSize: MSP_SIZE_MAP[String(row.company_size ?? "")] ?? null,
-    refundPct: firstPercentage(row, [
-      "refund_percent_max",
-      "refund_percent_standard",
-      "refund_percent_avg",
-      "refund_percent_base",
-      "refund_percent_min",
-      "refund_percent",
-    ]),
-    maxAmountPln: nonNegativeNumber(row.max_amount_pln),
-    maxPerPersonPln: nonNegativeNumber(row.max_per_person_pln),
-    ownContributionForm:
-      row.own_contribution_form === "CASH"
-        ? "monetary"
-        : row.own_contribution_form === "WAGES"
-          ? "salary"
-          : null,
+      label: fundingLabel(row, index, service?.label),
+      ...(service ? { serviceCategoryId: service.id } : {}),
+      mspSize: MSP_SIZE_MAP[String(row.company_size ?? "")] ?? null,
+      refundPct: firstPercentage(row, [
+        "refund_percent_max",
+        "refund_percent_standard",
+        "refund_percent_avg",
+        "refund_percent_base",
+        "refund_percent_min",
+        "refund_percent",
+      ]),
+      maxAmountPln: nonNegativeNumber(row.max_amount_pln),
+      maxPerPersonPln: nonNegativeNumber(row.max_per_person_pln),
+      ownContributionForm:
+        row.own_contribution_form === "CASH"
+          ? "monetary"
+          : row.own_contribution_form === "WAGES"
+            ? "salary"
+            : null,
     };
   });
 }
@@ -567,6 +583,7 @@ function documentFromFile(
 function documentRequirement(
   row: NonNullable<LegacyStorageState["documentRequirements"]>[number],
   fileIdBySourceId: Map<string, string>,
+  localKey: string,
 ): RoundImportDocument {
   const requirementMap: Record<string, RoundRequirement> = {
     REQUIRED: "required",
@@ -594,13 +611,6 @@ function documentRequirement(
   const purpose =
     cleanText(row.purpose) ||
     cleanText(row.notes);
-  const key =
-    cleanText(row.importKey) ||
-    cleanText(row.id) ||
-    cleanText(row.document_type_key);
-  if (!key) {
-    throw new Error("Wymaganie dokumentowe nie ma stabilnego klucza.");
-  }
 
   const normalizedRequirement =
     requirementMap[String(row.requirement ?? "UNKNOWN")] ?? "unknown";
@@ -624,7 +634,7 @@ function documentRequirement(
   }
 
   const document: RoundImportDocument = {
-    key: boundedText(key, 100, "documents.key"),
+    key: boundedText(localKey, 100, "documents.key"),
     label: boundedText(label, 500, "documents.label"),
     purpose: boundedText(
       purpose || label,
@@ -664,6 +674,18 @@ function documentRequirement(
   if (requiredEvidence) document.requiredEvidence = requiredEvidence;
   if (sourceUrl) document.sourceUrl = sourceUrl;
   if (sourceDescription) document.sourceDescription = sourceDescription;
+  const sourceFileIds = (row.source_file_source_ids ?? [])
+    .map((sourceId) => fileIdBySourceId.get(String(sourceId)))
+    .filter((value): value is string => !!value);
+  if (sourceFileIds.length) {
+    document.sourceFileIds = [...new Set(sourceFileIds)].slice(0, 30);
+  }
+  const versionLabel = boundedText(
+    row.version_label,
+    255,
+    "documents.versionLabel",
+  );
+  if (versionLabel) document.versionLabel = versionLabel;
 
   return document;
 }
