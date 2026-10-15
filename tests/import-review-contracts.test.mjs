@@ -208,6 +208,85 @@ test("import JSON can set Active View without applying imported data", () => {
   );
 });
 
+test("Set View from JSON uses only existing ids/import keys and ignores invalid import payload details", () => {
+  const document = {
+    version: 1,
+    offset_unit: "unicode_codepoint",
+    objects: [
+      {
+        key: "PR_EXISTING_KEY",
+        type: "project",
+        data: { name: "Nazwa z pliku, której View nie powinien importować" },
+        files: [
+          {
+            key: "BROKEN_NO_TEMPLATE",
+            without_template: true,
+            metadata: {},
+          },
+        ],
+      },
+      {
+        id: "recruitment-db-id",
+        type: "recruitment",
+        data: { external_number: "Inna wartość z JSON" },
+      },
+    ],
+  };
+  const state = {
+    version: 1,
+    revision: 3,
+    objects: [
+      {
+        id: "project-db-id",
+        importKey: "PR_EXISTING_KEY",
+        type: "project",
+        label: "Projekt z bazy",
+        values: {
+          name: "PEŁNA AKTUALNA NAZWA Z BAZY",
+          funding_conditions: "Aktualne warunki z bazy",
+        },
+      },
+      {
+        id: "recruitment-db-id",
+        importKey: "NAB_EXISTING_KEY",
+        type: "recruitment",
+        label: "Nabór z bazy",
+        values: {
+          external_number: "NABÓR Z BAZY",
+          eligible_entities: "Aktualne dane naboru z bazy",
+        },
+      },
+    ],
+    rules: [],
+  };
+  const before = structuredClone(state);
+
+  const resolved = viewSelectionModule.createObjectViewFromJsonDocument(
+    document,
+    state,
+    "2026-10-15T12:30:00.000Z",
+  );
+
+  assert.deepEqual(resolved.view.objectIds, [
+    "project-db-id",
+    "recruitment-db-id",
+  ]);
+  assert.equal(resolved.unresolvedSelectors.length, 0);
+  assert.equal(
+    resolved.matchedObjects[0].values.name,
+    "PEŁNA AKTUALNA NAZWA Z BAZY",
+  );
+  assert.equal(
+    resolved.matchedObjects[1].values.eligible_entities,
+    "Aktualne dane naboru z bazy",
+  );
+  assert.deepEqual(
+    state,
+    before,
+    "Set View from JSON must never import values/files from the selected JSON",
+  );
+});
+
 test("Set View skips new import objects instead of importing them", () => {
   const document = documentFixture();
   document.objects.push({
