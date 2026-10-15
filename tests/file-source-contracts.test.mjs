@@ -784,12 +784,14 @@ test("FundPilot export rejects Project objects and exports one Recruitment at a 
     state.objects[1],
     "2026-10-14T17:05:00.000Z",
   );
-  assert.deepEqual(
-    plan.document.data.objects.map((object) => object.key),
-    ["N1"],
+  assert.equal(plan.document.format, "FundPilotExportV2");
+  assert.equal(plan.document.recruitment.name, "Nabór 1");
+  assert.equal(plan.document.recruitment.fields.project, "Projekt");
+  assert.equal(Object.prototype.hasOwnProperty.call(plan.document, "data"), false);
+  assert.equal(
+    JSON.stringify(plan.document).includes('"type":"project"'),
+    false,
   );
-  assert.equal(plan.document.data.objects.some((object) => object.key === "PR"), false);
-  assert.equal(plan.document.data.objects.some((object) => object.key === "N2"), false);
 });
 
 test("FundPilot package accepts archive attachments and maps them into files/", () => {
@@ -836,7 +838,8 @@ test("FundPilot package accepts archive attachments and maps them into files/", 
   assert.equal(plan.document.package_files.length, 1);
   assert.equal(plan.document.package_files[0].file_type, "ZIP");
   assert.equal(plan.document.package_files[0].path, "files/dokumenty.zip");
-  assert.equal(plan.document.data.objects[0].files[0].source, plan.document.package_files[0].source);
+  assert.equal(plan.document.recruitment.fileSources[0].package_path, "files/dokumenty.zip");
+  assert.equal(Object.prototype.hasOwnProperty.call(plan.document.package_files[0], "source"), false);
 });
 
 test("FundPilot ZIP writer creates fundpilot.json plus declared package files", () => {
@@ -845,7 +848,7 @@ test("FundPilot ZIP writer creates fundpilot.json plus declared package files", 
     [
       {
         path: "fundpilot.json",
-        data: encoder.encode('{"format":"FundPilotExportV1"}'),
+        data: encoder.encode('{"format":"FundPilotExportV2"}'),
       },
       {
         path: "files/dokumenty.zip",
