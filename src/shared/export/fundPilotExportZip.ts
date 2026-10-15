@@ -1078,22 +1078,34 @@ export function buildFundPilotExportPackagePlan(
     portable,
   );
 
-  const document: FundPilotExportV1 = {
-    format: "FundPilotExportV1",
+  const externalFiles = externalPackageFiles(
+    state,
+    rootObject,
+    packageFiles,
+    physicalSources,
+  );
+  const recruitment = resolvedRecruitmentState(
+    state,
+    rootObject,
+    packageFiles,
+    physicalSources,
+  );
+
+  const document: FundPilotExportV2 = {
+    format: "FundPilotExportV2",
     exported_at: exportedAt,
     root_object: {
-      key: String(portableRoot.key),
       type: String(rootObject.type),
       name: objectDisplayName(rootObject),
     },
-    package_files: packageFiles,
-    data: portable,
-    complete_state: completeStateForRecruitment(state, rootObject),
+    package_files: externalFiles,
+    recruitment,
     system: {
       workspace_revision: state.revision,
-      objects: systemObjects(state, [portableRoot]),
+      object: systemObject(rootObject),
     },
   };
+  assertExternalValues(document);
 
   const folderName = safeDownloadPathSegment(
     `FundPilot - ${objectDisplayName(rootObject)}`,
