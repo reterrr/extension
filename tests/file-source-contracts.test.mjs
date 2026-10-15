@@ -1234,40 +1234,40 @@ test("RoundImport exports configured documents including requirements without op
   });
   assert.equal(form.fulfillmentMode, "operator_template");
   assert.equal(form.originalFileId, "FILE_002");
-  assert.equal(Object.prototype.hasOwnProperty.call(form, "sourceFileIds"), false);
+  assert.deepEqual(form.sourceFileIds, ["FILE_001", "FILE_002"]);
   assert.equal(form.condition, "Gdy podmiot składa zgłoszenie w tej ścieżce.");
   assert.equal(Object.prototype.hasOwnProperty.call(form, "deliveryStage"), false);
   assert.equal(Object.prototype.hasOwnProperty.call(form, "responsibility"), false);
   assert.equal(Object.prototype.hasOwnProperty.call(form, "requiredEvidence"), false);
   assert.equal(form.signatureRequirement, "required_file");
-  assert.equal(Object.prototype.hasOwnProperty.call(form, "versionLabel"), false);
+  assert.equal(form.versionLabel, "1.0");
 
   assert.equal(bank.fulfillmentMode, "without_operator_template");
   assert.equal(bank.originalFileId, null);
-  assert.equal(Object.prototype.hasOwnProperty.call(bank, "sourceFileIds"), false);
+  assert.deepEqual(bank.sourceFileIds, ["FILE_001"]);
   assert.equal(
     bank.requiredEvidence,
     "Zaświadczenie o prowadzeniu rachunku lub kopia umowy rachunku.",
   );
 });
 
-test("RoundImport exports runtime project services and funding service assignments", () => {
-  const serviceId = "11111111-1111-4111-8111-111111111111";
+test("FundPilot RoundImport exports service values with manifest-local UUID references", () => {
+  const databaseServiceId = "11111111-1111-4111-8111-111111111111";
   const state = {
     version: 1,
     revision: 1,
     objects: [
       {
-        id: "project",
+        id: "project-db-id",
         type: "project",
         values: { name: "Projekt" },
       },
       {
-        id: "round",
+        id: "round-db-id",
         type: "recruitment",
         values: {
           external_number: "Nabór usługowy",
-          project_id: "project",
+          project_id: "project-db-id",
           status: "AKTYWNY",
         },
       },
@@ -1276,19 +1276,32 @@ test("RoundImport exports runtime project services and funding service assignmen
     fileSources: [],
     serviceCategories: [
       {
-        id: serviceId,
-        objectId: "project",
-        label: "Szkolenia",
+        id: databaseServiceId,
+        objectId: "project-db-id",
+        label: "Szkolenia / walidacja / certyfikacja",
+      },
+      {
+        id: "service-db-non-uuid",
+        objectId: "project-db-id",
+        label: "Doradztwo",
       },
     ],
     financingRules: [
       {
-        id: "funding-1",
-        objectId: "round",
+        id: "funding-db-1",
+        objectId: "round-db-id",
         company_size: "MICRO",
         variant_no: 1,
-        service_category_id: serviceId,
+        service_category_id: databaseServiceId,
         refund_percent_max: 80,
+      },
+      {
+        id: "funding-db-2",
+        objectId: "round-db-id",
+        company_size: "MICRO",
+        variant_no: 2,
+        service_category_id: "service-db-non-uuid",
+        refund_percent_max: 70,
       },
     ],
   };
@@ -1297,13 +1310,40 @@ test("RoundImport exports runtime project services and funding service assignmen
     state,
     state.objects[1],
   );
+
   assert.deepEqual(plan.manifest.workspace.serviceCategories, [
-    { id: serviceId, label: "Szkolenia" },
+    {
+      id: "00000000-0000-4000-8000-000000000001",
+      label: "Szkolenia / walidacja / certyfikacja",
+    },
+    {
+      id: "00000000-0000-4000-8000-000000000002",
+      label: "Doradztwo",
+    },
   ]);
   assert.equal(
     plan.manifest.workspace.conditions.fundingVariants[0].serviceCategoryId,
-    serviceId,
+    "00000000-0000-4000-8000-000000000001",
   );
+  assert.equal(
+    plan.manifest.workspace.conditions.fundingVariants[1].serviceCategoryId,
+    "00000000-0000-4000-8000-000000000002",
+  );
+  assert.match(
+    plan.manifest.workspace.conditions.fundingVariants[0].label,
+    /Szkolenia \/ walidacja \/ certyfikacja/,
+  );
+  assert.match(
+    plan.manifest.workspace.conditions.fundingVariants[1].label,
+    /Doradztwo/,
+  );
+
+  const serialized = JSON.stringify(plan.manifest);
+  assert.equal(serialized.includes(databaseServiceId), false);
+  assert.equal(serialized.includes("service-db-non-uuid"), false);
+  assert.equal(serialized.includes("project-db-id"), false);
+  assert.equal(serialized.includes("round-db-id"), false);
+  assert.equal(serialized.includes("funding-db-1"), false);
 });
 
 test("RoundImport plan can export a data-only recruitment with no attachments", () => {
@@ -1337,6 +1377,44 @@ test("RoundImport plan can export a data-only recruitment with no attachments", 
   assert.deepEqual(plan.manifest.files, []);
   assert.deepEqual(plan.manifest.workspace.documents, []);
   assert.equal(plan.manifest.name, "Nabór bez plików");
+});
+
+test("FundPilot RoundImport refuses to silently truncate more than 30 documents", () => {
+  const state = {
+    version: 1,
+    revision: 1,
+    objects: [
+      {
+        id: "project",
+        type: "project",
+        values: { name: "Projekt" },
+      },
+      {
+        id: "round",
+        type: "recruitment",
+        values: {
+          external_number: "Nabór",
+          project_id: "project",
+        },
+      },
+    ],
+    rules: [],
+    fileSources: [],
+    documentRequirements: Array.from({ length: 31 }, (_, index) => ({
+      id: `doc-${index + 1}`,
+      objectId: "round",
+      label: `Dokument ${index + 1}`,
+      purpose: "Wymaganie",
+      requirement: "REQUIRED",
+      fulfillment_mode: "WITHOUT_OPERATOR_TEMPLATE",
+      signature_requirement: "NOT_REQUIRED",
+    })),
+  };
+
+  assert.throws(
+    () => roundImportZip.buildRoundImportPackagePlan(state, state.objects[1]),
+    /31 wymagań dokumentowych.*maksymalnie 30/,
+  );
 });
 
 test("RoundImport ZIP writer creates import.json and exact declared file paths", () => {
