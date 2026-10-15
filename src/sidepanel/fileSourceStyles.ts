@@ -16,6 +16,15 @@ if (!document.querySelector("style[data-burbot-file-sources]")) {
   border-radius: 7px;
   background: #fff;
 }
+.document-requirement-row[data-classified="false"] {
+  border-color: #e6bd72;
+}
+.document-requirement-row[data-classified="false"] > summary {
+  background: #fffaf0;
+}
+.document-requirement-pending {
+  align-self: center;
+}
 .document-requirement-row > summary {
   display: flex;
   align-items: flex-start;
