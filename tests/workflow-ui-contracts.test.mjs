@@ -743,6 +743,7 @@ test("project and recruitment workspace expose multiple operators and operator-s
 test("funding UI supports runtime project services", () => {
   const workspace = source("src/sidepanel/workspace.js");
   const app = source("src/sidepanel/App.tsx");
+  const background = source("src/background/index.ts");
 
   assert.match(app, /Twórz usługi projektu/);
   assert.match(workspace, /ADD_SERVICE_CATEGORY/);
@@ -752,6 +753,18 @@ test("funding UI supports runtime project services", () => {
   assert.match(workspace, /\+ Dodaj usługę/);
   assert.match(workspace, /Bez przypisanej usługi/);
   assert.match(workspace, /service_category_id/);
+
+  for (const op of [
+    "ADD_SERVICE_CATEGORY",
+    "UPDATE_SERVICE_CATEGORY",
+    "REMOVE_SERVICE_CATEGORY",
+    "SET_FUNDING_SERVICE",
+  ]) {
+    assert.match(
+      background,
+      new RegExp(`const ALLOWED_WRITES[\\s\\S]*?"${op}"`),
+    );
+  }
 });
 
 
