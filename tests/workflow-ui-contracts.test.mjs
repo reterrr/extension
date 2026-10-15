@@ -110,11 +110,12 @@ test("newly created objects are added to Active View and focused", () => {
 });
 
 
-test("Active View exposes its export action", () => {
+test("Active View exports exactly the selected set", () => {
   const manager = source("src/sidepanel/ViewManagerPanel.tsx");
 
   assert.match(manager, /createAiViewExport/);
   assert.match(manager, /aiViewExportFilename/);
+  assert.match(manager, /exactSelection: true/);
   assert.match(manager, />\s*Eksportuj zestaw\s*</);
 });
 
