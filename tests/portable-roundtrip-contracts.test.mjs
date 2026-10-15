@@ -202,6 +202,31 @@ test("View includes each project recruitment and referenced operators once with 
   );
 });
 
+test("exact View export contains only explicitly selected objects", () => {
+  const state = imported();
+  const call = state.objects.find((o) => o.type === "recruitment");
+  const project = state.objects.find((o) => o.type === "project");
+  assert.ok(call);
+  assert.ok(project);
+
+  const document = createAiViewExport({
+    state,
+    view: { objectIds: [call.id] },
+    exactSelection: true,
+  });
+
+  assert.equal(document.objects.length, 1);
+  assert.equal(document.objects[0].key, call.importKey);
+  assert.equal(document.objects[0].type, "recruitment");
+  assert.equal(document.objects[0].data.project_id, undefined);
+  assert.equal(document.objects[0].operators, undefined);
+  assert.equal(
+    document.objects.some((object) => object.key === project.importKey),
+    false,
+  );
+  assert.doesNotThrow(() => imported(document));
+});
+
 test("editing exported rows with database IDs updates existing rows, even with gaps in variant numbers", () => {
   const state = imported();
   for (const key of [
