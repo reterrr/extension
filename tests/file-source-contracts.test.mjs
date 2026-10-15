@@ -585,7 +585,7 @@ test("FundPilot recruitment export keeps the complete portable business dataset 
         delivery_stage: "ZGLOSZENIE",
         responsibility: "CLIENT",
         required_evidence: "Wydruk Karty Usługi z BUR.",
-        source_file_source_ids: ["FILE_PROJECT"],
+        source_file_source_ids: ["FILE_NAB"],
         version_label: "legacy-v1",
         signature_requirement: "NOT_REQUIRED",
       },
@@ -605,24 +605,13 @@ test("FundPilot recruitment export keeps the complete portable business dataset 
   assert.equal(exported.system.workspace_revision, 17);
 
   const keys = exported.data.objects.map((object) => object.key);
-  assert.deepEqual(keys, ["OP_1", "PR_1", "NAB_1"]);
-  assert.equal(keys.includes("NAB_2"), false);
+  assert.deepEqual(keys, ["NAB_1"]);
 
-  const project = exported.data.objects.find((object) => object.key === "PR_1");
-  const recruitment = exported.data.objects.find((object) => object.key === "NAB_1");
-  const operator = exported.data.objects.find((object) => object.key === "OP_1");
-
-  assert.equal(project.data.eligible_entities, "MŚP z obszaru projektu.");
-  assert.equal(project.data.funding_conditions, "Projektowo refundacja do 80%.");
-  assert.equal(
-    project.data.application_instructions,
-    "Zgłoszenie przez system operatora.",
-  );
-  assert.deepEqual(project.services, [
-    { key: "SERVICE_1", label: "Szkolenia" },
-  ]);
-  assert.equal(project.financing[0].data.refund_percent_base, 50);
-  assert.equal(project.financing[0].data.refund_percent_max, 80);
+  const recruitment = exported.data.objects[0];
+  assert.equal(recruitment.type, "recruitment");
+  assert.equal(Object.prototype.hasOwnProperty.call(recruitment.data, "project_id"), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(recruitment.data, "operator_id"), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(recruitment, "operators"), false);
 
   assert.equal(recruitment.data.status, "AKTYWNY");
   assert.equal(recruitment.data.dataRozpoczeciaOd, "2026-10-10");
@@ -632,9 +621,9 @@ test("FundPilot recruitment export keeps the complete portable business dataset 
   assert.equal(recruitment.financing[0].data.refund_percent_standard, 70);
   assert.equal(recruitment.financing[0].data.refund_percent_max, 85);
   assert.equal(recruitment.financing[0].data.max_per_person_pln, 5000);
-  assert.equal(recruitment.financing[0].service, "SERVICE_1");
+  assert.equal(Object.prototype.hasOwnProperty.call(recruitment.financing[0], "service"), false);
   assert.equal(recruitment.geography[0].value, "podkarpackie");
-  assert.equal(recruitment.geography[0].operator.$ref, "OP_1");
+  assert.equal(Object.prototype.hasOwnProperty.call(recruitment.geography[0], "operator"), false);
 
   const withoutTemplate = recruitment.files.find(
     (file) => file.key === "DOC_NO_TEMPLATE",
@@ -647,27 +636,15 @@ test("FundPilot recruitment export keeps the complete portable business dataset 
     "Wydruk Karty Usługi z BUR.",
   );
 
-  assert.equal(operator.contacts[0].value, "+48 17 123 45 67");
-
-  assert.equal(exported.package_files.length, 2);
+  assert.equal(exported.package_files.length, 1);
   assert.deepEqual(
-    exported.package_files.map((file) => file.path).sort(),
-    ["files/formularz.docx", "files/regulamin-projektu.pdf"],
+    exported.package_files.map((file) => file.path),
+    ["files/formularz.docx"],
   );
   assert.ok(
-    exported.package_files.some((file) =>
-      file.references.some(
-        (reference) =>
-          reference.object === "PR_1" && reference.file === "DOC_PROJECT",
-      ),
-    ),
-  );
-  assert.ok(
-    exported.package_files.some((file) =>
-      file.references.some(
-        (reference) =>
-          reference.object === "NAB_1" && reference.file === "DOC_NAB",
-      ),
+    exported.package_files[0].references.some(
+      (reference) =>
+        reference.object === "NAB_1" && reference.file === "DOC_NAB",
     ),
   );
 
@@ -681,8 +658,11 @@ test("FundPilot recruitment export keeps the complete portable business dataset 
   assert.equal(complete.revision, 17);
   assert.deepEqual(
     complete.objects.map((object) => object.id),
-    ["OP_1", "PR_1", "NAB_1"],
+    ["NAB_1"],
   );
+  assert.deepEqual(complete.operatorAssignments, []);
+  assert.deepEqual(complete.operatorContacts, []);
+  assert.deepEqual(complete.serviceCategories, []);
   assert.equal(
     complete.objects.find((object) => object.id === "NAB_1").manualFields
       .application_instructions,
@@ -698,20 +678,20 @@ test("FundPilot recruitment export keeps the complete portable business dataset 
   const completeNoTemplate = complete.documentRequirements.find(
     (row) => row.id === "DOC_NO_TEMPLATE",
   );
-  assert.deepEqual(completeNoTemplate.source_file_source_ids, ["FILE_PROJECT"]);
+  assert.deepEqual(completeNoTemplate.source_file_source_ids, ["FILE_NAB"]);
   assert.equal(completeNoTemplate.version_label, "legacy-v1");
 
-  assert.equal(plan.files.length, 2);
+  assert.equal(plan.files.length, 1);
   assert.match(plan.zipFileName, /^FundPilot - Nabór 1 - 2026\.zip$/);
 });
 
-test("FundPilot project export expands to all project recruitments", () => {
+test("FundPilot export rejects Project objects and exports one Recruitment at a time", () => {
   const state = {
     version: 1,
     revision: 1,
     objects: [
       {
-        id: "project-id",
+        id: "PR",
         importKey: "PR",
         type: "project",
         values: { name: "Projekt", status: "AKTYWNY", type: "B2B" },
@@ -741,18 +721,27 @@ test("FundPilot project export expands to all project recruitments", () => {
     fileSources: [],
   };
 
-  const plan = fundPilotExportZip.buildFundPilotExportPackagePlan(
-    state,
-    state.objects[0],
-    "2026-10-14T17:05:00.000Z",
+  assert.throws(
+    () =>
+      fundPilotExportZip.buildFundPilotExportPackagePlan(
+        state,
+        state.objects[0],
+        "2026-10-14T17:05:00.000Z",
+      ),
+    /tylko dla jednego naboru/,
   );
 
+  const plan = fundPilotExportZip.buildFundPilotExportPackagePlan(
+    state,
+    state.objects[1],
+    "2026-10-14T17:05:00.000Z",
+  );
   assert.deepEqual(
     plan.document.data.objects.map((object) => object.key),
-    ["PR", "N1", "N2"],
+    ["N1"],
   );
-  assert.deepEqual(plan.document.package_files, []);
-  assert.deepEqual(plan.files, []);
+  assert.equal(plan.document.data.objects.some((object) => object.key === "PR"), false);
+  assert.equal(plan.document.data.objects.some((object) => object.key === "N2"), false);
 });
 
 test("FundPilot package accepts archive attachments and maps them into files/", () => {
