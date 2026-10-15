@@ -109,8 +109,19 @@ function cleanText(value: unknown): string {
 }
 
 function objectDisplayName(object: LegacyStoredObject): string {
-  const value = cleanText(object.values?.external_number);
-  return value || cleanText(object.label) || cleanText(object.importKey) || object.id;
+  const value =
+    cleanText(object.values?.external_number) ||
+    cleanText(object.values?.name) ||
+    cleanText(object.label) ||
+    cleanText(object.values?.source_number) ||
+    cleanText(object.values?.number) ||
+    cleanText(object.values?.nip);
+  if (!value) {
+    throw new Error(
+      "Eksport FundPilot wymaga biznesowej nazwy obiektu zamiast wewnętrznego ID.",
+    );
+  }
+  return value;
 }
 
 function portableObjectForStoredObject(
