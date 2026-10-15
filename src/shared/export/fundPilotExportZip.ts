@@ -770,6 +770,9 @@ function resolvedRecruitmentState(
     requirement: row.requirement,
     fulfillment_mode: row.fulfillment_mode,
     signature_requirement: row.signature_requirement,
+    ...(documentTypeValue(row.document_type_key)
+      ? { document_type: documentTypeValue(row.document_type_key) }
+      : {}),
     ...(row.condition ? { condition: row.condition } : {}),
     ...(row.delivery_stage ? { delivery_stage: row.delivery_stage } : {}),
     ...(row.responsibility ? { responsibility: row.responsibility } : {}),
