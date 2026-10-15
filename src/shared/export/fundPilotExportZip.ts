@@ -30,8 +30,6 @@ export interface FundPilotPackageFile {
 }
 
 export interface FundPilotSystemObject {
-  key: string;
-  id: string;
   type: string;
   label?: string;
   source_url?: string;
@@ -41,20 +39,26 @@ export interface FundPilotSystemObject {
   last_checked_at?: string;
 }
 
-export interface FundPilotExportV1 {
-  format: "FundPilotExportV1";
+export interface FundPilotExternalPackageFile {
+  path: string;
+  name: string;
+  file_type: string;
+  original_url: string;
+  documents?: string[];
+}
+
+export interface FundPilotExportV2 {
+  format: "FundPilotExportV2";
   exported_at: string;
   root_object: {
-    key: string;
     type: string;
     name: string;
   };
-  package_files: FundPilotPackageFile[];
-  data: ReturnType<typeof createPortableExport>;
-  complete_state: LegacyStorageState;
+  package_files: FundPilotExternalPackageFile[];
+  recruitment: Record<string, unknown>;
   system: {
     workspace_revision: number;
-    objects: FundPilotSystemObject[];
+    object: FundPilotSystemObject;
   };
 }
 
@@ -65,14 +69,14 @@ export interface FundPilotPackageSource {
 }
 
 export interface FundPilotExportPackagePlan {
-  document: FundPilotExportV1;
+  document: FundPilotExportV2;
   files: FundPilotPackageSource[];
   zipFileName: string;
 }
 
 export interface FundPilotExportZipResult {
   blob: Blob;
-  document: FundPilotExportV1;
+  document: FundPilotExportV2;
   zipFileName: string;
 }
 
