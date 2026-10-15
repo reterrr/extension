@@ -586,7 +586,7 @@ export async function buildFundPilotExportZip(
   const plan = buildFundPilotExportPackagePlan(state, rootObject, exportedAt);
   const entries: ZipEntry[] = [
     {
-      path: "fundpilot.json",
+      path: "import.json",
       data: new TextEncoder().encode(JSON.stringify(plan.document, null, 2)),
     },
   ];
