@@ -508,22 +508,33 @@ test("document panel exports exactly one Recruitment as a FundPilot ZIP", () => 
   assert.equal(files.includes("buildProjectDownloadPlan"), false);
 });
 
-test("Import tab can set Active View without importing data", () => {
+test("Import tab can set Active View from existing DB ids without validating import data", () => {
   const review = source("src/sidepanel/ImportReviewPanel.tsx");
   const selection = source("src/shared/import/viewSelection.ts");
 
   assert.match(review, /Ustaw View z JSON/);
   assert.match(review, />\s*Ustaw View\s*</);
   assert.match(review, /createObjectViewFromImportReview/);
+  assert.match(review, /createObjectViewFromJsonDocument/);
   assert.match(review, /readWorkspaceState\(true\)/);
+  assert.match(
+    review,
+    /setViewFromJsonFile[\s\S]*?createObjectViewFromJsonDocument[\s\S]*?resolved\.unresolvedSelectors\.length/,
+  );
+  assert.equal(
+    /setViewFromJsonFile[\s\S]*?createImportReviewSession/.test(review),
+    false,
+  );
   assert.match(
     review,
     /\[OBJECT_VIEW_STORAGE_KEY\]: resolved\.view/,
   );
   assert.match(
     selection,
-    /deliberately does not stage, approve or otherwise[\s\S]*?Active View selection/,
+    /JSON is only a list of selectors[\s\S]*?runtime id or importKey/,
   );
+  assert.match(selection, /String\(object\.id\) === identifier/);
+  assert.match(selection, /String\(object\.importKey \?\? ""\) === identifier/);
   assert.equal(selection.includes("stageImportReviewObject"), false);
   assert.equal(selection.includes("writeActiveDraft"), false);
   assert.equal(selection.includes("publishUiState"), false);

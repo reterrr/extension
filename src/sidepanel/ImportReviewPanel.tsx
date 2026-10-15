@@ -7,7 +7,6 @@ import {
 import {
   allImportReviewEvidenceViews,
   buildImportApprovalPlan,
-  createImportReviewSession,
   findExistingImportObjectMatch,
   importReviewView,
   markImportObjectApproved,
@@ -21,7 +20,10 @@ import {
   readImportReview,
   writeImportReview,
 } from "../shared/import/reviewStore";
-import { createObjectViewFromImportReview } from "../shared/import/viewSelection";
+import {
+  createObjectViewFromImportReview,
+  createObjectViewFromJsonDocument,
+} from "../shared/import/viewSelection";
 import {
   stageImportReviewObject,
   type ImportApprovalPlanWithRules,
@@ -517,15 +519,9 @@ export function ImportReviewPanel() {
     setError("");
     try {
       const document = JSON.parse(await file.text()) as unknown;
-      const temporarySession = createImportReviewSession(
-        document,
-        file.name,
-        () => crypto.randomUUID(),
-        new Date().toISOString(),
-      );
       const currentState = await readWorkspaceState(true);
-      const resolved = createObjectViewFromImportReview(
-        temporarySession,
+      const resolved = createObjectViewFromJsonDocument(
+        document,
         currentState,
         new Date().toISOString(),
       );
@@ -534,7 +530,7 @@ export function ImportReviewPanel() {
       });
       announceViewResult(
         resolved.matchedObjects.length,
-        resolved.unresolvedObjects.length,
+        resolved.unresolvedSelectors.length,
       );
       requestWorkflowMode("view");
     } catch (cause) {
@@ -753,8 +749,9 @@ export function ImportReviewPanel() {
           <h2>Brak aktywnego importu</h2>
           <p>
             Możesz załadować JSON do Import Review albo tylko ustawić z niego
-            View. Ustawienie View wybiera istniejące obiekty i nie importuje
-            żadnych danych.
+            View. Ustawienie View czyta wyłącznie ID / key obiektów, odnajduje je
+            w bieżącej bazie i pokazuje ich pełne aktualne dane. Nie waliduje ani
+            nie importuje pozostałej zawartości JSON.
           </p>
           <div className="import-empty-actions">
             <button
