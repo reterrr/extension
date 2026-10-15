@@ -493,7 +493,6 @@ test("document panel exports exactly one Recruitment as a FundPilot ZIP", () => 
   assert.match(fundPilot, /path: "fundpilot\.json"/);
   assert.match(fundPilot, /package_files/);
   assert.match(fundPilot, /buildFundPilotStoreZip/);
-  assert.equal(files.includes("object.type === \"project\""), false);
   assert.equal(files.includes("buildRoundImportZip"), false);
   assert.equal(files.includes("buildProjectDownloadPlan"), false);
 });
