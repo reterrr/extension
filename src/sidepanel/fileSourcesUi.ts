@@ -21,7 +21,7 @@ import type {
   LegacyStoredObject,
 } from "../shared/types/legacy-storage";
 import type { RemoteFileSourceCandidate } from "../shared/types/source";
-import { buildFundPilotExportZip } from "../shared/export/fundPilotExportZip";
+import { buildRoundImportZip } from "../shared/export/roundImportZip";
 import {
   projectFileInheritanceStatus,
 } from "../shared/fileInheritance";
@@ -187,7 +187,7 @@ async function exportFundPilot(
   fileDownloadBusy = true;
   render();
   try {
-    const result = await buildFundPilotExportZip(
+    const result = await buildRoundImportZip(
       state,
       object,
       (completed, total, fileName) => {
@@ -211,9 +211,12 @@ async function exportFundPilot(
       window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
     }
 
-    const files = result.document.package_files.length;
+    const files = result.manifest.files.length;
+    const warningSuffix = result.warnings.length
+      ? ` Ostrzeżenia: ${result.warnings.join(" ")}`
+      : "";
     notice(
-      `Utworzono eksport FundPilot „${result.zipFileName}”: jeden nabór, fundpilot.json + ${files} plików.`,
+      `Utworzono eksport FundPilot „${result.zipFileName}”: import.json (RoundImportManifestV1) + ${files} plików.${warningSuffix}`,
     );
   } finally {
     fileDownloadBusy = false;
@@ -1106,7 +1109,7 @@ function render(): void {
     ? "Tworzenie eksportu FundPilot…"
     : "↓ Eksport FundPilot";
   downloadAll.title = isRecruitment
-    ? "Pobierz ZIP FundPilot tylko dla aktualnego naboru: fundpilot.json z pełnymi danymi tego naboru oraz jego fizyczne pliki w katalogu files/. Projekt i operatorzy nie są eksportowani jako obiekty."
+    ? "Pobierz ZIP FundPilot zgodny z RoundImportManifestV1: import.json + zadeklarowane pliki w files/. Eksport obejmuje tylko aktualny nabór; projekt i operator nie są osobnymi obiektami."
     : "";
 
   renderMode();

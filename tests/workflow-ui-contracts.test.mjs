@@ -485,27 +485,24 @@ test("recruitment can inherit project geography per operator and funding as copi
   assert.match(background, /copyProjectFundingToRecruitment/);
 });
 
-test("document panel exports exactly one Recruitment as a FundPilot ZIP", () => {
+test("document panel exports exactly one Recruitment as strict FundPilot RoundImport ZIP", () => {
   const app = source("src/sidepanel/App.tsx");
   const files = source("src/sidepanel/fileSourcesUi.ts");
-  const fundPilot = source("src/shared/export/fundPilotExportZip.ts");
+  const roundImport = source("src/shared/export/roundImportZip.ts");
 
   assert.match(files, /downloadAll\.hidden = !isRecruitment/);
   assert.match(files, /exportFundPilot/);
-  assert.match(files, /buildFundPilotExportZip/);
+  assert.match(files, /buildRoundImportZip/);
   assert.match(files, /tylko dla jednego naboru/);
-  assert.match(files, /jeden nabór, fundpilot\.json/);
+  assert.match(files, /import\.json \(RoundImportManifestV1\)/);
   assert.match(app, /↓ Eksport FundPilot/);
-  assert.match(fundPilot, /format: "FundPilotExportV1"/);
-  assert.match(fundPilot, /rootObject\.type !== "recruitment"/);
-  assert.match(fundPilot, /portableStateForRecruitment/);
-  assert.match(fundPilot, /objects: \[object\]/);
-  assert.match(fundPilot, /operatorAssignments: \[\]/);
-  assert.match(fundPilot, /serviceCategories: \[\]/);
-  assert.match(fundPilot, /path: "fundpilot\.json"/);
-  assert.match(fundPilot, /package_files/);
-  assert.match(fundPilot, /buildFundPilotStoreZip/);
-  assert.equal(files.includes("buildRoundImportZip"), false);
+  assert.match(roundImport, /format: "RoundImportManifestV1"/);
+  assert.match(roundImport, /entries\.push\(\{ path: "import\.json"/);
+  assert.match(roundImport, /localServiceUuid/);
+  assert.match(roundImport, /serviceCategoryId/);
+  assert.match(roundImport, /ROUND_IMPORT_MAX_DOCUMENTS = 30/);
+  assert.match(roundImport, /ROUND_IMPORT_MAX_FILES = 30/);
+  assert.equal(files.includes("buildFundPilotExportZip"), false);
   assert.equal(files.includes("buildProjectDownloadPlan"), false);
 });
 

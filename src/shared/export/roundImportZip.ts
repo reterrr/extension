@@ -14,6 +14,7 @@ export const ROUND_IMPORT_MANIFEST_MAX_BYTES = 1 * MIB;
 export const ROUND_IMPORT_FILE_MAX_BYTES = 10 * MIB;
 export const ROUND_IMPORT_TOTAL_FILE_MAX_BYTES = 99 * MIB;
 export const ROUND_IMPORT_MAX_FILES = 30;
+export const ROUND_IMPORT_MAX_DOCUMENTS = 30;
 
 const TARGET_EXTENSIONS = new Set([
   "pdf",
@@ -434,20 +435,32 @@ const FUNDING_LABEL: Record<string, string> = {
   OTHER_EMPLOYER: "Pozostali pracodawcy",
 };
 
-function fundingLabel(row: Record<string, unknown>, index: number): string {
+function localServiceUuid(index: number): string {
+  return `00000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`;
+}
+
+function fundingLabel(
+  row: Record<string, unknown>,
+  index: number,
+  serviceLabel?: string,
+): string {
   const size = String(row.company_size ?? "");
   const base = FUNDING_LABEL[size] ?? "Wariant";
   const variantNo = Number(row.variant_no);
   const variant =
     Number.isInteger(variantNo) && variantNo > 0 ? variantNo : index + 1;
   const note = cleanText(row.notes).replace(/\s+/gu, " ");
-  const label = note ? `${base} — ${note}` : `${base} — wariant ${variant}`;
-  return label.slice(0, 200).trim() || `Wariant ${index + 1}`;
+  const parts = [
+    base,
+    serviceLabel,
+    note || `wariant ${variant}`,
+  ].filter(Boolean);
+  return parts.join(" — ").slice(0, 200).trim() || `Wariant ${index + 1}`;
 }
 
 function fundingVariants(
   rows: Array<Record<string, unknown>>,
-  serviceIds: Set<string>,
+  serviceIdMap: Map<string, { id: string; label: string }>,
 ): RoundImportFundingVariant[] {
   if (rows.length > 30) {
     throw new Error(
@@ -456,32 +469,35 @@ function fundingVariants(
   }
 
   return rows.map((row, index) => {
-    const serviceCategoryId = cleanText(row.service_category_id);
-    if (serviceCategoryId && !serviceIds.has(serviceCategoryId)) {
+    const sourceServiceId = cleanText(row.service_category_id);
+    const service = sourceServiceId
+      ? serviceIdMap.get(sourceServiceId)
+      : undefined;
+    if (sourceServiceId && !service) {
       throw new Error(
         `Wariant „${fundingLabel(row, index)}” wskazuje usługę, której nie ma w projekcie.`,
       );
     }
     return {
-    label: fundingLabel(row, index),
-    ...(serviceCategoryId ? { serviceCategoryId } : {}),
-    mspSize: MSP_SIZE_MAP[String(row.company_size ?? "")] ?? null,
-    refundPct: firstPercentage(row, [
-      "refund_percent_max",
-      "refund_percent_standard",
-      "refund_percent_avg",
-      "refund_percent_base",
-      "refund_percent_min",
-      "refund_percent",
-    ]),
-    maxAmountPln: nonNegativeNumber(row.max_amount_pln),
-    maxPerPersonPln: nonNegativeNumber(row.max_per_person_pln),
-    ownContributionForm:
-      row.own_contribution_form === "CASH"
-        ? "monetary"
-        : row.own_contribution_form === "WAGES"
-          ? "salary"
-          : null,
+      label: fundingLabel(row, index, service?.label),
+      ...(service ? { serviceCategoryId: service.id } : {}),
+      mspSize: MSP_SIZE_MAP[String(row.company_size ?? "")] ?? null,
+      refundPct: firstPercentage(row, [
+        "refund_percent_max",
+        "refund_percent_standard",
+        "refund_percent_avg",
+        "refund_percent_base",
+        "refund_percent_min",
+        "refund_percent",
+      ]),
+      maxAmountPln: nonNegativeNumber(row.max_amount_pln),
+      maxPerPersonPln: nonNegativeNumber(row.max_per_person_pln),
+      ownContributionForm:
+        row.own_contribution_form === "CASH"
+          ? "monetary"
+          : row.own_contribution_form === "WAGES"
+            ? "salary"
+            : null,
     };
   });
 }
@@ -567,6 +583,7 @@ function documentFromFile(
 function documentRequirement(
   row: NonNullable<LegacyStorageState["documentRequirements"]>[number],
   fileIdBySourceId: Map<string, string>,
+  localKey: string,
 ): RoundImportDocument {
   const requirementMap: Record<string, RoundRequirement> = {
     REQUIRED: "required",
@@ -594,13 +611,6 @@ function documentRequirement(
   const purpose =
     cleanText(row.purpose) ||
     cleanText(row.notes);
-  const key =
-    cleanText(row.importKey) ||
-    cleanText(row.id) ||
-    cleanText(row.document_type_key);
-  if (!key) {
-    throw new Error("Wymaganie dokumentowe nie ma stabilnego klucza.");
-  }
 
   const normalizedRequirement =
     requirementMap[String(row.requirement ?? "UNKNOWN")] ?? "unknown";
@@ -624,7 +634,7 @@ function documentRequirement(
   }
 
   const document: RoundImportDocument = {
-    key: boundedText(key, 100, "documents.key"),
+    key: boundedText(localKey, 100, "documents.key"),
     label: boundedText(label, 500, "documents.label"),
     purpose: boundedText(
       purpose || label,
@@ -664,6 +674,18 @@ function documentRequirement(
   if (requiredEvidence) document.requiredEvidence = requiredEvidence;
   if (sourceUrl) document.sourceUrl = sourceUrl;
   if (sourceDescription) document.sourceDescription = sourceDescription;
+  const sourceFileIds = (row.source_file_source_ids ?? [])
+    .map((sourceId) => fileIdBySourceId.get(String(sourceId)))
+    .filter((value): value is string => !!value);
+  if (sourceFileIds.length) {
+    document.sourceFileIds = [...new Set(sourceFileIds)].slice(0, 30);
+  }
+  const versionLabel = boundedText(
+    row.version_label,
+    255,
+    "documents.versionLabel",
+  );
+  if (versionLabel) document.versionLabel = versionLabel;
 
   return document;
 }
@@ -766,16 +788,21 @@ export function buildRoundImportPackagePlan(
       `Projekt ma ${projectServices.length} usług; RoundImportManifestV1 dopuszcza maksymalnie 30.`,
     );
   }
-  const uuidPattern =
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
-  for (const service of projectServices) {
-    if (!uuidPattern.test(service.id)) {
-      throw new Error(
-        `Usługa „${service.label}” nie ma identyfikatora UUID wymaganego przez RoundImportManifestV1.`,
-      );
-    }
-  }
-  const serviceIds = new Set(projectServices.map((service) => service.id));
+  const manifestServices = projectServices.map((service, index) => ({
+    sourceId: String(service.id),
+    id: localServiceUuid(index),
+    label: boundedText(
+      service.label,
+      200,
+      `workspace.serviceCategories[${index}].label`,
+    ),
+  }));
+  const serviceIdMap = new Map(
+    manifestServices.map((service) => [
+      service.sourceId,
+      { id: service.id, label: service.label },
+    ]),
+  );
 
   const rows = (state.financingRules ?? []).filter(
     (row) => String(row.objectId ?? "") === recruitment.id,
@@ -816,12 +843,37 @@ export function buildRoundImportPackagePlan(
     eligibleBusinessCategories: categories,
     aidBasis: aidBasis(fundingDescription),
     aidBasisDescription: fundingDescription,
-    fundingVariants: fundingVariants(rows, serviceIds),
+    fundingVariants: fundingVariants(rows, serviceIdMap),
     submissionInstructions,
     sourceFileIds: declarations.map((file) => file.id),
   };
   const identity = officialIdentity(recruitment);
   if (identity) Object.assign(conditions, identity);
+
+  const configuredDocuments = (state.documentRequirements ?? []).filter(
+    (row) => row.objectId === recruitment.id,
+  );
+  if (configuredDocuments.length > ROUND_IMPORT_MAX_DOCUMENTS) {
+    throw new Error(
+      `Nabór ma ${configuredDocuments.length} wymagań dokumentowych; RoundImportManifestV1 dopuszcza maksymalnie ${ROUND_IMPORT_MAX_DOCUMENTS}. Zmniejsz liczbę dokumentów albo zwiększ limit po stronie FundPilot — eksport nie może ich bezpiecznie pominąć.`,
+    );
+  }
+  const manifestDocuments = configuredDocuments.length
+    ? configuredDocuments.map((row, index) =>
+        documentRequirement(
+          row,
+          fileIdBySourceId,
+          `DOC_${String(index + 1).padStart(3, "0")}`,
+        ),
+      )
+    : packageFiles.map((file, index) =>
+        documentFromFile(file.source, declarations[index]),
+      );
+  if (manifestDocuments.length > ROUND_IMPORT_MAX_DOCUMENTS) {
+    throw new Error(
+      `Nabór ma ${manifestDocuments.length} dokumentów; RoundImportManifestV1 dopuszcza maksymalnie ${ROUND_IMPORT_MAX_DOCUMENTS}.`,
+    );
+  }
 
   const roundSchedule = schedule(recruitment);
   const notes = boundedText(
@@ -836,25 +888,16 @@ export function buildRoundImportPackagePlan(
     workspace: {
       notes,
       ...(roundSchedule ? { schedule: roundSchedule } : {}),
-      ...(projectServices.length
+      ...(manifestServices.length
         ? {
-            serviceCategories: projectServices.map((service) => ({
-              id: service.id,
-              label: service.label.slice(0, 200),
+            serviceCategories: manifestServices.map(({ id, label }) => ({
+              id,
+              label,
             })),
           }
         : {}),
       conditions,
-      documents: (() => {
-        const configured = (state.documentRequirements ?? []).filter(
-          (row) => row.objectId === recruitment.id,
-        );
-        return configured.length
-          ? configured.map((row) => documentRequirement(row, fileIdBySourceId))
-          : packageFiles.map((file, index) =>
-              documentFromFile(file.source, declarations[index]),
-            );
-      })(),
+      documents: manifestDocuments,
     },
   };
 
