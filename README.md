@@ -393,11 +393,22 @@ other Recruitment-scoped records. The linked Project and Operator objects are
 not exported, sibling Recruitments are not exported, and no Project/Operator
 files are pulled into the ZIP.
 
-The portable business payload removes references that would require exporting
-Project/Operator objects. The separate `complete_state` keeps the raw scoped
-Recruitment records for traceability, while `system` exposes timestamps for
-that single Recruitment. Duplicate physical sources are stored once in the ZIP
-and `package_files` maps the source key to its `files/...` path.
+FundPilot JSON is an external-system export, not a raw database dump. Internal
+database identifiers are therefore never emitted as business values. References
+are resolved before serialization: `project_id` becomes the Project name,
+operator relations become operator names/roles, `service_category_id` becomes
+the service label, copied-from provenance becomes human-readable source values,
+and document/file relations use file names or `files/...` package paths.
+`serviceCategories` contains the Project service labels needed by the
+Recruitment, and every financing variant carries its resolved
+`service_category` value.
+
+The JSON uses `FundPilotExportV2` and exposes one resolved `recruitment`
+payload instead of the previous raw `complete_state`. A runtime guard rejects
+the export if an internal id/reference key leaks into the external document.
+Duplicate physical sources are stored once in the ZIP and `package_files`
+contains only file paths, names, file types, original URLs and human-readable
+document names.
 
 The older RoundImport V5 exporter remains in the codebase for compatibility
 tests, but the Documents panel no longer uses its reduced manifest.
