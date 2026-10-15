@@ -136,7 +136,8 @@ function selectorFromJsonObject(value: unknown): {
 
   if (!identifiers.length) return undefined;
 
-  const type = cleanIdentifier(object.type);
+  const rawType = cleanIdentifier(object.type);
+  const type = rawType === "nabor" ? "recruitment" : rawType;
   return {
     selector: {
       key: identifiers[0],
