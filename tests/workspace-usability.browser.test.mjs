@@ -574,6 +574,11 @@ test(
       await readFile(await viewFile.path(), "utf8"),
     );
     assert.deepEqual(Object.keys(viewDocument), Object.keys(fullDocument));
+    assert.equal(viewDocument.objects.length, 2);
+    assert.deepEqual(
+      new Set(viewDocument.objects.map((o) => o.key)),
+      new Set(["call", "project"]),
+    );
     assert.equal(
       new Set(viewDocument.objects.map((o) => o.key)).size,
       viewDocument.objects.length,
