@@ -615,87 +615,119 @@ test("FundPilot recruitment export keeps the complete portable business dataset 
   );
   const exported = plan.document;
 
-  assert.equal(exported.format, "FundPilotExportV1");
-  assert.equal(exported.root_object.key, "NAB_1");
+  assert.equal(exported.format, "FundPilotExportV2");
   assert.equal(exported.root_object.type, "recruitment");
+  assert.equal(exported.root_object.name, "Nabór 1/2026");
   assert.equal(exported.system.workspace_revision, 17);
 
-  const keys = exported.data.objects.map((object) => object.key);
-  assert.deepEqual(keys, ["NAB_1"]);
-
-  const recruitment = exported.data.objects[0];
+  const recruitment = exported.recruitment;
   assert.equal(recruitment.type, "recruitment");
-  assert.equal(Object.prototype.hasOwnProperty.call(recruitment.data, "project_id"), false);
-  assert.equal(Object.prototype.hasOwnProperty.call(recruitment.data, "operator_id"), false);
-  assert.equal(Object.prototype.hasOwnProperty.call(recruitment, "operators"), false);
+  assert.equal(recruitment.fields.status, "AKTYWNY");
+  assert.equal(recruitment.fields.dataRozpoczeciaOd, "2026-10-10");
+  assert.equal(recruitment.fields.godzinaZakonczenia, "16:00");
+  assert.equal(recruitment.fields.eligible_entities, "Mikro i małe firmy.");
+  assert.equal(recruitment.fields.project, "Projekt Test");
+  assert.equal(recruitment.project, "Projekt Test");
 
-  assert.equal(recruitment.data.status, "AKTYWNY");
-  assert.equal(recruitment.data.dataRozpoczeciaOd, "2026-10-10");
-  assert.equal(recruitment.data.godzinaZakonczenia, "16:00");
-  assert.equal(recruitment.data.eligible_entities, "Mikro i małe firmy.");
-  assert.equal(recruitment.financing[0].data.refund_percent_base, 60);
-  assert.equal(recruitment.financing[0].data.refund_percent_standard, 70);
-  assert.equal(recruitment.financing[0].data.refund_percent_max, 85);
-  assert.equal(recruitment.financing[0].data.max_per_person_pln, 5000);
-  assert.equal(Object.prototype.hasOwnProperty.call(recruitment.financing[0], "service"), false);
-  assert.equal(recruitment.geography[0].value, "podkarpackie");
-  assert.equal(Object.prototype.hasOwnProperty.call(recruitment.geography[0], "operator"), false);
+  assert.deepEqual(recruitment.operators, [
+    { name: "Operator Test", role: "GLOWNY" },
+  ]);
+  assert.deepEqual(recruitment.serviceCategories, [
+    "Szkolenia / walidacja / certyfikacja",
+    "Doradztwo",
+  ]);
 
-  const withoutTemplate = recruitment.files.find(
-    (file) => file.key === "DOC_NO_TEMPLATE",
-  );
-  assert.equal(withoutTemplate.without_template, true);
-  assert.equal(withoutTemplate.metadata.delivery_stage, "ZGLOSZENIE");
-  assert.equal(withoutTemplate.metadata.responsibility, "CLIENT");
+  assert.equal(recruitment.financingRules.length, 2);
   assert.equal(
-    withoutTemplate.metadata.required_evidence,
+    recruitment.financingRules[0].service_category,
+    "Szkolenia / walidacja / certyfikacja",
+  );
+  assert.equal(recruitment.financingRules[0].refund_percent_base, 60);
+  assert.equal(recruitment.financingRules[0].refund_percent_standard, 70);
+  assert.equal(recruitment.financingRules[0].refund_percent_max, 85);
+  assert.equal(recruitment.financingRules[0].max_per_person_pln, 5000);
+  assert.equal(
+    recruitment.financingRules[0].copied_from_project,
+    "Projekt Test",
+  );
+  assert.equal(
+    recruitment.financingRules[0].copied_from_financing_variant,
+    "MICRO · wariant 1",
+  );
+  assert.equal(
+    recruitment.financingRules[1].service_category,
+    "Doradztwo",
+  );
+
+  assert.equal(recruitment.geographies[0].value, "podkarpackie");
+  assert.equal(recruitment.geographies[0].operator, "Operator Test");
+
+  const application = recruitment.documentRequirements.find(
+    (document) => document.label === "Formularz zgłoszeniowy",
+  );
+  assert.equal(application.original_file, "files/formularz.docx");
+  assert.deepEqual(application.source_files, ["files/formularz.docx"]);
+
+  const withoutTemplate = recruitment.documentRequirements.find(
+    (document) => document.label === "Karta Usługi BUR",
+  );
+  assert.equal(withoutTemplate.delivery_stage, "ZGLOSZENIE");
+  assert.equal(withoutTemplate.responsibility, "CLIENT");
+  assert.equal(
+    withoutTemplate.required_evidence,
     "Wydruk Karty Usługi z BUR.",
   );
+  assert.deepEqual(withoutTemplate.source_files, ["files/formularz.docx"]);
+
+  assert.equal(recruitment.fileSources.length, 1);
+  assert.equal(recruitment.fileSources[0].package_path, "files/formularz.docx");
+  assert.equal(recruitment.rules[0].field, "notes");
+  assert.equal(recruitment.sources[0].url, "https://example.test/nabor");
+  assert.equal(
+    recruitment.evidence.notes[0].source.url,
+    "https://example.test/nabor",
+  );
+  assert.deepEqual(recruitment.manualFields, ["application_instructions"]);
 
   assert.equal(exported.package_files.length, 1);
-  assert.deepEqual(
-    exported.package_files.map((file) => file.path),
-    ["files/formularz.docx"],
+  assert.deepEqual(exported.package_files[0], {
+    path: "files/formularz.docx",
+    name: "formularz.docx",
+    file_type: "DOCX",
+    original_url: "https://example.test/nabor/formularz.docx",
+    documents: ["Formularz zgłoszeniowy", "Karta Usługi BUR"],
+  });
+
+  assert.equal(
+    exported.system.object.updated_at,
+    "2026-10-14T13:00:00.000Z",
   );
-  assert.ok(
-    exported.package_files[0].references.some(
-      (reference) =>
-        reference.object === "NAB_1" && reference.file === "DOC_NAB",
-    ),
+  assert.equal(
+    exported.system.object.last_checked_at,
+    "2026-10-14T12:59:00.000Z",
   );
 
-  const systemRecruitment = exported.system.objects.find(
-    (object) => object.key === "NAB_1",
-  );
-  assert.equal(systemRecruitment.updated_at, "2026-10-14T13:00:00.000Z");
-  assert.equal(systemRecruitment.last_checked_at, "2026-10-14T12:59:00.000Z");
-
-  const complete = exported.complete_state;
-  assert.equal(complete.revision, 17);
-  assert.deepEqual(
-    complete.objects.map((object) => object.id),
-    ["NAB_1"],
-  );
-  assert.deepEqual(complete.operatorAssignments, []);
-  assert.deepEqual(complete.operatorContacts, []);
-  assert.deepEqual(complete.serviceCategories, []);
-  assert.equal(
-    complete.objects.find((object) => object.id === "NAB_1").manualFields
-      .application_instructions,
-    true,
-  );
-  assert.equal(complete.rules[0].id, "RULE_1");
-  assert.equal(complete.importSources[0].importKey, "SRC_NOTE");
-  assert.equal(
-    complete.financingRules.find((row) => row.id === "FUND_NAB")
-      .copiedFromFundingRuleId,
+  const serialized = JSON.stringify(exported);
+  for (const internalId of [
+    "NAB_1",
+    "PR_1",
+    "OP_1",
+    "SERVICE_1",
+    "SERVICE_2",
+    "FUND_NAB",
+    "FUND_NAB_2",
     "FUND_PROJECT",
-  );
-  const completeNoTemplate = complete.documentRequirements.find(
-    (row) => row.id === "DOC_NO_TEMPLATE",
-  );
-  assert.deepEqual(completeNoTemplate.source_file_source_ids, ["FILE_NAB"]);
-  assert.equal(completeNoTemplate.version_label, "legacy-v1");
+    "FILE_NAB",
+    "DOC_NAB",
+    "SRC_NOTE_ID",
+    "RULE_1",
+  ]) {
+    assert.equal(
+      serialized.includes(internalId),
+      false,
+      "FundPilot export leaked internal identifier " + internalId,
+    );
+  }
 
   assert.equal(plan.files.length, 1);
   assert.match(plan.zipFileName, /^FundPilot - Nabór 1 - 2026\.zip$/);
