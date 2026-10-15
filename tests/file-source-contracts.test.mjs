@@ -794,6 +794,46 @@ test("FundPilot export rejects Project objects and exports one Recruitment at a 
   );
 });
 
+test("FundPilot export rejects unresolved service category references", () => {
+  const state = {
+    version: 1,
+    revision: 1,
+    objects: [
+      {
+        id: "NAB",
+        type: "recruitment",
+        values: {
+          external_number: "Nabór",
+          status: "AKTYWNY",
+        },
+      },
+    ],
+    rules: [],
+    fileSources: [],
+    serviceCategories: [],
+    financingRules: [
+      {
+        id: "FUNDING",
+        objectId: "NAB",
+        company_size: "MICRO",
+        variant_no: 1,
+        service_category_id: "MISSING_SERVICE",
+        refund_percent_max: 80,
+      },
+    ],
+  };
+
+  assert.throws(
+    () =>
+      fundPilotExportZip.buildFundPilotExportPackagePlan(
+        state,
+        state.objects[0],
+        "2026-10-14T17:09:00.000Z",
+      ),
+    /której definicji nie ma w bazie/,
+  );
+});
+
 test("FundPilot package accepts archive attachments and maps them into files/", () => {
   const state = {
     version: 1,
