@@ -473,22 +473,23 @@ test("recruitment can inherit project geography per operator and funding as copi
   assert.match(background, /copyProjectFundingToRecruitment/);
 });
 
-test("document panel exports Project or Recruitment as a complete FundPilot ZIP", () => {
+test("document panel exports exactly one Recruitment as a FundPilot ZIP", () => {
   const app = source("src/sidepanel/App.tsx");
   const files = source("src/sidepanel/fileSourcesUi.ts");
   const fundPilot = source("src/shared/export/fundPilotExportZip.ts");
 
-  assert.match(
-    files,
-    /const canBulkDownload =\s*object\.type === "project" \|\| object\.type === "recruitment"/,
-  );
-  assert.match(files, /downloadAll\.hidden = !canBulkDownload/);
+  assert.match(files, /downloadAll\.hidden = !isRecruitment/);
   assert.match(files, /exportFundPilot/);
   assert.match(files, /buildFundPilotExportZip/);
-  assert.match(files, /Eksport FundPilot/);
+  assert.match(files, /tylko dla jednego naboru/);
+  assert.match(files, /jeden nabór, fundpilot\.json/);
   assert.match(app, /↓ Eksport FundPilot/);
   assert.match(fundPilot, /format: "FundPilotExportV1"/);
-  assert.match(fundPilot, /createPortableExport/);
+  assert.match(fundPilot, /rootObject\.type !== "recruitment"/);
+  assert.match(fundPilot, /portableStateForRecruitment/);
+  assert.match(fundPilot, /objects: \[object\]/);
+  assert.match(fundPilot, /operatorAssignments: \[\]/);
+  assert.match(fundPilot, /serviceCategories: \[\]/);
   assert.match(fundPilot, /path: "fundpilot\.json"/);
   assert.match(fundPilot, /package_files/);
   assert.match(fundPilot, /buildFundPilotStoreZip/);

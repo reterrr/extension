@@ -381,23 +381,23 @@ the extension through the local DB service. Burbot never stores the original
 filesystem path, so moving or deleting the original file does not break the
 attachment.
 
-The **Eksport FundPilot** action creates one ZIP for either a Project or a
-Recruitment. The archive contains `fundpilot.json` and a `files/` directory
-with every physical attachment referenced by the exported set. The JSON embeds
-the complete portable business export, including related Project/Recruitment/
-Operator objects, operator relations and contacts, services, financing variants,
-geography, document semantics, file metadata, source snapshots/evidence and all
-current object fields. A separate `complete_state` snapshot also preserves the
-full scoped workspace records (raw document/file relations, inheritance
-provenance, manual-field markers, extraction rules and referenced import
-sources), while `system` exposes object creation/update/last-checked timestamps
-in a compact form.
+The **Eksport FundPilot** action is available only for a Recruitment and always
+exports exactly one Recruitment at a time. The archive contains
+`fundpilot.json` and a `files/` directory with physical attachments belonging
+to that Recruitment.
 
-For a Recruitment, the export includes that Recruitment plus its referenced
-Project and Operators, but not sibling Recruitments. For a Project, it includes
-the Project, all its Recruitments and their referenced Operators. Duplicate
-physical sources are stored once in the ZIP and `package_files` maps the
-portable source key to its `files/...` path.
+The JSON contains the complete Recruitment business data: all current
+Recruitment fields, financing variants, geography, document semantics, file
+metadata, source snapshots/evidence, extraction rules, manual-field markers and
+other Recruitment-scoped records. The linked Project and Operator objects are
+not exported, sibling Recruitments are not exported, and no Project/Operator
+files are pulled into the ZIP.
+
+The portable business payload removes references that would require exporting
+Project/Operator objects. The separate `complete_state` keeps the raw scoped
+Recruitment records for traceability, while `system` exposes timestamps for
+that single Recruitment. Duplicate physical sources are stored once in the ZIP
+and `package_files` maps the source key to its `files/...` path.
 
 The older RoundImport V5 exporter remains in the codebase for compatibility
 tests, but the Documents panel no longer uses its reduced manifest.

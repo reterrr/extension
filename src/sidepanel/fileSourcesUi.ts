@@ -180,10 +180,8 @@ function host(url: string): string {
 async function exportFundPilot(
   object: LegacyStoredObject,
 ): Promise<void> {
-  if (object.type !== "recruitment" && object.type !== "project") {
-    throw new Error(
-      "Eksport FundPilot jest dostępny dla projektu i naboru.",
-    );
+  if (object.type !== "recruitment") {
+    throw new Error("Eksport FundPilot jest dostępny tylko dla jednego naboru.");
   }
 
   fileDownloadBusy = true;
@@ -214,9 +212,8 @@ async function exportFundPilot(
     }
 
     const files = result.document.package_files.length;
-    const objects = result.document.data.objects.length;
     notice(
-      `Utworzono eksport FundPilot „${result.zipFileName}”: fundpilot.json + ${files} plików; JSON zawiera ${objects} obiektów i pełne dane biznesowe zestawu.`,
+      `Utworzono eksport FundPilot „${result.zipFileName}”: jeden nabór, fundpilot.json + ${files} plików.`,
     );
   } finally {
     fileDownloadBusy = false;
@@ -1103,15 +1100,13 @@ function render(): void {
   }
 
   const downloadAll = $("download-all-files") as HTMLButtonElement;
-  const canBulkDownload =
-    object.type === "project" || object.type === "recruitment";
-  downloadAll.hidden = !canBulkDownload;
+  downloadAll.hidden = !isRecruitment;
   downloadAll.disabled = fileDownloadBusy;
   downloadAll.textContent = fileDownloadBusy
     ? "Tworzenie eksportu FundPilot…"
     : "↓ Eksport FundPilot";
-  downloadAll.title = canBulkDownload
-    ? "Pobierz ZIP FundPilot: fundpilot.json z pełnymi danymi biznesowymi oraz wszystkie fizyczne pliki z eksportowanego zestawu w katalogu files/."
+  downloadAll.title = isRecruitment
+    ? "Pobierz ZIP FundPilot tylko dla aktualnego naboru: fundpilot.json z pełnymi danymi tego naboru oraz jego fizyczne pliki w katalogu files/. Projekt i operatorzy nie są eksportowani jako obiekty."
     : "";
 
   renderMode();
