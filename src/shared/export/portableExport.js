@@ -423,9 +423,11 @@ export function createPortableExport({
   };
 
   const serviceKeyById = new Map();
+  const serviceProjectIdById = new Map();
   const servicesByProjectId = new Map();
   for (const service of state.serviceCategories ?? []) {
     const projectId = String(service.objectId);
+    serviceProjectIdById.set(String(service.id), projectId);
     if (!servicesByProjectId.has(projectId)) servicesByProjectId.set(projectId, []);
     servicesByProjectId.get(projectId).push(service);
   }
@@ -559,7 +561,12 @@ export function createPortableExport({
     }
 
     if (unifiedFiles.length) result.files = unifiedFiles;
-    const geography = scoped("geographies", object);
+    const geography = scoped("geographies", object).filter((row) => {
+      if (!exactSelection || !["project", "recruitment"].includes(type)) {
+        return true;
+      }
+      return Boolean(row.operatorId && ref(row.operatorId, false));
+    });
     if (geography.length) {
       const keys = keysFor(geography);
       result.geography = geography.map((row) => {
@@ -615,10 +622,18 @@ export function createPortableExport({
               "copiedFromFundingRuleId",
             ],
           );
-          const serviceKey = row.service_category_id
-            ? serviceKeyById.get(String(row.service_category_id))
+          const serviceProjectId = row.service_category_id
+            ? serviceProjectIdById.get(String(row.service_category_id))
             : undefined;
-          if (row.service_category_id && !serviceKey) {
+          const serviceAvailable =
+            !exactSelection ||
+            !serviceProjectId ||
+            objectKeys.has(String(serviceProjectId));
+          const serviceKey =
+            row.service_category_id && serviceAvailable
+              ? serviceKeyById.get(String(row.service_category_id))
+              : undefined;
+          if (row.service_category_id && serviceAvailable && !serviceKey) {
             throw new Error(
               `Wariant ${row.importKey ?? row.id} wskazuje nieistniejącą usługę projektu.`,
             );
