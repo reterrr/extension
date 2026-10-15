@@ -105,11 +105,7 @@ function cleanText(value: unknown): string {
 }
 
 function objectDisplayName(object: LegacyStoredObject): string {
-  if (object.type === "recruitment") {
-    const value = cleanText(object.values?.external_number);
-    if (value) return value;
-  }
-  const value = cleanText(object.values?.name);
+  const value = cleanText(object.values?.external_number);
   return value || cleanText(object.label) || cleanText(object.importKey) || object.id;
 }
 
@@ -298,16 +294,70 @@ function cloneJson<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
 }
 
-function completeStateForPortableObjects(
+function scopedRows<T extends { objectId?: unknown }>(
+  rows: readonly T[] | undefined,
+  objectId: string,
+): T[] {
+  return (rows ?? []).filter(
+    (row) => String(row.objectId ?? "") === String(objectId),
+  );
+}
+
+function portableStateForRecruitment(
   state: LegacyStorageState,
-  portableObjects: PortableObject[],
+  recruitment: LegacyStoredObject,
 ): LegacyStorageState {
-  const selectedObjects = portableObjects
-    .map((portableObject) =>
-      storedObjectForPortableObject(state, portableObject),
-    )
-    .filter((object): object is LegacyStoredObject => !!object);
-  const objectIds = new Set(selectedObjects.map((object) => String(object.id)));
+  const object = cloneJson(recruitment);
+  const values = { ...(object.values ?? {}) };
+
+  // FundPilot package scope is exactly one Recruitment. Relations may still be
+  // present in complete_state for traceability, but the portable business
+  // payload must not pull Project / Operator objects into objects[].
+  delete values.project_id;
+  delete values.operator_id;
+  object.values = values;
+
+  return {
+    version: 1,
+    revision: state.revision,
+    objects: [object],
+    rules: cloneJson(scopedRows(state.rules, recruitment.id)),
+    geographies: cloneJson(
+      scopedRows(state.geographies, recruitment.id).map((row) => {
+        const copy = { ...row };
+        delete copy.operatorId;
+        return copy;
+      }),
+    ),
+    operatorAssignments: [],
+    operatorContacts: [],
+    fileSources: cloneJson(scopedRows(state.fileSources, recruitment.id)),
+    importSources: cloneJson(state.importSources ?? []),
+    importTargetEvidence: cloneJson(
+      scopedRows(state.importTargetEvidence, recruitment.id),
+    ),
+    financingRules: cloneJson(
+      scopedRows(state.financingRules, recruitment.id).map((row) => {
+        const copy = { ...row };
+        delete copy.service_category_id;
+        return copy;
+      }),
+    ),
+    serviceCategories: [],
+    documentRequirements: cloneJson(
+      scopedRows(state.documentRequirements, recruitment.id),
+    ),
+    fieldEvidence: cloneJson(
+      scopedRows(state.fieldEvidence, recruitment.id),
+    ),
+  };
+}
+
+function completeStateForRecruitment(
+  state: LegacyStorageState,
+  recruitment: LegacyStoredObject,
+): LegacyStorageState {
+  const objectIds = new Set([String(recruitment.id)]);
   const belongsToExport = (row: { objectId?: unknown }) =>
     objectIds.has(String(row.objectId ?? ""));
 
@@ -318,11 +368,9 @@ function completeStateForPortableObjects(
 
   const referencedSourceIds = new Set<string>();
   const referencedSourceKeys = new Set<string>();
-  for (const object of selectedObjects) {
-    for (const proofs of Object.values(object.evidence ?? {})) {
-      for (const proof of proofs) {
-        if (proof?.sourceId) referencedSourceIds.add(String(proof.sourceId));
-      }
+  for (const proofs of Object.values(recruitment.evidence ?? {})) {
+    for (const proof of proofs) {
+      if (proof?.sourceId) referencedSourceIds.add(String(proof.sourceId));
     }
   }
   for (const proof of importTargetEvidence) {
@@ -346,18 +394,16 @@ function completeStateForPortableObjects(
   return cloneJson({
     version: 1,
     revision: state.revision,
-    objects: selectedObjects,
+    objects: [recruitment],
     rules: (state.rules ?? []).filter(belongsToExport),
     geographies: (state.geographies ?? []).filter(belongsToExport),
-    operatorAssignments: (state.operatorAssignments ?? []).filter(
-      belongsToExport,
-    ),
-    operatorContacts: (state.operatorContacts ?? []).filter(belongsToExport),
+    operatorAssignments: [],
+    operatorContacts: [],
     fileSources,
     importSources,
     importTargetEvidence,
     financingRules: (state.financingRules ?? []).filter(belongsToExport),
-    serviceCategories: (state.serviceCategories ?? []).filter(belongsToExport),
+    serviceCategories: [],
     documentRequirements: (state.documentRequirements ?? []).filter(
       belongsToExport,
     ),
@@ -400,12 +446,13 @@ export function buildFundPilotExportPackagePlan(
   rootObject: LegacyStoredObject,
   exportedAt = new Date().toISOString(),
 ): FundPilotExportPackagePlan {
-  if (rootObject.type !== "project" && rootObject.type !== "recruitment") {
-    throw new Error("Eksport FundPilot jest dostępny dla projektu i naboru.");
+  if (rootObject.type !== "recruitment") {
+    throw new Error("Eksport FundPilot jest dostępny tylko dla jednego naboru.");
   }
 
+  const portableState = portableStateForRecruitment(state, rootObject);
   const portable = createPortableExport({
-    state,
+    state: portableState,
     view: { objectIds: [rootObject.id] },
     schema: globalThis.BurbotSchema ?? {},
     exportedAt,
@@ -435,10 +482,10 @@ export function buildFundPilotExportPackagePlan(
     },
     package_files: packageFiles,
     data: portable,
-    complete_state: completeStateForPortableObjects(state, portableObjects),
+    complete_state: completeStateForRecruitment(state, rootObject),
     system: {
       workspace_revision: state.revision,
-      objects: systemObjects(state, portableObjects),
+      objects: systemObjects(state, [portableRoot]),
     },
   };
 
