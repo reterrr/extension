@@ -852,6 +852,17 @@ function resolvedRecruitmentState(
     ...(file.source_description
       ? { source_description: file.source_description }
       : {}),
+    ...(file.sourceImportKey
+      ? { source: resolvedEvidenceSource(state, file.sourceImportKey) }
+      : {}),
+    ...(file.sourcePageImportKey
+      ? {
+          source_page_source: resolvedEvidenceSource(
+            state,
+            file.sourcePageImportKey,
+          ),
+        }
+      : {}),
     ...(file.document_kind ? { document_kind: file.document_kind } : {}),
     ...(file.delivery_method
       ? { delivery_method: file.delivery_method }
