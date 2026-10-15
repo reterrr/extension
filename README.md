@@ -382,36 +382,44 @@ filesystem path, so moving or deleting the original file does not break the
 attachment.
 
 The **Eksport FundPilot** action is available only for a Recruitment and always
-exports exactly one Recruitment at a time. The archive contains
-`fundpilot.json` and a `files/` directory with physical attachments belonging
-to that Recruitment.
+exports exactly one Recruitment at a time.
 
-The JSON contains the complete Recruitment business data: all current
-Recruitment fields, financing variants, geography, document semantics, file
-metadata, source snapshots/evidence, extraction rules, manual-field markers and
-other Recruitment-scoped records. The linked Project and Operator objects are
-not exported, sibling Recruitments are not exported, and no Project/Operator
-files are pulled into the ZIP.
+FundPilot does **not** accept the Burbot portable format or a custom FundPilot
+JSON envelope. The downloaded ZIP follows the target system's strict
+`RoundImportManifestV1` contract:
 
-FundPilot JSON is an external-system export, not a raw database dump. Internal
-database identifiers are therefore never emitted as business values. References
-are resolved before serialization: `project_id` becomes the Project name,
-operator relations become operator names/roles, `service_category_id` becomes
-the service label, copied-from provenance becomes human-readable source values,
-and document/file relations use file names or `files/...` package paths.
-`serviceCategories` contains the Project service labels needed by the
-Recruitment, and every financing variant carries its resolved
-`service_category` value.
+```text
+Nabór - Projekt.zip
+├── import.json
+└── files/
+    ├── regulamin.pdf
+    ├── formularz.docx
+    └── ...
+```
 
-The JSON uses `FundPilotExportV2` and exposes one resolved `recruitment`
-payload instead of the previous raw `complete_state`. A runtime guard rejects
-the export if an internal id/reference key leaks into the external document.
-Duplicate physical sources are stored once in the ZIP and `package_files`
-contains only file paths, names, file types, original URLs and human-readable
-document names.
+`import.json` contains exactly the allowed top-level fields:
+`format`, `name`, `files` and `workspace`. No extra `data`,
+`complete_state`, `manifest`, database IDs, project/operator objects or
+Burbot-only metadata are serialized.
 
-The older RoundImport V5 exporter remains in the codebase for compatibility
-tests, but the Documents panel no longer uses its reduced manifest.
+Services are exported through `workspace.serviceCategories`. Their UUIDs are
+manifest-local identifiers generated solely for this package; Burbot's database
+service IDs are not exposed. Every funding variant that uses a service points to
+the corresponding local UUID through `serviceCategoryId`, while both the
+service definition and the funding-variant label contain the human-readable
+service name.
+
+Physical files use package-local IDs such as `FILE_001`. Document requirements
+use package-local keys such as `DOC_001`; file/document relations are translated
+to those local IDs. This keeps the ZIP internally referential while avoiding
+database record identifiers.
+
+The exporter enforces the target limits before download: up to 30 physical
+files, up to 30 document requirements, up to 30 services and up to 30 funding
+variants. Supported attachments are PDF, DOC, DOCX, XLSX, JPG, JPEG and PNG,
+with 10 MiB per file, 1 MiB for `import.json`, and 100 MiB total unpacked
+budget. If a Recruitment exceeds one of these FundPilot limits, export fails
+with an explicit message instead of silently dropping data.
 
 ## Przegląd i zapis zmian
 
