@@ -892,14 +892,20 @@ function resolvedRecruitmentState(
 
   const evidence = Object.fromEntries(
     Object.entries(recruitment.evidence ?? {}).map(([field, proofs]) => [
-      field === "project_id" ? "project" : field,
+      externalFieldName(field),
       proofs.map((proof) => ({
         source: resolvedEvidenceSource(state, proof.sourceId),
         char_start: proof.charStart,
         char_end: proof.charEnd,
         raw_value: proof.rawValue,
         ...(Object.prototype.hasOwnProperty.call(proof, "normalizedValue")
-          ? { normalized_value: cloneJson(proof.normalizedValue) }
+          ? {
+              normalized_value: resolvedEvidenceValue(
+                state,
+                field,
+                proof.normalizedValue,
+              ),
+            }
           : {}),
       })),
     ]),
@@ -909,23 +915,26 @@ function resolvedRecruitmentState(
     state.importTargetEvidence,
     recruitment.id,
   ).map((proof) => ({
-    field:
-      proof.field === "service_category_id"
-        ? "service_category"
-        : proof.field,
+    field: externalFieldName(proof.field),
     target: resolvedTarget(state, proof.target, packagePaths),
     source: resolvedEvidenceSource(state, proof.sourceId),
     char_start: proof.charStart,
     char_end: proof.charEnd,
     raw_value: proof.rawValue,
     ...(Object.prototype.hasOwnProperty.call(proof, "normalizedValue")
-      ? { normalized_value: cloneJson(proof.normalizedValue) }
+      ? {
+          normalized_value: resolvedEvidenceValue(
+            state,
+            proof.field,
+            proof.normalizedValue,
+          ),
+        }
       : {}),
   }));
 
   const fieldEvidence = scopedRows(state.fieldEvidence, recruitment.id).map(
     (proof) => ({
-      field: proof.field,
+      field: externalFieldName(proof.field),
       ...(proof.target
         ? { target: resolvedTarget(state, proof.target, packagePaths) }
         : {}),
@@ -937,7 +946,13 @@ function resolvedRecruitmentState(
       extraction: cloneJson(proof.extraction),
       raw_value: proof.rawValue,
       ...(Object.prototype.hasOwnProperty.call(proof, "valueAtCapture")
-        ? { value_at_capture: cloneJson(proof.valueAtCapture) }
+        ? {
+            value_at_capture: resolvedEvidenceValue(
+              state,
+              proof.field,
+              proof.valueAtCapture,
+            ),
+          }
         : {}),
       created_at: proof.createdAt,
     }),
@@ -947,6 +962,10 @@ function resolvedRecruitmentState(
     const result: Record<string, unknown> = {};
     for (const [field, value] of Object.entries(rule)) {
       if (["id", "objectId", "target"].includes(field)) continue;
+      if (field === "field") {
+        result.field = externalFieldName(String(value));
+        continue;
+      }
       if (field.endsWith("_id") || field.endsWith("Id")) {
         throw new Error(
           "Eksport FundPilot zawiera nierozwiązane pole reguły " + field + ".",
@@ -995,7 +1014,7 @@ function resolvedRecruitmentState(
     sources,
     manualFields: Object.entries(recruitment.manualFields ?? {})
       .filter(([, enabled]) => Boolean(enabled))
-      .map(([field]) => field),
+      .map(([field]) => externalFieldName(field)),
     ...(recruitment.createdAt ? { created_at: recruitment.createdAt } : {}),
     ...(recruitment.updatedAt ? { updated_at: recruitment.updatedAt } : {}),
     ...(recruitment.values?.last_checked_at
