@@ -788,16 +788,21 @@ export function buildRoundImportPackagePlan(
       `Projekt ma ${projectServices.length} usług; RoundImportManifestV1 dopuszcza maksymalnie 30.`,
     );
   }
-  const uuidPattern =
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
-  for (const service of projectServices) {
-    if (!uuidPattern.test(service.id)) {
-      throw new Error(
-        `Usługa „${service.label}” nie ma identyfikatora UUID wymaganego przez RoundImportManifestV1.`,
-      );
-    }
-  }
-  const serviceIds = new Set(projectServices.map((service) => service.id));
+  const manifestServices = projectServices.map((service, index) => ({
+    sourceId: String(service.id),
+    id: localServiceUuid(index),
+    label: boundedText(
+      service.label,
+      200,
+      `workspace.serviceCategories[${index}].label`,
+    ),
+  }));
+  const serviceIdMap = new Map(
+    manifestServices.map((service) => [
+      service.sourceId,
+      { id: service.id, label: service.label },
+    ]),
+  );
 
   const rows = (state.financingRules ?? []).filter(
     (row) => String(row.objectId ?? "") === recruitment.id,
@@ -838,12 +843,37 @@ export function buildRoundImportPackagePlan(
     eligibleBusinessCategories: categories,
     aidBasis: aidBasis(fundingDescription),
     aidBasisDescription: fundingDescription,
-    fundingVariants: fundingVariants(rows, serviceIds),
+    fundingVariants: fundingVariants(rows, serviceIdMap),
     submissionInstructions,
     sourceFileIds: declarations.map((file) => file.id),
   };
   const identity = officialIdentity(recruitment);
   if (identity) Object.assign(conditions, identity);
+
+  const configuredDocuments = (state.documentRequirements ?? []).filter(
+    (row) => row.objectId === recruitment.id,
+  );
+  if (configuredDocuments.length > ROUND_IMPORT_MAX_DOCUMENTS) {
+    throw new Error(
+      `Nabór ma ${configuredDocuments.length} wymagań dokumentowych; RoundImportManifestV1 dopuszcza maksymalnie ${ROUND_IMPORT_MAX_DOCUMENTS}. Zmniejsz liczbę dokumentów albo zwiększ limit po stronie FundPilot — eksport nie może ich bezpiecznie pominąć.`,
+    );
+  }
+  const manifestDocuments = configuredDocuments.length
+    ? configuredDocuments.map((row, index) =>
+        documentRequirement(
+          row,
+          fileIdBySourceId,
+          `DOC_${String(index + 1).padStart(3, "0")}`,
+        ),
+      )
+    : packageFiles.map((file, index) =>
+        documentFromFile(file.source, declarations[index]),
+      );
+  if (manifestDocuments.length > ROUND_IMPORT_MAX_DOCUMENTS) {
+    throw new Error(
+      `Nabór ma ${manifestDocuments.length} dokumentów; RoundImportManifestV1 dopuszcza maksymalnie ${ROUND_IMPORT_MAX_DOCUMENTS}.`,
+    );
+  }
 
   const roundSchedule = schedule(recruitment);
   const notes = boundedText(
@@ -858,25 +888,16 @@ export function buildRoundImportPackagePlan(
     workspace: {
       notes,
       ...(roundSchedule ? { schedule: roundSchedule } : {}),
-      ...(projectServices.length
+      ...(manifestServices.length
         ? {
-            serviceCategories: projectServices.map((service) => ({
-              id: service.id,
-              label: service.label.slice(0, 200),
+            serviceCategories: manifestServices.map(({ id, label }) => ({
+              id,
+              label,
             })),
           }
         : {}),
       conditions,
-      documents: (() => {
-        const configured = (state.documentRequirements ?? []).filter(
-          (row) => row.objectId === recruitment.id,
-        );
-        return configured.length
-          ? configured.map((row) => documentRequirement(row, fileIdBySourceId))
-          : packageFiles.map((file, index) =>
-              documentFromFile(file.source, declarations[index]),
-            );
-      })(),
+      documents: manifestDocuments,
     },
   };
 
