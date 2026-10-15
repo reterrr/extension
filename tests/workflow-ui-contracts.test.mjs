@@ -320,6 +320,13 @@ test("Documents section renders one unified list for files and no-template docum
     documents,
     /originalFile\.onchange = \(\) => \{[\s\S]*?fulfillment\.value = "WITHOUT_OPERATOR_TEMPLATE"/,
   );
+  assert.match(documents, /const missingFields: string\[\] = \[\]/);
+  assert.match(documents, /missingFields\.push\("Wymagalność"\)/);
+  assert.match(documents, /missingFields\.push\("Podpis"\)/);
+  assert.match(documents, /missingFields\.push\("Kiedy dokument jest wymagany"\)/);
+  assert.match(documents, /missingFields\.push\("Plik \/ wzór operatora"\)/);
+  assert.match(documents, /status\.textContent = "Do uzupełnienia"/);
+  assert.match(documents, /status\.title = `Brakuje: \$\{missingFields\.join\(", "\)\}`/);
   assert.match(files, /const representedFileIds = supportsRequirements/);
   assert.match(
     files,
@@ -336,6 +343,10 @@ test("Documents section renders one unified list for files and no-template docum
   assert.match(background, /message\.op === "ADD_DOCUMENT_REQUIREMENT"/);
   assert.match(background, /message\.op === "UPDATE_DOCUMENT_REQUIREMENT"/);
   assert.match(background, /message\.op === "REMOVE_DOCUMENT_REQUIREMENT"/);
+
+  const styles = source("src/sidepanel/fileSourceStyles.ts");
+  assert.match(styles, /\.document-requirement-row\[data-classified="false"\]/);
+  assert.match(styles, /\.document-requirement-pending/);
 });
 
 
