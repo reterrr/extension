@@ -980,14 +980,36 @@ function resolvedRecruitmentState(
   });
 
   const sourceIds = new Set<string>();
+  const sourceKeys = new Set<string>();
   for (const proofs of Object.values(recruitment.evidence ?? {})) {
     for (const proof of proofs) sourceIds.add(String(proof.sourceId));
   }
   for (const proof of scopedRows(state.importTargetEvidence, recruitment.id)) {
     sourceIds.add(String(proof.sourceId));
   }
+  for (const file of scopedRows(state.fileSources, recruitment.id)) {
+    if (file.sourceImportKey) sourceKeys.add(String(file.sourceImportKey));
+    if (file.sourcePageImportKey) {
+      sourceKeys.add(String(file.sourcePageImportKey));
+    }
+  }
+  const sourceSignatures = new Set<string>();
   const sources = (state.importSources ?? [])
-    .filter((source) => sourceIds.has(String(source.id)))
+    .filter(
+      (source) =>
+        sourceIds.has(String(source.id)) ||
+        sourceKeys.has(String(source.importKey)),
+    )
+    .filter((source) => {
+      const signature = JSON.stringify([
+        source.type,
+        source.url ?? "",
+        source.snapshot,
+      ]);
+      if (sourceSignatures.has(signature)) return false;
+      sourceSignatures.add(signature);
+      return true;
+    })
     .map((source) => ({
       type: source.type,
       ...(source.url ? { url: source.url } : {}),
