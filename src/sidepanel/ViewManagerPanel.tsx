@@ -379,6 +379,7 @@ export function ViewManagerPanel() {
       schema: globals().BurbotSchema ?? {},
       geographyCatalog: (globals().BurbotGeography?.catalog ?? []) as never[],
       exportedAt,
+      exactSelection: true,
     });
 
     downloadJsonFile(aiViewExportFilename(exportedAt), payload);

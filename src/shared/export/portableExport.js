@@ -109,12 +109,13 @@ function keysFor(entries) {
 
 /**
  * The same portable v1 document is used by View export, workspace export and import.
- * @param {{state: import("../types/legacy-storage").LegacyStorageState, view?: {objectIds: string[]}, schema?: Record<string, any>, geographyCatalog?: unknown[], exportedAt?: string}} options
+ * @param {{state: import("../types/legacy-storage").LegacyStorageState, view?: {objectIds: string[]}, schema?: Record<string, any>, geographyCatalog?: unknown[], exportedAt?: string, exactSelection?: boolean}} options
  */
 export function createPortableExport({
   state,
   view,
   schema = globalThis.BurbotSchema ?? {},
+  exactSelection = false,
 }) {
   const objectsById = new Map(
     (state.objects ?? []).map((object) => [String(object.id), object]),
@@ -145,16 +146,19 @@ export function createPortableExport({
       .filter((id) => objectsById.has(id)),
   );
   if (!selected.size) throw new Error("Brak obiektów do eksportu.");
-  // Only explicitly selected projects expand to all their recruitments. A
-  // recruitment's parent is a dependency, not a request for every sibling.
-  for (const id of [...selected]) {
-    if (typeOf(objectsById.get(id)) !== "project") continue;
-    for (const object of objectsById.values())
-      if (
-        typeOf(object) === "recruitment" &&
-        resolveObjectId(object.values?.project_id) === id
-      )
-        selected.add(String(object.id));
+  // Normal portable export includes related objects so references are complete.
+  // Active View export can opt into exactSelection, where objects[] must match
+  // exactly what the user selected and must never grow behind their back.
+  if (!exactSelection) {
+    for (const id of [...selected]) {
+      if (typeOf(objectsById.get(id)) !== "project") continue;
+      for (const object of objectsById.values())
+        if (
+          typeOf(object) === "recruitment" &&
+          resolveObjectId(object.values?.project_id) === id
+        )
+          selected.add(String(object.id));
+    }
   }
   const assignmentsFor = (object) => {
     const rows = (state.operatorAssignments ?? []).filter(
@@ -185,30 +189,45 @@ export function createPortableExport({
         ids.push(resolveObjectId(row.operatorId));
     return ids;
   };
-  const ordered = [],
-    visiting = new Set(),
-    visited = new Set();
-  const visit = (id) => {
-    if (visited.has(id)) return;
-    const object = objectsById.get(id);
-    if (!object)
-      throw new Error(
-        `Brak powiązanego obiektu ${id}. Uzupełnij relację przed eksportem.`,
-      );
-    if (visiting.has(id))
-      throw new Error(`Cykliczne powiązanie obiektu ${id}.`);
-    visiting.add(id);
-    for (const dependency of dependencies(object)) visit(dependency);
-    visiting.delete(id);
-    visited.add(id);
-    ordered.push(object);
-  };
-  for (const id of selected) visit(id);
+  const ordered = [];
+  if (exactSelection) {
+    const seen = new Set();
+    for (const requestedId of requested) {
+      const id = resolveObjectId(requestedId);
+      if (!selected.has(id) || seen.has(id)) continue;
+      const object = objectsById.get(id);
+      if (!object) continue;
+      seen.add(id);
+      ordered.push(object);
+    }
+  } else {
+    const visiting = new Set();
+    const visited = new Set();
+    const visit = (id) => {
+      if (visited.has(id)) return;
+      const object = objectsById.get(id);
+      if (!object)
+        throw new Error(
+          `Brak powiązanego obiektu ${id}. Uzupełnij relację przed eksportem.`,
+        );
+      if (visiting.has(id))
+        throw new Error(`Cykliczne powiązanie obiektu ${id}.`);
+      visiting.add(id);
+      for (const dependency of dependencies(object)) visit(dependency);
+      visiting.delete(id);
+      visited.add(id);
+      ordered.push(object);
+    };
+    for (const id of selected) visit(id);
+  }
   const objectKeys = keysFor(ordered);
-  const ref = (id) => {
+  const ref = (id, required = true) => {
     const resolvedId = resolveObjectId(id);
     const key = objectKeys.get(resolvedId);
-    if (!key) throw new Error(`Brak powiązanego obiektu ${id}.`);
+    if (!key) {
+      if (exactSelection && !required) return undefined;
+      throw new Error(`Brak powiązanego obiektu ${id}.`);
+    }
     return { $ref: key };
   };
 
@@ -390,19 +409,25 @@ export function createPortableExport({
         throw new Error(
           `Nieznane pole ${context}.${field}. Przypisz je do obsługiwanego pola przed eksportem.`,
         );
-      result[field] =
+      if (
         fields?.[field]?.type === "reference" ||
         ["project_id", "operator_id"].includes(field)
-          ? ref(value)
-          : value;
+      ) {
+        const reference = ref(value, !exactSelection);
+        if (reference) result[field] = reference;
+      } else {
+        result[field] = value;
+      }
     }
     return result;
   };
 
   const serviceKeyById = new Map();
+  const serviceProjectIdById = new Map();
   const servicesByProjectId = new Map();
   for (const service of state.serviceCategories ?? []) {
     const projectId = String(service.objectId);
+    serviceProjectIdById.set(String(service.id), projectId);
     if (!servicesByProjectId.has(projectId)) servicesByProjectId.set(projectId, []);
     servicesByProjectId.get(projectId).push(service);
   }
@@ -429,9 +454,12 @@ export function createPortableExport({
       data,
       ...evidenceMap(object.evidence, data),
     };
-    if (operators.length) {
-      const keys = keysFor(operators);
-      result.operators = operators.map((row) => ({
+    const exportOperators = exactSelection
+      ? operators.filter((row) => Boolean(ref(row.operatorId, false)))
+      : operators;
+    if (exportOperators.length) {
+      const keys = keysFor(exportOperators);
+      result.operators = exportOperators.map((row) => ({
         key: keys.get(String(row.id)),
         operator: ref(row.operatorId),
         operator_type: row.operatorType,
@@ -533,17 +561,27 @@ export function createPortableExport({
     }
 
     if (unifiedFiles.length) result.files = unifiedFiles;
-    const geography = scoped("geographies", object);
+    const geography = scoped("geographies", object).filter((row) => {
+      if (!exactSelection || !["project", "recruitment"].includes(type)) {
+        return true;
+      }
+      return Boolean(row.operatorId && ref(row.operatorId, false));
+    });
     if (geography.length) {
       const keys = keysFor(geography);
-      result.geography = geography.map((row) => ({
-        key: keys.get(String(row.id)),
-        type: row.type,
-        role: row.role,
-        value: row.value,
-        ...(row.operatorId ? { operator: ref(row.operatorId) } : {}),
-        ...targetEvidence(object, "geography", row.id, { value: row.value }),
-      }));
+      result.geography = geography.map((row) => {
+        const operatorReference = row.operatorId
+          ? ref(row.operatorId, !exactSelection)
+          : undefined;
+        return {
+          key: keys.get(String(row.id)),
+          type: row.type,
+          role: row.role,
+          value: row.value,
+          ...(operatorReference ? { operator: operatorReference } : {}),
+          ...targetEvidence(object, "geography", row.id, { value: row.value }),
+        };
+      });
     }
     const contacts = scoped("operatorContacts", object).sort(
       (a, b) =>
@@ -584,10 +622,18 @@ export function createPortableExport({
               "copiedFromFundingRuleId",
             ],
           );
-          const serviceKey = row.service_category_id
-            ? serviceKeyById.get(String(row.service_category_id))
+          const serviceProjectId = row.service_category_id
+            ? serviceProjectIdById.get(String(row.service_category_id))
             : undefined;
-          if (row.service_category_id && !serviceKey) {
+          const serviceAvailable =
+            !exactSelection ||
+            !serviceProjectId ||
+            objectKeys.has(String(serviceProjectId));
+          const serviceKey =
+            row.service_category_id && serviceAvailable
+              ? serviceKeyById.get(String(row.service_category_id))
+              : undefined;
+          if (row.service_category_id && serviceAvailable && !serviceKey) {
             throw new Error(
               `Wariant ${row.importKey ?? row.id} wskazuje nieistniejącą usługę projektu.`,
             );
