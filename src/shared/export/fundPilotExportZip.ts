@@ -15,46 +15,48 @@ const MIB = 1024 * 1024;
 export const FUNDPILOT_EXPORT_FILE_MAX_BYTES = 100 * MIB;
 export const FUNDPILOT_EXPORT_TOTAL_FILE_MAX_BYTES = 512 * MIB;
 
-export interface FundPilotPackageReference {
-  object: string;
-  file: string;
-}
-
 export interface FundPilotPackageFile {
-  source: string;
   path: string;
   name: string;
   file_type: string;
   original_url: string;
-  references: FundPilotPackageReference[];
+  documents?: string[];
 }
 
-export interface FundPilotSystemObject {
-  key: string;
-  id: string;
-  type: string;
-  label?: string;
+export interface FundPilotResolvedRecruitment {
+  name: string;
+  type: "recruitment";
   source_url?: string;
-  creation_note?: string;
+  fields: Record<string, unknown>;
+  project?: string;
+  operators: Array<{ name: string; role: string }>;
+  service_categories: string[];
+  financing: Array<Record<string, unknown>>;
+  geography: Array<Record<string, unknown>>;
+  documents: Array<Record<string, unknown>>;
+  files: Array<Record<string, unknown>>;
+  rules: Array<Record<string, unknown>>;
+  evidence: Record<string, unknown[]>;
+  target_evidence: Array<Record<string, unknown>>;
+  field_evidence: Array<Record<string, unknown>>;
+  sources: Array<Record<string, unknown>>;
+  manual_fields: string[];
   created_at?: string;
   updated_at?: string;
   last_checked_at?: string;
 }
 
-export interface FundPilotExportV1 {
-  format: "FundPilotExportV1";
+export interface FundPilotExportV2 {
+  format: "FundPilotExportV2";
   exported_at: string;
   root_object: {
-    key: string;
-    type: string;
+    type: "recruitment";
     name: string;
   };
   package_files: FundPilotPackageFile[];
-  data: ReturnType<typeof createPortableExport>;
-  complete_state: LegacyStorageState;
+  recruitment: FundPilotResolvedRecruitment;
   system: {
     workspace_revision: number;
-    objects: FundPilotSystemObject[];
   };
 }
 
@@ -65,14 +67,14 @@ export interface FundPilotPackageSource {
 }
 
 export interface FundPilotExportPackagePlan {
-  document: FundPilotExportV1;
+  document: FundPilotExportV2;
   files: FundPilotPackageSource[];
   zipFileName: string;
 }
 
 export interface FundPilotExportZipResult {
   blob: Blob;
-  document: FundPilotExportV1;
+  document: FundPilotExportV2;
   zipFileName: string;
 }
 
