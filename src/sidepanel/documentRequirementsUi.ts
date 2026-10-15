@@ -139,16 +139,28 @@ function renderRequirement(
   const card = document.createElement("details");
   card.className = "document-requirement-row file-source-row";
   card.dataset.sortLabel = documentLabel(normalized).toLocaleLowerCase("pl-PL");
-  const requirementComplete =
-    Boolean(documentLabel(normalized).trim()) &&
-    normalized.requirement !== "UNKNOWN" &&
-    normalized.signature_requirement !== "UNKNOWN" &&
-    (normalized.requirement !== "CONDITIONAL" ||
-      Boolean(normalized.condition?.trim())) &&
-    (normalized.requirement === "INFORMATIONAL" ||
-      normalized.fulfillment_mode === "WITHOUT_OPERATOR_TEMPLATE" ||
-      (normalized.fulfillment_mode === "OPERATOR_TEMPLATE" &&
-        Boolean(linkedFile)));
+
+  const missingFields: string[] = [];
+  if (!documentLabel(normalized).trim()) missingFields.push("Nazwa");
+  if (normalized.requirement === "UNKNOWN") missingFields.push("Wymagalność");
+  if (normalized.signature_requirement === "UNKNOWN") {
+    missingFields.push("Podpis");
+  }
+  if (
+    normalized.requirement === "CONDITIONAL" &&
+    !normalized.condition?.trim()
+  ) {
+    missingFields.push("Kiedy dokument jest wymagany");
+  }
+  if (
+    normalized.requirement !== "INFORMATIONAL" &&
+    normalized.fulfillment_mode === "OPERATOR_TEMPLATE" &&
+    !linkedFile
+  ) {
+    missingFields.push("Plik / wzór operatora");
+  }
+
+  const requirementComplete = missingFields.length === 0;
   card.dataset.classified = String(requirementComplete);
   card.open = row.label === "Nowy dokument";
 
@@ -182,6 +194,19 @@ function renderRequirement(
     summaryCopy.append(inherited);
   }
 
+  const status = requirementComplete
+    ? null
+    : document.createElement("span");
+  if (status) {
+    status.className = "file-source-classification-status pending document-requirement-pending";
+    status.textContent = "Do uzupełnienia";
+    status.title = `Brakuje: ${missingFields.join(", ")}`;
+    status.setAttribute(
+      "aria-label",
+      `Dokument do uzupełnienia. Brakuje: ${missingFields.join(", ")}`,
+    );
+  }
+
   const remove = document.createElement("button");
   remove.type = "button";
   remove.className = "document-requirement-remove icon-button danger";
@@ -209,7 +234,8 @@ function renderRequirement(
         options.notice(error instanceof Error ? error.message : String(error), true),
       );
   };
-  summary.append(summaryCopy, remove);
+  if (status) summary.append(summaryCopy, status, remove);
+  else summary.append(summaryCopy, remove);
 
   const body = document.createElement("div");
   body.className = "document-requirement-body file-source-body";
