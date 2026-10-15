@@ -663,10 +663,20 @@ function resolvedRecruitmentState(
     fields[field] = cloneJson(value);
   }
 
-  const operatorAssignments = scopedRows(
+  const assignedOperators = scopedRows(
     state.operatorAssignments,
     recruitment.id,
   );
+  const operatorAssignments =
+    assignedOperators.length || !recruitment.values?.operator_id
+      ? assignedOperators
+      : [
+          {
+            objectId: recruitment.id,
+            operatorId: String(recruitment.values.operator_id),
+            operatorType: "GLOWNY",
+          },
+        ];
   const operators = operatorAssignments.map((assignment) => ({
     name: relationValue(state, assignment.operatorId, "operatora"),
     role: assignment.operatorType,
