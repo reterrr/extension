@@ -577,6 +577,49 @@ function resolvedEvidenceSource(
   };
 }
 
+function externalFieldName(field: string): string {
+  if (field === "project_id") return "project";
+  if (field === "operator_id") return "operator";
+  if (field === "service_category_id") return "service_category";
+  return field;
+}
+
+function resolvedEvidenceValue(
+  state: LegacyStorageState,
+  field: string,
+  value: unknown,
+): unknown {
+  if (value === undefined) return undefined;
+  if (field === "project_id") {
+    return relationValue(state, value, "projektu");
+  }
+  if (field === "operator_id") {
+    return relationValue(state, value, "operatora");
+  }
+  if (field === "service_category_id") {
+    const service = serviceByReference(state, value);
+    if (!service?.label) {
+      throw new Error(
+        "Eksport FundPilot nie może rozwiązać kategorii usługi z dowodu.",
+      );
+    }
+    return service.label;
+  }
+  return cloneJson(value);
+}
+
+function documentTypeValue(value: unknown): string | undefined {
+  const raw = cleanText(value);
+  if (!raw) return undefined;
+  const catalog = (
+    globalThis as typeof globalThis & {
+      BurbotDocuments?: { catalog?: Array<Record<string, unknown>> };
+    }
+  ).BurbotDocuments?.catalog;
+  const entry = catalog?.find((candidate) => String(candidate.key) === raw);
+  return cleanText(entry?.label) || raw;
+}
+
 function resolvedRecruitmentState(
   state: LegacyStorageState,
   recruitment: LegacyStoredObject,
