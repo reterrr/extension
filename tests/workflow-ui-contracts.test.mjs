@@ -496,12 +496,14 @@ test("document panel exports exactly one Recruitment as a FundPilot ZIP", () => 
   assert.match(files, /tylko dla jednego naboru/);
   assert.match(files, /jeden nabór, fundpilot\.json/);
   assert.match(app, /↓ Eksport FundPilot/);
-  assert.match(fundPilot, /format: "FundPilotExportV1"/);
+  assert.match(fundPilot, /format: "FundPilotExportV2"/);
   assert.match(fundPilot, /rootObject\.type !== "recruitment"/);
   assert.match(fundPilot, /portableStateForRecruitment/);
-  assert.match(fundPilot, /objects: \[object\]/);
-  assert.match(fundPilot, /operatorAssignments: \[\]/);
-  assert.match(fundPilot, /serviceCategories: \[\]/);
+  assert.match(fundPilot, /resolvedRecruitmentState/);
+  assert.match(fundPilot, /serviceCategories/);
+  assert.match(fundPilot, /service_category/);
+  assert.match(fundPilot, /relationValue/);
+  assert.match(fundPilot, /assertExternalValues/);
   assert.match(fundPilot, /path: "fundpilot\.json"/);
   assert.match(fundPilot, /package_files/);
   assert.match(fundPilot, /buildFundPilotStoreZip/);
