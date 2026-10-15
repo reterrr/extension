@@ -621,13 +621,10 @@ function resolvedEvidenceValue(
 function documentTypeValue(value: unknown): string | undefined {
   const raw = cleanText(value);
   if (!raw) return undefined;
-  const catalog = (
-    globalThis as typeof globalThis & {
-      BurbotDocuments?: { catalog?: Array<Record<string, unknown>> };
-    }
-  ).BurbotDocuments?.catalog;
-  const entry = catalog?.find((candidate) => String(candidate.key) === raw);
-  return cleanText(entry?.label) || raw;
+  const entry = globalThis.BurbotDocuments?.catalog?.find(
+    (candidate) => String(candidate.key) === raw,
+  );
+  return cleanText(entry?.name) || raw;
 }
 
 function resolvedRecruitmentState(
