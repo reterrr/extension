@@ -160,6 +160,9 @@ function renderRequirement(
   ) {
     missingFields.push("Plik / wzór operatora");
   }
+  if (linkedFile && typeof linkedFile.has_fields !== "boolean") {
+    missingFields.push("Czy plik zawiera pola do wypełnienia?");
+  }
 
   const requirementComplete = missingFields.length === 0;
   card.dataset.classified = String(requirementComplete);
