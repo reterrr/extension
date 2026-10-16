@@ -280,6 +280,7 @@ test("Documents section renders one unified list for files and no-template docum
     "Podpis",
     "Źródło / sposób przygotowania",
     "Plik / wzór operatora",
+    "Czy plik zawiera pola do wypełnienia?",
     "Kiedy dokument jest wymagany",
     "Etap dostarczenia",
     "Odpowiedzialność",
@@ -326,6 +327,26 @@ test("Documents section renders one unified list for files and no-template docum
   assert.match(documents, /missingFields\.push\("Podpis"\)/);
   assert.match(documents, /missingFields\.push\("Kiedy dokument jest wymagany"\)/);
   assert.match(documents, /missingFields\.push\("Plik \/ wzór operatora"\)/);
+  assert.match(
+    documents,
+    /missingFields\.push\("Czy plik zawiera pola do wypełnienia\?"\)/,
+  );
+  assert.match(
+    documents,
+    /hasFieldsLabel = fieldLabel\([\s\S]*?"Czy plik zawiera pola do wypełnienia\?"/,
+  );
+  assert.match(
+    documents,
+    /physicalFileMetadataRow\.hidden = !activePhysicalFileId/,
+  );
+  assert.match(
+    documents,
+    /fileHasFields:[\s\S]*?hasFields\.value === "true"/,
+  );
+  assert.match(
+    background,
+    /message\.physicalFileSourceId[\s\S]*?source\.has_fields[\s\S]*?entry\.field === "has_fields"/,
+  );
   assert.match(documents, /status\.textContent = "Do uzupełnienia"/);
   assert.match(documents, /status\.title = `Brakuje: \$\{missingFields\.join\(", "\)\}`/);
   assert.match(files, /const representedFileIds = supportsRequirements/);

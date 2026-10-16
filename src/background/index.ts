@@ -913,6 +913,58 @@ function mutateDocumentRequirement(
       );
     }
 
+    if (
+      Object.prototype.hasOwnProperty.call(message, "physicalFileSourceId") &&
+      typeof message.physicalFileSourceId === "string" &&
+      message.physicalFileSourceId
+    ) {
+      const source = (state.fileSources ?? []).find(
+        (entry) =>
+          entry.id === message.physicalFileSourceId &&
+          entry.objectId === object.id,
+      );
+      if (!source) {
+        throw new Error("Powiązany plik operatora nie istnieje.");
+      }
+      const linkedToRequirement =
+        row.original_file_source_id === source.id ||
+        (row.source_file_source_ids ?? []).includes(source.id);
+      if (!linkedToRequirement) {
+        throw new Error("Plik nie jest powiązany z tym dokumentem.");
+      }
+
+      const rawHasFields = message.fileHasFields;
+      let nextHasFields: boolean | undefined;
+      if (
+        rawHasFields === undefined ||
+        rawHasFields === null ||
+        rawHasFields === ""
+      ) {
+        nextHasFields = undefined;
+      } else if (typeof rawHasFields === "boolean") {
+        nextHasFields = rawHasFields;
+      } else {
+        throw new Error(
+          "fileHasFields must be true, false or unset.",
+        );
+      }
+
+      if (source.has_fields !== nextHasFields) {
+        if (nextHasFields === undefined) delete source.has_fields;
+        else source.has_fields = nextHasFields;
+
+        state.importTargetEvidence = (state.importTargetEvidence ?? []).filter(
+          (entry) =>
+            !(
+              entry.objectId === object.id &&
+              entry.target?.kind === "file_source" &&
+              String(entry.target.id) === source.id &&
+              entry.field === "has_fields"
+            ),
+        );
+      }
+    }
+
     if (changedFields.size) {
       state.importTargetEvidence = (state.importTargetEvidence ?? []).filter(
         (entry) =>
