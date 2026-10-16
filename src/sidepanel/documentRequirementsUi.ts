@@ -1,3 +1,4 @@
+import { FILE_METADATA_UNSET_LABEL } from "../shared/fileMetadata";
 import {
   DOCUMENT_FULFILLMENT_MODES,
   DOCUMENT_FULFILLMENT_MODE_LABELS,
@@ -274,6 +275,20 @@ function renderRequirement(
   const originalFile = document.createElement("select");
   physicalFileOptions(originalFile, files, normalized.original_file_source_id);
 
+  const hasFields = document.createElement("select");
+  hasFields.append(
+    new Option(FILE_METADATA_UNSET_LABEL, ""),
+    new Option("Tak, pola lub deklaracje", "true"),
+    new Option("Nie", "false"),
+  );
+  const setHasFieldsFromSource = (source?: LegacyStoredFileSource) => {
+    hasFields.value =
+      typeof source?.has_fields === "boolean"
+        ? String(source.has_fields)
+        : "";
+  };
+  setHasFieldsFromSource(linkedFile);
+
   const firstRow = document.createElement("div");
   firstRow.className = "document-requirement-field-row";
   firstRow.append(
@@ -293,6 +308,10 @@ function renderRequirement(
     fulfillment,
   );
   const originalFileLabel = fieldLabel("Plik / wzór operatora", originalFile);
+  const hasFieldsLabel = fieldLabel(
+    "Czy plik zawiera pola do wypełnienia?",
+    hasFields,
+  );
   const conditionLabelNode = fieldLabel(
     "Kiedy dokument jest wymagany",
     conditionInput,
@@ -311,6 +330,10 @@ function renderRequirement(
   thirdRow.className = "document-requirement-field-row";
   thirdRow.append(fulfillmentLabelNode, originalFileLabel);
 
+  const physicalFileMetadataRow = document.createElement("div");
+  physicalFileMetadataRow.className = "document-requirement-field-row";
+  physicalFileMetadataRow.append(hasFieldsLabel);
+
   const fourthRow = document.createElement("div");
   fourthRow.className = "document-requirement-field-row";
   fourthRow.append(deliveryStageLabel, responsibilityLabel);
@@ -319,6 +342,7 @@ function renderRequirement(
     firstRow,
     secondRow,
     thirdRow,
+    physicalFileMetadataRow,
     conditionLabelNode,
     fourthRow,
     requiredEvidenceLabel,
@@ -362,6 +386,9 @@ function renderRequirement(
     fulfillmentLabelNode.hidden = isInfo || usesOperatorTemplate;
     originalFileLabel.hidden = !wantsOperatorTemplate;
     thirdRow.hidden = isInfo;
+    const activePhysicalFileId =
+      (wantsOperatorTemplate ? originalFile.value : "") || linkedFile?.id || "";
+    physicalFileMetadataRow.hidden = !activePhysicalFileId;
     fourthRow.hidden = !withoutOperatorTemplate;
     requiredEvidenceLabel.hidden = !withoutOperatorTemplate;
     conditionLabelNode.hidden = requirement.value !== "CONDITIONAL";
@@ -372,6 +399,8 @@ function renderRequirement(
     if (!originalFile.value && fulfillment.value === "OPERATOR_TEMPLATE") {
       fulfillment.value = "WITHOUT_OPERATOR_TEMPLATE";
     }
+    const selected = files.find((source) => source.id === originalFile.value);
+    setHasFieldsFromSource(selected ?? linkedFile);
     refreshMode();
   };
   refreshMode();
@@ -415,6 +444,14 @@ function renderRequirement(
         objectId: options.object.id,
         documentId: row.id,
         values,
+        physicalFileSourceId:
+          (!informational() && fulfillment.value === "OPERATOR_TEMPLATE"
+            ? originalFile.value
+            : linkedFile?.id) || undefined,
+        fileHasFields:
+          hasFields.value === ""
+            ? undefined
+            : hasFields.value === "true",
       })
       .then(() => {
         options.notice(`Zapisano dokument: ${labelInput.value || "Dokument"}.`);
