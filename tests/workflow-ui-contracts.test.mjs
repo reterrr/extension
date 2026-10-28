@@ -389,14 +389,11 @@ test("Import Review keeps linked operator files inside unified document cards", 
   assert.match(panel, /Plik operatora/);
   assert.match(review, /function representedDocumentFileIds/);
   assert.match(review, /!represented\.has\(source\.id\)/);
-  assert.match(
-    review,
-    /\(informational \|\| isOperatorTemplate\)[\s\S]*?field === "fulfillment_mode"/,
-  );
-  assert.match(
-    review,
-    /noTemplateWorkflowFields[\s\S]*?"delivery_stage"[\s\S]*?"responsibility"[\s\S]*?"required_evidence"/,
-  );
+  assert.match(review, /const isOperatorTemplate =[\s\S]*?row\.fulfillment_mode === "OPERATOR_TEMPLATE"/);
+  assert.match(review, /const visibleFields = new Set/);
+  assert.match(review, /"delivery_stage"[\s\S]*?"responsibility"[\s\S]*?"required_evidence"/);
+  assert.match(review, /physical_file_intended_use/);
+  assert.match(review, /physical_file_has_fields/);
 });
 
 test("Import Review colors are derived from concrete evidence entries", () => {
