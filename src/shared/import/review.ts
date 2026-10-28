@@ -1,3 +1,1299 @@
+import { isSourceFileType } from "../types/source";
+import { importDocumentIntoState } from "./format";
+import { normalizePortableInput } from "./normalizePortableInput.js";
+import type {
+  ImportReviewEditorOption,
+  ImportReviewEditorType,
+  ImportReviewDocumentView,
+  ImportReviewEvidenceView,
+  ImportReviewFieldView,
+  ImportReviewFileView,
+  ImportReviewFinancingFieldView,
+  ImportReviewFinancingView,
+  ImportReviewSession,
+  ImportReviewView,
+} from "../types/importReview";
+import type {
+  ImportedEvidence,
+  ImportedSource,
+  LegacyStoredDocumentRequirement,
+  LegacyStoredFileSource,
+  LegacyStoredObject,
+  LegacyStorageState,
+} from "../types/legacy-storage";
+
+export interface ImportApprovalReferencePatch {
+  field: string;
+  targetObjectId: string;
+}
+
+export interface ImportApprovalOperatorReferencePatch {
+  assignmentImportKey: string;
+  targetObjectId: string;
+}
+
+export interface ImportApprovalExistingReferenceLink {
+  importKey: string;
+  targetObjectId: string;
+}
+
+export interface ImportApprovalPlan {
+  document: unknown;
+  selectedImportKey: string;
+  existingTargetObjectId?: string;
+  selectedDataFields: string[];
+  financingFieldsByImportKey: Record<string, string[]>;
+  referencePatches: ImportApprovalReferencePatch[];
+  operatorReferencePatches: ImportApprovalOperatorReferencePatch[];
+  existingReferenceLinks: ImportApprovalExistingReferenceLink[];
+  temporaryDependencyImportKeys: string[];
+}
+
+function recordValue(value: unknown): Record<string, unknown> | undefined {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+function importedFieldSets(
+  input: unknown,
+  previewState: LegacyStorageState,
+): {
+  objectFields: Record<string, string[]>;
+  financingFields: Record<string, Record<string, string[]>>;
+} {
+  const root = recordValue(input);
+  const rawObjects = Array.isArray(root?.objects) ? root.objects : [];
+  const byImportKey = new Map(
+    previewState.objects
+      .filter((object) => object.importKey)
+      .map((object) => [String(object.importKey), object]),
+  );
+
+  const objectFields: Record<string, string[]> = {};
+  const financingFields: Record<string, Record<string, string[]>> = {};
+
+  for (const raw of rawObjects) {
+    const object = recordValue(raw);
+    if (!object || typeof object.key !== "string") continue;
+    const preview = byImportKey.get(object.key);
+    if (!preview) continue;
+
+    const data = recordValue(object.data);
+    objectFields[preview.id] = data ? Object.keys(data) : [];
+
+    const financing = Array.isArray(object.financing) ? object.financing : [];
+    const fieldsByKey: Record<string, string[]> = {};
+    for (const rawVariant of financing) {
+      const variant = recordValue(rawVariant);
+      if (!variant || typeof variant.key !== "string") continue;
+      const variantData = recordValue(variant.data);
+      fieldsByKey[variant.key] = variantData ? Object.keys(variantData) : [];
+    }
+    financingFields[preview.id] = fieldsByKey;
+  }
+
+  return { objectFields, financingFields };
+}
+
+function includeImportedObjectField(
+  session: ImportReviewSession,
+  objectId: string,
+  field: string,
+): void {
+  const fields = (session.importedFieldsByObjectId ||= {})[objectId] ?? [];
+  if (!fields.includes(field)) fields.push(field);
+  session.importedFieldsByObjectId[objectId] = fields;
+}
+
+function includeImportedFinancingField(
+  session: ImportReviewSession,
+  objectId: string,
+  financingImportKey: string,
+  field: string,
+): void {
+  const byObject = (session.importedFinancingFieldsByObjectId ||= {});
+  const byVariant = (byObject[objectId] ||= {});
+  const fields = byVariant[financingImportKey] ?? [];
+  if (!fields.includes(field)) fields.push(field);
+  byVariant[financingImportKey] = fields;
+}
+
+type SourceCodepointCache = Map<string, string[]>;
+
+function quoteContext(
+  text: string,
+  evidence: ImportedEvidence,
+  codepoints: string[] = Array.from(text),
+) {
+  return {
+    exact: BurbotCore.clean(evidence.rawValue),
+    prefix: BurbotCore.clean(
+      codepoints.slice(Math.max(0, evidence.charStart - 80), evidence.charStart).join(""),
+    ),
+    suffix: BurbotCore.clean(
+      codepoints.slice(evidence.charEnd, Math.min(codepoints.length, evidence.charEnd + 80)).join(""),
+    ),
+  };
+}
+
+function sourceCodepoints(
+  source: ImportedSource,
+  cache: SourceCodepointCache,
+): string[] {
+  let codepoints = cache.get(source.id);
+  if (!codepoints) {
+    codepoints = Array.from(source.snapshot.text);
+    cache.set(source.id, codepoints);
+  }
+  return codepoints;
+}
+
+export function createImportReviewSession(
+  input: unknown,
+  fileName: string,
+  uuid: () => string,
+  now: string,
+): ImportReviewSession {
+  input = normalizePortableInput(input);
+  const previewState = importDocumentIntoState(
+    BurbotCore.empty(),
+    input,
+    0,
+    uuid,
+    now,
+  );
+  previewState.revision = 0;
+
+  const fieldSets = importedFieldSets(input, previewState);
+  const objectOrder = previewState.objects.map((object) => object.id);
+  return {
+    id: uuid(),
+    fileName,
+    createdAt: now,
+    updatedAt: now,
+    previewState,
+    objectOrder,
+    statusByObjectId: Object.fromEntries(
+      objectOrder.map((objectId) => [objectId, "PENDING"]),
+    ),
+    approvedObjectIdByImportKey: {},
+    importedFieldsByObjectId: fieldSets.objectFields,
+    importedFinancingFieldsByObjectId: fieldSets.financingFields,
+    selectedObjectId: objectOrder[0] ?? null,
+  };
+}
+
+function selectedObject(session: ImportReviewSession): LegacyStoredObject | undefined {
+  if (!session.selectedObjectId) return undefined;
+  return session.previewState.objects.find(
+    (object) => object.id === session.selectedObjectId,
+  );
+}
+
+function editorOptions(
+  session: ImportReviewSession,
+  definition: Record<string, unknown> | undefined,
+): ImportReviewEditorOption[] | undefined {
+  if (!definition) return undefined;
+  if (definition.type === "reference") {
+    return session.previewState.objects
+      .filter((object) => object.type === definition.references)
+      .map((object) => ({ value: object.id, label: BurbotCore.displayName(object) }));
+  }
+  if (definition.type === "enum" && definition.options) {
+    return Object.entries(definition.options as Record<string, string>).map(
+      ([value, label]) => ({ value, label: String(label) }),
+    );
+  }
+  if (definition.type === "boolean") {
+    return [
+      { value: "true", label: "Tak" },
+      { value: "false", label: "Nie" },
+    ];
+  }
+  return undefined;
+}
+
+function editorType(definition: Record<string, unknown> | undefined): ImportReviewEditorType {
+  if (!definition) return "text";
+  if (["reference", "enum", "boolean"].includes(String(definition.type))) {
+    return "select";
+  }
+  if (definition.type === "date") return "date";
+  if (definition.type === "time") return "time";
+  if (
+    ["integer", "number", "money", "percentage"].includes(
+      String(definition.type),
+    )
+  ) {
+    return "number";
+  }
+  return "text";
+}
+
+function editorValue(value: unknown): string {
+  if (value === undefined || value === null) return "";
+  return String(value);
+}
+
+function fieldViews(
+  session: ImportReviewSession,
+  object: LegacyStoredObject | undefined,
+): ImportReviewFieldView[] {
+  if (!object) return [];
+  const fields = BurbotSchema[object.type]?.fields ?? {};
+  return Object.entries(fields)
+    .filter(
+      ([field, definition]) =>
+        !definition.reviewHidden &&
+        (!definition.legacy ||
+          BurbotCore.hasValue(object.values[field]) ||
+          session.previewState.rules.some((rule) =>
+            BurbotCore.matches(rule, object.id, field),
+          )),
+    )
+    .map(([field, rawDefinition]) => {
+      const definition = rawDefinition as Record<string, unknown>;
+      const value = object.values[field];
+      const hasValue = BurbotCore.hasValue(value);
+      const options = editorOptions(session, definition);
+      return {
+        field,
+        label: String(definition.label ?? field),
+        value: hasValue
+          ? BurbotCore.formatValue(value, definition, session.previewState)
+          : "Nie ustawiono",
+        editorType: editorType(definition),
+        editorValue: editorValue(value),
+        ...(options ? { options } : {}),
+        evidenceCount: object.evidence?.[field]?.length ?? 0,
+      };
+    });
+}
+
+function evidenceViews(
+  session: ImportReviewSession,
+  object: LegacyStoredObject | undefined,
+  sourceIds?: ReadonlySet<string>,
+  codepointsBySource: SourceCodepointCache = new Map(),
+): ImportReviewEvidenceView[] {
+  if (!object?.evidence) return [];
+  const fields = BurbotSchema[object.type]?.fields ?? {};
+  const sources = new Map(
+    (session.previewState.importSources ?? []).map((source) => [source.id, source]),
+  );
+  const result: ImportReviewEvidenceView[] = [];
+
+  for (const [field, entries] of Object.entries(object.evidence)) {
+    entries.forEach((evidence, index) => {
+      const source = sources.get(evidence.sourceId);
+      if (!source || (sourceIds && !sourceIds.has(source.id))) return;
+      const quote = quoteContext(
+        source.snapshot.text,
+        evidence,
+        sourceCodepoints(source, codepointsBySource),
+      );
+      if (!quote.exact) return;
+      result.push({
+        id: `${object.id}:${field}:${index}`,
+        field,
+        fieldLabel: fields[field]?.label ?? field,
+        rawValue: evidence.rawValue,
+        ...(source.url ? { sourceUrl: source.url } : {}),
+        sourceType: source.type,
+        ...quote,
+      });
+    });
+  }
+  return result;
+}
+
+function nestedEvidenceViews(
+  session: ImportReviewSession,
+  objectId: string,
+  sourceIds?: ReadonlySet<string>,
+  codepointsBySource: SourceCodepointCache = new Map(),
+): ImportReviewEvidenceView[] {
+  const sources = new Map(
+    (session.previewState.importSources ?? []).map((source) => [source.id, source]),
+  );
+  const result: ImportReviewEvidenceView[] = [];
+
+  for (const entry of session.previewState.importTargetEvidence ?? []) {
+    if (entry.objectId !== objectId) continue;
+    const source = sources.get(entry.sourceId);
+    if (!source || (sourceIds && !sourceIds.has(source.id))) continue;
+    const quote = quoteContext(
+      source.snapshot.text,
+      entry,
+      sourceCodepoints(source, codepointsBySource),
+    );
+    if (!quote.exact) continue;
+
+    const targetLabel =
+      entry.target.kind === "geography"
+        ? "Geografia"
+        : entry.target.kind === "operator_contact"
+          ? "Kontakt operatora"
+          : entry.target.kind === "funding"
+            ? "Finansowanie"
+            : entry.target.kind === "file_source"
+              ? "Plik"
+              : entry.target.kind === "document"
+                ? "Dokument legacy"
+                : entry.target.kind;
+
+    result.push({
+      id: `${entry.objectId}:${entry.target.kind}:${entry.targetImportKey ?? entry.target.id}:${entry.field}:${entry.id}`,
+      field: `__nested__:${entry.target.kind}:${entry.field}`,
+      fieldLabel: `${targetLabel} · ${entry.field}`,
+      rawValue: entry.rawValue,
+      ...(source.url ? { sourceUrl: source.url } : {}),
+      sourceType: source.type,
+      ...quote,
+    });
+  }
+
+  return result;
+}
+
+export function allImportReviewEvidenceViews(
+  session: ImportReviewSession,
+  sourceIds?: ReadonlySet<string>,
+): ImportReviewEvidenceView[] {
+  const codepointsBySource: SourceCodepointCache = new Map();
+  return session.objectOrder.flatMap((objectId) => {
+    const object = session.previewState.objects.find(
+      (entry) => entry.id === objectId,
+    );
+    return [
+      ...evidenceViews(session, object, sourceIds, codepointsBySource),
+      ...nestedEvidenceViews(session, objectId, sourceIds, codepointsBySource),
+    ];
+  });
+}
+
+function linkedPhysicalFile(
+  row: LegacyStoredDocumentRequirement,
+  files: LegacyStoredFileSource[],
+): LegacyStoredFileSource | undefined {
+  const mayHavePhysicalDocument =
+    row.requirement === "INFORMATIONAL" ||
+    row.fulfillment_mode === "OPERATOR_TEMPLATE";
+  if (!mayHavePhysicalDocument) return undefined;
+
+  if (row.original_file_source_id) {
+    const original = files.find(
+      (file) => file.id === row.original_file_source_id,
+    );
+    if (original) return original;
+  }
+
+  const sourceIds = new Set(row.source_file_source_ids ?? []);
+  if (!sourceIds.size) return undefined;
+
+  const label = String(row.label ?? "").trim().toLocaleLowerCase("pl-PL");
+  if (!label) return undefined;
+
+  return files.find(
+    (file) =>
+      sourceIds.has(file.id) &&
+      String(file.display_name?.trim() || file.name)
+        .trim()
+        .toLocaleLowerCase("pl-PL") === label,
+  );
+}
+
+function representedDocumentFileIds(
+  session: ImportReviewSession,
+  object: LegacyStoredObject | undefined,
+): Set<string> {
+  if (!object) return new Set();
+  const files = (session.previewState.fileSources ?? []).filter(
+    (source) => source.objectId === object.id,
+  );
+  const represented = new Set<string>();
+  for (const row of session.previewState.documentRequirements ?? []) {
+    if (row.objectId !== object.id) continue;
+    const linked = linkedPhysicalFile(row, files);
+    if (linked) represented.add(linked.id);
+  }
+  return represented;
+}
+
+function fileViews(
+  session: ImportReviewSession,
+  object: LegacyStoredObject | undefined,
+): ImportReviewFileView[] {
+  if (!object) return [];
+  const represented = representedDocumentFileIds(session, object);
+  return (session.previewState.fileSources ?? [])
+    .filter(
+      (source) =>
+        source.objectId === object.id && !represented.has(source.id),
+    )
+    .map((source) => ({
+      id: source.id,
+      name: source.name,
+      ...(source.display_name ? { displayName: source.display_name } : {}),
+      url: source.url,
+      sourcePageUrl: source.sourcePageUrl,
+      ...(source.document_kind ? { documentKind: source.document_kind } : {}),
+      ...(source.purpose ? { purpose: source.purpose } : {}),
+      ...(typeof source.has_fields === "boolean"
+        ? { hasFields: source.has_fields }
+        : {}),
+      ...(source.intended_use ? { intendedUse: source.intended_use } : {}),
+      ...(source.client_requirement
+        ? { clientRequirement: source.client_requirement }
+        : {}),
+      ...(source.signature_requirement
+        ? { signatureRequirement: source.signature_requirement }
+        : {}),
+      ...(source.delivery_method
+        ? { deliveryMethod: source.delivery_method }
+        : {}),
+    }));
+}
+
+function documentViews(
+  session: ImportReviewSession,
+  object: LegacyStoredObject | undefined,
+): ImportReviewDocumentView[] {
+  if (!object) return [];
+  const files = (session.previewState.fileSources ?? []).filter(
+    (source) => source.objectId === object.id,
+  );
+
+  return (session.previewState.documentRequirements ?? [])
+    .filter((row) => row.objectId === object.id)
+    .map((row) => {
+      const informational = row.requirement === "INFORMATIONAL";
+      const isOperatorTemplate =
+        !informational && row.fulfillment_mode === "OPERATOR_TEMPLATE";
+      const noTemplateWorkflowFields = new Set([
+        "delivery_stage",
+        "responsibility",
+        "required_evidence",
+      ]);
+      const physicalFile = linkedPhysicalFile(row, files);
+
+      const rowFields = Object.entries(BurbotDocuments.fields)
+        .filter(([field, definition]) => {
+          if (
+            definition.hidden ||
+            !Object.prototype.hasOwnProperty.call(row, field)
+          ) {
+            return false;
+          }
+          if (
+            (informational || isOperatorTemplate) &&
+            (field === "fulfillment_mode" ||
+              noTemplateWorkflowFields.has(field))
+          ) {
+            return false;
+          }
+          return true;
+        })
+        .map(([field, definition]) => ({
+          field,
+          label: String(definition.label ?? field),
+          value: BurbotCore.hasValue(
+            (row as unknown as Record<string, unknown>)[field],
+          )
+            ? BurbotCore.formatValue(
+                (row as unknown as Record<string, unknown>)[field],
+                definition,
+                session.previewState,
+              )
+            : "Nie ustawiono",
+        }));
+
+      const physicalFields = physicalFile
+        ? [
+            ...(physicalFile.purpose
+              ? [
+                  {
+                    field: "physical_file_purpose",
+                    label: "Cel dokumentu",
+                    value: physicalFile.purpose,
+                  },
+                ]
+              : []),
+            ...(typeof physicalFile.has_fields === "boolean"
+              ? [
+                  {
+                    field: "physical_file_has_fields",
+                    label: "Czy plik zawiera pola do wypełnienia?",
+                    value: physicalFile.has_fields
+                      ? "Tak, pola lub deklaracje"
+                      : "Nie",
+                  },
+                ]
+              : []),
+          ]
+        : [];
+
+      const labelFields = rowFields.filter((field) => field.field === "label");
+      const otherFields = rowFields.filter((field) => field.field !== "label");
+      const fields = [...labelFields, ...physicalFields, ...otherFields];
+
+      return {
+        id: row.id,
+        key: String(row.importKey ?? row.id),
+        label:
+          row.label ||
+          String(row.document_type_key ?? row.importKey ?? row.id),
+        fields,
+        isOperatorTemplate,
+        ...(physicalFile
+          ? {
+              physicalFileName:
+                physicalFile.display_name?.trim() || physicalFile.name,
+              physicalFileUrl: physicalFile.url,
+            }
+          : {}),
+      };
+    });
+}
+
+function financingFieldViews(
+  session: ImportReviewSession,
+  row: Record<string, unknown>,
+): ImportReviewFinancingFieldView[] {
+  return Object.entries(BurbotFunding.fields).map(([field, rawDefinition]) => {
+    const definition = rawDefinition as Record<string, unknown>;
+    const value = row[field];
+    return {
+      field,
+      label: String(definition.label ?? field),
+      value:
+        value === undefined
+          ? ""
+          : BurbotCore.formatValue(value, definition, session.previewState),
+      editorType: editorType(definition),
+      editorValue: editorValue(value),
+      ...(editorOptions(session, definition)
+        ? { options: editorOptions(session, definition) }
+        : {}),
+    };
+  });
+}
+
+function financingViews(
+  session: ImportReviewSession,
+  object: LegacyStoredObject | undefined,
+): ImportReviewFinancingView[] {
+  if (!object) return [];
+  return (session.previewState.financingRules ?? [])
+    .filter((row) => row.objectId === object.id)
+    .map((row) => {
+      const companySize = String(row.company_size ?? "");
+      const serviceLabel = row.service_category_id
+        ? session.previewState.serviceCategories?.find(
+            (service) => service.id === row.service_category_id,
+          )?.label
+        : undefined;
+      return {
+        id: String(row.id),
+        key: String(row.importKey ?? row.id),
+        companySize,
+        companySizeLabel:
+          BurbotFunding.sizes[companySize] ?? companySize,
+        ...(serviceLabel ? { serviceLabel } : {}),
+        variantNo: Number(row.variant_no ?? 1),
+        fields: financingFieldViews(session, row),
+      };
+    });
+}
+
+export function importReviewView(
+  session: ImportReviewSession | null,
+): ImportReviewView {
+  if (!session) {
+    return {
+      active: false,
+      objects: [],
+      fields: [],
+      evidence: [],
+      files: [],
+      documents: [],
+      financing: [],
+    };
+  }
+
+  const object = selectedObject(session);
+  const objects = session.objectOrder
+    .map((id) => session.previewState.objects.find((entry) => entry.id === id))
+    .filter((entry): entry is LegacyStoredObject => Boolean(entry))
+    .map((entry) => ({
+      id: entry.id,
+      type: entry.type,
+      label: BurbotCore.displayName(entry),
+      status: session.statusByObjectId[entry.id] ?? "PENDING",
+      fieldCount: fieldViews(session, entry).length,
+      evidenceCount: Object.values(entry.evidence ?? {}).reduce(
+        (sum, entries) => sum + entries.length,
+        0,
+      ),
+      fileCount: fileViews(session, entry).length,
+      financingCount: (session.previewState.financingRules ?? []).filter(
+        (row) => row.objectId === entry.id,
+      ).length,
+      documentCount: (session.previewState.documentRequirements ?? []).filter(
+        (row) => row.objectId === entry.id,
+      ).length,
+    }));
+
+  const approvedCount = objects.filter((entry) => entry.status === "APPROVED").length;
+  const rejectedCount = objects.filter((entry) => entry.status === "REJECTED").length;
+  return {
+    active: true,
+    id: session.id,
+    fileName: session.fileName,
+    createdAt: session.createdAt,
+    selectedObjectId: session.selectedObjectId,
+    pendingCount: objects.length - approvedCount - rejectedCount,
+    approvedCount,
+    rejectedCount,
+    objects,
+    fields: fieldViews(session, object),
+    evidence: evidenceViews(session, object),
+    files: fileViews(session, object),
+    documents: documentViews(session, object),
+    financing: financingViews(session, object),
+  };
+}
+
+function requirePendingObject(
+  session: ImportReviewSession,
+  objectId: string,
+): LegacyStoredObject {
+  const object = session.previewState.objects.find((entry) => entry.id === objectId);
+  if (!object) throw new Error("Imported object not found.");
+  if (session.statusByObjectId[objectId] === "APPROVED") {
+    throw new Error("Zatwierdzonego obiektu nie można już edytować w Import Review.");
+  }
+  return object;
+}
+
+function touch(session: ImportReviewSession, object: LegacyStoredObject, now: string): void {
+  object.updatedAt = now;
+  session.updatedAt = now;
+}
+
+export function editImportReviewObjectField(
+  session: ImportReviewSession,
+  objectId: string,
+  field: string,
+  input: string,
+  now: string,
+): void {
+  const object = requirePendingObject(session, objectId);
+  const schema = BurbotSchema[object.type];
+  const definition = schema?.fields?.[field];
+  if (!definition) throw new Error(`Unknown field ${object.type}.${field}.`);
+
+  let value: unknown = input;
+  if (definition.type === "reference") {
+    const target = session.previewState.objects.find((entry) => entry.id === input);
+    if (!target || target.type !== definition.references) {
+      throw new Error(`Wybierz poprawny obiekt typu ${definition.references}.`);
+    }
+    value = target.id;
+  }
+
+  object.values[field] = BurbotCore.coerceField(
+    value,
+    definition,
+    session.previewState,
+  );
+  if (field === schema.primary) object.label = String(object.values[field]);
+
+  // Once the reviewer changes a value manually, imported evidence no longer
+  // proves that value. Keeping it would make review visually misleading.
+  if (object.evidence?.[field]) {
+    delete object.evidence[field];
+    if (!Object.keys(object.evidence).length) delete object.evidence;
+  }
+  (object.manualFields ||= {})[field] = true;
+  includeImportedObjectField(session, object.id, field);
+  touch(session, object, now);
+}
+
+export function editImportReviewFinancingField(
+  session: ImportReviewSession,
+  objectId: string,
+  financingId: string,
+  field: string,
+  input: string,
+  now: string,
+): void {
+  const object = requirePendingObject(session, objectId);
+  const row = (session.previewState.financingRules ?? []).find(
+    (entry) => entry.objectId === object.id && String(entry.id) === financingId,
+  );
+  if (!row) throw new Error("Wariant finansowania nie istnieje.");
+  const definition = BurbotFunding.fields[field];
+  if (!definition) throw new Error(`Unknown financing field ${field}.`);
+  row[field] = BurbotCore.coerceField(input, definition, session.previewState);
+  session.previewState.importTargetEvidence = (
+    session.previewState.importTargetEvidence ?? []
+  ).filter(
+    (entry) =>
+      !(
+        entry.objectId === object.id &&
+        entry.field === field &&
+        entry.target.kind === "funding" &&
+        String(entry.target.id) === String(row.id)
+      ),
+  );
+  includeImportedFinancingField(
+    session,
+    object.id,
+    String(row.importKey ?? row.id),
+    field,
+  );
+  touch(session, object, now);
+}
+
+export function removeImportReviewFinancing(
+  session: ImportReviewSession,
+  objectId: string,
+  financingId: string,
+  now: string,
+): void {
+  const object = requirePendingObject(session, objectId);
+  const before = session.previewState.financingRules?.length ?? 0;
+  session.previewState.financingRules = (
+    session.previewState.financingRules ?? []
+  ).filter(
+    (entry) =>
+      !(entry.objectId === object.id && String(entry.id) === financingId),
+  );
+  if (session.previewState.financingRules.length === before) {
+    throw new Error("Wariant finansowania nie istnieje.");
+  }
+  touch(session, object, now);
+}
+
+export function removeImportReviewFile(
+  session: ImportReviewSession,
+  objectId: string,
+  fileId: string,
+  now: string,
+): void {
+  const object = requirePendingObject(session, objectId);
+  const before = session.previewState.fileSources?.length ?? 0;
+  session.previewState.fileSources = (session.previewState.fileSources ?? []).filter(
+    (entry) => !(entry.objectId === object.id && entry.id === fileId),
+  );
+  if (session.previewState.fileSources.length === before) {
+    throw new Error("Plik nie istnieje.");
+  }
+  for (const requirement of session.previewState.documentRequirements ?? []) {
+    if (requirement.objectId !== object.id) continue;
+    requirement.source_file_source_ids = (
+      requirement.source_file_source_ids ?? []
+    ).filter((id) => id !== fileId);
+    if (requirement.original_file_source_id === fileId) {
+      delete requirement.original_file_source_id;
+      requirement.fulfillment_mode = "WITHOUT_OPERATOR_TEMPLATE";
+    }
+  }
+  touch(session, object, now);
+}
+
+function referencedObjects(
+  session: ImportReviewSession,
+  object: LegacyStoredObject,
+): Array<{ field: string; target: LegacyStoredObject }> {
+  const fields = BurbotSchema[object.type]?.fields ?? {};
+  const result: Array<{ field: string; target: LegacyStoredObject }> = [];
+  for (const [field, definition] of Object.entries(fields)) {
+    if (definition.type !== "reference") continue;
+    const value = object.values[field];
+    if (typeof value !== "string") continue;
+    const target = session.previewState.objects.find((entry) => entry.id === value);
+    if (target) result.push({ field, target });
+  }
+  return result;
+}
+
+function portableEvidence(
+  object: LegacyStoredObject,
+  sourceById: Map<string, ImportedSource>,
+) {
+  if (!object.evidence) return undefined;
+  const evidence: Record<string, Array<Record<string, unknown>>> = {};
+  for (const [field, entries] of Object.entries(object.evidence)) {
+    evidence[field] = entries.map((entry) => {
+      const source = sourceById.get(entry.sourceId);
+      if (!source) throw new Error(`Missing import source ${entry.sourceId}.`);
+      return {
+        source: source.importKey,
+        char_start: entry.charStart,
+        char_end: entry.charEnd,
+        raw_value: entry.rawValue,
+        ...(Object.prototype.hasOwnProperty.call(entry, "normalizedValue")
+          ? { normalized_value: entry.normalizedValue }
+          : {}),
+      };
+    });
+  }
+  return evidence;
+}
+
+function portableTargetEvidence(
+  state: LegacyStorageState,
+  objectId: string,
+  target: { kind: string; id: string },
+  sourceById: Map<string, ImportedSource>,
+) {
+  const evidence: Record<string, Array<Record<string, unknown>>> = {};
+  for (const entry of state.importTargetEvidence ?? []) {
+    if (
+      entry.objectId !== objectId ||
+      entry.target.kind !== target.kind ||
+      String(entry.target.id) !== String(target.id)
+    ) {
+      continue;
+    }
+    const source = sourceById.get(entry.sourceId);
+    if (!source) throw new Error(`Missing import source ${entry.sourceId}.`);
+    (evidence[entry.field] ||= []).push({
+      source: source.importKey,
+      char_start: entry.charStart,
+      char_end: entry.charEnd,
+      raw_value: entry.rawValue,
+      ...(Object.prototype.hasOwnProperty.call(entry, "normalizedValue")
+        ? { normalized_value: entry.normalizedValue }
+        : {}),
+    });
+  }
+  return Object.keys(evidence).length ? evidence : undefined;
+}
+
+function explicitObjectFields(
+  session: ImportReviewSession,
+  object: LegacyStoredObject,
+): string[] {
+  const tracked = session.importedFieldsByObjectId?.[object.id];
+  const selected = new Set<string>();
+
+  if (tracked !== undefined) {
+    for (const field of tracked) selected.add(field);
+  } else {
+    // Compatibility with an Import Review session created before update
+    // metadata existed. Infer conservatively so schema defaults never
+    // overwrite a real value in an existing object.
+    const schema = BurbotSchema[object.type];
+    if (schema?.primary) selected.add(schema.primary);
+    for (const field of Object.keys(object.evidence ?? {})) selected.add(field);
+
+    for (const [field, value] of Object.entries(object.values)) {
+      const definition = schema?.fields?.[field];
+      if (!definition || !BurbotCore.hasValue(value)) continue;
+      if (definition.type === "reference") {
+        selected.add(field);
+        continue;
+      }
+      if (!Object.prototype.hasOwnProperty.call(definition, "default")) {
+        selected.add(field);
+        continue;
+      }
+      if (JSON.stringify(value) !== JSON.stringify(definition.default)) {
+        selected.add(field);
+      }
+    }
+  }
+
+  for (const field of Object.keys(object.manualFields ?? {})) {
+    selected.add(field);
+  }
+  return [...selected];
+}
+
+function explicitFinancingFields(
+  session: ImportReviewSession,
+  objectId: string,
+  row: Record<string, unknown>,
+  importKey: string,
+): string[] {
+  const tracked =
+    session.importedFinancingFieldsByObjectId?.[objectId]?.[importKey];
+  if (tracked !== undefined) return [...new Set(tracked)];
+
+  // Older review sessions did not remember the raw JSON field set. Funding
+  // fields have no schema defaults except own_contribution_form, which the
+  // importer seeds as UNSPECIFIED. Exclude that synthetic default.
+  return Object.keys(BurbotFunding.fields).filter((field) => {
+    if (!Object.prototype.hasOwnProperty.call(row, field)) return false;
+    if (
+      field === "own_contribution_form" &&
+      row[field] === "UNSPECIFIED"
+    ) {
+      return false;
+    }
+    return true;
+  });
+}
+
+function portableData(
+  session: ImportReviewSession,
+  object: LegacyStoredObject,
+): Record<string, unknown> {
+  const fields = BurbotSchema[object.type]?.fields ?? {};
+  const selectedFields = new Set(explicitObjectFields(session, object));
+
+  const data: Record<string, unknown> = {};
+  for (const [field, value] of Object.entries(object.values)) {
+    if (!selectedFields.has(field)) continue;
+    const definition = fields[field];
+    if (definition?.type === "reference" && typeof value === "string") {
+      const target = session.previewState.objects.find((entry) => entry.id === value);
+      if (!target?.importKey) {
+        throw new Error(`Could not resolve imported reference ${field}.`);
+      }
+      data[field] = { $ref: target.importKey };
+    } else {
+      data[field] = value;
+    }
+  }
+  return data;
+}
+
+function dependencyStub(target: LegacyStoredObject) {
+  const schema = BurbotSchema[target.type];
+  const primary = schema?.primary;
+  if (!primary) throw new Error(`No primary field for ${target.type}.`);
+  return {
+    key: target.importKey,
+    type: target.type,
+    data: { [primary]: target.values[primary] },
+  };
+}
+
+function importedSourceForFile(
+  file: LegacyStoredFileSource,
+  sources: ImportedSource[],
+): ImportedSource {
+  const source =
+    sources.find((entry) => entry.importKey === file.sourceImportKey) ??
+    sources.find((entry) => isSourceFileType(entry.type) && entry.url === file.url);
+  if (!source?.url) {
+    throw new Error(`Could not resolve import source for file ${file.name}.`);
+  }
+  return source;
+}
+
+function normalizedIdentity(value: unknown): string {
+  return String(value ?? "")
+    .normalize("NFKC")
+    .trim()
+    .toLocaleLowerCase("pl-PL");
+}
+
+function uniqueExistingMatch(
+  objects: LegacyStoredObject[],
+  predicate: (object: LegacyStoredObject) => boolean,
+): LegacyStoredObject | undefined {
+  const matches = objects.filter(predicate);
+  return matches.length === 1 ? matches[0] : undefined;
+}
+
+export function findExistingImportObjectMatch(
+  imported: LegacyStoredObject,
+  state: LegacyStorageState | undefined,
+): LegacyStoredObject | undefined {
+  if (!state) return undefined;
+  const candidates = state.objects.filter((object) => object.type === imported.type);
+  if (!candidates.length) return undefined;
+
+  if (imported.importKey) {
+    const byStableKey = uniqueExistingMatch(
+      candidates,
+      (object) =>
+        object.importKey === imported.importKey ||
+        String(object.id) === imported.importKey,
+    );
+    if (byStableKey) return byStableKey;
+  }
+
+  if (imported.type === "project") {
+    const number = normalizedIdentity(imported.values.number);
+    if (number) {
+      const byNumber = uniqueExistingMatch(
+        candidates,
+        (object) => normalizedIdentity(object.values.number) === number,
+      );
+      if (byNumber) return byNumber;
+    }
+  }
+
+  if (imported.type === "operator") {
+    const nip = String(imported.values.nip ?? "").replace(/\D/g, "");
+    if (nip) {
+      const byNip = uniqueExistingMatch(
+        candidates,
+        (object) =>
+          String(object.values.nip ?? "").replace(/\D/g, "") === nip,
+      );
+      if (byNip) return byNip;
+    }
+  }
+
+  return undefined;
+}
+
+export function buildImportApprovalPlan(
+  session: ImportReviewSession,
+  objectId: string,
+  existingState?: LegacyStorageState,
+): ImportApprovalPlan {
+  const object = session.previewState.objects.find((entry) => entry.id === objectId);
+  if (!object?.importKey) throw new Error("Imported object not found.");
+  if (session.statusByObjectId[objectId] === "APPROVED") {
+    throw new Error("This imported object is already approved.");
+  }
+
+  const existingTarget = findExistingImportObjectMatch(object, existingState);
+  const references = referencedObjects(session, object);
+  const referencePatches: ImportApprovalReferencePatch[] = [];
+  const operatorReferencePatches: ImportApprovalOperatorReferencePatch[] = [];
+  const existingReferenceLinks: ImportApprovalExistingReferenceLink[] = [];
+  for (const { field, target } of references) {
+    if (!target.importKey) throw new Error(`Could not resolve imported reference ${field}.`);
+
+    let targetObjectId = session.approvedObjectIdByImportKey[target.importKey];
+    if (!targetObjectId) {
+      const existing = findExistingImportObjectMatch(target, existingState);
+      if (existing) {
+        targetObjectId = existing.id;
+        existingReferenceLinks.push({
+          importKey: target.importKey,
+          targetObjectId: existing.id,
+        });
+      }
+    }
+
+    if (!targetObjectId) {
+      throw new Error(
+        `Approve referenced object “${BurbotCore.displayName(target)}” first, or make sure the existing object has the same import key / project number / NIP.`,
+      );
+    }
+    referencePatches.push({ field, targetObjectId });
+  }
+
+  const operatorAssignments = (session.previewState.operatorAssignments ?? [])
+    .filter((row) => row.objectId === object.id);
+  const operatorDependencies: LegacyStoredObject[] = [];
+  for (const assignment of operatorAssignments) {
+    const target = session.previewState.objects.find(
+      (entry) => entry.id === assignment.operatorId && entry.type === "operator",
+    );
+    if (!target?.importKey) {
+      throw new Error("Could not resolve imported operator assignment.");
+    }
+
+    let targetObjectId = session.approvedObjectIdByImportKey[target.importKey];
+    if (!targetObjectId) {
+      const existing = findExistingImportObjectMatch(target, existingState);
+      if (existing) {
+        targetObjectId = existing.id;
+        existingReferenceLinks.push({
+          importKey: target.importKey,
+          targetObjectId: existing.id,
+        });
+      }
+    }
+    if (!targetObjectId) {
+      throw new Error(
+        `Approve referenced operator “${BurbotCore.displayName(target)}” first, or make sure the existing operator has the same import key / NIP.`,
+      );
+    }
+    operatorDependencies.push(target);
+    operatorReferencePatches.push({
+      assignmentImportKey: String(assignment.importKey ?? assignment.id),
+      targetObjectId,
+    });
+  }
+
+  const importedSources = session.previewState.importSources ?? [];
+  const sourceById = new Map(importedSources.map((source) => [source.id, source]));
+  const usedSourceIds = new Set(
+    Object.values(object.evidence ?? {})
+      .flat()
+      .map((entry) => entry.sourceId),
+  );
+  for (const entry of session.previewState.importTargetEvidence ?? []) {
+    if (entry.objectId === object.id) usedSourceIds.add(entry.sourceId);
+  }
+
+  const selectedFiles = (session.previewState.fileSources ?? []).filter(
+    (file) => file.objectId === object.id,
+  );
+  const selectedDocuments = (
+    session.previewState.documentRequirements ?? []
+  ).filter((row) => row.objectId === object.id);
+  const usedFileKeys = new Set<string>();
+  const fileKeyById = new Map<string, string>();
+  const uniqueFileKey = (preferred: string): string => {
+    let key = preferred;
+    for (let suffix = 2; usedFileKeys.has(key); suffix++) {
+      key = `${preferred}_${suffix}`;
+    }
+    usedFileKeys.add(key);
+    return key;
+  };
+  selectedFiles.forEach((file, index) => {
+    const preferred = String(file.importKey ?? `FILE_${index + 1}`);
+    fileKeyById.set(file.id, uniqueFileKey(preferred));
+  });
+
+  const linkedDocumentByFileId = new Map<
+    string,
+    (typeof selectedDocuments)[number]
+  >();
+  const unlinkedDocuments: typeof selectedDocuments = [];
+  for (const row of selectedDocuments) {
+    let linkedFile = row.original_file_source_id
+      ? selectedFiles.find((file) => file.id === row.original_file_source_id)
+      : undefined;
+    if (
+      !linkedFile &&
+      (row.fulfillment_mode === "OPERATOR_TEMPLATE" ||
+        row.requirement === "INFORMATIONAL")
+    ) {
+      const label = String(row.label ?? "")
+        .trim()
+        .toLocaleLowerCase("pl-PL");
+      linkedFile = selectedFiles.find(
+        (file) =>
+          (row.source_file_source_ids ?? []).includes(file.id) &&
+          String(file.display_name ?? file.name)
+            .trim()
+            .toLocaleLowerCase("pl-PL") === label,
+      );
+    }
+    if (linkedFile && !linkedDocumentByFileId.has(linkedFile.id)) {
+      linkedDocumentByFileId.set(linkedFile.id, row);
+    } else if (!linkedFile) {
+      unlinkedDocuments.push(row);
+    }
+  }
+
+  const requirementLabel = (value: unknown): string | undefined =>
+    value === "REQUIRED"
+      ? "Obowiązkowy"
+      : value === "CONDITIONAL"
+        ? "Warunkowy"
+        : value === "INFORMATIONAL"
+          ? "Informacyjny"
+          : undefined;
+  const signatureLabel = (value: unknown): string | undefined =>
+    value === "NOT_REQUIRED"
+      ? "Nie jest wymagany"
+      : value === "REQUIRED_FILE"
+        ? "Wymagany podpisany plik"
+        : value === "EXTERNAL_OPERATOR"
+          ? "Dowód w systemie operatora"
+          : undefined;
+  const physicalMetadataFields = new Set([
+    "display_name",
+    "purpose",
+    "has_fields",
+    "intended_use",
+    "client_requirement",
+    "signature_requirement",
+  ]);
+  const requirementMetadata = (
+    row: (typeof selectedDocuments)[number],
+    withoutTemplate = false,
+  ): Record<string, unknown> =>
+    Object.fromEntries(
+      Object.entries({
+        display_name: row.label,
+        intended_use: row.purpose,
+        client_requirement: requirementLabel(row.requirement),
+        signature_requirement: signatureLabel(row.signature_requirement),
+        ...(withoutTemplate ? {
+          condition: row.condition,
+          delivery_stage: row.delivery_stage,
+          responsibility: row.responsibility,
+          required_evidence: row.required_evidence,
+          source_url: row.source_url,
+        } : {}),
+      }).filter(([, value]) => value !== undefined && value !== null && value !== ""),
+    );
+
+  const mappedDocumentEvidence = (
+    row: (typeof selectedDocuments)[number],
+  ): Record<string, Array<Record<string, unknown>>> | undefined => {
+    const evidence = portableTargetEvidence(
+      session.previewState,
+      object.id,
+      { kind: "document", id: String(row.id) },
+      sourceById,
+    );
+    if (!evidence) return undefined;
+    const map: Record<string, string> = {
+      label: "display_name",
+      purpose: "intended_use",
+      requirement: "client_requirement",
+      signature_requirement: "signature_requirement",
+      condition: "condition",
+      delivery_stage: "delivery_stage",
+      responsibility: "responsibility",
+      required_evidence: "required_evidence",
+      source_url: "source_url",
+      source_description: "source_description",
+    };
+    const result: Record<string, Array<Record<string, unknown>>> = {};
+    for (const [field, entries] of Object.entries(evidence)) {
+      const target = map[field];
+      if (!target) continue;
+      result[target] = entries.map((entry) => {
+        if (!Object.prototype.hasOwnProperty.call(entry, "normalized_value")) {
+          return entry;
+        }
+        const normalized =
+          field === "requirement"
+            ? requirementLabel(entry.normalized_value) ?? entry.normalized_value
+            : field === "signature_requirement"
+              ? signatureLabel(entry.normalized_value) ?? entry.normalized_value
+              : entry.normalized_value;
+        return { ...entry, normalized_value: normalized };
+      });
+    }
+    return Object.keys(result).length ? result : undefined;
+  };
+
+  const mergePortableEvidence = (
+    ...parts: Array<
+      Record<string, Array<Record<string, unknown>>> | undefined
+    >
+  ): Record<string, Array<Record<string, unknown>>> | undefined => {
+    const result: Record<string, Array<Record<string, unknown>>> = {};
+    for (const part of parts) {
+      for (const [field, entries] of Object.entries(part ?? {})) {
+        result[field] = [...(result[field] ?? []), ...entries];
+      }
+    }
+    return Object.keys(result).length ? result : undefined;
+  };
+
+  const portableFiles: Array<Record<string, unknown>> = selectedFiles.map((file) => {
+    const source = importedSourceForFile(file, importedSources);
+    usedSourceIds.add(source.id);
+    const pageSource =
+      importedSources.find(
+        (entry) => entry.importKey === file.sourcePageImportKey,
+      ) ?? importedSources.find((entry) => entry.url === file.sourcePageUrl);
+    if (pageSource) usedSourceIds.add(pageSource.id);
+
+    const linkedDocument = linkedDocumentByFileId.get(file.id);
     const metadata = Object.fromEntries(
       [...physicalMetadataFields]
         .filter((field) => Object.prototype.hasOwnProperty.call(file, field))
