@@ -128,6 +128,16 @@ test("Active View export opens an independent subset selector", () => {
   assert.match(manager, />\s*Eksportuj zestaw\s*</);
   assert.match(styles, /\.view-export-dialog/);
   assert.match(styles, /\.view-export-results/);
+  assert.match(
+    styles,
+    /grid-template-columns: 18px minmax\(0, 1fr\)/,
+  );
+  assert.match(
+    styles,
+    /#root \.view-export-dialog \.view-export-item input\[type="checkbox"\][\s\S]*?width: 16px;[\s\S]*?height: 16px;/,
+  );
+  assert.match(styles, /overflow-x: hidden/);
+  assert.match(styles, /height: auto;/);
 });
 
 test("object action popover is anchored inside the header", () => {
