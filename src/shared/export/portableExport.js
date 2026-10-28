@@ -32,29 +32,39 @@ const DOCUMENT_TO_FILE_SIGNATURE = {
   EXTERNAL_OPERATOR: "Dowód w systemie operatora",
 };
 
-const NO_TEMPLATE_ONLY_FILE_METADATA_FIELDS = new Set([
-  "delivery_stage",
-  "responsibility",
-  "required_evidence",
+// Canonical portable files[] has mutually exclusive metadata contracts.
+// The physical file's classification is stored on fileSources; the document
+// adds only its requirement/signature. Workflow fields are no-template only.
+const TEMPLATE_FILE_FIELDS = new Set([
+  "display_name",
+  "purpose",
+  "has_fields",
+  "intended_use",
+  "client_requirement",
+  "signature_requirement",
 ]);
 
-function documentMetadata(row, includeNoTemplateDetails = false) {
-  return compact({
+function documentMetadata(row, withoutTemplate = false) {
+  const common = {
     display_name: row.label,
-    intended_use: row.purpose,
     client_requirement: DOCUMENT_TO_FILE_REQUIREMENT[row.requirement],
     signature_requirement:
       DOCUMENT_TO_FILE_SIGNATURE[row.signature_requirement],
+  };
+  if (!withoutTemplate) {
+    return compact({
+      ...common,
+      intended_use: row.purpose,
+    });
+  }
+  return compact({
+    ...common,
+    intended_use: row.purpose,
     condition: row.condition,
-    ...(includeNoTemplateDetails
-      ? {
-          delivery_stage: row.delivery_stage,
-          responsibility: row.responsibility,
-          required_evidence: row.required_evidence,
-        }
-      : {}),
+    delivery_stage: row.delivery_stage,
+    responsibility: row.responsibility,
+    required_evidence: row.required_evidence,
     source_url: row.source_url,
-    source_description: row.source_description,
   });
 }
 
@@ -506,15 +516,15 @@ export function createPortableExport({
       const linkedDocument = linkedDocumentByFileId.get(String(file.id));
       const physicalMetadata = compact(
         Object.fromEntries(
-          FILE_METADATA_FIELDS.filter(
-            (field) => !NO_TEMPLATE_ONLY_FILE_METADATA_FIELDS.has(field),
+          FILE_METADATA_FIELDS.filter((field) =>
+            TEMPLATE_FILE_FIELDS.has(field),
           ).map((field) => [field, file[field]]),
         ),
       );
-      const metadata = {
+      const metadata = compact({
         ...physicalMetadata,
         ...(linkedDocument ? documentMetadata(linkedDocument) : {}),
-      };
+      });
       const key = uniqueUnifiedKey(
         file.importKey || linkedDocument?.importKey || fileKeys.get(String(file.id)),
         file.id,
