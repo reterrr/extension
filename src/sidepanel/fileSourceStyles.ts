@@ -82,6 +82,11 @@ if (!document.querySelector("style[data-burbot-file-sources]")) {
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 7px;
 }
+/* Grid declarations for rows/labels must not override the hidden attribute:
+   exactly one of the two document modes is visible at a time. */
+.document-requirement-body [hidden] {
+  display: none !important;
+}
 .document-requirement-field {
   display: grid;
   gap: 3px;
