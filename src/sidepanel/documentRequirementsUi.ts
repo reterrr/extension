@@ -116,6 +116,14 @@ function linkedFileForRequirement(
     if (original) return original;
   }
 
+  // Legacy informational files may lack original_file_source_id, but a
+  // genuine no-template requirement must not inherit a proof attachment as a
+  // template simply because its name happens to match.
+  if (
+    row.fulfillment_mode !== "OPERATOR_TEMPLATE" &&
+    row.requirement !== "INFORMATIONAL"
+  ) return undefined;
+
   const label = documentLabel(row).trim().toLocaleLowerCase("pl-PL");
   return files.find(
     (source) =>
