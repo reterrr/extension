@@ -397,7 +397,18 @@ function renderRequirement(
     open.target = "_blank";
     open.rel = "noopener noreferrer";
     open.textContent = "Otwórz plik ↗";
-    physical.append(copy, open);
+    const switchToNoTemplate = document.createElement("button");
+    switchToNoTemplate.type = "button";
+    switchToNoTemplate.className = "text-button";
+    switchToNoTemplate.textContent = "Zmień na bez wzoru";
+    switchToNoTemplate.title =
+      "Zmień wymaganie na dokument bez wzoru. Fizyczny plik pozostanie dostępny osobno.";
+    switchToNoTemplate.onclick = () => {
+      fulfillment.value = "WITHOUT_OPERATOR_TEMPLATE";
+      originalFile.value = "";
+      refreshMode();
+    };
+    physical.append(copy, open, switchToNoTemplate);
     body.append(physical);
   }
 
