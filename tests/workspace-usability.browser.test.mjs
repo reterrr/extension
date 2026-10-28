@@ -573,6 +573,46 @@ test(
     });
     assert.equal(await exportDialog.isVisible(), true);
     assert.equal(await exportDialog.locator(".view-export-item").count(), 2);
+    // Export rows must remain compact and readable at narrow and wide widths.
+    // A global input { width: 100% } previously expanded checkboxes and pushed
+    // object names outside the viewport, causing horizontal scrolling.
+    const exportViewport = page.viewportSize();
+    for (const width of [375, 740]) {
+      await page.setViewportSize({ width, height: 900 });
+      const metrics = await exportDialog.evaluate((modal) => {
+        const row = modal.querySelector(".view-export-item");
+        const input = row?.querySelector('input[type="checkbox"]');
+        const text = row?.querySelector(".view-export-item-copy");
+        const results = modal.querySelector(".view-export-results");
+        if (!row || !input || !text || !results) return null;
+        const rowRect = row.getBoundingClientRect();
+        const inputRect = input.getBoundingClientRect();
+        const textRect = text.getBoundingClientRect();
+        return {
+          checkboxWidth: inputRect.width,
+          rowHeight: rowRect.height,
+          textWidth: textRect.width,
+          textAfterCheckbox: textRect.left >= inputRect.right,
+          textInsideRow: textRect.right <= rowRect.right + 1,
+          horizontalOverflow: results.scrollWidth > results.clientWidth + 1,
+          dialogOverflow: modal.scrollWidth > modal.clientWidth + 1,
+        };
+      });
+      assert.ok(metrics, "Export list should be measurable");
+      assert.ok(
+        metrics.checkboxWidth <= 24,
+        `checkbox oversized at ${width}px: ${JSON.stringify(metrics)}`,
+      );
+      assert.ok(
+        metrics.rowHeight < 120 && metrics.textWidth > 100,
+        `export row not compact/readable at ${width}px: ${JSON.stringify(metrics)}`,
+      );
+      assert.equal(metrics.textAfterCheckbox, true);
+      assert.equal(metrics.textInsideRow, true);
+      assert.equal(metrics.horizontalOverflow, false);
+      assert.equal(metrics.dialogOverflow, false);
+    }
+    if (exportViewport) await page.setViewportSize(exportViewport);
     assert.equal(
       await exportDialog.locator(".view-export-item input:checked").count(),
       2,
