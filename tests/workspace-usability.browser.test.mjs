@@ -565,9 +565,63 @@ test(
     ]);
     assert.equal(fullDocument.objects.length, 4);
     await page.locator(".view-set-menu > summary").click();
-    const viewDownload = page.waitForEvent("download");
     await page
       .getByRole("button", { name: "Eksportuj zestaw", exact: true })
+      .click();
+    const exportDialog = page.getByRole("dialog", {
+      name: "Wybierz obiekty do eksportu",
+    });
+    assert.equal(await exportDialog.isVisible(), true);
+    assert.equal(await exportDialog.locator(".view-export-item").count(), 2);
+    assert.equal(
+      await exportDialog.locator(".view-export-item input:checked").count(),
+      2,
+      "All Active View members must be preselected",
+    );
+    // Select a subset without removing objects from Active View.
+    await exportDialog
+      .getByRole("button", { name: "Odznacz widoczne" })
+      .click();
+    assert.equal(
+      await exportDialog
+        .getByRole("button", { name: "Eksportuj zaznaczone (0)" })
+        .isDisabled(),
+      true,
+    );
+    await exportDialog
+      .getByRole("combobox", { name: "Filtruj typ obiektu do eksportu" })
+      .selectOption("recruitment");
+    assert.equal(await exportDialog.locator(".view-export-item").count(), 1);
+    await exportDialog
+      .getByRole("button", { name: "Zaznacz widoczne" })
+      .click();
+    const subsetDownload = page.waitForEvent("download");
+    await exportDialog
+      .getByRole("button", { name: "Eksportuj zaznaczone (1)" })
+      .click();
+    const subsetFile = await subsetDownload;
+    const subsetDocument = JSON.parse(
+      await readFile(await subsetFile.path(), "utf8"),
+    );
+    assert.deepEqual(subsetDocument.objects.map((object) => object.key), ["call"]);
+    assert.equal(
+      await page.locator(".view-manager-header strong").textContent(),
+      "2 obiekty",
+      "Subset export must not modify Active View",
+    );
+
+    // Reopening resets the dialog to all members and preserves normal exports.
+    await page.locator(".view-set-menu > summary").click();
+    await page
+      .getByRole("button", { name: "Eksportuj zestaw", exact: true })
+      .click();
+    assert.equal(
+      await exportDialog.locator(".view-export-item input:checked").count(),
+      2,
+    );
+    const viewDownload = page.waitForEvent("download");
+    await exportDialog
+      .getByRole("button", { name: "Eksportuj zaznaczone (2)" })
       .click();
     const viewFile = await viewDownload;
     const viewDocument = JSON.parse(

@@ -285,6 +285,19 @@ kbd { padding: 2px 5px; border: 1px solid #b6c7bc; border-radius: 4px; font: 11p
 .view-dialog-footer { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 10px; padding: 16px 24px; border-top: 1px solid #d4dfd8; background: #f5f9f6; }
 .view-dialog-footer button { border: 1px solid #aabeb1; }
 .view-dialog-footer .primary { width: auto; }
+.view-export-dialog { width: min(740px, calc(100vw - 24px)); }
+.view-export-toolbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; margin: 8px 24px 0; padding: 10px 0; border-bottom: 1px solid #d4dfd8; }
+.view-export-toolbar strong { font-size: 13px; }
+.view-export-toolbar-actions, .view-export-footer-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.view-export-toolbar-actions button { border: 1px solid #b4c8ba; padding: 8px 10px; }
+.view-export-dialog .view-export-results { flex: 1; min-height: 0; overflow-y: auto; padding: 10px 24px; scrollbar-gutter: stable; }
+.view-export-item { display: flex; align-items: center; gap: 12px; min-width: 0; padding: 10px; border: 1px solid #dae4dd; border-radius: 7px; margin-bottom: 6px; cursor: pointer; }
+.view-export-item:hover { background: #edf6f0; }
+.view-export-item input[type=checkbox] { flex: none; }
+.view-export-item-copy { display: grid; gap: 4px; min-width: 0; }
+.view-export-item-copy strong { font-size: 13px; overflow-wrap: anywhere; }
+.view-export-item-copy small, .view-export-footer-count { color: #53685a; font-size: 12px; }
+.view-export-dialog .view-manager-error { margin: 8px 24px; }
 .keyboard-help { position: relative; color: #4e6456; font-size: 12px; }
 .keyboard-help summary { padding: 8px; }
 .keyboard-help dl { position: absolute; top: 100%; right: 0; margin: 0; padding: 16px; width: min(360px, calc(100vw - 24px)); border: 1px solid #b8cbbf; background: #fff; border-radius: 8px; box-shadow: 0 6px 20px #173d2426; z-index: 50; }
@@ -303,6 +316,11 @@ kbd { padding: 2px 5px; border: 1px solid #b6c7bc; border-radius: 4px; font: 11p
   .view-dialog-header small { display: none; }
   .view-search-dialog .view-search-help, .view-search-dialog .view-catalog-head { margin-left: 12px; margin-right: 12px; }
   .view-manager .view-search-dialog .view-search-results { margin: 0 4px; }
+  .view-export-toolbar { margin: 8px 12px 0; }
+  .view-export-dialog .view-export-results { padding: 8px 12px; }
+  .view-export-dialog .view-manager-error { margin: 8px 12px; }
+  .view-export-footer-actions { width: 100%; }
+  .view-export-footer-actions button { flex: 1; }
   .operator-assignment-add { grid-template-columns: 1fr; }
 }
 @media (prefers-reduced-motion: reduce) {

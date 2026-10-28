@@ -110,13 +110,24 @@ test("newly created objects are added to Active View and focused", () => {
 });
 
 
-test("Active View exports exactly the selected set", () => {
+test("Active View export opens an independent subset selector", () => {
   const manager = source("src/sidepanel/ViewManagerPanel.tsx");
+  const styles = source("src/sidepanel/workspaceLayoutStyles.ts");
 
-  assert.match(manager, /createAiViewExport/);
-  assert.match(manager, /aiViewExportFilename/);
+  assert.match(manager, /onClick=\{\(event\) => \{[\s\S]*?openExportPicker\(\)/);
+  assert.match(manager, /Wybierz obiekty do eksportu/);
+  assert.match(manager, /setExportSelectedIds\(activeObjects\.map/);
+  assert.match(manager, /toggleExportObject/);
+  assert.match(manager, /selectExportVisible/);
+  assert.match(manager, /Filtruj typ obiektu do eksportu/);
+  assert.match(manager, /Eksportuj zaznaczone/);
+  assert.match(manager, /view: \{ objectIds: selectedIds \}/);
   assert.match(manager, /exactSelection: true/);
+  assert.match(manager, /payload\.objects\.length !== selectedIds\.length/);
+  assert.match(manager, /aiViewExportFilename/);
   assert.match(manager, />\s*Eksportuj zestaw\s*</);
+  assert.match(styles, /\.view-export-dialog/);
+  assert.match(styles, /\.view-export-results/);
 });
 
 test("object action popover is anchored inside the header", () => {
