@@ -133,10 +133,6 @@ export function documentRequirementFromFile(
         }
       : {}),
     fulfillment_mode: "OPERATOR_TEMPLATE",
-    ...(typeof source.source_description === "string" &&
-    source.source_description.trim()
-      ? { source_description: source.source_description.trim().slice(0, 1000) }
-      : {}),
     signature_requirement: signatureFromFileSource(source),
     original_file_source_id: source.id,
     // The physical file remains useful as provenance even when it is only an
