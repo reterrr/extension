@@ -1469,6 +1469,7 @@ export function importDocumentIntoState(
 
         if (!legacyType) {
           if (
+            row.fulfillment_mode !== "OPERATOR_TEMPLATE" &&
             row.requirement === "CONDITIONAL" &&
             (typeof row.condition !== "string" || !row.condition.trim())
           ) {
