@@ -113,24 +113,9 @@ export function documentRequirementFromFile(
     (typeof source.display_name === "string" && source.display_name.trim()) ||
     source.name;
 
-  const informational = requirement === "INFORMATIONAL";
-  const legacyDelivery = String(source.delivery_method ?? "")
-    .normalize("NFKD")
-    .replace(/[\u0300-\u036f]/gu, "")
-    .toLocaleLowerCase("pl-PL");
-  const explicitlyWithoutTemplate =
-    legacyDelivery.includes("bez wzoru") ||
-    legacyDelivery.includes("without operator template");
-  const explicitlyOperatorTemplate =
-    legacyDelivery.includes("oryginalu operatora") ||
-    legacyDelivery.includes("original operator") ||
-    legacyDelivery.includes("operator template");
-  // A LegacyStoredFileSource is a real operator-supplied physical file.
-  // "Informacyjny" and has_fields=false describe its usage, not absence.
-  // Only an explicit legacy "bez wzoru" classification may override it.
-  const usesOperatorTemplate =
-    !explicitlyWithoutTemplate ||
-    explicitlyOperatorTemplate;
+  // A physical file added by the operator always follows the "ze wzorem"
+  // UI path, regardless of required/informational status, has_fields or
+  // misleading legacy delivery_method strings.
   return {
     id,
     objectId,
@@ -147,35 +132,13 @@ export function documentRequirementFromFile(
             ).slice(0, 1000),
         }
       : {}),
-    fulfillment_mode: usesOperatorTemplate
-      ? "OPERATOR_TEMPLATE"
-      : "WITHOUT_OPERATOR_TEMPLATE",
-    ...(!usesOperatorTemplate
-      ? {
-          responsibility:
-            source.responsibility === "FUNDPILOT" ||
-            source.responsibility === "SHARED" ||
-            source.responsibility === "CLIENT"
-              ? source.responsibility
-              : "CLIENT",
-        }
-      : {}),
-    ...(!usesOperatorTemplate &&
-    typeof source.delivery_stage === "string" &&
-    source.delivery_stage.trim()
-      ? { delivery_stage: source.delivery_stage.trim().slice(0, 60) }
-      : {}),
-    ...(!usesOperatorTemplate &&
-    typeof source.required_evidence === "string" &&
-    source.required_evidence.trim()
-      ? { required_evidence: source.required_evidence.trim().slice(0, 4000) }
-      : {}),
+    fulfillment_mode: "OPERATOR_TEMPLATE",
     ...(typeof source.source_description === "string" &&
     source.source_description.trim()
       ? { source_description: source.source_description.trim().slice(0, 1000) }
       : {}),
     signature_requirement: signatureFromFileSource(source),
-    ...(usesOperatorTemplate ? { original_file_source_id: source.id } : {}),
+    original_file_source_id: source.id,
     // The physical file remains useful as provenance even when it is only an
     // informational regulation/instruction rather than a client template.
     source_file_source_ids: [source.id],
