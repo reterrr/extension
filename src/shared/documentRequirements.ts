@@ -125,13 +125,12 @@ export function documentRequirementFromFile(
     legacyDelivery.includes("oryginalu operatora") ||
     legacyDelivery.includes("original operator") ||
     legacyDelivery.includes("operator template");
-  const looksLikeOperatorTemplate =
-    source.purpose === "Formularz do uzupełnienia" ||
-    source.has_fields === true;
+  // A LegacyStoredFileSource is a real operator-supplied physical file.
+  // "Informacyjny" and has_fields=false describe its usage, not absence.
+  // Only an explicit legacy "bez wzoru" classification may override it.
   const usesOperatorTemplate =
-    !informational &&
-    !explicitlyWithoutTemplate &&
-    (explicitlyOperatorTemplate || looksLikeOperatorTemplate);
+    !explicitlyWithoutTemplate ||
+    explicitlyOperatorTemplate;
   return {
     id,
     objectId,
@@ -151,7 +150,7 @@ export function documentRequirementFromFile(
     fulfillment_mode: usesOperatorTemplate
       ? "OPERATOR_TEMPLATE"
       : "WITHOUT_OPERATOR_TEMPLATE",
-    ...(!informational && !usesOperatorTemplate
+    ...(!usesOperatorTemplate
       ? {
           responsibility:
             source.responsibility === "FUNDPILOT" ||
@@ -161,14 +160,12 @@ export function documentRequirementFromFile(
               : "CLIENT",
         }
       : {}),
-    ...(!informational &&
-    !usesOperatorTemplate &&
+    ...(!usesOperatorTemplate &&
     typeof source.delivery_stage === "string" &&
     source.delivery_stage.trim()
       ? { delivery_stage: source.delivery_stage.trim().slice(0, 60) }
       : {}),
-    ...(!informational &&
-    !usesOperatorTemplate &&
+    ...(!usesOperatorTemplate &&
     typeof source.required_evidence === "string" &&
     source.required_evidence.trim()
       ? { required_evidence: source.required_evidence.trim().slice(0, 4000) }
