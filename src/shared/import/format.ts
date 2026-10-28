@@ -738,15 +738,10 @@ function unifiedRequirementFromMetadata(
       objectId,
       importKey,
     );
-    if (row.requirement === "INFORMATIONAL") {
-      row.fulfillment_mode = "WITHOUT_OPERATOR_TEMPLATE";
-      delete row.original_file_source_id;
-    } else {
-      // In the canonical one-list format, the presence of source means this
-      // very row is backed by an operator-provided physical file/template.
-      row.fulfillment_mode = "OPERATOR_TEMPLATE";
-      row.original_file_source_id = linkedFile.id;
-    }
+    // The source/without_template discriminator is authoritative, including
+    // informational regulations and instructions. Requirement is independent.
+    row.fulfillment_mode = "OPERATOR_TEMPLATE";
+    row.original_file_source_id = linkedFile.id;
     if (metadata.condition) row.condition = metadata.condition.slice(0, 1000);
     // A physical operator file/template is one document, not a second
     // no-template delivery requirement. delivery_stage, responsibility and
@@ -1481,13 +1476,11 @@ export function importDocumentIntoState(
               `${item.key}.documents.${importedDocument.key} is CONDITIONAL but data.condition is empty.`,
             );
           }
-          if (row.requirement === "INFORMATIONAL") {
-            row.fulfillment_mode = "WITHOUT_OPERATOR_TEMPLATE";
-            delete row.original_file_source_id;
-            delete row.delivery_stage;
-            delete row.responsibility;
-            delete row.required_evidence;
-          } else if (row.fulfillment_mode === "OPERATOR_TEMPLATE") {
+          // An explicit original_file always means an operator-supplied
+          // template, even when the document is informational. No-template
+          // documents do not have an original_file.
+          if (originalFileId) row.fulfillment_mode = "OPERATOR_TEMPLATE";
+          if (row.fulfillment_mode === "OPERATOR_TEMPLATE") {
             delete row.delivery_stage;
             delete row.responsibility;
             delete row.required_evidence;
