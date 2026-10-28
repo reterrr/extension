@@ -639,6 +639,9 @@ function stageExistingObjectUpdate(
       delete row.delivery_stage;
       delete row.responsibility;
       delete row.required_evidence;
+      delete row.condition;
+      delete row.source_url;
+      delete row.source_description;
     } else {
       row.fulfillment_mode = "WITHOUT_OPERATOR_TEMPLATE";
       for (const field of ["delivery_stage", "responsibility", "required_evidence", "condition", "source_url"] as const) {
