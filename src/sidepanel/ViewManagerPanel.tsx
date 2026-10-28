@@ -662,7 +662,11 @@ export function ViewManagerPanel() {
         </div>
         <div className="view-export-results" aria-label="Obiekty do eksportu">
           {exportVisibleObjects.map((object) => (
-            <label key={object.id} className="view-export-item">
+            <label
+              key={object.id}
+              className="view-export-item"
+              title={displayName(object)}
+            >
               <input
                 type="checkbox"
                 checked={exportSelectedSet.has(object.id)}
