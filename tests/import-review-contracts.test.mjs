@@ -428,8 +428,8 @@ test("repository portable-import example stays importable", async () => {
   assert.ok(serviceCard);
 
   assert.equal(regulations.requirement, "INFORMATIONAL");
-  assert.equal(regulations.fulfillment_mode, "WITHOUT_OPERATOR_TEMPLATE");
-  assert.equal(regulations.original_file_source_id, undefined);
+  assert.equal(regulations.fulfillment_mode, "OPERATOR_TEMPLATE");
+  assert.equal(regulations.original_file_source_id, files[0].id);
   assert.deepEqual(regulations.source_file_source_ids, [files[0].id]);
 
   assert.equal(application.requirement, "REQUIRED");
@@ -606,8 +606,8 @@ test("dynamic documents support operator templates and no-template requirements"
     "Warunkowy",
   );
   assert.equal(
-    portableProject.files[0].metadata.condition,
-    "Gdy wnioskodawca korzysta z pomocy de minimis.",
+    Object.prototype.hasOwnProperty.call(portableProject.files[0].metadata, "condition"),
+    false,
   );
   assert.equal(
     Object.prototype.hasOwnProperty.call(
