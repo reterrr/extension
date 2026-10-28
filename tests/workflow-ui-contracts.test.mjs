@@ -114,7 +114,7 @@ test("Active View export opens an independent subset selector", () => {
   const manager = source("src/sidepanel/ViewManagerPanel.tsx");
   const styles = source("src/sidepanel/workspaceLayoutStyles.ts");
 
-  assert.match(manager, /onClick=\{openExportPicker\}/);
+  assert.match(manager, /onClick=\{\(event\) => \{[\s\S]*?openExportPicker\(\)/);
   assert.match(manager, /Wybierz obiekty do eksportu/);
   assert.match(manager, /setExportSelectedIds\(activeObjects\.map/);
   assert.match(manager, /toggleExportObject/);
