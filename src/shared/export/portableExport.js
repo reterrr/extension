@@ -75,6 +75,10 @@ function linkedPhysicalFile(row, files) {
     );
     if (original) return original;
   }
+  if (
+    row.fulfillment_mode !== "OPERATOR_TEMPLATE" &&
+    row.requirement !== "INFORMATIONAL"
+  ) return undefined;
   const label = String(row.label ?? "").trim().toLocaleLowerCase("pl-PL");
   if (!label) return undefined;
   return files.find(
