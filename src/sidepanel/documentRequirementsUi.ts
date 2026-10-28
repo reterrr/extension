@@ -1,4 +1,7 @@
-import { FILE_METADATA_UNSET_LABEL } from "../shared/fileMetadata";
+import {
+  FILE_METADATA_UNSET_LABEL,
+  FILE_PURPOSES,
+} from "../shared/fileMetadata";
 import {
   DOCUMENT_FULFILLMENT_MODES,
   DOCUMENT_FULFILLMENT_MODE_LABELS,
@@ -113,6 +116,14 @@ function linkedFileForRequirement(
     if (original) return original;
   }
 
+  // Legacy informational files may lack original_file_source_id, but a
+  // genuine no-template requirement must not inherit a proof attachment as a
+  // template simply because its name happens to match.
+  if (
+    row.fulfillment_mode !== "OPERATOR_TEMPLATE" &&
+    row.requirement !== "INFORMATIONAL"
+  ) return undefined;
+
   const label = documentLabel(row).trim().toLocaleLowerCase("pl-PL");
   return files.find(
     (source) =>
@@ -136,6 +147,11 @@ function renderRequirement(
     options.state,
     options.object.id,
   );
+  // A legacy physical file may have WITHOUT_OPERATOR_TEMPLATE from the old
+  // informational special case. An actual linked operator file wins.
+  const hasOperatorTemplate =
+    Boolean(linkedFile) ||
+    normalized.fulfillment_mode === "OPERATOR_TEMPLATE";
 
   const card = document.createElement("details");
   card.className = "document-requirement-row file-source-row";
@@ -148,6 +164,7 @@ function renderRequirement(
     missingFields.push("Podpis");
   }
   if (
+    !hasOperatorTemplate &&
     normalized.requirement === "CONDITIONAL" &&
     !normalized.condition?.trim()
   ) {
@@ -155,12 +172,12 @@ function renderRequirement(
   }
   if (
     normalized.requirement !== "INFORMATIONAL" &&
-    normalized.fulfillment_mode === "OPERATOR_TEMPLATE" &&
+    hasOperatorTemplate &&
     !linkedFile
   ) {
     missingFields.push("Plik / wzór operatora");
   }
-  if (linkedFile && typeof linkedFile.has_fields !== "boolean") {
+  if (hasOperatorTemplate && linkedFile && typeof linkedFile.has_fields !== "boolean") {
     missingFields.push("Czy plik zawiera pola do wypełnienia?");
   }
 
@@ -179,12 +196,9 @@ function renderRequirement(
     DOCUMENT_REQUIREMENT_LABELS[
       normalized.requirement as keyof typeof DOCUMENT_REQUIREMENT_LABELS
     ] ?? normalized.requirement;
-  const fulfillmentLabel =
-    normalized.requirement === "INFORMATIONAL"
-      ? "Materiał informacyjny"
-      : DOCUMENT_FULFILLMENT_MODE_LABELS[
-          normalized.fulfillment_mode as keyof typeof DOCUMENT_FULFILLMENT_MODE_LABELS
-        ] ?? normalized.fulfillment_mode;
+  const fulfillmentLabel = hasOperatorTemplate
+    ? DOCUMENT_FULFILLMENT_MODE_LABELS.OPERATOR_TEMPLATE
+    : DOCUMENT_FULFILLMENT_MODE_LABELS.WITHOUT_OPERATOR_TEMPLATE;
   const physicalMeta = linkedFile
     ? ` · ${linkedFile.fileType} · ${linkedFile.name}`
     : "";
@@ -246,6 +260,20 @@ function renderRequirement(
 
   const labelInput = input(text(normalized.label), 500);
   const purposeInput = textarea(text(normalized.purpose), 1000);
+  const templateName = input(
+    text(linkedFile?.display_name) || text(normalized.label),
+    500,
+  );
+  const templatePurpose = select(
+    FILE_PURPOSES,
+    Object.fromEntries(FILE_PURPOSES.map((value) => [value, value])),
+    text(linkedFile?.purpose) || "",
+    true,
+  );
+  const templateIntendedUse = textarea(
+    text(linkedFile?.intended_use) || text(normalized.purpose),
+    1000,
+  );
   const requirement = select(
     DOCUMENT_REQUIREMENTS,
     DOCUMENT_REQUIREMENT_LABELS,
@@ -255,7 +283,7 @@ function renderRequirement(
   const fulfillment = select(
     DOCUMENT_FULFILLMENT_MODES,
     DOCUMENT_FULFILLMENT_MODE_LABELS,
-    text(normalized.fulfillment_mode) || "WITHOUT_OPERATOR_TEMPLATE",
+    hasOperatorTemplate ? "OPERATOR_TEMPLATE" : "WITHOUT_OPERATOR_TEMPLATE",
   );
   const deliveryStage = input(text(normalized.delivery_stage), 60);
   const responsibility = select(
@@ -276,7 +304,11 @@ function renderRequirement(
   const sourceDescription = textarea(text(normalized.source_description), 1000);
 
   const originalFile = document.createElement("select");
-  physicalFileOptions(originalFile, files, normalized.original_file_source_id);
+  physicalFileOptions(
+    originalFile,
+    files,
+    normalized.original_file_source_id ?? linkedFile?.id,
+  );
 
   const hasFields = document.createElement("select");
   hasFields.append(
@@ -292,16 +324,25 @@ function renderRequirement(
   };
   setHasFieldsFromSource(linkedFile);
 
-  const firstRow = document.createElement("div");
-  firstRow.className = "document-requirement-field-row";
-  firstRow.append(
-    fieldLabel("Nazwa", labelInput),
-    fieldLabel("Przeznaczenie", purposeInput),
+  const templateNameRow = document.createElement("div");
+  templateNameRow.className = "document-requirement-field-row";
+  templateNameRow.append(
+    fieldLabel("Nazwa", templateName),
+    fieldLabel("Przeznaczenie", templatePurpose),
+  );
+  const templateDetailsRow = document.createElement("div");
+  templateDetailsRow.className = "document-requirement-field-row";
+  templateDetailsRow.append(
+    fieldLabel("Cel dokumentu", templateIntendedUse),
+    fieldLabel("Czy plik zawiera pola do wypełnienia?", hasFields),
   );
 
-  const secondRow = document.createElement("div");
-  secondRow.className = "document-requirement-field-row";
-  secondRow.append(
+  const newDocumentName = fieldLabel("Nazwa nowego dokumentu", labelInput);
+  const noTemplatePurpose = fieldLabel("Przeznaczenie", purposeInput);
+
+  const commonRow = document.createElement("div");
+  commonRow.className = "document-requirement-field-row";
+  commonRow.append(
     fieldLabel("Wymagalność", requirement),
     fieldLabel("Podpis", signature),
   );
@@ -311,10 +352,6 @@ function renderRequirement(
     fulfillment,
   );
   const originalFileLabel = fieldLabel("Plik / wzór operatora", originalFile);
-  const hasFieldsLabel = fieldLabel(
-    "Czy plik zawiera pola do wypełnienia?",
-    hasFields,
-  );
   const conditionLabelNode = fieldLabel(
     "Kiedy dokument jest wymagany",
     conditionInput,
@@ -328,33 +365,32 @@ function renderRequirement(
     "Co należy dostarczyć",
     requiredEvidence,
   );
+  const sourceUrlLabel = fieldLabel("Oficjalne źródło", sourceUrl);
 
-  const thirdRow = document.createElement("div");
-  thirdRow.className = "document-requirement-field-row";
-  thirdRow.append(fulfillmentLabelNode, originalFileLabel);
-
-  const physicalFileMetadataRow = document.createElement("div");
-  physicalFileMetadataRow.className = "document-requirement-field-row";
-  physicalFileMetadataRow.append(hasFieldsLabel);
-
-  const fourthRow = document.createElement("div");
-  fourthRow.className = "document-requirement-field-row";
-  fourthRow.append(deliveryStageLabel, responsibilityLabel);
+  const modeRow = document.createElement("div");
+  modeRow.className = "document-requirement-field-row";
+  modeRow.append(fulfillmentLabelNode, originalFileLabel);
+  const workflowRow = document.createElement("div");
+  workflowRow.className = "document-requirement-field-row";
+  workflowRow.append(deliveryStageLabel, responsibilityLabel);
 
   body.append(
-    firstRow,
-    secondRow,
-    thirdRow,
-    physicalFileMetadataRow,
+    templateNameRow,
+    templateDetailsRow,
+    newDocumentName,
+    noTemplatePurpose,
+    commonRow,
+    modeRow,
     conditionLabelNode,
-    fourthRow,
+    workflowRow,
     requiredEvidenceLabel,
-    fieldLabel("Oficjalne źródło", sourceUrl),
-    fieldLabel("Opis źródła", sourceDescription),
+    sourceUrlLabel,
   );
 
+  let linkedPhysicalNode: HTMLElement | undefined;
   if (linkedFile) {
     const physical = document.createElement("div");
+    linkedPhysicalNode = physical;
     physical.className = "document-linked-file";
     const copy = document.createElement("span");
     copy.textContent = `Plik: ${linkedFile.name} · ${linkedFile.fileType}`;
@@ -363,47 +399,51 @@ function renderRequirement(
     open.target = "_blank";
     open.rel = "noopener noreferrer";
     open.textContent = "Otwórz plik ↗";
-    physical.append(copy, open);
+    const switchToNoTemplate = document.createElement("button");
+    switchToNoTemplate.type = "button";
+    switchToNoTemplate.className = "text-button";
+    switchToNoTemplate.textContent = "Zmień na bez wzoru";
+    switchToNoTemplate.title =
+      "Zmień wymaganie na dokument bez wzoru. Fizyczny plik pozostanie dostępny osobno.";
+    switchToNoTemplate.onclick = () => {
+      fulfillment.value = "WITHOUT_OPERATOR_TEMPLATE";
+      originalFile.value = "";
+      refreshMode();
+    };
+    physical.append(copy, open, switchToNoTemplate);
     body.append(physical);
   }
 
-  const informational = () => requirement.value === "INFORMATIONAL";
   const refreshMode = () => {
-    const isInfo = informational();
-    const wantsOperatorTemplate =
-      !isInfo && fulfillment.value === "OPERATOR_TEMPLATE";
-    const usesOperatorTemplate =
-      wantsOperatorTemplate && Boolean(originalFile.value);
-    const withoutOperatorTemplate =
-      !isInfo && fulfillment.value === "WITHOUT_OPERATOR_TEMPLATE";
-
-    // There are only two business cases in the Documents UI:
-    // 1. the operator supplies a physical file/template,
-    // 2. the required document has no operator template.
-    //
-    // Delivery workflow fields describe only case 2. For case 1 the physical
-    // operator file is the relevant input and showing both sets of controls
-    // makes the card look like two independent requirements. Keep the mode
-    // selector visible while a template is being chosen so the user can still
-    // switch back to "without template".
-    fulfillmentLabelNode.hidden = isInfo || usesOperatorTemplate;
-    originalFileLabel.hidden = !wantsOperatorTemplate;
-    thirdRow.hidden = isInfo;
-    const activePhysicalFileId =
-      (wantsOperatorTemplate ? originalFile.value : "") || linkedFile?.id || "";
-    physicalFileMetadataRow.hidden = !activePhysicalFileId;
-    fourthRow.hidden = !withoutOperatorTemplate;
-    requiredEvidenceLabel.hidden = !withoutOperatorTemplate;
-    conditionLabelNode.hidden = requirement.value !== "CONDITIONAL";
+    const withTemplate = fulfillment.value === "OPERATOR_TEMPLATE";
+    templateNameRow.hidden = !withTemplate;
+    templateDetailsRow.hidden = !withTemplate;
+    noTemplatePurpose.hidden = withTemplate;
+    // A new no-template document still needs a name once, before it can be
+    // rendered by title in the normal list. Do not duplicate it on edit.
+    newDocumentName.hidden =
+      withTemplate || normalized.label !== "Nowy dokument";
+    modeRow.hidden = withTemplate && Boolean(originalFile.value);
+    fulfillmentLabelNode.hidden = withTemplate;
+    originalFileLabel.hidden = !withTemplate;
+    conditionLabelNode.hidden = withTemplate;
+    workflowRow.hidden = withTemplate;
+    requiredEvidenceLabel.hidden = withTemplate;
+    sourceUrlLabel.hidden = withTemplate;
+    if (linkedPhysicalNode) linkedPhysicalNode.hidden = !withTemplate;
   };
-  requirement.onchange = refreshMode;
   fulfillment.onchange = refreshMode;
   originalFile.onchange = () => {
     if (!originalFile.value && fulfillment.value === "OPERATOR_TEMPLATE") {
       fulfillment.value = "WITHOUT_OPERATOR_TEMPLATE";
     }
     const selected = files.find((source) => source.id === originalFile.value);
-    setHasFieldsFromSource(selected ?? linkedFile);
+    setHasFieldsFromSource(selected);
+    if (selected) {
+      templateName.value = text(selected.display_name) || selected.name;
+      templatePurpose.value = text(selected.purpose);
+      templateIntendedUse.value = text(selected.intended_use);
+    }
     refreshMode();
   };
   refreshMode();
@@ -413,51 +453,49 @@ function renderRequirement(
   save.className = "primary document-requirement-save";
   save.textContent = "Zapisz dokument";
   save.onclick = () => {
+    const withTemplate = fulfillment.value === "OPERATOR_TEMPLATE";
+    const selectedFileId = withTemplate ? originalFile.value : "";
     const values: Record<string, unknown> = {
-      label: labelInput.value,
-      purpose: purposeInput.value,
+      label: withTemplate ? templateName.value : labelInput.value,
+      purpose: withTemplate ? templateIntendedUse.value : purposeInput.value,
       requirement: requirement.value,
-      condition:
-        requirement.value === "CONDITIONAL" ? conditionInput.value : undefined,
-      fulfillment_mode: informational()
-        ? "WITHOUT_OPERATOR_TEMPLATE"
-        : fulfillment.value,
-      delivery_stage:
-        !informational() && fulfillment.value === "WITHOUT_OPERATOR_TEMPLATE"
-          ? deliveryStage.value
-          : undefined,
-      responsibility:
-        !informational() && fulfillment.value === "WITHOUT_OPERATOR_TEMPLATE"
-          ? responsibility.value || undefined
-          : undefined,
-      required_evidence:
-        !informational() && fulfillment.value === "WITHOUT_OPERATOR_TEMPLATE"
-          ? requiredEvidence.value
-          : undefined,
-      original_file_source_id:
-        !informational() && fulfillment.value === "OPERATOR_TEMPLATE"
-          ? originalFile.value || undefined
-          : undefined,
-      source_url: sourceUrl.value,
-      source_description: sourceDescription.value,
       signature_requirement: signature.value,
+      fulfillment_mode: withTemplate
+        ? "OPERATOR_TEMPLATE"
+        : "WITHOUT_OPERATOR_TEMPLATE",
+      condition: withTemplate ? undefined : conditionInput.value,
+      delivery_stage: withTemplate ? undefined : deliveryStage.value,
+      responsibility: withTemplate ? undefined : responsibility.value || undefined,
+      required_evidence: withTemplate ? undefined : requiredEvidence.value,
+      source_url: withTemplate ? undefined : sourceUrl.value,
+      source_description: withTemplate ? undefined : text(normalized.source_description),
+      original_file_source_id: selectedFileId || undefined,
+      // Converting from a physical template to a no-template requirement must
+      // not keep the old physical file attached under source_files.
+      source_file_source_ids: withTemplate
+        ? [...new Set([...(normalized.source_file_source_ids ?? []), selectedFileId].filter(Boolean))]
+        : [],
     };
     void options
       .mutate("UPDATE_DOCUMENT_REQUIREMENT", {
         objectId: options.object.id,
         documentId: row.id,
         values,
-        physicalFileSourceId:
-          (!informational() && fulfillment.value === "OPERATOR_TEMPLATE"
-            ? originalFile.value
-            : linkedFile?.id) || undefined,
-        fileHasFields:
-          hasFields.value === ""
-            ? undefined
-            : hasFields.value === "true",
+        ...(withTemplate && selectedFileId
+          ? {
+              physicalFileSourceId: selectedFileId,
+              fileDisplayName: templateName.value,
+              filePurpose: templatePurpose.value || undefined,
+              fileIntendedUse: templateIntendedUse.value,
+              fileHasFields:
+                hasFields.value === "" ? undefined : hasFields.value === "true",
+            }
+          : {}),
       })
       .then(() => {
-        options.notice(`Zapisano dokument: ${labelInput.value || "Dokument"}.`);
+        options.notice(
+          `Zapisano dokument: ${withTemplate ? templateName.value : labelInput.value || "Dokument"}.`,
+        );
         options.onChanged();
       })
       .catch((error: unknown) =>

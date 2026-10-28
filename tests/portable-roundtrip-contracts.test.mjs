@@ -281,6 +281,68 @@ test("canonical no-template documents cannot also declare a physical source", ()
   );
 });
 
+test("legacy informational file is exported once as a physical operator document", () => {
+  const state = BurbotCore.empty();
+  state.objects = [{
+    id: "project",
+    importKey: "PROJECT",
+    type: "project",
+    values: { name: "Projekt" },
+  }];
+  state.fileSources = [{
+    id: "regulations-file",
+    importKey: "REGULATIONS",
+    objectId: "project",
+    fileType: "PDF",
+    name: "regulamin.pdf",
+    display_name: "Regulamin",
+    purpose: "Regulamin",
+    intended_use: "Zasady uczestnictwa",
+    has_fields: false,
+    client_requirement: "Informacyjny",
+    signature_requirement: "Nie jest wymagany",
+    url: "https://example.test/regulamin.pdf",
+    sourcePageUrl: "https://example.test/project",
+    addedAt: now,
+  }];
+  // Older states incorrectly classified this as WITHOUT_OPERATOR_TEMPLATE.
+  state.documentRequirements = [{
+    id: "regulations-document",
+    importKey: "REGULATIONS",
+    objectId: "project",
+    label: "Regulamin",
+    purpose: "Zasady uczestnictwa",
+    requirement: "INFORMATIONAL",
+    fulfillment_mode: "WITHOUT_OPERATOR_TEMPLATE",
+    signature_requirement: "NOT_REQUIRED",
+    source_file_source_ids: ["regulations-file"],
+  }];
+
+  const document = exported(state);
+  const physical = byKey(document, "PROJECT").files;
+  assert.equal(physical.length, 1);
+  assert.ok(physical[0].source);
+  assert.equal(physical[0].without_template, undefined);
+  assert.deepEqual(Object.keys(physical[0].metadata).sort(), [
+    "client_requirement",
+    "display_name",
+    "has_fields",
+    "intended_use",
+    "purpose",
+    "signature_requirement",
+  ]);
+  const roundtrip = imported(document);
+  assert.equal(roundtrip.documentRequirements.length, 1);
+  assert.equal(
+    roundtrip.documentRequirements[0].fulfillment_mode,
+    "OPERATOR_TEMPLATE",
+  );
+  assert.equal(
+    roundtrip.documentRequirements[0].original_file_source_id,
+    roundtrip.fileSources[0].id,
+  );
+});
+
 test("files without captured text remain attachments with empty snapshots; URLs and false survive", () => {
   const state = BurbotCore.empty();
   state.objects = [{ id: "o", type: "operator", values: { name: "Operator" } }];

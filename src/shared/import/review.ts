@@ -469,36 +469,38 @@ function documentViews(
   return (session.previewState.documentRequirements ?? [])
     .filter((row) => row.objectId === object.id)
     .map((row) => {
-      const informational = row.requirement === "INFORMATIONAL";
-      const isOperatorTemplate =
-        !informational && row.fulfillment_mode === "OPERATOR_TEMPLATE";
-      const noTemplateWorkflowFields = new Set([
-        "delivery_stage",
-        "responsibility",
-        "required_evidence",
-      ]);
       const physicalFile = linkedPhysicalFile(row, files);
+      const isOperatorTemplate =
+        row.fulfillment_mode === "OPERATOR_TEMPLATE" || Boolean(physicalFile);
+      const visibleFields = new Set(
+        isOperatorTemplate
+          ? ["label", "requirement", "signature_requirement"]
+          : [
+              "purpose",
+              "requirement",
+              "signature_requirement",
+              "fulfillment_mode",
+              "condition",
+              "delivery_stage",
+              "responsibility",
+              "required_evidence",
+              "source_url",
+            ],
+      );
 
       const rowFields = Object.entries(BurbotDocuments.fields)
-        .filter(([field, definition]) => {
-          if (
-            definition.hidden ||
-            !Object.prototype.hasOwnProperty.call(row, field)
-          ) {
-            return false;
-          }
-          if (
-            (informational || isOperatorTemplate) &&
-            (field === "fulfillment_mode" ||
-              noTemplateWorkflowFields.has(field))
-          ) {
-            return false;
-          }
-          return true;
-        })
+        .filter(([field, definition]) =>
+          !definition.hidden &&
+          visibleFields.has(field) &&
+          Object.prototype.hasOwnProperty.call(row, field),
+        )
         .map(([field, definition]) => ({
           field,
-          label: String(definition.label ?? field),
+          label: field === "purpose"
+            ? "Przeznaczenie"
+            : field === "condition"
+              ? "Kiedy dokument jest wymagany"
+              : String(definition.label ?? field),
           value: BurbotCore.hasValue(
             (row as unknown as Record<string, unknown>)[field],
           )
@@ -510,27 +512,30 @@ function documentViews(
             : "Nie ustawiono",
         }));
 
-      const physicalFields = physicalFile
+      const physicalFields = physicalFile && isOperatorTemplate
         ? [
             ...(physicalFile.purpose
-              ? [
-                  {
-                    field: "physical_file_purpose",
-                    label: "Cel dokumentu",
-                    value: physicalFile.purpose,
-                  },
-                ]
+              ? [{
+                  field: "physical_file_purpose",
+                  label: "Przeznaczenie",
+                  value: physicalFile.purpose,
+                }]
+              : []),
+            ...(physicalFile.intended_use
+              ? [{
+                  field: "physical_file_intended_use",
+                  label: "Cel dokumentu",
+                  value: physicalFile.intended_use,
+                }]
               : []),
             ...(typeof physicalFile.has_fields === "boolean"
-              ? [
-                  {
-                    field: "physical_file_has_fields",
-                    label: "Czy plik zawiera pola do wypełnienia?",
-                    value: physicalFile.has_fields
-                      ? "Tak, pola lub deklaracje"
-                      : "Nie",
-                  },
-                ]
+              ? [{
+                  field: "physical_file_has_fields",
+                  label: "Czy plik zawiera pola do wypełnienia?",
+                  value: physicalFile.has_fields
+                    ? "Tak, pola lub deklaracje"
+                    : "Nie",
+                }]
               : []),
           ]
         : [];
@@ -1161,7 +1166,11 @@ export function buildImportApprovalPlan(
     let linkedFile = row.original_file_source_id
       ? selectedFiles.find((file) => file.id === row.original_file_source_id)
       : undefined;
-    if (!linkedFile) {
+    if (
+      !linkedFile &&
+      (row.fulfillment_mode === "OPERATOR_TEMPLATE" ||
+        row.requirement === "INFORMATIONAL")
+    ) {
       const label = String(row.label ?? "")
         .trim()
         .toLocaleLowerCase("pl-PL");
@@ -1196,8 +1205,17 @@ export function buildImportApprovalPlan(
         : value === "EXTERNAL_OPERATOR"
           ? "Dowód w systemie operatora"
           : undefined;
+  const physicalMetadataFields = new Set([
+    "display_name",
+    "purpose",
+    "has_fields",
+    "intended_use",
+    "client_requirement",
+    "signature_requirement",
+  ]);
   const requirementMetadata = (
     row: (typeof selectedDocuments)[number],
+    withoutTemplate = false,
   ): Record<string, unknown> =>
     Object.fromEntries(
       Object.entries({
@@ -1205,12 +1223,13 @@ export function buildImportApprovalPlan(
         intended_use: row.purpose,
         client_requirement: requirementLabel(row.requirement),
         signature_requirement: signatureLabel(row.signature_requirement),
-        condition: row.condition,
-        delivery_stage: row.delivery_stage,
-        responsibility: row.responsibility,
-        required_evidence: row.required_evidence,
-        source_url: row.source_url,
-        source_description: row.source_description,
+        ...(withoutTemplate ? {
+          condition: row.condition,
+          delivery_stage: row.delivery_stage,
+          responsibility: row.responsibility,
+          required_evidence: row.required_evidence,
+          source_url: row.source_url,
+        } : {}),
       }).filter(([, value]) => value !== undefined && value !== null && value !== ""),
     );
 
@@ -1281,22 +1300,7 @@ export function buildImportApprovalPlan(
 
     const linkedDocument = linkedDocumentByFileId.get(file.id);
     const metadata = Object.fromEntries(
-      [
-        "display_name",
-        "document_kind",
-        "purpose",
-        "has_fields",
-        "intended_use",
-        "client_requirement",
-        "signature_requirement",
-        "delivery_method",
-        "condition",
-        "delivery_stage",
-        "responsibility",
-        "required_evidence",
-        "source_url",
-        "source_description",
-      ]
+      [...physicalMetadataFields]
         .filter((field) => Object.prototype.hasOwnProperty.call(file, field))
         .map((field) => [
           field,
@@ -1314,10 +1318,15 @@ export function buildImportApprovalPlan(
       { kind: "file_source", id: String(file.id) },
       sourceById,
     );
-    const evidence = mergePortableEvidence(
+    const rawEvidence = mergePortableEvidence(
       fileEvidence,
       linkedDocument ? mappedDocumentEvidence(linkedDocument) : undefined,
     );
+    const evidence = rawEvidence
+      ? Object.fromEntries(Object.entries(rawEvidence).filter(
+          ([field]) => physicalMetadataFields.has(field) && field in metadata,
+        ))
+      : undefined;
 
     return {
       key: fileKeyById.get(file.id),
@@ -1332,8 +1341,13 @@ export function buildImportApprovalPlan(
     const key = uniqueFileKey(
       String(row.importKey ?? `DOC_${portableFiles.length + 1}`),
     );
-    const metadata = requirementMetadata(row);
-    const evidence = mappedDocumentEvidence(row);
+    const metadata = requirementMetadata(row, true);
+    const rawEvidence = mappedDocumentEvidence(row);
+    const evidence = rawEvidence
+      ? Object.fromEntries(Object.entries(rawEvidence).filter(
+          ([field]) => field in metadata,
+        ))
+      : undefined;
     portableFiles.push({
       key,
       without_template: true,

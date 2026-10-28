@@ -631,6 +631,26 @@ function stageExistingObjectUpdate(
       return mapped;
     });
 
+    // Do not retain stale fields from the previous mode when an AI import
+    // updates an existing document. File presence is independent of
+    // informational/required/conditional classification.
+    if (row.original_file_source_id) {
+      row.fulfillment_mode = "OPERATOR_TEMPLATE";
+      delete row.delivery_stage;
+      delete row.responsibility;
+      delete row.required_evidence;
+      delete row.condition;
+      delete row.source_url;
+      delete row.source_description;
+    } else {
+      row.fulfillment_mode = "WITHOUT_OPERATOR_TEMPLATE";
+      for (const field of ["delivery_stage", "responsibility", "required_evidence", "condition", "source_url"] as const) {
+        if (!(field in importedRow)) {
+          delete (row as unknown as Record<string, unknown>)[field];
+        }
+      }
+    }
+
     importedTargetIdMap.set(
       `document:${String(importedRow.id)}`,
       String(row.id),
