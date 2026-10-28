@@ -536,7 +536,10 @@ export function ViewManagerPanel() {
             <button
               type="button"
               disabled={!activeObjects.length}
-              onClick={openExportPicker}
+              onClick={(event) => {
+                event.currentTarget.closest("details")?.removeAttribute("open");
+                openExportPicker();
+              }}
             >
               Eksportuj zestaw
             </button>
@@ -855,7 +858,7 @@ export function ViewManagerPanel() {
           </p>
         )}
       </dialog>
-      {error && !pickerOpen && (
+      {error && !pickerOpen && !exportPickerOpen && (
         <p className="view-manager-error" role="alert">
           {error}
         </p>
