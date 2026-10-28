@@ -1186,11 +1186,30 @@ export function importDocumentIntoState(
             file.name ??
             technicalName,
         };
-        // Physical operator files/templates do not carry the workflow fields
-        // used by documents that must be prepared without an operator template.
-        delete resolvedMetadata.delivery_stage;
-        delete resolvedMetadata.responsibility;
-        delete resolvedMetadata.required_evidence;
+        // Accept old AI formats, but never persist workflow fields on an
+        // operator-provided physical template (even an informational PDF).
+        for (const field of [
+          "condition",
+          "delivery_stage",
+          "responsibility",
+          "required_evidence",
+          "source_url",
+          "source_description",
+          "delivery_method",
+          "document_kind",
+        ] as const) delete resolvedMetadata[field];
+        const physicalEvidence = Object.fromEntries(
+          Object.entries(file.evidence ?? {}).filter(([field]) =>
+            [
+              "display_name",
+              "purpose",
+              "has_fields",
+              "intended_use",
+              "client_requirement",
+              "signature_requirement",
+            ].includes(field),
+          ),
+        );
         const row: LegacyStoredFileSource = {
           id: uuid(),
           objectId: object.id,
@@ -1209,12 +1228,12 @@ export function importDocumentIntoState(
         if (file.key) fileIdByKey.set(file.key, row.id);
 
         validateTargetEvidenceFields(
-          file.evidence,
+          physicalEvidence,
           FILE_METADATA_EVIDENCE_FIELDS,
           resolvedMetadata,
           `${item.key}.files[${fileIndex}]`,
         );
-        for (const [field, entries] of Object.entries(file.evidence ?? {})) {
+        for (const [field, entries] of Object.entries(physicalEvidence)) {
           storeTargetEvidence(
             state,
             object.id,
