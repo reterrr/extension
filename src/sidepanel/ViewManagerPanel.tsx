@@ -132,6 +132,13 @@ export function ViewManagerPanel() {
   const [query, setQuery] = useState("");
   const [error, setError] = useState("");
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [exportPickerOpen, setExportPickerOpen] = useState(false);
+  const [exportSelectedIds, setExportSelectedIds] = useState<string[]>([]);
+  const [exportQuery, setExportQuery] = useState("");
+  const [exportTypeFilter, setExportTypeFilter] = useState("all");
+  const [exportBusy, setExportBusy] = useState(false);
+  const exportDialog = useRef<HTMLDialogElement>(null);
+  const exportSearchInput = useRef<HTMLInputElement>(null);
   const [catalogVersion, setCatalogVersion] = useState(0);
   useEffect(() => {
     const ready = () => setCatalogVersion(value => value + 1);
@@ -295,6 +302,12 @@ export function ViewManagerPanel() {
     } else if (!pickerOpen) dialog.current?.close();
   }, [pickerOpen]);
   useEffect(() => {
+    if (exportPickerOpen && !exportDialog.current?.open) {
+      exportDialog.current?.showModal();
+      exportSearchInput.current?.focus();
+    } else if (!exportPickerOpen) exportDialog.current?.close();
+  }, [exportPickerOpen]);
+  useEffect(() => {
     const open = () => {
       window.dispatchEvent(
         new CustomEvent("burbot:request-workflow-mode", {
@@ -320,6 +333,30 @@ export function ViewManagerPanel() {
     () => new Map(commit.objects.map((entry) => [entry.id, entry])),
     [commit.objects],
   );
+
+  const exportVisibleObjects = useMemo(() => {
+    const search = exportQuery.trim().toLocaleLowerCase("pl-PL");
+    return activeObjects.filter((object) => {
+      const type = object.type === "nabor" ? "recruitment" : object.type;
+      if (exportTypeFilter !== "all" && type !== exportTypeFilter) return false;
+      if (!search) return true;
+      return [
+        displayName(object),
+        typeLabel(object),
+        object.id,
+        object.importKey ?? "",
+        String(object.values?.external_number ?? ""),
+        String(object.values?.number ?? ""),
+      ].some((value) => String(value).toLocaleLowerCase("pl-PL").includes(search));
+    });
+  }, [activeObjects, exportQuery, exportTypeFilter]);
+  const exportSelectedSet = useMemo(
+    () => new Set(exportSelectedIds),
+    [exportSelectedIds],
+  );
+  const exportSelectedCount = activeObjects.filter((object) =>
+    exportSelectedSet.has(object.id),
+  ).length;
 
   useEffect(() => {
     if (!query && view?.query) setQuery(view.query);
@@ -367,20 +404,64 @@ export function ViewManagerPanel() {
     await persist(null);
   }
 
-  async function exportView() {
-    if (!view?.objectIds.length) {
-      throw new Error("Najpierw wybierz obiekty.");
+  function openExportPicker() {
+    if (!activeObjects.length) {
+      setError("Najpierw wybierz obiekty do View.");
+      return;
+    }
+    setError("");
+    setExportQuery("");
+    setExportTypeFilter("all");
+    setExportSelectedIds(activeObjects.map((object) => object.id));
+    setExportPickerOpen(true);
+  }
+
+  function toggleExportObject(objectId: string, checked: boolean) {
+    setExportSelectedIds((previous) => {
+      const selected = new Set(previous);
+      if (checked) selected.add(objectId);
+      else selected.delete(objectId);
+      return activeObjects
+        .filter((object) => selected.has(object.id))
+        .map((object) => object.id);
+    });
+  }
+
+  function selectExportVisible(checked: boolean) {
+    const visibleIds = new Set(exportVisibleObjects.map((object) => object.id));
+    setExportSelectedIds((previous) => {
+      const selected = new Set(previous);
+      for (const id of visibleIds) {
+        if (checked) selected.add(id);
+        else selected.delete(id);
+      }
+      return activeObjects
+        .filter((object) => selected.has(object.id))
+        .map((object) => object.id);
+    });
+  }
+
+  async function exportView(selectedObjectIds: string[]) {
+    const activeIds = new Set(activeObjects.map((object) => object.id));
+    const selectedIds = [...new Set(selectedObjectIds)].filter((id) =>
+      activeIds.has(id),
+    );
+    if (!selectedIds.length) {
+      throw new Error("Zaznacz co najmniej jeden obiekt do eksportu.");
     }
 
     const exportedAt = new Date().toISOString();
     const payload = createAiViewExport({
       state,
-      view,
+      view: { objectIds: selectedIds },
       schema: globals().BurbotSchema ?? {},
       geographyCatalog: (globals().BurbotGeography?.catalog ?? []) as never[],
       exportedAt,
       exactSelection: true,
     });
+    if (payload.objects.length !== selectedIds.length) {
+      throw new Error("Liczba eksportowanych obiektów nie zgadza się z wyborem.");
+    }
 
     downloadJsonFile(aiViewExportFilename(exportedAt), payload);
   }
@@ -455,7 +536,7 @@ export function ViewManagerPanel() {
             <button
               type="button"
               disabled={!activeObjects.length}
-              onClick={() => run(exportView)}
+              onClick={openExportPicker}
             >
               Eksportuj zestaw
             </button>
@@ -512,6 +593,129 @@ export function ViewManagerPanel() {
           )}
         </div>
       </div>
+      <dialog
+        className="view-search-dialog view-export-dialog"
+        ref={exportDialog}
+        onCancel={() => setExportPickerOpen(false)}
+        onClose={() => setExportPickerOpen(false)}
+        aria-labelledby="view-export-title"
+      >
+        <header className="view-dialog-header">
+          <div>
+            <h2 id="view-export-title">Wybierz obiekty do eksportu</h2>
+            <small>
+              Tylko obiekty z aktualnego View. Eksport nie zmienia zestawu.
+            </small>
+          </div>
+          <button
+            type="button"
+            disabled={exportBusy}
+            onClick={() => setExportPickerOpen(false)}
+            aria-label="Zamknij wybór do eksportu"
+          >
+            Zamknij
+          </button>
+        </header>
+        <div className="view-dialog-search">
+          <input
+            ref={exportSearchInput}
+            type="search"
+            value={exportQuery}
+            onChange={(event) => setExportQuery(event.target.value)}
+            placeholder="Filtruj po nazwie lub numerze…"
+            aria-label="Filtruj obiekty do eksportu"
+          />
+          <select
+            aria-label="Filtruj typ obiektu do eksportu"
+            value={exportTypeFilter}
+            onChange={(event) => setExportTypeFilter(event.target.value)}
+          >
+            <option value="all">Wszystkie typy</option>
+            <option value="recruitment">Nabory</option>
+            <option value="project">Projekty</option>
+            <option value="operator">Operatorzy</option>
+          </select>
+        </div>
+        <div className="view-export-toolbar">
+          <strong>
+            {exportSelectedCount} z {activeObjects.length} zaznaczonych
+          </strong>
+          <div className="view-export-toolbar-actions">
+            <button
+              type="button"
+              disabled={!exportVisibleObjects.length || exportBusy}
+              onClick={() => selectExportVisible(true)}
+            >
+              Zaznacz widoczne
+            </button>
+            <button
+              type="button"
+              disabled={!exportVisibleObjects.length || exportBusy}
+              onClick={() => selectExportVisible(false)}
+            >
+              Odznacz widoczne
+            </button>
+          </div>
+        </div>
+        <div className="view-export-results" aria-label="Obiekty do eksportu">
+          {exportVisibleObjects.map((object) => (
+            <label key={object.id} className="view-export-item">
+              <input
+                type="checkbox"
+                checked={exportSelectedSet.has(object.id)}
+                disabled={exportBusy}
+                onChange={(event) =>
+                  toggleExportObject(object.id, event.target.checked)
+                }
+              />
+              <span className="view-export-item-copy">
+                <strong>{displayName(object)}</strong>
+                <small>{typeLabel(object)}</small>
+              </span>
+            </label>
+          ))}
+          {!exportVisibleObjects.length && (
+            <p className="view-manager-empty">
+              Brak obiektów pasujących do filtra w aktualnym View.
+            </p>
+          )}
+        </div>
+        {error && exportPickerOpen && (
+          <p className="view-manager-error" role="alert">{error}</p>
+        )}
+        <footer className="view-dialog-footer">
+          <span className="view-export-footer-count">
+            Do eksportu: {objectCountLabel(exportSelectedCount)}
+          </span>
+          <div className="view-export-footer-actions">
+            <button
+              type="button"
+              disabled={exportBusy}
+              onClick={() => setExportPickerOpen(false)}
+            >
+              Anuluj
+            </button>
+            <button
+              type="button"
+              className="primary"
+              disabled={!exportSelectedCount || exportBusy}
+              onClick={() =>
+                run(async () => {
+                  setExportBusy(true);
+                  try {
+                    await exportView(exportSelectedIds);
+                    setExportPickerOpen(false);
+                  } finally {
+                    setExportBusy(false);
+                  }
+                })
+              }
+            >
+              {exportBusy ? "Eksportowanie…" : `Eksportuj zaznaczone (${exportSelectedCount})`}
+            </button>
+          </div>
+        </footer>
+      </dialog>
       <dialog
         className="view-search-dialog"
         ref={dialog}
