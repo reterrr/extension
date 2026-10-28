@@ -294,20 +294,20 @@ test("Documents section renders one unified list for files and no-template docum
   assert.equal(app.includes("Pliki operatora"), false);
   assert.equal(app.includes("Wymagania dokumentowe"), false);
 
+  // Only the fields of the active mode are visible in the editor.
   for (const label of [
     "Nazwa",
     "Przeznaczenie",
+    "Cel dokumentu",
+    "Czy plik zawiera pola do wypełnienia?",
     "Wymagalność",
     "Podpis",
     "Źródło / sposób przygotowania",
-    "Plik / wzór operatora",
-    "Czy plik zawiera pola do wypełnienia?",
     "Kiedy dokument jest wymagany",
     "Etap dostarczenia",
     "Odpowiedzialność",
     "Co należy dostarczyć",
     "Oficjalne źródło",
-    "Opis źródła",
   ]) {
     assert.ok(documents.includes(label), `missing document field: ${label}`);
   }
@@ -316,33 +316,20 @@ test("Documents section renders one unified list for files and no-template docum
     documents,
     /card\.className = "document-requirement-row file-source-row"/,
   );
-  assert.match(
-    documents,
-    /wantsOperatorTemplate[\s\S]*?Boolean\(originalFile\.value\)/,
-  );
-  assert.match(
-    documents,
-    /fulfillmentLabelNode\.hidden = isInfo \|\| usesOperatorTemplate/,
-  );
-  assert.match(documents, /originalFileLabel\.hidden = !wantsOperatorTemplate/);
-  assert.match(documents, /thirdRow\.hidden = isInfo/);
-  assert.match(documents, /fourthRow\.hidden = !withoutOperatorTemplate/);
-  assert.match(
-    documents,
-    /requiredEvidenceLabel\.hidden = !withoutOperatorTemplate/,
-  );
-  assert.match(
-    documents,
-    /fulfillment\.value === "WITHOUT_OPERATOR_TEMPLATE"[\s\S]*?deliveryStage\.value/,
-  );
-  assert.match(
-    documents,
-    /fulfillment\.value === "OPERATOR_TEMPLATE"[\s\S]*?originalFile\.value/,
-  );
-  assert.match(
-    documents,
-    /originalFile\.onchange = \(\) => \{[\s\S]*?fulfillment\.value = "WITHOUT_OPERATOR_TEMPLATE"/,
-  );
+  assert.match(documents, /Boolean\(linkedFile\)[\s\S]*?normalized\.fulfillment_mode === "OPERATOR_TEMPLATE"/);
+  assert.match(documents, /templateNameRow\.hidden = !withTemplate/);
+  assert.match(documents, /templateDetailsRow\.hidden = !withTemplate/);
+  assert.match(documents, /noTemplatePurpose\.hidden = withTemplate/);
+  assert.match(documents, /conditionLabelNode\.hidden = withTemplate/);
+  assert.match(documents, /workflowRow\.hidden = withTemplate/);
+  assert.match(documents, /requiredEvidenceLabel\.hidden = withTemplate/);
+  assert.match(documents, /sourceUrlLabel\.hidden = withTemplate/);
+  assert.match(documents, /source_file_source_ids: withTemplate/);
+  assert.match(documents, /fileDisplayName: templateName\.value/);
+  assert.match(documents, /filePurpose: templatePurpose\.value/);
+  assert.match(documents, /fileIntendedUse: templateIntendedUse\.value/);
+  assert.match(documents, /fileHasFields:[\s\S]*?hasFields\.value === "true"/);
+
   assert.match(documents, /const missingFields: string\[\] = \[\]/);
   assert.match(documents, /missingFields\.push\("Wymagalność"\)/);
   assert.match(documents, /missingFields\.push\("Podpis"\)/);
@@ -352,21 +339,12 @@ test("Documents section renders one unified list for files and no-template docum
     documents,
     /missingFields\.push\("Czy plik zawiera pola do wypełnienia\?"\)/,
   );
-  assert.match(
-    documents,
-    /hasFieldsLabel = fieldLabel\([\s\S]*?"Czy plik zawiera pola do wypełnienia\?"/,
-  );
-  assert.match(
-    documents,
-    /physicalFileMetadataRow\.hidden = !activePhysicalFileId/,
-  );
-  assert.match(
-    documents,
-    /fileHasFields:[\s\S]*?hasFields\.value === "true"/,
-  );
-  assert.match(
-    background,
-    /message\.physicalFileSourceId[\s\S]*?source\.has_fields[\s\S]*?entry\.field === "has_fields"/,
+  assert.match(background, /message\.physicalFileSourceId[\s\S]*?metadataUpdates[\s\S]*?changedMetadata\.has\(entry\.field\)/);
+  assert.match(background, /row\.fulfillment_mode === "WITHOUT_OPERATOR_TEMPLATE"/);
+  assert.match(background, /row\.fulfillment_mode === "OPERATOR_TEMPLATE"/);
+  assert.equal(
+    background.includes('if (row.requirement === "INFORMATIONAL") {\n      // Informational materials'),
+    false,
   );
   assert.match(documents, /status\.textContent = "Do uzupełnienia"/);
   assert.match(documents, /status\.title = `Brakuje: \$\{missingFields\.join\(", "\)\}`/);
