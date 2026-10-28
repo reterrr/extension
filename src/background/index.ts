@@ -939,13 +939,15 @@ function mutateDocumentRequirement(
         throw new Error("Metadane pliku można zmieniać tylko dla wzoru operatora.");
       }
       const metadataUpdates = {
-        display_name: message.fileDisplayName,
-        purpose: message.filePurpose,
-        intended_use: message.fileIntendedUse,
-        has_fields: message.fileHasFields,
-      };
+        fileDisplayName: "display_name",
+        filePurpose: "purpose",
+        fileIntendedUse: "intended_use",
+        fileHasFields: "has_fields",
+      } as const;
       const changedMetadata = new Set<string>();
-      for (const [field, raw] of Object.entries(metadataUpdates)) {
+      for (const [inputField, field] of Object.entries(metadataUpdates)) {
+        if (!Object.prototype.hasOwnProperty.call(message, inputField)) continue;
+        const raw = message[inputField];
         let next: string | boolean | undefined;
         if (raw === undefined || raw === null || raw === "") {
           next = undefined;
