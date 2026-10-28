@@ -862,6 +862,7 @@ function mutateDocumentRequirement(
     }
 
     if (
+      row.fulfillment_mode === "WITHOUT_OPERATOR_TEMPLATE" &&
       row.requirement === "CONDITIONAL" &&
       (!row.condition || !row.condition.trim())
     ) {
@@ -888,20 +889,21 @@ function mutateDocumentRequirement(
       }
     };
 
-    if (row.requirement === "INFORMATIONAL") {
-      // Informational materials are physical/operator materials to read, not
-      // documents that the client prepares and delivers.
-      row.fulfillment_mode = "WITHOUT_OPERATOR_TEMPLATE";
-      delete row.original_file_source_id;
-      clearNoTemplateOnlyFields();
-    } else if (row.fulfillment_mode === "WITHOUT_OPERATOR_TEMPLATE") {
-      // A no-template requirement has no operator file. Its delivery workflow
-      // fields remain editable and meaningful.
+    if (row.fulfillment_mode === "WITHOUT_OPERATOR_TEMPLATE") {
+      // Whether a document is informational is independent of whether the
+      // operator supplies a template. No-template rows have only workflow data.
+      if (row.original_file_source_id) changedFields.add("original_file_source_id");
       delete row.original_file_source_id;
     } else if (row.fulfillment_mode === "OPERATOR_TEMPLATE") {
-      // The operator-provided template is the document source. Do not store a
-      // second, parallel delivery specification on the same requirement.
+      // The physical template's metadata is edited on the file source.
+      // Never retain workflow fields from a no-template row.
       clearNoTemplateOnlyFields();
+      for (const field of ["condition", "source_url", "source_description"] as const) {
+        if ((row as unknown as Record<string, unknown>)[field] !== undefined) {
+          delete (row as unknown as Record<string, unknown>)[field];
+          changedFields.add(field);
+        }
+      }
     }
 
     if (
@@ -933,33 +935,56 @@ function mutateDocumentRequirement(
         throw new Error("Plik nie jest powiązany z tym dokumentem.");
       }
 
-      const rawHasFields = message.fileHasFields;
-      let nextHasFields: boolean | undefined;
-      if (
-        rawHasFields === undefined ||
-        rawHasFields === null ||
-        rawHasFields === ""
-      ) {
-        nextHasFields = undefined;
-      } else if (typeof rawHasFields === "boolean") {
-        nextHasFields = rawHasFields;
-      } else {
-        throw new Error(
-          "fileHasFields must be true, false or unset.",
-        );
+      if (row.fulfillment_mode !== "OPERATOR_TEMPLATE") {
+        throw new Error("Metadane pliku można zmieniać tylko dla wzoru operatora.");
       }
-
-      if (source.has_fields !== nextHasFields) {
-        if (nextHasFields === undefined) delete source.has_fields;
-        else source.has_fields = nextHasFields;
-
+      const metadataUpdates = {
+        display_name: message.fileDisplayName,
+        purpose: message.filePurpose,
+        intended_use: message.fileIntendedUse,
+        has_fields: message.fileHasFields,
+      };
+      const changedMetadata = new Set<string>();
+      for (const [field, raw] of Object.entries(metadataUpdates)) {
+        let next: string | boolean | undefined;
+        if (raw === undefined || raw === null || raw === "") {
+          next = undefined;
+        } else if (field === "has_fields") {
+          if (typeof raw !== "boolean") {
+            throw new Error("fileHasFields must be true, false or unset.");
+          }
+          next = raw;
+        } else if (typeof raw === "string") {
+          next = raw.trim();
+          if (field === "display_name" && (!next || next.length > 500)) {
+            throw new Error("Nazwa pliku ma nieprawidłową długość.");
+          }
+          if (field === "intended_use" && next.length > 1000) {
+            throw new Error("Cel dokumentu przekracza 1000 znaków.");
+          }
+          if (field === "purpose" && next && ![
+            "Formularz do uzupełnienia", "Regulamin", "Instrukcja", "Inny dokument",
+          ].includes(next)) {
+            throw new Error("Nieprawidłowe przeznaczenie pliku.");
+          }
+        } else {
+          throw new Error("Nieprawidłowa wartość metadanych pliku.");
+        }
+        const previous = (source as unknown as Record<string, unknown>)[field];
+        if (previous !== next) {
+          if (next === undefined) delete (source as unknown as Record<string, unknown>)[field];
+          else (source as unknown as Record<string, unknown>)[field] = next;
+          changedMetadata.add(field);
+        }
+      }
+      if (changedMetadata.size) {
         state.importTargetEvidence = (state.importTargetEvidence ?? []).filter(
           (entry) =>
             !(
               entry.objectId === object.id &&
               entry.target?.kind === "file_source" &&
               String(entry.target.id) === source.id &&
-              entry.field === "has_fields"
+              changedMetadata.has(entry.field)
             ),
         );
       }
