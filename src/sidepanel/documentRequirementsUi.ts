@@ -387,8 +387,10 @@ function renderRequirement(
     sourceUrlLabel,
   );
 
+  let linkedPhysicalNode: HTMLElement | undefined;
   if (linkedFile) {
     const physical = document.createElement("div");
+    linkedPhysicalNode = physical;
     physical.className = "document-linked-file";
     const copy = document.createElement("span");
     copy.textContent = `Plik: ${linkedFile.name} · ${linkedFile.fileType}`;
@@ -428,6 +430,7 @@ function renderRequirement(
     workflowRow.hidden = withTemplate;
     requiredEvidenceLabel.hidden = withTemplate;
     sourceUrlLabel.hidden = withTemplate;
+    if (linkedPhysicalNode) linkedPhysicalNode.hidden = !withTemplate;
   };
   fulfillment.onchange = refreshMode;
   originalFile.onchange = () => {
