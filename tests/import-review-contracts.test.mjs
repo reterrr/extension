@@ -154,6 +154,90 @@ function documentFixture() {
   };
 }
 
+test("AI import keeps informational physical files distinct from no-template documents", () => {
+  const document = documentFixture();
+  const project = document.objects[0];
+  project.files[0].key = "FILE_REGULAMIN";
+  project.files[0].metadata = {
+    display_name: "Regulamin projektu",
+    purpose: "Regulamin",
+    has_fields: false,
+    intended_use: "Opis zasad programu",
+    client_requirement: "Informacyjny",
+    signature_requirement: "Nie jest wymagany",
+    // Legacy AI mixes these into files with source; they must be ignored.
+    condition: "Dla wszystkich uczestników",
+    delivery_stage: "ZŁOŻENIE WNIOSKU",
+    responsibility: "CLIENT",
+    required_evidence: "Wydruk dokumentu",
+    source_url: "https://example.test/project",
+  };
+  project.files.push({
+    key: "DOC_BEZ_WZORU",
+    without_template: true,
+    metadata: {
+      display_name: "Karta Usługi BUR",
+      purpose: "Inny dokument",
+      intended_use: "Potwierdza zgłoszoną usługę",
+      has_fields: true, // Bad legacy metadata must not become file metadata.
+      client_requirement: "Warunkowy",
+      condition: "Jeżeli wybrano usługę w BUR",
+      signature_requirement: "Nie jest wymagany",
+      delivery_stage: "ZGLOSZENIE",
+      responsibility: "CLIENT",
+      required_evidence: "Karta Usługi z BUR",
+      source_url: "https://example.test/project",
+    },
+  });
+
+  const session = reviewModule.createImportReviewSession(
+    document, "ai-two-document-modes.json", ids(), "2026-10-28T11:00:00Z",
+  );
+  const projectObject = session.previewState.objects.find(
+    (object) => object.importKey === "project-1",
+  );
+  const docs = (session.previewState.documentRequirements ?? []).filter(
+    (row) => row.objectId === projectObject.id,
+  );
+  const template = docs.find((row) => row.importKey === "FILE_REGULAMIN");
+  const without = docs.find((row) => row.importKey === "DOC_BEZ_WZORU");
+  assert.ok(template);
+  assert.ok(without);
+  assert.equal(template.requirement, "INFORMATIONAL");
+  assert.equal(template.fulfillment_mode, "OPERATOR_TEMPLATE");
+  assert.ok(template.original_file_source_id);
+  assert.equal(template.delivery_stage, undefined);
+  assert.equal(template.responsibility, undefined);
+  assert.equal(template.required_evidence, undefined);
+  assert.equal(template.condition, undefined);
+  assert.equal(template.source_url, undefined);
+
+  assert.equal(without.fulfillment_mode, "WITHOUT_OPERATOR_TEMPLATE");
+  assert.equal(without.original_file_source_id, undefined);
+  assert.equal(without.condition, "Jeżeli wybrano usługę w BUR");
+  assert.equal(without.required_evidence, "Karta Usługi z BUR");
+  assert.equal(without.source_url, "https://example.test/project");
+  assert.equal((session.previewState.fileSources ?? []).filter(
+    (row) => row.objectId === projectObject.id,
+  ).length, 1);
+
+  const approval = reviewModule.buildImportApprovalPlan(session, projectObject.id);
+  const exported = approval.document.objects.find((row) => row.key === "project-1");
+  const physical = exported.files.find((row) => row.key === "FILE_REGULAMIN");
+  const standalone = exported.files.find((row) => row.key === "DOC_BEZ_WZORU");
+  assert.ok(physical.source);
+  assert.equal(physical.without_template, undefined);
+  for (const field of ["condition", "delivery_stage", "responsibility",
+    "required_evidence", "source_url", "source_description"]) {
+    assert.equal(Object.prototype.hasOwnProperty.call(physical.metadata, field), false, field);
+  }
+  assert.equal(physical.metadata.has_fields, false);
+  assert.equal(standalone.without_template, true);
+  assert.equal(standalone.source, undefined);
+  assert.equal(Object.prototype.hasOwnProperty.call(standalone.metadata, "has_fields"), false);
+  assert.equal(standalone.metadata.required_evidence, "Karta Usługi z BUR");
+});
+
 test("import JSON can set Active View without applying imported data", () => {
   const session = reviewModule.createImportReviewSession(
     documentFixture(),
