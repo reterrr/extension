@@ -138,10 +138,6 @@ export function documentRequirementFromFile(
     // The physical file remains useful as provenance even when it is only an
     // informational regulation/instruction rather than a client template.
     source_file_source_ids: [source.id],
-    source_url:
-      (typeof source.source_url === "string" && source.source_url.trim()) ||
-      source.sourcePageUrl ||
-      source.url,
   };
 }
 
