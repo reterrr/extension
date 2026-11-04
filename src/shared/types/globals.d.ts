@@ -112,6 +112,13 @@ interface BurbotDocumentCatalogEntry {
   internal?: boolean;
 }
 
+interface BurbotOperatorContactsApi {
+  kinds: Readonly<Record<"EMAIL" | "PHONE", string>>;
+  fields: Readonly<Record<"EMAIL" | "PHONE", {
+    value: BurbotFieldDefinition;
+  }>>;
+}
+
 interface BurbotDocumentsApi {
   fields: Readonly<Record<string, BurbotFieldDefinition>>;
   catalog: ReadonlyArray<BurbotDocumentCatalogEntry>;
@@ -122,6 +129,7 @@ declare global {
   var BurbotSchema: Record<string, BurbotSchemaEntry>;
   var BurbotGeography: BurbotGeographyApi;
   var BurbotFunding: BurbotFundingApi;
+  var BurbotOperatorContacts: BurbotOperatorContactsApi;
   var BurbotDocuments: BurbotDocumentsApi;
   var __burbotPickerLoaded: boolean | undefined;
 }

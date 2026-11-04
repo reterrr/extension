@@ -23,6 +23,8 @@ type FieldDefinition = {
   label: string;
   type: string;
   options?: Record<string, string>;
+  allowEmpty?: boolean;
+  emptyLabel?: string;
   references?: string;
   numeric?: boolean;
   legacy?: boolean;

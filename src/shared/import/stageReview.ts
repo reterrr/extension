@@ -6,10 +6,11 @@ import type {
   LegacyStoredRule,
 } from "../types/legacy-storage";
 
-export interface ReviewedImportRule extends LegacyStoredRule {
+// LegacyStoredRule is a discriminated union; interfaces cannot extend it.
+export type ReviewedImportRule = LegacyStoredRule & {
   /** Stable financing key used to remap preview row ids after staging. */
   targetImportKey?: string;
-}
+};
 
 export interface ImportApprovalPlanWithRules extends ImportApprovalPlan {
   reviewRules?: ReviewedImportRule[];
