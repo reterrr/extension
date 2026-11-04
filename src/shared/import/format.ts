@@ -56,7 +56,12 @@ const GEOGRAPHY_TYPES = new Set([
   "MIASTO_NA_PRAWACH_POWIATU",
 ]);
 const GEOGRAPHY_ROLES = new Set(["OBEJMUJE", "WYKLUCZA"]);
-const OPERATOR_CONTACT_KINDS = new Set(["EMAIL", "PHONE"]);
+type OperatorContactKind = "EMAIL" | "PHONE";
+const OPERATOR_CONTACT_KINDS = new Set<OperatorContactKind>(["EMAIL", "PHONE"]);
+
+function isOperatorContactKind(value: string): value is OperatorContactKind {
+  return OPERATOR_CONTACT_KINDS.has(value as OperatorContactKind);
+}
 
 interface ImportReference {
   $ref: string;
@@ -84,7 +89,7 @@ interface ImportEvidence {
   normalized_value?: unknown;
 }
 
-interface ImportFileMetadata {
+interface ImportFileMetadata extends Record<string, unknown> {
   display_name?: string;
   purpose?: string;
   has_fields?: boolean;
@@ -153,7 +158,7 @@ interface ImportGeography {
 
 interface ImportOperatorContact {
   key: string;
-  kind: string;
+  kind: OperatorContactKind;
   value: string;
   evidence?: Record<string, ImportEvidence[]>;
 }
@@ -526,7 +531,7 @@ function parseDocument(input: unknown): BurbotImportV1 {
         const contactPath = `${path}.contacts[${contactIndex}]`;
         if (!isRecord(entry)) throw new Error(`${contactPath} must be an object.`);
         const kind = requiredString(entry.kind, `${contactPath}.kind`);
-        if (!OPERATOR_CONTACT_KINDS.has(kind)) {
+        if (!isOperatorContactKind(kind)) {
           throw new Error(`${contactPath}.kind must be EMAIL or PHONE.`);
         }
         return {
@@ -1359,13 +1364,17 @@ export function importDocumentIntoState(
         if (!definition) {
           throw new Error(`Unknown operator contact kind ${contact.kind}.`);
         }
+        const value = BurbotCore.coerceField(contact.value, definition, state);
+        if (typeof value !== "string") {
+          throw new Error(`Invalid value for operator contact ${contact.kind}.`);
+        }
         const row = {
           id: uuid(),
           objectId: object.id,
           importKey: contact.key,
           kind: contact.kind,
           variant_no: variant,
-          value: BurbotCore.coerceField(contact.value, definition, state),
+          value,
         };
         (state.operatorContacts ||= []).push(row);
 
