@@ -446,7 +446,11 @@ function renderCaptureDock(): void {
     void (async () => {
       try {
         const client = await ensurePicker();
-        await client.request(picking ? "STOP" : "PICK");
+        if (picking) {
+          await client.request("STOP");
+        } else {
+          await client.request("PICK");
+        }
       } catch (error) {
         notice(error instanceof Error ? error.message : String(error), true);
       }
