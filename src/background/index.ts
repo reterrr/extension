@@ -545,6 +545,8 @@ function mutateFileSource(
     if (!isRecord(message.metadata)) {
       throw new Error("Invalid file metadata.");
     }
+    // Narrow once: closures do not preserve the metadata refinement.
+    const metadata = message.metadata;
 
     const mutableSource = source as unknown as Record<string, unknown>;
     const changedFields = new Set<string>();
@@ -553,8 +555,8 @@ function mutateFileSource(
       field: "display_name" | "intended_use",
       maxLength = 5000,
     ) => {
-      if (!Object.prototype.hasOwnProperty.call(message.metadata, field)) return;
-      const raw = message.metadata[field];
+      if (!Object.prototype.hasOwnProperty.call(metadata, field)) return;
+      const raw = metadata[field];
       const next =
         raw === undefined || raw === null || String(raw).trim() === ""
           ? undefined
@@ -575,8 +577,8 @@ function mutateFileSource(
       field: "purpose" | "client_requirement" | "signature_requirement",
       validator: (value: unknown) => boolean,
     ) => {
-      if (!Object.prototype.hasOwnProperty.call(message.metadata, field)) return;
-      const raw = message.metadata[field];
+      if (!Object.prototype.hasOwnProperty.call(metadata, field)) return;
+      const raw = metadata[field];
       const next =
         raw === undefined || raw === null || String(raw).trim() === ""
           ? undefined
@@ -603,7 +605,7 @@ function mutateFileSource(
     setOptionalEnum("client_requirement", isFileClientRequirement);
     setOptionalEnum("signature_requirement", isFileSignatureRequirement);
 
-    const hasFields = message.metadata.has_fields;
+    const hasFields = metadata.has_fields;
     let nextHasFields: boolean | undefined;
     if (hasFields === undefined || hasFields === null || hasFields === "") {
       nextHasFields = undefined;
