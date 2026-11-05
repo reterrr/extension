@@ -690,8 +690,13 @@ test("dynamic documents support operator templates and no-template requirements"
     "Warunkowy",
   );
   assert.equal(
-    Object.prototype.hasOwnProperty.call(portableProject.files[0].metadata, "condition"),
-    false,
+    portableProject.files[0].metadata.condition,
+    "Gdy wnioskodawca korzysta z pomocy de minimis.",
+  );
+  assert.ok(
+    reviewView.documents[0].fields.some((field) =>
+      field.field === "condition" && field.value.includes("de minimis")
+    ),
   );
   assert.equal(
     Object.prototype.hasOwnProperty.call(
