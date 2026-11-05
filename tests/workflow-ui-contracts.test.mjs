@@ -320,7 +320,13 @@ test("Documents section renders one unified list for files and no-template docum
   assert.match(documents, /templateNameRow\.hidden = !withTemplate/);
   assert.match(documents, /templateDetailsRow\.hidden = !withTemplate/);
   assert.match(documents, /noTemplatePurpose\.hidden = withTemplate/);
-  assert.match(documents, /conditionLabelNode\.hidden = withTemplate/);
+  assert.match(documents, /conditionLabelNode\.hidden = requirement\.value !== "CONDITIONAL"/);
+  assert.match(documents, /requirement\.onchange = refreshMode/);
+  assert.match(documents, /conditionInput\.required = requirement\.value === "CONDITIONAL"/);
+  assert.match(documents, /condition: requirement\.value === "CONDITIONAL"/);
+  assert.match(background, /row\.requirement === "CONDITIONAL" &&/);
+  assert.match(background, /if \(row\.requirement !== "CONDITIONAL" && row\.condition !== undefined\)/);
+  assert.match(source("src/shared/export/portableExport.js"), /row\.requirement === "CONDITIONAL" \? \{ condition: row\.condition \}/);
   assert.match(documents, /workflowRow\.hidden = withTemplate/);
   assert.match(documents, /requiredEvidenceLabel\.hidden = withTemplate/);
   assert.match(documents, /sourceUrlLabel\.hidden = withTemplate/);
