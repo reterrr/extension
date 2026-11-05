@@ -493,7 +493,7 @@ Są tylko dwa przypadki:
 
 **Nie mieszaj pól tych dwóch przypadków.** Typ dokumentu ustala obecność `source` albo `without_template: true`, **nigdy** sama wymagalność `Informacyjny` ani wartość `has_fields`. Regulamin z fizycznym plikiem PDF nadal jest dokumentem **ze wzorem/plikiem operatora**, mimo że nie wymaga wypełniania.
 
-Dla **ze wzorem** podawaj tylko: `metadata.display_name` (**Nazwa**), `metadata.purpose` (**Przeznaczenie**), `metadata.intended_use` (**Cel dokumentu**), `metadata.has_fields` (**Czy plik zawiera pola do wypełnienia?**), `metadata.client_requirement` (**Wymagalność**), `metadata.signature_requirement` (**Podpis**). `source` i opcjonalne `source_page` są technicznymi referencjami do fizycznego pliku, nie dodatkowymi wymaganiami. **Nie generuj** w takim wpisie `condition`, `delivery_stage`, `responsibility`, `required_evidence`, `source_url` ani `source_description`.
+Dla **ze wzorem** podawaj: `metadata.display_name` (**Nazwa**), `metadata.purpose` (**Przeznaczenie**), `metadata.intended_use` (**Cel dokumentu**), `metadata.has_fields` (**Czy plik zawiera pola do wypełnienia?**), `metadata.client_requirement` (**Wymagalność**), `metadata.signature_requirement` (**Podpis**) oraz `metadata.condition` (**Przy jakim warunku dokument jest wymagany?**) tylko przy `Warunkowy`. `source` i opcjonalne `source_page` są technicznymi referencjami do fizycznego pliku, nie dodatkowymi wymaganiami. **Nie generuj** w takim wpisie `delivery_stage`, `responsibility`, `required_evidence`, `source_url` ani `source_description`.
 
 Dla **bez wzoru** używaj `without_template: true` i **bez `source`**. `metadata.display_name` jest potrzebną nazwą dokumentu widoczną w nagłówku (nie osobnym polem edycji po utworzeniu). `metadata.intended_use` oznacza **Przeznaczenie**, następnie `client_requirement` (Wymagalność), `signature_requirement` (Podpis), `condition` (**Kiedy dokument jest wymagany**), `delivery_stage` (**Etap dostarczenia**), `responsibility` (**Odpowiedzialność**), `required_evidence` (**Co należy dostarczyć**) i `source_url` (**Oficjalne źródło**). Wartość `without_template: true` odpowiada polu UI **Źródło / sposób przygotowania**. **Nie podawaj** `has_fields`, `original_file` ani fizycznego `source`; nie kopiuj pól opisujących fizyczny plik. Import toleruje historyczne metadane, ale je normalizuje zamiast mieszać obie klasyfikacje.
 
@@ -510,6 +510,7 @@ Przykład fizycznego wzoru operatora:
     "has_fields": true,
     "intended_use": "Załącznik składany przy zgłoszeniu.",
     "client_requirement": "Warunkowy",
+    "condition": "Gdy wnioskodawca ubiega się o pomoc de minimis.",
     "signature_requirement": "Wymagany podpisany plik"
   }
 }
@@ -530,7 +531,6 @@ Przykład dokumentu bez wzoru operatora:
     "responsibility": "CLIENT",
     "required_evidence": "Karta Usługi pobrana z BUR dla wybranej usługi.",
     "signature_requirement": "Nie jest wymagany",
-    "condition": "Przy zgłoszeniu usługi do dofinansowania.",
     "source_url": "https://operator.example/nabor"
   }
 }
@@ -559,7 +559,7 @@ Przykład dokumentu bez wzoru operatora:
 | `has_fields` | boolean | **Tylko ze wzorem.** Czy fizyczny plik ma pola/oświadczenia do uzupełnienia (także `false` dla regulaminu). Nigdy dla `without_template: true`. |
 | `intended_use` | tekst | Do czego służy dokument i jak jest używany. |
 | `client_requirement` | `Obowiązkowy`, `Warunkowy`, `Informacyjny` | Wymagalność wobec klienta. |
-| `condition` | tekst do 1000 | **Tylko bez wzoru.** Kiedy dokument jest wymagany; obowiązkowe przy `Warunkowy`. |
+| `condition` | tekst do 1000 | **Ze wzorem i bez wzoru.** Przy jakim warunku dokument jest wymagany; obowiązkowe przy `Warunkowy`, pomijane w innych przypadkach. |
 | `delivery_stage` | tekst do 60 | **Tylko dla `without_template: true`.** Etap procesu, np. `ZGLOSZENIE`, `UMOWA`, `REALIZACJA`, `REFUNDACJA`, `KONTROLA`. |
 | `responsibility` | `FUNDPILOT`, `CLIENT`, `SHARED` | **Tylko dla `without_template: true`.** Kto przygotowuje/dostarcza dokument. |
 | `required_evidence` | tekst do 4000 | **Tylko dla `without_template: true`.** Co konkretnie klient ma dostarczyć/okazać. |
