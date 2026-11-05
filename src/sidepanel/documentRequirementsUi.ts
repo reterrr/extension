@@ -164,7 +164,6 @@ function renderRequirement(
     missingFields.push("Podpis");
   }
   if (
-    !hasOperatorTemplate &&
     normalized.requirement === "CONDITIONAL" &&
     !normalized.condition?.trim()
   ) {
@@ -280,6 +279,7 @@ function renderRequirement(
     text(normalized.requirement) || "UNKNOWN",
   );
   const conditionInput = textarea(text(normalized.condition), 1000);
+  conditionInput.placeholder = "Opisz sytuację, w której dokument jest wymagany";
   const fulfillment = select(
     DOCUMENT_FULFILLMENT_MODES,
     DOCUMENT_FULFILLMENT_MODE_LABELS,
@@ -353,7 +353,7 @@ function renderRequirement(
   );
   const originalFileLabel = fieldLabel("Plik / wzór operatora", originalFile);
   const conditionLabelNode = fieldLabel(
-    "Kiedy dokument jest wymagany",
+    "Przy jakim warunku dokument jest wymagany?",
     conditionInput,
   );
   const deliveryStageLabel = fieldLabel("Etap dostarczenia", deliveryStage);
@@ -426,13 +426,15 @@ function renderRequirement(
     modeRow.hidden = withTemplate && Boolean(originalFile.value);
     fulfillmentLabelNode.hidden = withTemplate;
     originalFileLabel.hidden = !withTemplate;
-    conditionLabelNode.hidden = withTemplate;
+    conditionLabelNode.hidden = requirement.value !== "CONDITIONAL";
+    conditionInput.required = requirement.value === "CONDITIONAL";
     workflowRow.hidden = withTemplate;
     requiredEvidenceLabel.hidden = withTemplate;
     sourceUrlLabel.hidden = withTemplate;
     if (linkedPhysicalNode) linkedPhysicalNode.hidden = !withTemplate;
   };
   fulfillment.onchange = refreshMode;
+  requirement.onchange = refreshMode;
   originalFile.onchange = () => {
     if (!originalFile.value && fulfillment.value === "OPERATOR_TEMPLATE") {
       fulfillment.value = "WITHOUT_OPERATOR_TEMPLATE";
@@ -455,6 +457,11 @@ function renderRequirement(
   save.onclick = () => {
     const withTemplate = fulfillment.value === "OPERATOR_TEMPLATE";
     const selectedFileId = withTemplate ? originalFile.value : "";
+    if (requirement.value === "CONDITIONAL" && !conditionInput.value.trim()) {
+      options.notice("Dla dokumentu warunkowego opisz, kiedy dokument jest wymagany.", true);
+      conditionInput.focus();
+      return;
+    }
     const values: Record<string, unknown> = {
       label: withTemplate ? templateName.value : labelInput.value,
       purpose: withTemplate ? templateIntendedUse.value : purposeInput.value,
@@ -463,7 +470,9 @@ function renderRequirement(
       fulfillment_mode: withTemplate
         ? "OPERATOR_TEMPLATE"
         : "WITHOUT_OPERATOR_TEMPLATE",
-      condition: withTemplate ? undefined : conditionInput.value,
+      condition: requirement.value === "CONDITIONAL"
+        ? conditionInput.value.trim()
+        : undefined,
       delivery_stage: withTemplate ? undefined : deliveryStage.value,
       responsibility: withTemplate ? undefined : responsibility.value || undefined,
       required_evidence: withTemplate ? undefined : requiredEvidence.value,

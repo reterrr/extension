@@ -474,7 +474,7 @@ function documentViews(
         row.fulfillment_mode === "OPERATOR_TEMPLATE" || Boolean(physicalFile);
       const visibleFields = new Set(
         isOperatorTemplate
-          ? ["label", "requirement", "signature_requirement"]
+          ? ["label", "requirement", "signature_requirement", "condition"]
           : [
               "purpose",
               "requirement",
@@ -1223,8 +1223,8 @@ export function buildImportApprovalPlan(
         intended_use: row.purpose,
         client_requirement: requirementLabel(row.requirement),
         signature_requirement: signatureLabel(row.signature_requirement),
+        ...(row.requirement === "CONDITIONAL" ? { condition: row.condition } : {}),
         ...(withoutTemplate ? {
-          condition: row.condition,
           delivery_stage: row.delivery_stage,
           responsibility: row.responsibility,
           required_evidence: row.required_evidence,

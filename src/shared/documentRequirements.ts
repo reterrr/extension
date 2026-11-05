@@ -123,14 +123,10 @@ export function documentRequirementFromFile(
     label,
     purpose: intendedUse.slice(0, 1000),
     requirement,
-    ...(requirement === "CONDITIONAL"
-      ? {
-          condition:
-            (typeof source.condition === "string" && source.condition.trim()
-              ? source.condition.trim()
-              : intendedUse
-            ).slice(0, 1000),
-        }
+    ...(requirement === "CONDITIONAL" &&
+    typeof source.condition === "string" &&
+    source.condition.trim()
+      ? { condition: source.condition.trim().slice(0, 1000) }
       : {}),
     fulfillment_mode: "OPERATOR_TEMPLATE",
     signature_requirement: signatureFromFileSource(source),

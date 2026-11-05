@@ -1262,13 +1262,34 @@ export function importDocumentIntoState(
           !(file.key && legacyDocumentFileKeys.has(file.key))
         ) {
           const requirement = unifiedRequirementFromMetadata(
-            resolvedMetadata,
+            { ...resolvedMetadata, ...(metadata.condition ? { condition: metadata.condition } : {}) },
             object.id,
             uuid(),
             file.key ?? `DOC_FILE_${row.id}`,
             row,
           );
           (state.documentRequirements ||= []).push(requirement);
+          // Conditions belong to the document requirement, not the physical file.
+          if (metadata.condition && file.evidence?.condition) {
+            const conditionEvidence = { condition: file.evidence.condition };
+            validateTargetEvidenceFields(
+              conditionEvidence,
+              FILE_METADATA_EVIDENCE_FIELDS,
+              metadata,
+              `${item.key}.files[${fileIndex}]`,
+            );
+            storeTargetEvidence(
+              state,
+              object.id,
+              { kind: "document", id: requirement.id },
+              requirement.importKey ?? requirement.id,
+              item.key,
+              "condition",
+              file.evidence.condition,
+              sourceByKey,
+              uuid,
+            );
+          }
         }
       }
     }

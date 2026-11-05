@@ -34,7 +34,8 @@ const DOCUMENT_TO_FILE_SIGNATURE = {
 
 // Canonical portable files[] has mutually exclusive metadata contracts.
 // The physical file's classification is stored on fileSources; the document
-// adds only its requirement/signature. Workflow fields are no-template only.
+// adds its requirement/signature and conditional requirement text.
+// Delivery-stage and responsibility workflow fields are no-template only.
 const TEMPLATE_FILE_FIELDS = new Set([
   "display_name",
   "purpose",
@@ -50,6 +51,7 @@ function documentMetadata(row, withoutTemplate = false) {
     client_requirement: DOCUMENT_TO_FILE_REQUIREMENT[row.requirement],
     signature_requirement:
       DOCUMENT_TO_FILE_SIGNATURE[row.signature_requirement],
+    ...(row.requirement === "CONDITIONAL" ? { condition: row.condition } : {}),
   };
   if (!withoutTemplate) {
     return compact({
@@ -60,7 +62,6 @@ function documentMetadata(row, withoutTemplate = false) {
   return compact({
     ...common,
     intended_use: row.purpose,
-    condition: row.condition,
     delivery_stage: row.delivery_stage,
     responsibility: row.responsibility,
     required_evidence: row.required_evidence,
