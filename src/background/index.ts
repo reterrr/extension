@@ -864,7 +864,6 @@ function mutateDocumentRequirement(
     }
 
     if (
-      row.fulfillment_mode === "WITHOUT_OPERATOR_TEMPLATE" &&
       row.requirement === "CONDITIONAL" &&
       (!row.condition || !row.condition.trim())
     ) {
@@ -900,12 +899,17 @@ function mutateDocumentRequirement(
       // The physical template's metadata is edited on the file source.
       // Never retain workflow fields from a no-template row.
       clearNoTemplateOnlyFields();
-      for (const field of ["condition", "source_url", "source_description"] as const) {
+      for (const field of ["source_url", "source_description"] as const) {
         if ((row as unknown as Record<string, unknown>)[field] !== undefined) {
           delete (row as unknown as Record<string, unknown>)[field];
           changedFields.add(field);
         }
       }
+    }
+
+    if (row.requirement !== "CONDITIONAL" && row.condition !== undefined) {
+      delete row.condition;
+      changedFields.add("condition");
     }
 
     if (
