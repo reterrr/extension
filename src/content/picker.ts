@@ -1,9 +1,11 @@
 import {
   buildDurableSelectors,
+  buildCapturedSelectorVersion,
   selectionContainer,
   type DurableSelectorSet,
 } from "./durable-selector";
 import { runExtractionRules } from "./extraction-runner";
+import { createDOMSelectorRuntime } from "./selector-resolver";
 import { readSelectionFromDocument } from "./selection-fallback";
 import {
   isPickerRequest,
@@ -185,13 +187,29 @@ if (!globalThis.__burbotPickerLoaded) {
       }
     }
 
+    const verifiedOptions: ElementExtractionCandidateOption[] = [];
+    for (const option of options.filter((item) => item.raw.length <= 100000)) {
+      try {
+        verifiedOptions.push({
+          ...option,
+          selectorVersion: buildCapturedSelectorVersion(
+            element, selectors, option.extraction, option.raw,
+            option.extraction.type === "selection" ? range : undefined,
+          ),
+        });
+      } catch {
+        // Another extraction option (for example an attribute) may still work.
+      }
+    }
+    if (!verifiedOptions.length) throw new Error("No extraction option could be verified on the current DOM.");
+
     return {
       pageUrl: location.href,
       selector: selectors.primary,
       ...(selectors.fallbacks.length
         ? { selectorFallbacks: selectors.fallbacks }
         : {}),
-      options: options.filter((option) => option.raw.length <= 100000),
+      options: verifiedOptions,
     };
   }
 
@@ -478,6 +496,7 @@ if (!globalThis.__burbotPickerLoaded) {
           case "RUN":
             value = runExtractionRules(message.rules, {
               pageUrl: location.href,
+              selectorRuntime: createDOMSelectorRuntime(document),
               selectAll: (selector) => Array.from(document.querySelectorAll(selector)),
               readElement: (element, extraction) =>
                 C.readElement(element, extraction),

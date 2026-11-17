@@ -3,11 +3,13 @@ import type {
   PageUrlExtraction,
   PdfTextExtraction,
 } from "./extraction";
+import type { SelectorVersion } from "./selectors";
 
 export interface ElementExtractionCandidateOption {
   label: string;
   raw: string;
   extraction: ElementExtractionSpec;
+  selectorVersion?: SelectorVersion;
 }
 
 export interface PageUrlExtractionCandidateOption {

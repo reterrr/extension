@@ -47,6 +47,17 @@ export function createCapturedExtractionInput(
   option: ExtractionCandidateOption,
 ): CapturedExtractionInput {
   const rule = createExtractionRule(candidate, option);
+  if ("selectorVersion" in option && option.selectorVersion && rule.selector !== null) {
+    return {
+      ...rule,
+      extraction: {
+        ...rule.extraction,
+        ...(rule.selectorFallbacks?.length ? { selectorFallbacks: rule.selectorFallbacks } : {}),
+        selectorVersion: option.selectorVersion,
+      },
+      raw: option.raw,
+    } as CapturedExtractionInput;
+  }
 
   if (rule.selector !== null && rule.selectorFallbacks?.length) {
     // The current legacy domain core reconstructs the rule envelope but copies

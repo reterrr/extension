@@ -33,6 +33,7 @@ import {
   unstageObject,
 } from "../shared/commits/staging";
 import { createCapturedExtractionInput } from "../shared/extraction/rules";
+import { mutateSelectorState, SELECTOR_WRITE_OPERATIONS } from "../shared/selectors/repository";
 import {
   FILE_METADATA_INFERENCE_VERSION,
   inferFileMetadataFromName,
@@ -82,6 +83,7 @@ const CREATE_TYPES = ["project", "recruitment", "operator"] as const;
 type CreateObjectType = (typeof CREATE_TYPES)[number];
 
 const ALLOWED_WRITES = new Set<string>([
+  ...SELECTOR_WRITE_OPERATIONS,
   "IMPORT",
   "ASSIGN",
   "ASSIGN_PDF",
@@ -1553,7 +1555,9 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
     const state = draft.workingState;
     const now = new Date().toISOString();
     let next: LegacyStorageState;
-    if (message.op === "IMPORT") {
+    if (SELECTOR_WRITE_OPERATIONS.some((op) => op === message.op)) {
+      next = mutateSelectorState(state, message, now);
+    } else if (message.op === "IMPORT") {
       next = importDocumentIntoState(
         state,
         message.document,

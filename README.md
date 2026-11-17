@@ -21,6 +21,8 @@ Firefox 140+ WebExtension using React for extension pages and TypeScript for bro
 
 ## Architecture
 
+Web selector definitions, migration, versioning and the tree editor are described in [Unified selectors](docs/unified-selectors.md).
+
 ```text
 extension/
 ├── src/

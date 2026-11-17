@@ -11,6 +11,8 @@ import {
 } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { writeSelectorTrees } from "./db/selectors.mjs";
+import { migrateLegacySelectors } from "../src/shared/selectors/migration.js";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const HOST = process.env.BURBOT_DB_HOST || "127.0.0.1";
@@ -143,10 +145,10 @@ ensureColumn("recruitments", "funding_rules", "TEXT");
 ensureColumn("recruitments", "funding_verified_at", "TEXT");
 ensureColumn("recruitments", "funding_verification_url", "TEXT");
 ensureColumn("geographies", "operator_object_id", "TEXT");
-db.pragma("user_version = 13");
+db.pragma("user_version = 14");
 
 db.prepare(
-  `INSERT INTO app_meta(key, value) VALUES ('schema_version', '13')
+  `INSERT INTO app_meta(key, value) VALUES ('schema_version', '14')
    ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
 ).run();
 
@@ -725,8 +727,10 @@ function syncPayloadRows(table, prefix, records) {
 
 const persistStateTransaction = db.transaction((state) => {
   assertState(state);
+  const previous = loadState();
   clearMaterializedTables();
   syncWorkspaceObjects(state);
+  writeSelectorTrees(db, state, previous);
   const groupByObject = syncGeographies(state);
   syncBusinessTables(state, groupByObject);
   syncOperatorContacts(state);
@@ -766,6 +770,7 @@ function saveState(state) {
 }
 
 const resetTransaction = db.transaction(() => {
+  db.exec("UPDATE selectors SET active_version_uuid = NULL; DELETE FROM selectors;");
   clearMaterializedTables();
   db.exec(`
     DELETE FROM workspace_objects;
@@ -784,6 +789,12 @@ function resetState() {
   resetTransaction();
   db.pragma("wal_checkpoint(TRUNCATE)");
   db.exec("VACUUM");
+}
+
+// One-time local migration: persist UUIDs without changing workspace revisions.
+const selectorMigrationState = loadState();
+if (selectorMigrationState && migrateLegacySelectors(selectorMigrationState)) {
+  persistStateTransaction(selectorMigrationState);
 }
 
 function databaseBytes() {

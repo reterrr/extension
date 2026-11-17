@@ -561,3 +561,9 @@ pre {
     font-size: 7px;
   }
 }
+.selector-tree-editor textarea { display: block; box-sizing: border-box; width: 100%; font: 11px/1.5 monospace; }
+.selector-tree-editor ol { padding-left: 18px; }
+.selector-tree-editor li { margin: 6px 0; overflow-wrap: anywhere; }
+.selector-tree-editor button { margin: 3px; font-size: 11px; }
+.selector-tree-editor code, .selector-diagnostics { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 11px; }
+.selector-tree-editor details { border-top: 1px solid var(--border, #ddd); padding: 8px 0; }
