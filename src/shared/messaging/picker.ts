@@ -6,12 +6,14 @@ import type {
 } from "../types/extraction";
 import type { ElementExtractionCandidate } from "../types/picker";
 import { isSourceFileType, type RemoteFileSourceCandidate } from "../types/source";
+import type { SelectorPart } from "../types/selectors";
 
 export interface SelectorHighlight {
   id: string;
   selector: string;
   selectorFallbacks?: string[];
   quote?: SelectionQuote;
+  part?: SelectorPart;
 }
 
 export type PickerOperation =

@@ -270,6 +270,29 @@ export function buildStoredSelectorHighlights(
   const seen = new Set();
 
   for (const rule of state.rules ?? []) {
+    if (rule.selectorTree) {
+      const { selector, versions } = rule.selectorTree;
+      if (!sameSelectorPage(selector.pageUrl ?? rule.pageUrl, pageUrl)) continue;
+      const version = versions.find(
+        (item) => item.uuid === selector.activeVersionUuid && item.status === "active",
+      );
+      for (const recipe of [...(version?.recipes ?? [])].sort((a, b) => a.order - b.order)) {
+        for (const part of [...recipe.parts].sort((a, b) => a.order - b.order)) {
+          const css = [...part.locators]
+            .sort((a, b) => a.order - b.order)
+            .filter((locator) => locator.kind === "css_path");
+          const key = JSON.stringify([part.extraction, part.locators]);
+          if (seen.has(key)) continue;
+          seen.add(key);
+          highlights.push({
+            id: `rule:${rule.id}:part:${part.uuid}`,
+            selector: css[0]?.selector ?? "body",
+            part,
+          });
+        }
+      }
+      continue;
+    }
     if (
       !sameSelectorPage(rule.pageUrl, pageUrl) ||
       typeof rule.selector !== "string" ||

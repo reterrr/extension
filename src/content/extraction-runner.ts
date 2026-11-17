@@ -6,12 +6,29 @@ import type {
   ExtractionRuleRunResult,
   SelectionExtraction,
 } from "../shared/types/extraction";
+import { activeSelectorVersion } from "../shared/selectors/repository";
+import {
+  createDOMSelectorRuntime,
+  evaluateSelectorVersion,
+  type SelectorRuntime,
+} from "./selector-resolver";
+import type {
+  ExtractionSpec as SelectorExtractionSpec,
+  SelectorLocator,
+} from "../shared/types/selectors";
+export {
+  evaluateLocator,
+  evaluatePart,
+  evaluateRecipe,
+  evaluateSelectorVersion,
+} from "./selector-resolver";
 
 export interface ExtractionRuntime {
   pageUrl: string;
   selectAll(selector: string): Element[];
   readElement(element: Element, extraction: ElementExtractionSpec): string;
   readSelectionFromPage?(extraction: SelectionExtraction): string;
+  selectorRuntime?: SelectorRuntime;
 }
 
 function errorMessage(error: unknown): string {
@@ -127,8 +144,34 @@ export function runExtractionRules(
         throw new Error("PDF extraction rules run in the Burbot PDF reader.");
       }
 
-      if (rule.pageUrl !== runtime.pageUrl) {
+      if ((rule.selectorTree?.selector.pageUrl ?? rule.pageUrl) !== runtime.pageUrl) {
         throw new Error("Open the original source page.");
+      }
+
+      if (rule.selectorTree) {
+        const version = activeSelectorVersion(rule.selectorTree);
+        if (!version)
+          throw new Error("Selector has no active version. Approve a draft first.");
+        const resolver = runtime.selectorRuntime ??
+          (typeof document !== "undefined"
+            ? createDOMSelectorRuntime(document)
+            : {
+                resolve: (locator: SelectorLocator) =>
+                  locator.kind === "css_path" ? runtime.selectAll(locator.selector) : null,
+                read: (target: Element | Range, extraction: SelectorExtractionSpec) =>
+                  runtime.readElement(target as Element, (
+                    extraction.type === "attribute"
+                      ? { type: "attribute", attribute: extraction.name }
+                      : extraction
+                  ) as ElementExtractionSpec),
+              });
+        const evaluation = evaluateSelectorVersion(version, resolver);
+        if (evaluation.status !== "success") return {
+          ruleId: rule.id,
+          error: `${evaluation.status}: ${evaluation.diagnostic ?? "Selector evaluation failed."}`,
+          evaluation,
+        };
+        return { ruleId: rule.id, raw: evaluation.rawValue!, evaluation };
       }
 
       let raw: string;

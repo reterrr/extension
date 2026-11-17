@@ -1,3 +1,6 @@
+import { migrateRuleSelector } from "../selectors/migration.js";
+import { newSelectorUuid } from "../selectors/uuid.js";
+
 (() => {
   const clean = (value) =>
     String(value ?? "")
@@ -509,6 +512,10 @@
       rawValue: candidate.raw,
       createdAt: now,
     };
+    if (row.extraction.selectorVersion) {
+      row.extraction = { ...row.extraction };
+      delete row.extraction.selectorVersion;
+    }
     if (Array.isArray(candidate.selectorFallbacks) && candidate.selectorFallbacks.length)
       row.selectorFallbacks = candidate.selectorFallbacks;
     if (message.target?.kind && message.target.kind !== "object")
@@ -543,6 +550,7 @@
       throw Error("This field is managed automatically.");
     const input = message.value ?? candidate.raw;
     values[message.field] = coerceField(input, definition, state);
+    const previousRule = state.rules.find((r) => matches(r, object.id, message.field, message.target));
     state.rules = state.rules.filter(
       (r) => !matches(r, object.id, message.field, message.target),
     );
@@ -560,6 +568,25 @@
       rule.target = message.target;
     if (String(input) !== candidate.raw)
       rule.transform = { sample: candidate.raw, value: input };
+    migrateRuleSelector(rule, newSelectorUuid, now);
+    if (previousRule?.selectorTree && rule.selectorTree && previousRule.pageUrl === rule.pageUrl) {
+      const capturedVersion = rule.selectorTree.versions[0];
+      capturedVersion.uuid = newSelectorUuid();
+      for (const recipe of capturedVersion.recipes) {
+        recipe.uuid = newSelectorUuid();
+        for (const part of recipe.parts) {
+          part.uuid = newSelectorUuid();
+          for (const locator of part.locators) locator.uuid = newSelectorUuid();
+        }
+      }
+      capturedVersion.selectorUuid = previousRule.selectorTree.selector.uuid;
+      capturedVersion.versionNo = Math.max(...previousRule.selectorTree.versions.map((version) => version.versionNo)) + 1;
+      capturedVersion.status = "draft";
+      rule.id = previousRule.id;
+      rule.selectorTree = structuredClone(previousRule.selectorTree);
+      rule.selectorTree.versions.push(capturedVersion);
+      rule.selectorEvaluations = previousRule.selectorEvaluations;
+    }
     state.rules.push(rule);
     if (!message.target || message.target.kind === "object") {
       delete object.manualFields?.[message.field];

@@ -1,3 +1,5 @@
+import type { SelectorTree, SelectorVersion, SelectorEvaluationResult } from "./selectors";
+
 export type ExtractionRuleId = string | number;
 export type RuntimeExtractionRuleId = string;
 
@@ -12,10 +14,12 @@ export type SupportedExtractionAttribute =
 /**
  * Compatibility mirror for the current legacy domain core, which copies the
  * extraction object verbatim but reconstructs the rule envelope. The canonical
- * rule-level location remains `selector` + `selectorFallbacks`.
+ * tree lives on `selectorTree`; selector/fallback fields remain a legacy projection.
  */
 export interface WebLocatorMetadata {
   selectorFallbacks?: string[];
+  /** Picker transport, moved into the rule's canonical tree during assignment. */
+  selectorVersion?: SelectorVersion;
 }
 
 export interface TextExtraction extends WebLocatorMetadata {
@@ -76,6 +80,7 @@ export type ExtractionSpec =
 interface ExtractionRuleBase {
   id?: ExtractionRuleId;
   pageUrl: string;
+  selectorTree?: SelectorTree;
 }
 
 export interface ElementExtractionRule extends ExtractionRuleBase {
@@ -144,9 +149,11 @@ export type ExtractionRuleRunResult =
       ruleId: RuntimeExtractionRuleId;
       raw: string;
       error?: never;
+      evaluation?: SelectorEvaluationResult;
     }
   | {
       ruleId: RuntimeExtractionRuleId;
       error: string;
       raw?: never;
+      evaluation?: SelectorEvaluationResult;
     };

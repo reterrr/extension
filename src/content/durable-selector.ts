@@ -1,3 +1,8 @@
+import { newSelectorUuid } from "../shared/selectors/uuid.js";
+import type { ElementExtractionSpec } from "../shared/types/extraction";
+import type { ExtractionSpec, SelectorLocator, SelectorVersion } from "../shared/types/selectors";
+import { captureTextQuote, createDOMSelectorRuntime } from "./selector-resolver";
+
 export interface DurableSelectorSet {
   primary: string;
   fallbacks: string[];
@@ -297,4 +302,99 @@ export function selectorCandidates(
   fallbacks: readonly string[] | undefined,
 ): string[] {
   return Array.from(new Set([primary, ...(fallbacks ?? [])].filter(Boolean)));
+}
+
+function xpathLiteral(value: string): string {
+  if (!value.includes("'")) return `'${value}'`;
+  if (!value.includes('"')) return `"${value}"`;
+  return `concat(${value
+    .split("'")
+    .map((part) => `'${part}'`)
+    .join(', "\'", ')})`;
+}
+
+export function buildXPath(element: Element): string {
+  if (element.id) return `//*[@id=${xpathLiteral(element.id)}]`;
+  const segments: string[] = [];
+  for (let node: Element | null = element; node; node = node.parentElement) {
+    const siblings = Array.from(node.parentElement?.children ?? [node]).filter(
+      (sibling) => sibling.localName === node!.localName,
+    );
+    segments.unshift(`${node.localName}[${siblings.indexOf(node) + 1}]`);
+  }
+  return `/${segments.join("/")}`;
+}
+
+/** CSS fallbacks, XPath, id and quote all locate ONE part of ONE recipe. */
+export function buildCapturedSelectorVersion(
+  element: Element,
+  selectors: DurableSelectorSet,
+  legacyExtraction: ElementExtractionSpec,
+  raw: string,
+  range?: Range,
+): SelectorVersion {
+  const extraction: ExtractionSpec =
+    legacyExtraction.type === "attribute"
+      ? { type: "attribute", name: legacyExtraction.attribute }
+      : legacyExtraction.type === "selection"
+        ? { type: "selection", quote: { ...legacyExtraction.quote } }
+        : { type: "text" };
+  const runtime = createDOMSelectorRuntime(element.ownerDocument);
+  const locators: SelectorLocator[] = [];
+  const add = (locator: SelectorLocator) => {
+    try {
+      const matches = runtime.resolve(locator);
+      if (
+        !matches ||
+        matches.length !== 1 ||
+        runtime.read(matches[0], extraction) !== raw
+      )
+        return;
+      if (locator.kind !== "text_quote" && matches[0] !== element) return;
+      locator.order = locators.length;
+      locators.push(locator);
+    } catch {
+      /* A capture only stores alternatives verified against this DOM. */
+    }
+  };
+  selectorCandidates(selectors.primary, selectors.fallbacks).forEach(
+    (selector) =>
+      add({ uuid: newSelectorUuid(), kind: "css_path", order: 0, selector }),
+  );
+  add({
+    uuid: newSelectorUuid(),
+    kind: "xpath",
+    order: 0,
+    expression: buildXPath(element),
+  });
+  if (element.id)
+    add({
+      uuid: newSelectorUuid(),
+      kind: "element_id",
+      order: 0,
+      elementId: element.id,
+    });
+  if (extraction.type !== "attribute") {
+    const quote = captureTextQuote(element, raw, element.ownerDocument, range);
+    if (quote)
+      add({ uuid: newSelectorUuid(), kind: "text_quote", order: 0, quote });
+  }
+  if (!locators.length)
+    throw new Error("No locator could be verified on the current DOM.");
+  return {
+    uuid: newSelectorUuid(),
+    selectorUuid: newSelectorUuid(),
+    versionNo: 1,
+    status: "draft",
+    createdFromSnapshotUuid: null,
+    artifactType: "rendered_dom",
+    createdAt: new Date().toISOString(),
+    recipes: [
+      {
+        uuid: newSelectorUuid(),
+        order: 0,
+        parts: [{ uuid: newSelectorUuid(), order: 0, extraction, locators }],
+      },
+    ],
+  };
 }

@@ -1,4 +1,6 @@
 import { ensureGeographyCatalog } from "./geographyCatalog";
+import { renderSelectorTreeEditor } from "./selectorTreeEditor";
+import { validateSelectorTree } from "../shared/selectors/validation.js";
 import { readWorkspaceState } from "./workspaceData";
 import {
   createCapturedExtractionInput,
@@ -2131,6 +2133,26 @@ export const workspaceReady = (() => {
       null,
       2,
     );
+    let treeRoot = $("selector-tree-editor");
+    if (treeRoot) treeRoot.remove();
+    if (rule?.selectorTree && !candidate) {
+      treeRoot = node("div");
+      treeRoot.id = "selector-tree-editor";
+      $("rule-details").append(treeRoot);
+      renderSelectorTreeEditor(treeRoot, rule, {
+        write: async (op, payload) => { await data(op, payload); render(); },
+        evaluate: async (version) => {
+          const selectorTree = structuredClone(rule.selectorTree);
+          selectorTree.versions = [{ ...version, status: "active" }];
+          selectorTree.selector.activeVersionUuid = version.uuid;
+          validateSelectorTree(selectorTree);
+          const results = await rpc("RUN", { rules: [{ ...rule, selectorTree }] });
+          if (!results[0]?.evaluation) throw Error(results[0]?.error || "Selector did not return diagnostics.");
+          return results[0].evaluation;
+        },
+        error: (error) => notice(error.message || String(error), true),
+      });
+    }
   }
   function controls() {
     for (const row of $("workspace").querySelectorAll(".field-row")) row.disabled = busy;
@@ -2559,6 +2581,10 @@ export const workspaceReady = (() => {
     const results = await rpc("RUN", { rules });
     if (epoch !== viewEpoch || db.revision !== revision)
       throw Error("Page or object changed. Preview again.");
+    const evaluations = results.filter((result) => result.evaluation).map((result) => ({ ruleId: result.ruleId, evaluation: result.evaluation }));
+    if (evaluations.length) await data("SELECTOR_RECORD_EVALUATIONS", { objectId: id, evaluations, pageUrl });
+    if (epoch !== viewEpoch || objectId !== id)
+      throw Error("Page or object changed. Preview again.");
     const successful = [];
     $("result-list").replaceChildren();
     for (const result of results) {
@@ -2581,7 +2607,7 @@ export const workspaceReady = (() => {
       }
       $("result-list").append(row);
     }
-    preview = { objectId: id, revision, results: successful };
+    preview = { objectId: id, revision: db.revision, results: successful };
     notice("Review the values before applying.");
   });
   $("apply").onclick = action(async () => {

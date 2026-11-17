@@ -341,4 +341,74 @@ CREATE TABLE IF NOT EXISTS document_requirements (
   FOREIGN KEY (object_id) REFERENCES workspace_objects(object_id) ON DELETE CASCADE
 );
 
-PRAGMA user_version = 13;
+CREATE TABLE IF NOT EXISTS selectors (
+  uuid TEXT PRIMARY KEY,
+  object_id TEXT NOT NULL,
+  field TEXT NOT NULL,
+  target_json TEXT NOT NULL CHECK (json_valid(target_json)),
+  source_uuid TEXT,
+  page_url TEXT,
+  active_version_uuid TEXT,
+  created_at TEXT NOT NULL,
+  migration_json TEXT CHECK (migration_json IS NULL OR json_valid(migration_json)),
+  legacy_rule_id TEXT UNIQUE,
+  FOREIGN KEY (object_id) REFERENCES workspace_objects(object_id) ON DELETE CASCADE,
+  FOREIGN KEY (uuid, active_version_uuid) REFERENCES selector_versions(selector_uuid, uuid)
+    DEFERRABLE INITIALLY DEFERRED
+);
+
+CREATE TABLE IF NOT EXISTS selector_versions (
+  uuid TEXT PRIMARY KEY,
+  selector_uuid TEXT NOT NULL,
+  version_no INTEGER NOT NULL CHECK (version_no > 0),
+  status TEXT NOT NULL CHECK (status IN ('draft', 'active', 'superseded', 'rejected')),
+  created_from_snapshot_uuid TEXT,
+  artifact_type TEXT CHECK (artifact_type IN ('raw_html', 'rendered_dom') OR artifact_type IS NULL),
+  created_at TEXT NOT NULL,
+  reviewed_at TEXT,
+  reviewed_by TEXT,
+  UNIQUE (selector_uuid, version_no),
+  UNIQUE (selector_uuid, uuid),
+  FOREIGN KEY (selector_uuid) REFERENCES selectors(uuid) ON DELETE CASCADE
+);
+CREATE UNIQUE INDEX IF NOT EXISTS selector_one_active_version
+  ON selector_versions(selector_uuid) WHERE status = 'active';
+
+CREATE TABLE IF NOT EXISTS selector_recipes (
+  uuid TEXT PRIMARY KEY,
+  version_uuid TEXT NOT NULL,
+  position INTEGER NOT NULL CHECK (position >= 0),
+  UNIQUE (version_uuid, position),
+  FOREIGN KEY (version_uuid) REFERENCES selector_versions(uuid) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS selector_parts (
+  uuid TEXT PRIMARY KEY,
+  recipe_uuid TEXT NOT NULL,
+  position INTEGER NOT NULL CHECK (position >= 0),
+  extraction_json TEXT NOT NULL CHECK (json_valid(extraction_json)),
+  join_with TEXT,
+  UNIQUE (recipe_uuid, position),
+  FOREIGN KEY (recipe_uuid) REFERENCES selector_recipes(uuid) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS selector_locators (
+  uuid TEXT PRIMARY KEY,
+  part_uuid TEXT NOT NULL,
+  position INTEGER NOT NULL CHECK (position >= 0),
+  kind TEXT NOT NULL CHECK (kind IN ('css_path', 'xpath', 'element_id', 'text_quote', 'dom_path', 'dom_range', 'exact_pos', 'text_position', 'text_fragment')),
+  payload_json TEXT NOT NULL CHECK (json_valid(payload_json)),
+  UNIQUE (part_uuid, position),
+  FOREIGN KEY (part_uuid) REFERENCES selector_parts(uuid) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS selector_evaluations (
+  uuid TEXT PRIMARY KEY,
+  version_uuid TEXT NOT NULL,
+  evaluated_at TEXT NOT NULL,
+  page_url TEXT NOT NULL,
+  result_json TEXT NOT NULL CHECK (json_valid(result_json)),
+  FOREIGN KEY (version_uuid) REFERENCES selector_versions(uuid) ON DELETE CASCADE
+);
+
+PRAGMA user_version = 14;

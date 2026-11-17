@@ -5,6 +5,7 @@ import type {
   FileSignatureRequirement,
 } from "../fileMetadata";
 import type { SourceFileType } from "./source";
+import type { StoredSelectorEvaluation } from "./selectors";
 
 /**
  * Compatibility projection consumed by the existing workspace UI/domain engine.
@@ -244,6 +245,7 @@ export type LegacyStoredRule = ExecutableExtractionRule & {
   target?: { kind: string; id: string };
   transform?: { sample: string; value: unknown };
   createdAt?: string;
+  selectorEvaluations?: StoredSelectorEvaluation[];
 };
 
 export interface LegacyStorageState {

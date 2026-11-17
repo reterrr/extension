@@ -1,6 +1,11 @@
 import { selectorColor } from "../shared/selectorPalette";
 import type { SelectorHighlight } from "../shared/messaging/picker";
 import type { SelectionQuote } from "../shared/types/extraction";
+import {
+  createDOMSelectorRuntime,
+  resolvePartTarget,
+  resolveSelectionRange,
+} from "./selector-resolver";
 
 type SelectorHighlightMessage = {
   type: "BURBOT_SHOW_SELECTOR_HIGHLIGHTS";
@@ -373,9 +378,10 @@ function rebuild(): void {
     return quoteRange(index, quote);
   };
   const resolved = new Map<string, Element | null>();
+  const selectorRuntime = createDOMSelectorRuntime(document);
 
   for (const highlight of currentHighlights) {
-    const signature = JSON.stringify([highlight.selector, highlight.selectorFallbacks, highlight.quote]);
+    const signature = JSON.stringify([highlight.selector, highlight.selectorFallbacks, highlight.quote, highlight.part]);
     const old = previous.get(highlight.id);
     const unchanged = old?.signature === signature;
     if (unchanged && !mutations.length && targetConnected(old.target) && old.anchor.isConnected) {
@@ -388,7 +394,13 @@ function rebuild(): void {
     const element = resolved.get(selectorKey) ?? null;
     let target: Element | Range | null = null;
 
-    if (unchanged && old.element === element && targetConnected(old.target) &&
+    if (highlight.part) {
+      target = resolvePartTarget(highlight.part, selectorRuntime);
+      if (target instanceof Element && highlight.part.extraction.type === "selection") {
+        const quote = highlight.part.extraction.quote;
+        target = resolveSelectionRange(target, quote);
+      }
+    } else if (unchanged && old.element === element && targetConnected(old.target) &&
         old.anchor.isConnected && !mutations.some((mutation) => touchesAnchor(mutation, old.anchor))) {
       target = old.target;
     } else if (highlight.quote) {
