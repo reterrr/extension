@@ -555,10 +555,17 @@ the SQLite Commit. Retry pending commits on reconnect and review conflicts
 against a refreshed server head. The selector and capture controls use a
 selected Source and its registered Snapshot.
 
-The version 15 SQLite migration adds synchronization tables and preserves
-workspace object IDs, drafts, portable imports and selector history. The
-schema manifest is generated with `npm run --silent export:schema` and can be
-reviewed alongside the backend definitions.
+Use **Bulk Source & Selector Synchronization** to scan the committed workspace,
+preview Source registrations and selector bindings, and choose ambiguous URLs.
+Select the Sources and selectors to synchronize and confirm publication of any
+reviewed versions. **Retry failed** resumes the approved operation after a
+restart. **Export report** downloads each item's outcome and the pending evidence
+count. The backend administrator sets Source registration permissions separately
+from business object permissions.
+
+SQLite schema version 16 adds Source bindings and saves bulk operation progress
+independently from draft commits. The schema manifest is generated with
+`npm run --silent export:schema`.
 
 [Backend bootstrap and enrollment](https://github.com/reterrr/burbot/blob/main/docs/extension-sync.md)
 

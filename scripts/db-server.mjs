@@ -146,10 +146,10 @@ ensureColumn("recruitments", "funding_rules", "TEXT");
 ensureColumn("recruitments", "funding_verified_at", "TEXT");
 ensureColumn("recruitments", "funding_verification_url", "TEXT");
 ensureColumn("geographies", "operator_object_id", "TEXT");
-db.pragma("user_version = 15");
+db.pragma("user_version = 16");
 
 db.prepare(
-  `INSERT INTO app_meta(key, value) VALUES ('schema_version', '15')
+  `INSERT INTO app_meta(key, value) VALUES ('schema_version', '16')
    ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
 ).run();
 
@@ -978,11 +978,15 @@ const server = createServer(async (req, res) => {
       sendJson(res, 200, backendSync.read());
       return;
     }
+    if (req.method === "GET" && pathname === "/backend-sync/bulk") {
+      sendJson(res, 200, backendSync.readBulk(requestUrl.searchParams.get("operationId")));
+      return;
+    }
     if (req.method === "POST" && pathname.startsWith("/backend-sync/")) {
       const action = pathname.slice("/backend-sync/".length);
-      if (["registry", "binding", "selector", "enqueue", "finish"].includes(action)) {
-        backendSync[action](await readJsonBody(req));
-        sendJson(res, 200, { ok: true });
+      if (["registry", "binding", "selector", "enqueue", "finish", "bulkStart", "bulkFinish"].includes(action)) {
+        const result = backendSync[action](await readJsonBody(req));
+        sendJson(res, 200, action === "bulkFinish" ? result : { ok: true });
         return;
       }
     }

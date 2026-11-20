@@ -38,7 +38,11 @@ export interface Registry {
   aliases: Record<string, { entity: string; fields: Record<string, string> }>;
   entities: EntityDefinition[];
   permissions: { create: boolean; bindExisting: boolean; commit: boolean };
-  sources: Array<{ sourceId: ServerId; url: string | null }>;
+  sources: Array<{
+    sourceId: ServerId;
+    url: string | null;
+    type?: "HTML" | "PDF" | "XLSX";
+  }>;
 }
 
 export interface EntityDefinition {
@@ -134,6 +138,7 @@ export type StoredOperation = CommitOperation & {
 
 export interface SelectorBinding {
   selectorUuid: string;
+  revision?: ServerId;
   sourceId: ServerId;
   businessObjectId: ServerId;
   field: Slot;

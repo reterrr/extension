@@ -478,4 +478,40 @@ CREATE TABLE IF NOT EXISTS backend_sync_operations (
   PRIMARY KEY (workspace_uuid, operation_id)
 ) STRICT;
 
-PRAGMA user_version = 15;
+-- Bulk sync keeps approved operations and Source identities outside portable state.
+CREATE TABLE IF NOT EXISTS backend_source_bindings (
+  workspace_uuid TEXT NOT NULL REFERENCES backend_workspace_identity(workspace_uuid),
+  local_source_key TEXT NOT NULL,
+  canonical_url TEXT NOT NULL,
+  source_type TEXT NOT NULL CHECK (source_type IN ('HTML', 'PDF', 'XLSX')),
+  backend_source_id TEXT NOT NULL,
+  sync_status TEXT NOT NULL CHECK (sync_status = 'SYNCED'),
+  last_synced_at TEXT NOT NULL,
+  PRIMARY KEY (workspace_uuid, local_source_key)
+) STRICT;
+
+CREATE INDEX IF NOT EXISTS backend_source_bindings_by_url
+  ON backend_source_bindings(workspace_uuid, canonical_url);
+
+CREATE TABLE IF NOT EXISTS backend_bulk_sync_jobs (
+  workspace_uuid TEXT NOT NULL REFERENCES backend_workspace_identity(workspace_uuid),
+  operation_id TEXT NOT NULL,
+  local_revision INTEGER NOT NULL,
+  job_json TEXT NOT NULL CHECK (json_valid(job_json)),
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (workspace_uuid, operation_id)
+) STRICT;
+
+CREATE TABLE IF NOT EXISTS backend_bulk_sync_items (
+  workspace_uuid TEXT NOT NULL,
+  operation_id TEXT NOT NULL,
+  item_key TEXT NOT NULL,
+  task_json TEXT NOT NULL CHECK (json_valid(task_json)),
+  sync_status TEXT NOT NULL CHECK (sync_status IN ('PENDING', 'SYNCED', 'BLOCKED', 'SELECTOR_CONFLICT', 'SYNC_ERROR')),
+  result_json TEXT CHECK (result_json IS NULL OR json_valid(result_json)),
+  PRIMARY KEY (workspace_uuid, operation_id, item_key),
+  FOREIGN KEY (workspace_uuid, operation_id)
+    REFERENCES backend_bulk_sync_jobs(workspace_uuid, operation_id) ON DELETE CASCADE
+) STRICT;
+
+PRAGMA user_version = 16;
