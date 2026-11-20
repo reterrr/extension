@@ -11,6 +11,7 @@ import {
 } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { createBackendSyncStore, LocalSyncError } from "./db/backend-sync.mjs";
 import { writeSelectorTrees } from "./db/selectors.mjs";
 import { migrateLegacySelectors } from "../src/shared/selectors/migration.js";
 
@@ -145,12 +146,14 @@ ensureColumn("recruitments", "funding_rules", "TEXT");
 ensureColumn("recruitments", "funding_verified_at", "TEXT");
 ensureColumn("recruitments", "funding_verification_url", "TEXT");
 ensureColumn("geographies", "operator_object_id", "TEXT");
-db.pragma("user_version = 14");
+db.pragma("user_version = 15");
 
 db.prepare(
-  `INSERT INTO app_meta(key, value) VALUES ('schema_version', '14')
+  `INSERT INTO app_meta(key, value) VALUES ('schema_version', '15')
    ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
 ).run();
+
+const backendSync = createBackendSyncStore(db);
 
 function assertState(value) {
   if (
@@ -769,7 +772,15 @@ function saveState(state) {
   persistStateTransaction(state);
 }
 
+const commitReviewedState = db.transaction(({ state, expectedRevision, operation }) => {
+  if ((loadState()?.revision ?? 0) !== expectedRevision || state.revision !== expectedRevision + 1)
+    throw new LocalSyncError(409, "The SQLite workspace revision changed during review.");
+  persistStateTransaction(state);
+  if (operation) backendSync.enqueue(operation);
+});
+
 const resetTransaction = db.transaction(() => {
+  backendSync.reset();
   db.exec("UPDATE selectors SET active_version_uuid = NULL; DELETE FROM selectors;");
   clearMaterializedTables();
   db.exec(`
@@ -963,6 +974,25 @@ const server = createServer(async (req, res) => {
       return;
     }
 
+    if (req.method === "GET" && pathname === "/backend-sync") {
+      sendJson(res, 200, backendSync.read());
+      return;
+    }
+    if (req.method === "POST" && pathname.startsWith("/backend-sync/")) {
+      const action = pathname.slice("/backend-sync/".length);
+      if (["registry", "binding", "selector", "enqueue", "finish"].includes(action)) {
+        backendSync[action](await readJsonBody(req));
+        sendJson(res, 200, { ok: true });
+        return;
+      }
+    }
+    if (req.method === "POST" && pathname === "/state/commit") {
+      const request = await readJsonBody(req);
+      commitReviewedState(request);
+      sendJson(res, 200, { ok: true, revision: request.state.revision });
+      return;
+    }
+
     if (req.method === "GET" && pathname === "/state") {
       const state = loadState();
       if (!state) {
@@ -990,6 +1020,10 @@ const server = createServer(async (req, res) => {
 
     sendJson(res, 404, { error: "Not found." });
   } catch (error) {
+    if (error instanceof LocalSyncError) {
+      sendJson(res, error.status, { error: error.message });
+      return;
+    }
     console.error(error);
     sendJson(res, 500, {
       error: error instanceof Error ? error.message : String(error),

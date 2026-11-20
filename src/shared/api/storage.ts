@@ -1,3 +1,4 @@
+import { persistReviewedCommit } from "../backend-sync/client";
 import { clearActiveDraft } from "../commits/draftStore";
 import { stampLastCheckedAt } from "../commits/lastChecked";
 import {
@@ -194,7 +195,8 @@ export async function commitState(
     checkedAt,
   );
   committed.revision = baseRevision + 1;
-  await saveRemoteState(committed);
+  if (!await persistReviewedCommit(current, committed, baseRevision))
+    await saveRemoteState(committed);
   await writeLegacyMirror(committed);
   return committed;
 }

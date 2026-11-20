@@ -1,3 +1,4 @@
+import { BackendSyncOptions } from "./BackendSyncOptions";
 import { MonitoringOptions } from "./MonitoringOptions";
 import { useEffect, useState } from "react";
 import {
@@ -68,6 +69,7 @@ export function App() {
         {error && <p className="ui-error">{error}</p>}
       </section>
       <MonitoringOptions />
+      <BackendSyncOptions />
     </main>
   );
 }
