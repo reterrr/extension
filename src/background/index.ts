@@ -1,3 +1,4 @@
+import { installMonitoringAgent } from "./monitoring";
 import { commitSummary } from "../shared/commits/summary";
 import { createActiveTabHighlightSync } from "./activeTabHighlights";
 import "../shared/domain/schema.js";
@@ -1614,3 +1615,5 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
     (error: unknown) => ({ ok: false, error: errorMessage(error) }),
   );
 });
+
+installMonitoringAgent();

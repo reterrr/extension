@@ -10,6 +10,10 @@
       "data_collection_permissions": {
         "required": [
           "none"
+        ],
+        "optional": [
+          "websiteContent",
+          "browsingActivity"
         ]
       }
     }
@@ -19,7 +23,10 @@
     "activeTab",
     "scripting",
     "contextMenus",
-    "downloads"
+    "downloads",
+    "alarms",
+    "contextualIdentities",
+    "dns"
   ],
   "host_permissions": [
     "http://*/*",
@@ -53,5 +60,10 @@
       },
       "description": "Toggle Burbot File Add Mode"
     }
-  }
+  },
+  "optional_permissions": [
+    "cookies",
+    "webRequest",
+    "webRequestBlocking"
+  ]
 }

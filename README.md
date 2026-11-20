@@ -513,3 +513,29 @@ dist/
 ```
 
 `core.js` and `picker.js` remain compatibility build artifacts because the existing workspace still injects them together when connecting to a page. New runtime code can use the single `content.js` bundle.
+
+## Automatic Source Monitoring
+
+Enable **Source monitoring** in the Firefox extension's options after an
+operator has approved the source and issued a scoped Browser Agent token. Enter
+the Burbot API and MinIO upload origins, the token and the approved HTTPS site
+origins. Grant the website access requested by Firefox so the agent can block
+redirects and requests outside the approved origins. Use a separate token for
+each Firefox profile. The settings and pending
+completion payload live in Firefox local extension storage. MinIO credentials
+stay on the server.
+
+While Firefox is running, the enabled agent polls once a minute and checks one
+job at a time. It opens each source in an inactive temporary container tab.
+The agent confirms the allowed origins and public DNS results, waits briefly
+for the DOM to settle, runs the job's pinned SelectorTree and uploads the
+sanitized HTML and evaluation. Disabling monitoring aborts the active check.
+Enable Firefox containers for the monitoring profile.
+
+See the backend guide for approval, the Prefect stack and check history.
+[Automatic Source Monitoring](https://github.com/reterrr/burbot/blob/main/docs/monitoring.md)
+
+```sh
+node --test tests/monitoring-agent-contracts.test.mjs
+npm run lint
+```
