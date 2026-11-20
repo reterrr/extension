@@ -141,7 +141,7 @@ test("existing v13 SQLite migrates atomically, survives service restart, and ret
     migrated.rules[0].selectorTree.versions[0],
   );
   const info = await (await fetch(`${service.url}/info`)).json();
-  assert.equal(info.schemaVersion, 14);
+  assert.equal(info.schemaVersion, 15);
   await service.stop();
   service = await startService(path);
   assert.deepEqual(await getState(service), migrated);

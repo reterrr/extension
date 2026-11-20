@@ -411,4 +411,71 @@ CREATE TABLE IF NOT EXISTS selector_evaluations (
   FOREIGN KEY (version_uuid) REFERENCES selector_versions(uuid) ON DELETE CASCADE
 );
 
-PRAGMA user_version = 14;
+
+-- Workspace namespaces and optimistic heads are independent of portable state.
+CREATE TABLE IF NOT EXISTS backend_workspace_identity (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  workspace_uuid TEXT NOT NULL UNIQUE,
+  backend_origin TEXT,
+  business_model_id TEXT,
+  schema_revision_id TEXT,
+  registry_json TEXT,
+  created_at TEXT NOT NULL,
+  last_synced_at TEXT
+) STRICT;
+
+CREATE TABLE IF NOT EXISTS backend_field_bindings (
+  workspace_uuid TEXT NOT NULL REFERENCES backend_workspace_identity(workspace_uuid),
+  business_entity_id TEXT NOT NULL,
+  persistent_key TEXT NOT NULL,
+  business_entity_field_id TEXT NOT NULL,
+  field_version_id TEXT NOT NULL,
+  schema_revision_id TEXT NOT NULL,
+  PRIMARY KEY (workspace_uuid, business_entity_id, persistent_key)
+) STRICT;
+
+CREATE TABLE IF NOT EXISTS backend_object_bindings (
+  workspace_uuid TEXT NOT NULL REFERENCES backend_workspace_identity(workspace_uuid),
+  identity_key TEXT NOT NULL,
+  local_object_id TEXT NOT NULL,
+  business_entity_id TEXT NOT NULL,
+  business_object_id TEXT,
+  sync_status TEXT NOT NULL,
+  binding_json TEXT NOT NULL,
+  last_synced_at TEXT NOT NULL,
+  PRIMARY KEY (workspace_uuid, identity_key),
+  UNIQUE (workspace_uuid, business_object_id)
+) STRICT;
+
+CREATE TABLE IF NOT EXISTS backend_object_field_bindings (
+  workspace_uuid TEXT NOT NULL,
+  identity_key TEXT NOT NULL,
+  persistent_key TEXT NOT NULL,
+  business_entity_field_id TEXT NOT NULL,
+  business_object_field_id TEXT NOT NULL,
+  slot_json TEXT NOT NULL,
+  PRIMARY KEY (workspace_uuid, identity_key, persistent_key),
+  FOREIGN KEY (workspace_uuid, identity_key)
+    REFERENCES backend_object_bindings(workspace_uuid, identity_key) ON DELETE CASCADE
+) STRICT;
+
+CREATE TABLE IF NOT EXISTS backend_selector_bindings (
+  workspace_uuid TEXT NOT NULL REFERENCES backend_workspace_identity(workspace_uuid),
+  selector_uuid TEXT NOT NULL,
+  binding_json TEXT NOT NULL,
+  PRIMARY KEY (workspace_uuid, selector_uuid)
+) STRICT;
+
+CREATE TABLE IF NOT EXISTS backend_sync_operations (
+  workspace_uuid TEXT NOT NULL REFERENCES backend_workspace_identity(workspace_uuid),
+  operation_id TEXT NOT NULL,
+  local_revision INTEGER,
+  sync_status TEXT NOT NULL,
+  payload_json TEXT NOT NULL,
+  result_json TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (workspace_uuid, operation_id)
+) STRICT;
+
+PRAGMA user_version = 15;

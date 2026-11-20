@@ -539,3 +539,29 @@ See the backend guide for approval, the Prefect stack and check history.
 node --test tests/monitoring-agent-contracts.test.mjs
 npm run lint
 ```
+
+## Backend synchronization
+
+Start the SQLite service and open **Backend synchronization** in Options. Use
+the displayed workspace UUID to provision a workspace token on the Burbot
+backend, then enter the backend origin and token and refresh the schema.
+SQLite keeps the namespace, registry, bindings and queued operations. The
+workspace token stays in Firefox local extension storage.
+
+Preview selected objects before binding or creating their server identities.
+Use **Compare selected values** to review a proposed server write. The optional
+setting for future, locally approved commits queues their changes together with
+the SQLite Commit. Retry pending commits on reconnect and review conflicts
+against a refreshed server head. The selector and capture controls use a
+selected Source and its registered Snapshot.
+
+The version 15 SQLite migration adds synchronization tables and preserves
+workspace object IDs, drafts, portable imports and selector history. The
+schema manifest is generated with `npm run --silent export:schema` and can be
+reviewed alongside the backend definitions.
+
+[Backend bootstrap and enrollment](https://github.com/reterrr/burbot/blob/main/docs/extension-sync.md)
+
+```sh
+node --test tests/backend-sync-contracts.test.mjs
+```

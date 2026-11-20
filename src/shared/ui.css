@@ -49,3 +49,28 @@ button.danger { border-color: #dfb7b7; color: #a02525; }
   font-weight: 400;
 }
 .ui-monitoring textarea { resize: vertical; }
+
+.ui-monitoring .ui-sync-checkbox {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  font-weight: 400;
+}
+.ui-sync-checkbox input[type="checkbox"] { width: auto; }
+.ui-sync-records {
+  max-height: 280px;
+  overflow-y: auto;
+  border: 1px solid #dfe3ea;
+  border-radius: 8px;
+  margin-top: 12px;
+}
+.ui-sync-record { padding: 6px 12px 8px; border-bottom: 1px solid #dfe3ea; }
+.ui-sync-record small { display: block; color: #697386; overflow-wrap: anywhere; }
+.ui-sync-record dl { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; }
+.ui-sync-record dd { margin: 0; overflow-wrap: anywhere; }
+.ui-backend-sync select { font: inherit; max-width: 100%; padding: 8px; }
+.ui-sync-details { margin-top: 16px; }
+.ui-sync-details summary, .ui-sync-record summary { cursor: pointer; }
+.ui-sync-preview { overflow-x: auto; }
+.ui-sync-preview table { width: 100%; border-collapse: collapse; }
+.ui-sync-preview th, .ui-sync-preview td { padding: 8px; text-align: left; border-block-end: 1px solid #dfe3ea; overflow-wrap: anywhere; }
