@@ -6,6 +6,18 @@ import type {
 } from "../types/legacy-storage";
 import { makeCommitPreview, resolveBusinessField } from "./resolve";
 import type {
+  ApprovedSource,
+  BulkJob,
+  BulkJobSummary,
+  BulkProgress,
+  SelectorRequest,
+  SelectorResult,
+  SourceBinding,
+  SourceRequest,
+  SourceResult,
+  StoredBulkJob,
+} from "./bulkTypes";
+import type {
   CommitOperation,
   Identity,
   OperationResult,
@@ -90,8 +102,8 @@ function remote<T>(settings: SyncSettings, path: string, body?: unknown) {
 
 export const readSyncState = () =>
   json<SyncState>(localOrigin + "/backend-sync");
-const local = (action: string, body: unknown) =>
-  json(localOrigin + "/backend-sync/" + action, body);
+const local = <T = unknown>(action: string, body: unknown) =>
+  json<T>(localOrigin + "/backend-sync/" + action, body);
 
 function connected(settings: SyncSettings, state: SyncState): Registry {
   if (
@@ -106,10 +118,68 @@ function connected(settings: SyncSettings, state: SyncState): Registry {
 }
 
 export async function refreshRegistry(settings: SyncSettings) {
-  const registry = await remote<Registry>(settings, "/schema");
+  const registry = await fetchRegistry(settings);
   await local("registry", { origin: settings.origin, registry });
   return registry;
 }
+
+export const fetchRegistry = (settings: SyncSettings) =>
+  remote<Registry>(settings, "/schema");
+
+export const previewSources = (
+  settings: SyncSettings,
+  workspaceUuid: string,
+  sources: SourceRequest[],
+) =>
+  remote<{ items: SourceResult[] }>(settings, "/sources/preview", {
+    workspaceUuid,
+    sources,
+  });
+
+export const resolveSources = (
+  settings: SyncSettings,
+  workspaceUuid: string,
+  sources: ApprovedSource[],
+) =>
+  remote<{ items: SourceResult[] }>(settings, "/sources/resolve", {
+    workspaceUuid,
+    sources,
+  });
+
+export const previewSelectors = (
+  settings: SyncSettings,
+  workspaceUuid: string,
+  selectors: SelectorRequest[],
+) =>
+  remote<{ items: SelectorResult[]; schemaRevisionId: ServerId }>(
+    settings,
+    "/selectors/preview",
+    {
+      workspaceUuid,
+      selectors,
+    },
+  );
+
+export const listBulkJobs = () =>
+  json<{ jobs: BulkJobSummary[]; sources: SourceBinding[] }>(
+    localOrigin + "/backend-sync/bulk",
+  );
+
+export const readBulkJob = (operationId: string) =>
+  json<StoredBulkJob>(
+    localOrigin +
+      "/backend-sync/bulk?operationId=" +
+      encodeURIComponent(operationId),
+  );
+
+export const startBulkJob = (job: BulkJob) => local("bulkStart", job);
+
+export const finishBulkItem = (job: BulkJob, progress: BulkProgress) =>
+  local<BulkProgress>("bulkFinish", {
+    workspaceUuid: job.workspaceUuid,
+    operationId: job.operationId,
+    progress,
+  });
 
 export async function reconcile(
   settings: SyncSettings,
@@ -152,8 +222,7 @@ export async function syncSelector(
     rule.selectorTree.selector.target.field,
   );
   if (found.status === "UNRESOLVED") throw new Error(found.reason);
-  const selector = await remote<SelectorBinding>(settings, "/selectors", {
-    workspaceUuid: state.workspaceUuid,
+  const selector = await submitSelector(settings, state.workspaceUuid, {
     identity,
     sourceId,
     tree: selectorTreeDTO(rule.selectorTree),
@@ -162,6 +231,24 @@ export async function syncSelector(
   await local("selector", { workspaceUuid: state.workspaceUuid, selector });
   return selector;
 }
+
+type SelectorSubmission = SelectorRequest & {
+  sourceId: ServerId;
+  publishReviewed: boolean;
+  expectedRevision?: ServerId | null;
+  expectedSchemaRevisionId?: ServerId;
+  expectedBusinessObjectFieldId?: ServerId;
+};
+
+export const submitSelector = (
+  settings: SyncSettings,
+  workspaceUuid: string,
+  request: SelectorSubmission,
+) =>
+  remote<SelectorBinding>(settings, "/selectors", {
+    workspaceUuid,
+    ...request,
+  });
 
 export async function reportCapture(
   settings: SyncSettings,

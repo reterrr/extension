@@ -29,6 +29,7 @@ import type {
   SyncState,
 } from "../shared/backend-sync/types";
 import type { LegacyStorageState } from "../shared/types/legacy-storage";
+import { BulkSyncOptions } from "./BulkSyncOptions";
 
 const emptySettings: SyncSettings = {
   origin: "",
@@ -632,6 +633,13 @@ export function BackendSyncOptions() {
           </details>
         </>
       )}
+      <BulkSyncOptions
+        settings={settings}
+        onSynchronized={async () => {
+          if (settings) await refreshRegistry(settings).catch(() => undefined);
+          await localState();
+        }}
+      />
       {message && <p role="status">{message}</p>}
       {error && (
         <p role="alert" className="ui-error">

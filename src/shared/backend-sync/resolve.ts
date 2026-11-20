@@ -160,6 +160,40 @@ export function selectorIdentity(
   );
 }
 
+export function resolveSelectorTarget(
+  sync: SyncState,
+  rule: LegacyStoredRule,
+  records: LocalRecord[],
+) {
+  const identity = selectorIdentity(rule, records);
+  if (!identity)
+    return {
+      status: "OBJECT_UNRESOLVED",
+      reason: "The selector target has no local identity.",
+    } as const;
+  const { target, ...parent } = identity;
+  if (target && !resolveBusinessObject(sync, parent))
+    return {
+      status: "OBJECT_UNRESOLVED",
+      reason: "Bind the parent business object first.",
+    } as const;
+  if (!resolveBusinessObject(sync, identity))
+    return {
+      status: "OBJECT_UNRESOLVED",
+      reason: target
+        ? "Bind the nested business object first."
+        : "Bind the business object first.",
+    } as const;
+  const slot = resolveBusinessField(
+    sync,
+    identity,
+    rule.selectorTree!.selector.target.field,
+  );
+  return slot.status === "UNRESOLVED"
+    ? ({ status: "FIELD_UNRESOLVED", reason: slot.reason } as const)
+    : ({ status: "READY", identity, field: slot.field } as const);
+}
+
 function wireValue(
   value: unknown,
   type: ValueDefinition,

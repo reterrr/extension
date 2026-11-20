@@ -98,13 +98,13 @@ export function hasSensitiveParameters(url: URL): boolean {
   return sensitive;
 }
 
-export function monitoredURL(input: string): URL {
+export function monitoredURL(input: string, { allowHttp = false } = {}): URL {
   const url = new URL(input);
   const labels = url.hostname.split(".");
   const suffix = labels.at(-1) ?? "";
   if (
     /[\x00-\x20\\\x7f]/.test(input) ||
-    url.protocol !== "https:" ||
+    (url.protocol !== "https:" && !(allowHttp && url.protocol === "http:")) ||
     url.port ||
     url.username ||
     url.password ||

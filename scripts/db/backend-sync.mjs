@@ -189,13 +189,30 @@ export function createBackendSyncStore(db) {
   const binding = db.transaction(({ workspaceUuid, object }) =>
     writeBinding(workspaceUuid, object),
   );
-  const selector = db.transaction(({ workspaceUuid, selector: value }) => {
+  function writeSelector(workspaceUuid, value) {
     requireWorkspace(workspaceUuid);
+    const key = uuid(value.selectorUuid);
+    const previous = parse(
+      db
+        .prepare(
+          "SELECT binding_json FROM backend_selector_bindings WHERE workspace_uuid=? AND selector_uuid=?",
+        )
+        .get(workspaceUuid, key)?.binding_json,
+    );
+    if (
+      previous?.revision &&
+      value.revision &&
+      BigInt(previous.revision) > BigInt(value.revision)
+    )
+      return;
     db.prepare(
       `INSERT INTO backend_selector_bindings VALUES (?, ?, ?)
        ON CONFLICT(workspace_uuid, selector_uuid) DO UPDATE SET binding_json=excluded.binding_json`,
-    ).run(workspaceUuid, uuid(value.selectorUuid), json(value));
-  });
+    ).run(workspaceUuid, key, json(value));
+  }
+  const selector = db.transaction(({ workspaceUuid, selector: value }) =>
+    writeSelector(workspaceUuid, value),
+  );
 
   function enqueue(op) {
     requireWorkspace(op.workspaceUuid);
@@ -280,8 +297,168 @@ export function createBackendSyncStore(db) {
         })),
     };
   }
+
+  const bulkStart = db.transaction(({ tasks, ...job }) => {
+    requireWorkspace(job.workspaceUuid, job.backendOrigin);
+    uuid(job.operationId);
+    id(job.schemaRevisionId);
+    if (!tasks?.length)
+      throw new LocalSyncError(422, "Select at least one bulk sync item.");
+    const revision =
+      db.prepare("SELECT revision FROM workspace_state WHERE id=1").get()
+        ?.revision ?? 0;
+    if (job.localRevision !== revision)
+      throw new LocalSyncError(
+        409,
+        "The local workspace changed. Preview it again.",
+      );
+    db.prepare("INSERT INTO backend_bulk_sync_jobs VALUES (?, ?, ?, ?, ?)").run(
+      job.workspaceUuid,
+      job.operationId,
+      job.localRevision,
+      json(job),
+      now(),
+    );
+    const insert = db.prepare(
+      "INSERT INTO backend_bulk_sync_items VALUES (?, ?, ?, ?, 'PENDING', NULL)",
+    );
+    for (const task of tasks)
+      insert.run(job.workspaceUuid, job.operationId, task.key, json(task));
+  });
+
+  function writeSource(workspaceUuid, task, receipt) {
+    const sourceId = id(receipt?.sourceId);
+    if (
+      receipt.status !== "RESOLVED" ||
+      receipt.clientKey !== task.key ||
+      receipt.canonicalUrl !== task.request.url ||
+      receipt.type !== task.request.type ||
+      (task.request.expectedSourceId &&
+        sourceId !== task.request.expectedSourceId)
+    )
+      throw new LocalSyncError(
+        409,
+        "The Source response differs from the approved request.",
+      );
+    const put = db.prepare(`
+      INSERT INTO backend_source_bindings VALUES (?, ?, ?, ?, ?, 'SYNCED', ?)
+      ON CONFLICT(workspace_uuid, local_source_key) DO UPDATE SET last_synced_at=excluded.last_synced_at
+      WHERE canonical_url=excluded.canonical_url AND source_type=excluded.source_type
+        AND backend_source_id=excluded.backend_source_id`);
+    const values = [receipt.canonicalUrl, receipt.type, sourceId, now()];
+    if (!put.run(workspaceUuid, task.key, ...values).changes)
+      throw new LocalSyncError(
+        409,
+        "This URL has a different saved Source binding.",
+      );
+    for (const key of task.localKeys)
+      if (key !== task.key) put.run(workspaceUuid, key, ...values);
+  }
+
+  const bulkFinish = db.transaction(
+    ({ workspaceUuid, operationId, progress }) => {
+      requireWorkspace(workspaceUuid);
+      if (
+        !["SYNCED", "BLOCKED", "SELECTOR_CONFLICT", "SYNC_ERROR"].includes(
+          progress.status,
+        )
+      )
+        throw new LocalSyncError(422, "Invalid bulk item status.");
+      const key = [workspaceUuid, uuid(operationId), progress.key];
+      const readItem = db.prepare(`SELECT * FROM backend_bulk_sync_items
+      WHERE workspace_uuid=? AND operation_id=? AND item_key=?`);
+      const row = readItem.get(...key);
+      if (!row) throw new LocalSyncError(404, "Unknown bulk sync item.");
+      if (row.sync_status === "SYNCED") return parse(row.result_json);
+      if (progress.status === "SYNCED") {
+        const task = parse(row.task_json);
+        if (task.kind === "source")
+          writeSource(workspaceUuid, task, progress.source);
+        else {
+          const binding = progress.selector;
+          const source = readItem.get(
+            workspaceUuid,
+            operationId,
+            task.sourceKey,
+          );
+          const sourceId = parse(source?.result_json)?.source?.sourceId;
+          if (
+            source?.sync_status !== "SYNCED" ||
+            binding?.status !== "SYNCED" ||
+            binding.sourceId !== sourceId ||
+            binding.selectorUuid !== task.request.tree.selector.uuid ||
+            binding.field?.businessObjectFieldId !==
+              task.expectedBusinessObjectFieldId
+          )
+            throw new LocalSyncError(
+              409,
+              "The selector response differs from the approved target.",
+            );
+          id(binding.sourceId);
+          if (binding.revision !== "0") id(binding.revision);
+          id(binding.businessObjectId);
+          writeSelector(workspaceUuid, binding);
+        }
+      }
+      db.prepare(
+        `UPDATE backend_bulk_sync_items SET sync_status=?, result_json=?
+      WHERE workspace_uuid=? AND operation_id=? AND item_key=?`,
+      ).run(progress.status, json(progress), ...key);
+      return progress;
+    },
+  );
+
+  function readBulk(operationId) {
+    const { workspace_uuid: workspaceUuid } = workspace();
+    if (operationId !== null) {
+      const job = db
+        .prepare(
+          "SELECT job_json FROM backend_bulk_sync_jobs WHERE workspace_uuid=? AND operation_id=?",
+        )
+        .get(workspaceUuid, uuid(operationId));
+      if (!job) throw new LocalSyncError(404, "Unknown bulk sync operation.");
+      const rows = db
+        .prepare(
+          `SELECT * FROM backend_bulk_sync_items
+        WHERE workspace_uuid=? AND operation_id=? ORDER BY rowid`,
+        )
+        .all(workspaceUuid, operationId);
+      return {
+        ...parse(job.job_json),
+        tasks: rows.map(({ task_json }) => parse(task_json)),
+        progress: rows.map(
+          (row) =>
+            parse(row.result_json) ?? {
+              key: row.item_key,
+              status: row.sync_status,
+            },
+        ),
+      };
+    }
+    return {
+      jobs: db
+        .prepare(
+          `SELECT j.operation_id AS operationId, j.local_revision AS localRevision,
+        j.created_at AS createdAt, SUM(i.sync_status='PENDING') AS pending,
+        SUM(i.sync_status='SYNCED') AS synced, SUM(i.sync_status NOT IN ('PENDING','SYNCED')) AS failed
+        FROM backend_bulk_sync_jobs j JOIN backend_bulk_sync_items i USING (workspace_uuid, operation_id)
+        WHERE j.workspace_uuid=? GROUP BY j.operation_id ORDER BY j.rowid DESC`,
+        )
+        .all(workspaceUuid),
+      sources: db
+        .prepare(
+          `SELECT local_source_key AS localSourceKey, canonical_url AS canonicalUrl,
+        source_type AS type, backend_source_id AS backendSourceId, sync_status AS syncStatus, last_synced_at AS lastSyncedAt
+        FROM backend_source_bindings WHERE workspace_uuid=? ORDER BY local_source_key`,
+        )
+        .all(workspaceUuid),
+    };
+  }
+
   const reset = () => {
     for (const table of [
+      "backend_bulk_sync_jobs",
+      "backend_source_bindings",
       "backend_sync_operations",
       "backend_selector_bindings",
       "backend_object_bindings",
@@ -291,5 +468,16 @@ export function createBackendSyncStore(db) {
       db.exec("DELETE FROM " + table);
     initialize.run(randomUUID(), now());
   };
-  return { read, registry, binding, selector, enqueue, finish, reset };
+  return {
+    read,
+    registry,
+    binding,
+    selector,
+    enqueue,
+    finish,
+    readBulk,
+    bulkStart,
+    bulkFinish,
+    reset,
+  };
 }

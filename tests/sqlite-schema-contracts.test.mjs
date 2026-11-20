@@ -204,7 +204,7 @@ test("SQLite schema creates typed business and provenance tables", () => {
     assert.ok(evidenceColumns.has(column), `missing field_evidence.${column}`);
   }
 
-  assert.equal(db.pragma("user_version", { simple: true }), 15);
+  assert.equal(db.pragma("user_version", { simple: true }), 16);
   db.close();
 });
 
