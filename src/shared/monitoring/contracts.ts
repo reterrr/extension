@@ -87,6 +87,17 @@ export type AgentStatus = {
 export const secretName =
   /token|password|passwd|secret|session|credential|auth|signature|code$/i;
 
+export function hasSensitiveParameters(url: URL): boolean {
+  let sensitive = false;
+  // WebIDL iterator objects can be unavailable through Firefox's content-script wrappers.
+  const inspect = (_value: string, key: string) => {
+    sensitive ||= secretName.test(key);
+  };
+  url.searchParams.forEach(inspect);
+  new URLSearchParams(url.hash.slice(1)).forEach(inspect);
+  return sensitive;
+}
+
 export function monitoredURL(input: string): URL {
   const url = new URL(input);
   const labels = url.hostname.split(".");
@@ -113,10 +124,7 @@ export function monitoredURL(input: string): URL {
       "onion",
     ].includes(suffix) ||
     url.hostname.endsWith(".home.arpa") ||
-    [
-      ...url.searchParams.keys(),
-      ...new URLSearchParams(url.hash.slice(1)).keys(),
-    ].some((key) => secretName.test(key))
+    hasSensitiveParameters(url)
   )
     throw new Error("Unapproved source URL.");
   return url;

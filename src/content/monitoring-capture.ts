@@ -1,5 +1,6 @@
 import {
   captureMessage,
+  hasSensitiveParameters,
   maxSnapshotBytes,
   monitoredURL,
   secretName,
@@ -59,10 +60,7 @@ function safeReference(value: string, base: string): boolean {
       (url.protocol === "https:" || url.protocol === "http:") &&
       !url.username &&
       !url.password &&
-      [
-        ...url.searchParams.keys(),
-        ...new URLSearchParams(url.hash.slice(1)).keys(),
-      ].every((key) => !secretName.test(key))
+      !hasSensitiveParameters(url)
     );
   } catch {
     return false;
@@ -94,12 +92,13 @@ export function sanitizedDOM(doc: Document, pageUrl: string): Document {
     "[data-burbot-picker]",
     "[data-burbot-import-review-highlight]",
   ];
-  for (const node of snapshot.querySelectorAll(remove.join(","))) node.remove();
+  for (const node of Array.from(snapshot.querySelectorAll(remove.join(","))))
+    node.remove();
   const walker = snapshot.createTreeWalker(snapshot, NodeFilter.SHOW_COMMENT);
   const comments: Node[] = [];
   while (walker.nextNode()) comments.push(walker.currentNode);
   for (const comment of comments) comment.parentNode?.removeChild(comment);
-  for (const node of snapshot.querySelectorAll("*")) {
+  for (const node of Array.from(snapshot.querySelectorAll("*"))) {
     if (
       node.tagName.toLowerCase() === "meta" &&
       secretName.test(node.getAttribute("name") ?? "")
@@ -107,7 +106,7 @@ export function sanitizedDOM(doc: Document, pageUrl: string): Document {
       node.remove();
       continue;
     }
-    for (const { name, value } of [...node.attributes]) {
+    for (const { name, value } of Array.from(node.attributes)) {
       if (
         name.startsWith("on") ||
         name === "nonce" ||
@@ -150,7 +149,9 @@ export function shape(snapshot: Document): string {
         node.parentElement ? indexes.get(node.parentElement) : null,
         node.namespaceURI,
         node.localName,
-        [...node.attributes].map((attribute) => attribute.name).sort(),
+        Array.from(node.attributes)
+          .map((attribute) => attribute.name)
+          .sort(),
       ];
     }),
   );

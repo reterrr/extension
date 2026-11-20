@@ -93,6 +93,9 @@ test("named hosts, redirects and all returned DNS addresses must be allowed", as
 });
 
 test("capture signs exact sanitized DOM and executes the pinned CSS, XPath and TextQuote", async (t) => {
+  t.mock.method(URLSearchParams.prototype, "keys", () => {
+    throw new TypeError("Firefox content-script wrapper");
+  });
   const dom = new JSDOM(
     `<html><head><script>secret-1</script></head><body>
     <p id="value">Nabór otwarty</p><span id="year">2026</span><aside data-burbot-selector-highlight>overlay</aside>
