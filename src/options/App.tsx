@@ -1,3 +1,4 @@
+import { MonitoringOptions } from "./MonitoringOptions";
 import { useEffect, useState } from "react";
 import {
   loadCommittedState,
@@ -66,6 +67,7 @@ export function App() {
         </div>
         {error && <p className="ui-error">{error}</p>}
       </section>
+      <MonitoringOptions />
     </main>
   );
 }

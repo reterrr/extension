@@ -35,3 +35,17 @@ button.danger { border-color: #dfb7b7; color: #a02525; }
 .ui-stat { padding: 12px; border-radius: 12px; background: #f4f6f9; }
 .ui-stat strong { display: block; font-size: 20px; }
 .ui-error { color: #a02525; }
+
+.ui-monitoring { margin-top: 16px; }
+.ui-monitoring h2 { margin-top: 0; }
+.ui-monitoring label { display: grid; gap: 6px; margin-top: 14px; font-weight: 600; }
+.ui-monitoring input, .ui-monitoring textarea {
+  width: 100%;
+  border: 1px solid #ccd2dc;
+  border-radius: 8px;
+  padding: 8px 10px;
+  color: inherit;
+  font: inherit;
+  font-weight: 400;
+}
+.ui-monitoring textarea { resize: vertical; }

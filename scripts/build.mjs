@@ -53,6 +53,7 @@ const configs = [
       picker: "src/content/picker.ts",
       "selector-highlights": "src/content/selector-highlights.ts",
       "import-review-highlights": "src/content/import-review-highlights.ts",
+      "monitoring-capture": "src/content/monitoring-capture.ts",
       "evidence-locator": "src/content/evidence-locator.ts",
     },
   },

@@ -461,6 +461,7 @@ if (!globalThis.__burbotPickerLoaded) {
       picking = true;
       filePicking = fileMode;
       overlay = document.createElement("div");
+      overlay.dataset.burbotPicker = "true";
       overlay.style.cssText =
         "position:fixed;pointer-events:none;z-index:2147483647;" +
         "box-sizing:border-box;border-radius:4px;border:2px solid #6f98bd;" +
