@@ -20,9 +20,11 @@ export const representation = "rendered_dom";
 export const representationVersion = "firefox-dom-1";
 export const structureHashVersion = "dom-shape-1";
 export const mimeType = "text/html";
+export type MonitoringMode = "strict" | "trusted";
 
 export interface Settings {
   enabled: boolean;
+  mode?: MonitoringMode;
   apiOrigin: string;
   storageOrigin: string;
   agentToken: string;
@@ -47,6 +49,7 @@ export interface Job {
   leaseExpiresAt: string;
   representation: typeof representation;
   selectors: PinnedSelector[];
+  navigation?: { mode: "trusted"; allowHttp: boolean };
 }
 
 export interface Capture {
@@ -76,6 +79,7 @@ export type Completion = Omit<Capture, "html"> & {
 export interface CaptureMessage {
   type: typeof captureMessage;
   expectedOrigins: string[];
+  allowHttp?: boolean;
   selectors: PinnedSelector[];
 }
 
@@ -99,15 +103,19 @@ export function hasSensitiveParameters(url: URL): boolean {
 }
 
 export function monitoredURL(input: string, { allowHttp = false } = {}): URL {
+  const authority = /^https?:\/\/([^/?#]+)/i.exec(input)?.[1];
   const url = new URL(input);
   const labels = url.hostname.split(".");
   const suffix = labels.at(-1) ?? "";
   if (
+    !authority ||
+    authority.includes("@") ||
     /[\x00-\x20\\\x7f]/.test(input) ||
     (url.protocol !== "https:" && !(allowHttp && url.protocol === "http:")) ||
     url.port ||
     url.username ||
     url.password ||
+    url.hostname.length > 253 ||
     labels.length < 2 ||
     labels.some(
       (label) => !/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(label),
@@ -165,12 +173,19 @@ export function validateSettings(settings: Settings): Settings {
   const agentToken = settings.agentToken.trim();
   if (!/^[a-zA-Z0-9_-]{43}$/.test(agentToken))
     throw new Error("Enter the issued Browser Agent token.");
+  const mode = settings.mode ?? "strict";
+  if (mode !== "strict" && mode !== "trusted")
+    throw new Error("Choose a monitoring mode.");
   return {
     enabled: settings.enabled,
+    mode,
     apiOrigin: configuredOrigin(settings.apiOrigin),
     storageOrigin: configuredOrigin(settings.storageOrigin),
     agentToken,
-    allowedOrigins: allowedOrigins(settings.allowedOrigins),
+    allowedOrigins:
+      mode === "trusted"
+        ? (settings.allowedOrigins ?? [])
+        : allowedOrigins(settings.allowedOrigins),
   };
 }
 

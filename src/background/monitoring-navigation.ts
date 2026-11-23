@@ -10,12 +10,16 @@ import {
 const contextKey = "burbotMonitoringContext";
 const contextPrefix = "Burbot monitoring ";
 const navigationTimeout = 40_000;
+const maxMainFrameRequests = 10;
+const redirects = new Set([301, 302, 303, 307, 308]);
 
 export class AcquisitionError extends Error {
   constructor(
     readonly code:
       | "NAVIGATION_FAILED"
       | "PAGE_TIMEOUT"
+      | "HTTP_ERROR"
+      | "UNSUPPORTED_CONTENT_TYPE"
       | "CAPTURE_FAILED"
       | "UPLOAD_FAILED"
       | "CANCELLED",
@@ -54,13 +58,23 @@ export function publicAddress(address: string): boolean {
   );
 }
 
-export function approvalGuard(origins: ReadonlySet<string>) {
+export function approvalGuard(
+  origins: ReadonlySet<string> | null,
+  {
+    allowHttp = false,
+    excludedOrigins = [],
+  }: { allowHttp?: boolean; excludedOrigins?: readonly string[] } = {},
+) {
   // Share only concurrent lookups. Every later request is checked by Firefox DNS.
   const lookups = new Map<string, Promise<boolean>>();
   return async (address: string) => {
     try {
-      const url = monitoredURL(address);
-      if (!origins.has(url.origin)) return false;
+      const url = monitoredURL(address, { allowHttp });
+      if (
+        excludedOrigins.includes(url.origin) ||
+        (origins && !origins.has(url.origin))
+      )
+        return false;
       let check = lookups.get(url.hostname);
       if (!check) {
         check = browser.dns
@@ -103,7 +117,12 @@ function abortable<T>(operation: Promise<T>, signal: AbortSignal): Promise<T> {
   });
 }
 
-async function loaded(tabId: number, url: string, signal: AbortSignal) {
+async function loaded(
+  tabId: number,
+  url: string,
+  allowHttp: boolean,
+  signal: AbortSignal,
+) {
   // Observe before navigation. Initial about:blank completion is ignored.
   let listener: Parameters<typeof browser.tabs.onUpdated.addListener>[0];
   let removed: Parameters<typeof browser.tabs.onRemoved.addListener>[0];
@@ -113,7 +132,8 @@ async function loaded(tabId: number, url: string, signal: AbortSignal) {
       if (
         change.url &&
         change.url !== "about:blank" &&
-        !change.url.startsWith("https:")
+        !change.url.startsWith("https:") &&
+        !(allowHttp && change.url.startsWith("http:"))
       )
         reject(new AcquisitionError("NAVIGATION_FAILED"));
       if (change.status === "complete" && tab.url && tab.url !== "about:blank")
@@ -126,10 +146,14 @@ async function loaded(tabId: number, url: string, signal: AbortSignal) {
     browser.tabs.onRemoved.addListener(removed);
   });
   try {
-    void browser.tabs.update(tabId, { url }).catch(() => {
-      // The request guard or Firefox will normally deliver an error-page update.
+    const navigation = browser.tabs.update(tabId, { url }).catch(() => {
+      throw new AcquisitionError("NAVIGATION_FAILED");
     });
-    return await abortable(complete, signal);
+    const [, page] = await abortable(
+      Promise.all([navigation, complete]),
+      signal,
+    );
+    return page;
   } finally {
     browser.tabs.onUpdated.removeListener(listener!);
     browser.tabs.onRemoved.removeListener(removed!);
@@ -141,19 +165,47 @@ export async function acquire(
   settings: Settings,
   signal: AbortSignal,
 ): Promise<Capture> {
+  const trusted = settings.mode === "trusted";
+  if (
+    trusted
+      ? job.navigation?.mode !== "trusted" ||
+        typeof job.navigation.allowHttp !== "boolean"
+      : job.navigation !== undefined
+  )
+    throw new AcquisitionError("NAVIGATION_FAILED");
+  const allowHttp = job.navigation?.allowHttp === true;
+  if (trusted) {
+    const entry = monitoredURL(job.url, { allowHttp });
+    if (
+      job.allowedOrigins.length !== 1 ||
+      job.allowedOrigins[0] !== entry.origin ||
+      allowHttp !== (entry.protocol === "http:")
+    )
+      throw new AcquisitionError("NAVIGATION_FAILED");
+  }
+  const rejection = new AbortController();
   const deadline = AbortSignal.any([
     signal,
+    rejection.signal,
     AbortSignal.timeout(navigationTimeout),
   ]);
-  const origins = new Set(
-    job.allowedOrigins.filter((item) => settings.allowedOrigins.includes(item)),
-  );
+  const origins = trusted
+    ? null
+    : new Set(
+        job.allowedOrigins.filter((item) =>
+          settings.allowedOrigins.includes(item),
+        ),
+      );
   // The backend and upload destinations are never monitored as pages.
-  origins.delete(settings.apiOrigin);
-  origins.delete(settings.storageOrigin);
-  const allowed = approvalGuard(origins);
-  if (!(await abortable(allowed(job.url), deadline)))
+  const allowed = approvalGuard(origins, {
+    allowHttp,
+    excludedOrigins: [settings.apiOrigin, settings.storageOrigin],
+  });
+  if (!(await abortable(allowed(job.url), deadline).catch(() => false))) {
+    if (signal.aborted) throw new AcquisitionError("CANCELLED");
+    if (deadline.aborted) throw new AcquisitionError("PAGE_TIMEOUT");
     throw new AcquisitionError("NAVIGATION_FAILED");
+  }
 
   const name = contextPrefix + crypto.randomUUID();
   const context = await browser.contextualIdentities.create({
@@ -162,19 +214,55 @@ export async function acquire(
     icon: "circle",
   });
   let tabId: number | undefined;
-  let blockedNavigation = false;
+  let requestCount = 0;
+  let responseOrigin: string | undefined;
   const guard = async (request: browser.webRequest._OnBeforeRequestDetails) => {
     if (
       request.tabId !== tabId &&
       request.cookieStoreId !== context.cookieStoreId
     )
       return {};
+    const mainFrame = request.type === "main_frame";
+    if (trusted && mainFrame && request.tabId !== tabId)
+      return { cancel: true };
     const accepted =
       !deadline.aborted &&
+      (!trusted || !mainFrame || ++requestCount <= maxMainFrameRequests) &&
       (request.method === "GET" || request.method === "HEAD") &&
       (await abortable(allowed(request.url), deadline).catch(() => false));
-    if (!accepted && request.type === "main_frame") blockedNavigation = true;
+    if (!accepted && mainFrame)
+      rejection.abort(new AcquisitionError("NAVIGATION_FAILED"));
     return { cancel: !accepted };
+  };
+  const checkResponse: Parameters<
+    typeof browser.webRequest.onHeadersReceived.addListener
+  >[0] = (request) => {
+    if (request.tabId !== tabId || redirects.has(request.statusCode)) return {};
+    const header = (name: string) =>
+      request.responseHeaders?.find((item) => item.name.toLowerCase() === name)
+        ?.value;
+    const mediaType = header("content-type")
+      ?.split(";", 1)[0]
+      .trim()
+      .toLowerCase();
+    if (
+      request.statusCode < 200 ||
+      request.statusCode >= 300 ||
+      request.statusCode === 204 ||
+      request.statusCode === 205
+    ) {
+      rejection.abort(new AcquisitionError("HTTP_ERROR"));
+      return { cancel: true };
+    }
+    if (
+      (mediaType && mediaType !== "text/html") ||
+      /^\s*attachment\b/i.test(header("content-disposition") ?? "")
+    ) {
+      rejection.abort(new AcquisitionError("UNSUPPORTED_CONTENT_TYPE"));
+      return { cancel: true };
+    }
+    responseOrigin = new URL(request.url).origin;
+    return {};
   };
   try {
     await browser.storage.local.set({
@@ -185,6 +273,12 @@ export async function acquire(
       { urls: ["<all_urls>"] },
       ["blocking"],
     );
+    if (trusted)
+      browser.webRequest.onHeadersReceived.addListener(
+        checkResponse,
+        { urls: ["http://*/*", "https://*/*"], types: ["main_frame"] },
+        ["blocking", "responseHeaders"],
+      );
     const tab = await browser.tabs.create({
       active: false,
       url: "about:blank",
@@ -193,8 +287,12 @@ export async function acquire(
     if (tab.id === undefined || tab.cookieStoreId !== context.cookieStoreId)
       throw new AcquisitionError("NAVIGATION_FAILED");
     tabId = tab.id;
-    const page = await loaded(tabId, job.url, deadline);
-    if (blockedNavigation || !(await abortable(allowed(page), deadline)))
+    const page = await loaded(tabId, job.url, allowHttp, deadline);
+    const pageOrigin = monitoredURL(page, { allowHttp }).origin;
+    if (
+      (trusted && responseOrigin !== pageOrigin) ||
+      !(await abortable(allowed(page), deadline))
+    )
       throw new AcquisitionError("NAVIGATION_FAILED");
     await abortable(
       browser.scripting.executeScript({
@@ -206,7 +304,8 @@ export async function acquire(
     const message: CaptureMessage = {
       type: captureMessage,
       selectors: job.selectors,
-      expectedOrigins: [...origins],
+      expectedOrigins: origins ? [...origins] : [pageOrigin],
+      allowHttp,
     };
     const result = (await abortable(
       browser.tabs.sendMessage(tabId, message, { frameId: 0 }),
@@ -216,14 +315,13 @@ export async function acquire(
     if (
       !result ||
       result.pageUrl !== finalTab.url ||
-      blockedNavigation ||
       !(await abortable(allowed(result.pageUrl), deadline))
     )
       throw new AcquisitionError("CAPTURE_FAILED");
     return result;
   } catch (error) {
     if (signal.aborted) throw new AcquisitionError("CANCELLED");
-    if (blockedNavigation) throw new AcquisitionError("NAVIGATION_FAILED");
+    if (deadline.reason instanceof AcquisitionError) throw deadline.reason;
     if (deadline.aborted) throw new AcquisitionError("PAGE_TIMEOUT");
     if (error instanceof AcquisitionError) throw error;
     throw new AcquisitionError("CAPTURE_FAILED");
@@ -233,6 +331,8 @@ export async function acquire(
       await browser.storage.local.remove(contextKey);
     } finally {
       browser.webRequest.onBeforeRequest.removeListener(guard);
+      if (trusted)
+        browser.webRequest.onHeadersReceived.removeListener(checkResponse);
     }
   }
 }

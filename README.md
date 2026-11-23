@@ -516,24 +516,34 @@ dist/
 
 ## Automatic Source Monitoring
 
-Enable **Source monitoring** in the Firefox extension's options after an
-operator has approved the source and issued a scoped Browser Agent token. Enter
-the Burbot API and MinIO upload origins, the token and the approved HTTPS site
-origins. Grant the website access requested by Firefox so the agent can block
-redirects and requests outside the approved origins. Use a separate token for
-each Firefox profile. The settings and pending
-completion payload live in Firefox local extension storage. MinIO credentials
-stay on the server.
+Enable **Source monitoring** in the Firefox extension's options and enter the
+Burbot API origin, MinIO upload origin and Browser Agent token. Use a separate
+token for each Firefox profile and grant the requested Firefox permissions.
+
+- **Trusted local** uses a trusted Agent token issued by a Burbot backend
+  running in trusted mode. Firefox receives the exact entry origin in each
+  job and checks public redirects and dependencies. The backend can opt in
+  to public HTTP Sources.
+- **Strict** uses a scoped Agent token and the approved HTTPS website origins
+  entered in Firefox. It remains the default.
+
+Firefox local extension storage holds the settings and pending completion
+payload. MinIO credentials stay on the server.
 
 While Firefox is running, the enabled agent polls once a minute and checks one
 job at a time. It opens each source in an inactive temporary container tab.
-The agent confirms the allowed origins and public DNS results, waits briefly
+The agent confirms the navigation policy and public DNS results, waits briefly
 for the DOM to settle, runs the job's pinned SelectorTree and uploads the
 sanitized HTML and evaluation. Disabling monitoring aborts the active check.
 Enable Firefox containers for the monitoring profile.
 
-See the backend guide for approval, the Prefect stack and check history.
-[Automatic Source Monitoring](https://github.com/reterrr/burbot/blob/main/docs/monitoring.md)
+The backend guide includes deployment, trusted Agent registration and check
+history. [Automatic Source Monitoring](https://github.com/reterrr/burbot/blob/main/docs/monitoring.md)
+
+```sh
+npm install --no-package-lock
+npm start
+```
 
 ```sh
 node --test tests/monitoring-agent-contracts.test.mjs

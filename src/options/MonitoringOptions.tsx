@@ -10,6 +10,7 @@ import {
 
 const defaults: Settings = {
   enabled: false,
+  mode: "strict",
   apiOrigin: "",
   storageOrigin: "",
   agentToken: "",
@@ -29,9 +30,10 @@ export function MonitoringOptions() {
       .get([settingsKey, statusKey])
       .then((state) => {
         if (state[settingsKey]) {
-          setInput(state[settingsKey]);
-          setSaved(state[settingsKey]);
-          setOrigins(state[settingsKey].allowedOrigins.join("\n"));
+          const settings = { ...defaults, ...state[settingsKey] } as Settings;
+          setInput(settings);
+          setSaved(settings);
+          setOrigins(settings.allowedOrigins.join("\n"));
         }
         setStatus(state[statusKey]);
       })
@@ -78,9 +80,9 @@ export function MonitoringOptions() {
     <section className="ui-card ui-monitoring">
       <h2>Source monitoring</h2>
       <p className="ui-muted">
-        When enabled, Firefox opens approved public sites in temporary container
-        tabs and sends rendered HTML and selector results to your Burbot server
-        and storage service.
+        When enabled, Firefox opens public sites in temporary container tabs and
+        sends rendered HTML and selector results to your Burbot server and
+        storage service.
       </p>
       <form onSubmit={save}>
         <label>
@@ -114,15 +116,37 @@ export function MonitoringOptions() {
           />
         </label>
         <label>
-          Approved website origins
-          <textarea
-            required
-            rows={3}
-            value={origins}
-            onChange={(e) => setOrigins(e.target.value)}
-            placeholder="https://example.org"
-          />
+          Monitoring mode
+          <select
+            value={input.mode}
+            onChange={(e) =>
+              setInput({
+                ...input,
+                mode: e.target.value === "trusted" ? "trusted" : "strict",
+              })
+            }
+          >
+            <option value="strict">Strict</option>
+            <option value="trusted">Trusted local</option>
+          </select>
         </label>
+        {input.mode === "trusted" ? (
+          <p className="ui-muted">
+            Use a trusted Agent token issued by your local Burbot backend.
+            Firefox checks the public sites supplied by that backend.
+          </p>
+        ) : (
+          <label>
+            Approved website origins
+            <textarea
+              required
+              rows={3}
+              value={origins}
+              onChange={(e) => setOrigins(e.target.value)}
+              placeholder="https://example.org"
+            />
+          </label>
+        )}
         <div className="ui-actions">
           <button disabled={loading} type="submit">
             {saved.enabled ? "Save monitoring settings" : "Enable monitoring"}
