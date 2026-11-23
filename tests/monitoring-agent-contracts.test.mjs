@@ -203,11 +203,13 @@ test("capture signs exact sanitized DOM and executes the pinned CSS, XPath and T
   assert.equal(changed.structureHash, capture.structureHash);
 });
 
-function browserStub(storage, capture, onNavigation) {
+function browserStub(storage, capture, onNavigation, navigation = {}) {
   const context = { cookieStoreId: "firefox-container-321" };
   const onBefore = event();
+  const onHeaders = event();
   const onUpdated = event();
   const onAlarm = event();
+  let page = pageUrl;
   return {
     alarms: { onAlarm, create() {}, clear() {} },
     runtime: { onStartup: event() },
@@ -230,7 +232,7 @@ function browserStub(storage, capture, onNavigation) {
         assert.equal(id, context.cookieStoreId);
       },
     },
-    webRequest: { onBeforeRequest: onBefore },
+    webRequest: { onBeforeRequest: onBefore, onHeadersReceived: onHeaders },
     tabs: {
       onUpdated,
       onRemoved: event(),
@@ -244,13 +246,8 @@ function browserStub(storage, capture, onNavigation) {
       },
       update: async (tabId, { url }) => {
         onNavigation();
-        const [guard] = onBefore.emit({
-          tabId,
-          url,
-          method: "GET",
-          type: "main_frame",
-        });
-        assert.equal((await guard).cancel, false);
+        const initial = { tabId, url, method: "GET", type: "main_frame" };
+        if ((await onBefore.emit(initial)[0]).cancel) return;
         const [redirect] = onBefore.emit({
           tabId: -1,
           cookieStoreId: context.cookieStoreId,
@@ -259,10 +256,44 @@ function browserStub(storage, capture, onNavigation) {
           type: "xmlhttprequest",
         });
         assert.equal((await redirect).cancel, true);
-        onUpdated.emit(tabId, { url, status: "complete" }, { url });
+        for (const { cancel, ...request } of navigation.requests ?? []) {
+          assert.equal(
+            (await onBefore.emit({ ...initial, type: "script", ...request })[0])
+              .cancel,
+            cancel,
+            request.url,
+          );
+        }
+        page = navigation.redirectTo ?? url;
+        if (navigation.redirectTo) {
+          assert.equal(
+            onHeaders.emit({ ...initial, statusCode: 302 })[0]?.cancel,
+            undefined,
+          );
+          if ((await onBefore.emit({ ...initial, url: page })[0]).cancel)
+            return;
+        }
+        const [headers] = onHeaders.emit({
+          ...initial,
+          url: page,
+          statusCode: navigation.status ?? 200,
+          responseHeaders: [
+            {
+              name: "Content-Type",
+              value: navigation.contentType ?? "text/html",
+            },
+          ],
+        });
+        if (!headers?.cancel)
+          onUpdated.emit(
+            tabId,
+            { url: page, status: "complete" },
+            { url: page },
+          );
       },
-      get: async () => ({ url: pageUrl }),
-      sendMessage: async () => capture,
+      get: async () => ({ url: page }),
+      sendMessage: async (_tabId, message) =>
+        typeof capture === "function" ? capture(message) : capture,
     },
     scripting: {
       executeScript: async (arg) =>
@@ -375,4 +406,226 @@ test("an enabled agent waits for Firefox host access before claiming jobs", asyn
   installMonitoringAgent();
   await until(() => storage[statusKey]?.state === "disabled");
   assert.deepEqual(checked.origins, ["http://*/*", "https://*/*"]);
+});
+
+test("trusted jobs follow public redirects, run pinned selectors and upload rendered evidence", async (t) => {
+  const settings = {
+    ...config,
+    mode: "trusted",
+    allowedOrigins: [],
+    apiOrigin: "https://burbot.example.org",
+  };
+  const start = "http://catalog.example.org/list";
+  const redirected = "https://publisher.example.net/rendered";
+  const storage = { [settingsKey]: settings };
+  const dom = new JSDOM(
+    `<!doctype html><main></main><script>
+      setTimeout(() => {
+        document.querySelector('main').innerHTML = '<p id="listing">Applications open</p>';
+      }, 100);
+    </script>`,
+    { url: redirected, runScripts: "dangerously" },
+  );
+  const onMessage = event();
+  const stub = browserStub(
+    storage,
+    (message) => {
+      assert.deepEqual(message.expectedOrigins, [new URL(redirected).origin]);
+      assert.equal(message.allowHttp, true);
+      return onMessage.emit(message, { id: "test-addon" })[0];
+    },
+    () => {},
+    {
+      redirectTo: redirected,
+      requests: [
+        { url: "https://cdn.example.net/public-script", cancel: false },
+        { url: "https://mixed-dns.example.net/private", cancel: true },
+        { url: settings.apiOrigin + "/monitoring", cancel: true },
+        { url: redirected + "?access_token=secret", cancel: true },
+        { url: redirected, method: "POST", cancel: true },
+        {
+          url: redirected,
+          type: "main_frame",
+          tabId: 2,
+          cookieStoreId: "firefox-container-321",
+          cancel: true,
+        },
+      ],
+    },
+  );
+  stub.dns.resolve = async (host) => ({
+    addresses:
+      host === "mixed-dns.example.net" ? ["8.8.8.8", "10.0.0.2"] : ["8.8.8.8"],
+  });
+  Object.assign(stub.runtime, { id: "test-addon", onMessage });
+  Object.assign(globalThis, {
+    browser: stub,
+    document: dom.window.document,
+    NodeFilter: dom.window.NodeFilter,
+    MutationObserver: dom.window.MutationObserver,
+  });
+  t.after(() => {
+    dom.window.close();
+    for (const key of ["browser", "document", "NodeFilter", "MutationObserver"])
+      delete globalThis[key];
+  });
+
+  const selectorUuid = crypto.randomUUID();
+  const versionUuid = crypto.randomUUID();
+  const job = {
+    jobId: crypto.randomUUID(),
+    leaseId: crypto.randomUUID(),
+    sourceId: 42,
+    url: start,
+    allowedOrigins: [new URL(start).origin],
+    representation: "rendered_dom",
+    navigation: { mode: "trusted", allowHttp: true },
+    selectors: [
+      {
+        selectorUuid,
+        versionUuid,
+        versionNo: 1,
+        definitionFingerprint: "a".repeat(64),
+        definition: {
+          uuid: versionUuid,
+          selectorUuid,
+          versionNo: 1,
+          createdAt: new Date().toISOString(),
+          status: "active",
+          recipes: [
+            {
+              uuid: crypto.randomUUID(),
+              order: 0,
+              parts: [
+                {
+                  uuid: crypto.randomUUID(),
+                  order: 0,
+                  extraction: { type: "text" },
+                  locators: [
+                    {
+                      uuid: crypto.randomUUID(),
+                      order: 0,
+                      kind: "css_path",
+                      selector: "#listing",
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      },
+    ],
+  };
+  let claims = 0;
+  let uploaded;
+  let completion;
+  const intent = crypto.randomUUID();
+  t.mock.method(globalThis, "fetch", async (url, options) => {
+    const target = new URL(url);
+    assert.equal(options.redirect, "error");
+    assert.equal(options.credentials, "omit");
+    if (target.origin === settings.storageOrigin) {
+      assert.equal(options.method, "PUT");
+      assert.deepEqual(options.headers, { "Content-Type": "text/html" });
+      uploaded = options.body;
+      return new Response(null, { status: 200 });
+    }
+    assert.equal(target.origin, settings.apiOrigin);
+    assert.equal(
+      options.headers.Authorization,
+      "Bearer " + settings.agentToken,
+    );
+    if (target.pathname.endsWith("/claim")) {
+      assert.equal(target.searchParams.get("mode"), "trusted");
+      return ++claims === 1
+        ? Response.json(job)
+        : new Response(null, { status: 204 });
+    }
+    if (target.pathname.endsWith("/uploads"))
+      return Response.json({
+        uploadIntentId: intent,
+        url: settings.storageOrigin + "/test/pending?X-Amz-Signature=signature",
+        expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      });
+    if (target.pathname.endsWith("/complete"))
+      completion = JSON.parse(options.body);
+    else assert.ok(target.pathname.endsWith("/heartbeat"), target.pathname);
+    return Response.json({});
+  });
+  await load("src/content/monitoring-capture.ts");
+  const { installMonitoringAgent } = await load("src/background/monitoring.ts");
+  installMonitoringAgent();
+  await until(() => completion && storage[statusKey]?.state === "idle");
+  const html = new TextDecoder().decode(uploaded);
+  assert.match(html, /<p id="listing">Applications open<\/p>/);
+  assert.doesNotMatch(html, /<script/);
+  const { sha256 } = await load("src/shared/monitoring/contracts.ts");
+  assert.equal(completion.contentHash, await sha256(uploaded));
+  assert.match(completion.structureHash, /^[0-9a-f]{64}$/);
+  assert.equal(completion.pageUrl, redirected);
+  assert.equal(completion.uploadIntentId, intent);
+  assert.equal(completion.evaluations[0].result.rawValue, "Applications open");
+  assert.equal(
+    completion.evaluations[0].result.selectorVersionUuid,
+    versionUuid,
+  );
+  assert.equal(storage[outboxKey], undefined);
+  stub.alarms.onAlarm.emit({ name: "burbot-monitoring" });
+  await until(() => claims === 2 && storage[statusKey]?.state === "idle");
+});
+
+test("trusted navigation rejects mismatched jobs, private hops and non-HTML responses", async (t) => {
+  const { acquire } = await load("src/background/monitoring-navigation.ts");
+  const settings = { ...config, mode: "trusted", allowedOrigins: [] };
+  const job = {
+    url: pageUrl,
+    allowedOrigins: [new URL(pageUrl).origin],
+    navigation: { mode: "trusted", allowHttp: false },
+    selectors: [],
+  };
+  t.after(() => {
+    delete globalThis.browser;
+  });
+  const cases = [
+    [{ ...job, allowedOrigins: ["*"] }, {}, "NAVIGATION_FAILED", 0],
+    [{ ...job, navigation: undefined }, {}, "NAVIGATION_FAILED", 0],
+    [job, { redirectTo: "http://example.net/page" }, "NAVIGATION_FAILED", 1],
+    [
+      job,
+      { redirectTo: "https://internal.example.org" },
+      "NAVIGATION_FAILED",
+      1,
+    ],
+    [job, { status: 404 }, "HTTP_ERROR", 1],
+    [job, { contentType: "application/pdf" }, "UNSUPPORTED_CONTENT_TYPE", 1],
+  ];
+  for (const [candidate, navigation, code, tabs] of cases) {
+    let navigations = 0;
+    const storage = {};
+    globalThis.browser = browserStub(
+      storage,
+      () => assert.fail("Rejected page reached capture"),
+      () => navigations++,
+      navigation,
+    );
+    globalThis.browser.dns.resolve = async (host) => ({
+      addresses:
+        host === "internal.example.org" ? ["192.168.2.1"] : ["8.8.8.8"],
+    });
+    await assert.rejects(
+      acquire(candidate, settings, new AbortController().signal),
+      { code },
+    );
+    assert.equal(navigations, tabs);
+    assert.deepEqual(storage, {});
+    assert.deepEqual(
+      globalThis.browser.webRequest.onBeforeRequest.emit({}),
+      [],
+    );
+    assert.deepEqual(
+      globalThis.browser.webRequest.onHeadersReceived.emit({}),
+      [],
+    );
+  }
 });

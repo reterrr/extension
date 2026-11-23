@@ -261,7 +261,7 @@ export function installMonitoringAgent() {
         await replay(settings, storage[outboxKey], agentScope, run.signal);
       const job = await request<Job>(
         settings,
-        "jobs/claim",
+        settings.mode === "trusted" ? "jobs/claim?mode=trusted" : "jobs/claim",
         undefined,
         run.signal,
       );

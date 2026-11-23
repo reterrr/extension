@@ -172,7 +172,10 @@ async function capture(message: CaptureMessage): Promise<Capture> {
   if (document.contentType !== "text/html")
     throw new Error("Source must be HTML.");
   const pageUrl = document.URL;
-  if (!message.expectedOrigins.includes(monitoredURL(pageUrl).origin))
+  const pageOrigin = monitoredURL(pageUrl, {
+    allowHttp: message.allowHttp,
+  }).origin;
+  if (!message.expectedOrigins.includes(pageOrigin))
     throw new Error("Source navigated outside its approval.");
   const capturedAt = new Date().toISOString();
   const dom = sanitizedDOM(document, pageUrl);
