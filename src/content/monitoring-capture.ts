@@ -1,5 +1,6 @@
 import {
   captureMessage,
+  comparisonVersion,
   hasSensitiveParameters,
   maxSnapshotBytes,
   monitoredURL,
@@ -7,6 +8,7 @@ import {
   sha256,
   type Capture,
   type CaptureMessage,
+  type SnapshotComparison,
 } from "../shared/monitoring/contracts";
 import {
   validateSelectorEvaluation,
@@ -16,6 +18,15 @@ import {
   createDOMSelectorRuntime,
   evaluateSelectorVersion,
 } from "./selector-resolver";
+import {
+  comparisonRepresentation,
+  isResponsiveImage,
+  readSourceSet,
+  shape,
+  type SourceSet,
+} from "./monitoring-comparison";
+
+export { shape };
 
 const settleQuietMs = 600;
 const settleMaxMs = 4_000;
@@ -67,7 +78,11 @@ function safeReference(value: string, base: string): boolean {
   }
 }
 
-export function sanitizedDOM(doc: Document, pageUrl: string): Document {
+export function sanitizedDOM(
+  doc: Document,
+  pageUrl: string,
+  nativeSourceSets?: Map<Element, SourceSet>,
+): Document {
   const snapshot = doc.implementation.createHTMLDocument("");
   snapshot.replaceChild(
     snapshot.importNode(doc.documentElement, true),
@@ -91,6 +106,8 @@ export function sanitizedDOM(doc: Document, pageUrl: string): Document {
     "[data-burbot-selector-highlight]",
     "[data-burbot-picker]",
     "[data-burbot-import-review-highlight]",
+    "div[data-burbot-import-review-focused]",
+    "div#automa-palette",
   ];
   for (const node of Array.from(snapshot.querySelectorAll(remove.join(","))))
     node.remove();
@@ -98,6 +115,7 @@ export function sanitizedDOM(doc: Document, pageUrl: string): Document {
   const comments: Node[] = [];
   while (walker.nextNode()) comments.push(walker.currentNode);
   for (const comment of comments) comment.parentNode?.removeChild(comment);
+  const baseUrl = safeReference(doc.baseURI, pageUrl) ? doc.baseURI : pageUrl;
   for (const node of Array.from(snapshot.querySelectorAll("*"))) {
     if (
       node.tagName.toLowerCase() === "meta" &&
@@ -107,6 +125,12 @@ export function sanitizedDOM(doc: Document, pageUrl: string): Document {
       continue;
     }
     for (const { name, value } of Array.from(node.attributes)) {
+      // Evidence keeps its existing srcset redaction. Retain only validated
+      // image candidates for the comparison before removing the raw attribute.
+      if (nativeSourceSets && name === "srcset" && isResponsiveImage(node)) {
+        const sourceSet = readSourceSet(value, baseUrl);
+        if (sourceSet) nativeSourceSets.set(node, sourceSet);
+      }
       if (
         name.startsWith("on") ||
         name === "nonce" ||
@@ -135,26 +159,9 @@ export function sanitizedDOM(doc: Document, pageUrl: string): Document {
     }
   }
   const base = snapshot.createElement("base");
-  base.href = safeReference(doc.baseURI, pageUrl) ? doc.baseURI : pageUrl;
+  base.href = baseUrl;
   snapshot.head?.prepend(base);
   return snapshot;
-}
-
-export function shape(snapshot: Document): string {
-  const indexes = new Map<Element, number>();
-  return JSON.stringify(
-    Array.from(snapshot.querySelectorAll("*"), (node, index) => {
-      indexes.set(node, index);
-      return [
-        node.parentElement ? indexes.get(node.parentElement) : null,
-        node.namespaceURI,
-        node.localName,
-        Array.from(node.attributes)
-          .map((attribute) => attribute.name)
-          .sort(),
-      ];
-    }),
-  );
 }
 
 function cleanResult(result: {
@@ -178,7 +185,11 @@ async function capture(message: CaptureMessage): Promise<Capture> {
   if (!message.expectedOrigins.includes(pageOrigin))
     throw new Error("Source navigated outside its approval.");
   const capturedAt = new Date().toISOString();
-  const dom = sanitizedDOM(document, pageUrl);
+  const nativeSourceSets =
+    message.comparisonVersion === comparisonVersion
+      ? new Map<Element, SourceSet>()
+      : undefined;
+  const dom = sanitizedDOM(document, pageUrl, nativeSourceSets);
   const html = "<!doctype html>\n" + dom.documentElement.outerHTML;
   const encoder = new TextEncoder();
   const bytes = encoder.encode(html);
@@ -214,14 +225,26 @@ async function capture(message: CaptureMessage): Promise<Capture> {
     }
     return { definitionFingerprint: pin.definitionFingerprint, result };
   });
-  const [contentHash, structureHash] = await Promise.all([
+  const normalized =
+    nativeSourceSets && comparisonRepresentation(dom, nativeSourceSets);
+  const [contentHash, structureHash, comparison] = await Promise.all([
     sha256(bytes),
     sha256(encoder.encode(shape(dom))),
+    normalized &&
+      Promise.all([
+        sha256(encoder.encode(normalized.content)),
+        sha256(encoder.encode(normalized.structure)),
+      ]).then<SnapshotComparison>(([contentHash, structureHash]) => ({
+        version: comparisonVersion,
+        contentHash,
+        structureHash,
+      })),
   ]);
   return {
     html,
     contentHash,
     structureHash,
+    ...(comparison && { comparison }),
     contentSize: bytes.length,
     capturedAt,
     pageUrl,
