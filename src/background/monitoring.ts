@@ -14,11 +14,9 @@ import {
   type Job,
   type Settings,
 } from "../shared/monitoring/contracts";
-import {
-  acquire,
-  AcquisitionError,
-  recoverContext,
-} from "./monitoring-navigation";
+import { acquire, AcquisitionError } from "./monitoring-navigation";
+import { agentFetch } from "./monitoring-request";
+import { recoverContext } from "./monitoring-tabs";
 
 const alarm = "burbot-monitoring";
 const outboxKey = "burbotMonitoringOutbox";
@@ -44,21 +42,7 @@ async function request<T>(
   body?: unknown,
   signal?: AbortSignal,
 ) {
-  const response = await fetch(settings.apiOrigin + "/monitoring/" + endpoint, {
-    method: "POST",
-    headers: {
-      Authorization: "Bearer " + settings.agentToken,
-      ...(body !== undefined && { "Content-Type": "application/json" }),
-    },
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-    credentials: "omit",
-    redirect: "error",
-    cache: "no-store",
-    signal: AbortSignal.any([
-      AbortSignal.timeout(apiTimeout),
-      ...(signal ? [signal] : []),
-    ]),
-  });
+  const response = await agentFetch(settings, endpoint, { body, signal });
   if (!response.ok) throw new RequestError(response.status);
   return response.status === 204 ? null : ((await response.json()) as T);
 }

@@ -41,6 +41,7 @@ const configs = [
     metafile: true,
     entryPoints: {
       "pdf-reader": "src/pdf-reader/bootstrap.ts",
+      "snapshot-viewer": "src/snapshot-viewer/index.ts",
       sidepanel: "src/sidepanel/main.tsx",
       popup: "src/popup/main.tsx",
       options: "src/options/main.tsx",

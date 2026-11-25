@@ -1,4 +1,5 @@
 import { installMonitoringAgent } from "./monitoring";
+import { installSnapshotBridge } from "./snapshot-bridge";
 import { commitSummary } from "../shared/commits/summary";
 import { createActiveTabHighlightSync } from "./activeTabHighlights";
 import "../shared/domain/schema.js";
@@ -1617,3 +1618,4 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
 });
 
 installMonitoringAgent();
+installSnapshotBridge();

@@ -540,6 +540,24 @@ Enable Firefox containers for the monitoring profile.
 The backend guide includes deployment, trusted Agent registration and check
 history. [Automatic Source Monitoring](https://github.com/reterrr/burbot/blob/main/docs/monitoring.md)
 
+## Historical snapshots in Firefox
+
+With a configured monitoring agent, use **Open in Firefox** in Burbot Studio.
+The extension checks for commands independently of capture jobs. It verifies
+the stored HTML and opens an extension-owned tab with the archived page, exact
+HTML source, and the pinned selector when supplied. CSS, XPath, and element ID
+tests run on the archived structure locally. Site scripts and remote resources
+are blocked in the displayed page. Close the snapshot tab in Firefox when done.
+
+The `sessions` permission marks temporary monitoring tabs so Firefox can
+recover their ownership after a restart. Capture cleanup removes its marked
+tab and its temporary container. Snapshot viewer tabs have a separate lifecycle.
+
+Build the extension with `npm run build`. For the native browser regression,
+install Playwright Firefox with `npx playwright install firefox` and run
+`npm run test:snapshot-bridge`. The backend guide has the command and
+authentication contracts. [Snapshot bridge](https://github.com/reterrr/burbot/blob/main/docs/snapshot-bridge.md)
+
 ```sh
 npm install --no-package-lock
 npm start

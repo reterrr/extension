@@ -22,7 +22,7 @@ async function until(check, label = "condition", timeout = 10000) {
     `Timed out waiting for ${label}${last ? ": " + last.message : ""}`,
   );
 }
-async function launch() {
+async function launch({ sourceDir = root } = {}) {
   const { connectWithMaxRetries, findFreeTcpPort } = await import(
     pathToFileURL(path.join(root, "node_modules/web-ext/lib/firefox/remote.js"))
   );
@@ -109,7 +109,7 @@ async function launch() {
       }
       return typeof result === "string" ? JSON.parse(result) : undefined;
     }
-    await remote.installTemporaryAddon(root);
+    await remote.installTemporaryAddon(sourceDir);
     const addon = await remote.getInstalledAddon("burbot-picker@local.example");
     const watcher = await request({
       to: addon.actor,
@@ -235,6 +235,7 @@ async function launch() {
     return {
       context,
       page,
+      inView,
       ui,
       chrome,
       storage,
