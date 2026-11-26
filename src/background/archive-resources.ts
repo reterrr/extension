@@ -8,10 +8,12 @@ const resourceTypes: browser.webRequest.ResourceType[] = [
   "image",
   "font",
 ];
-const maxResourceBytes = 4 * 1024 * 1024;
-const maxBytes = 8 * 1024 * 1024;
-const maxRequests = 500;
-const drainMs = 750;
+// Keep the total below the 16 MiB visual HTML limit after base64 expansion.
+// Never buffer scripts, API responses, or resources from unrelated tabs.
+const maxResourceBytes = 8 * 1024 * 1024;
+const maxBytes = 10 * 1024 * 1024;
+const maxRequests = 750;
+const drainMs = 1_500;
 
 interface ResourceStream {
   url: string;
