@@ -388,7 +388,7 @@ test(
     // retain the loaded font and its rules in the archived document.
     assert.match(
       visual.toString(),
-      /data:font\\/woff;base64,/,
+      /data:font\/woff;base64,/,
       "the loaded font was saved in the archived CSS",
     );
     assert.match(visual.toString(), /@font-face/);
