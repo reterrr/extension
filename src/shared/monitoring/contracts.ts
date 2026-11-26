@@ -19,6 +19,7 @@ export const captureMessage = "burbot:monitoring-capture";
 export const representation = "rendered_dom";
 export const representationVersion = "firefox-dom-1";
 export const structureHashVersion = "dom-shape-1";
+export const comparisonVersion = "dom-comparison-1";
 export const mimeType = "text/html";
 export type MonitoringMode = "strict" | "trusted";
 
@@ -48,14 +49,22 @@ export interface Job {
   leaseId: string;
   leaseExpiresAt: string;
   representation: typeof representation;
+  comparisonVersion?: string;
   selectors: PinnedSelector[];
   navigation?: { mode: "trusted"; allowHttp: boolean };
+}
+
+export interface SnapshotComparison {
+  version: typeof comparisonVersion;
+  contentHash: string;
+  structureHash: string;
 }
 
 export interface Capture {
   html: string;
   contentHash: string;
   structureHash: string;
+  comparison?: SnapshotComparison;
   contentSize: number;
   capturedAt: string;
   pageUrl: string;
@@ -78,6 +87,7 @@ export type Completion = Omit<Capture, "html"> & {
 
 export interface CaptureMessage {
   type: typeof captureMessage;
+  comparisonVersion?: typeof comparisonVersion;
   expectedOrigins: string[];
   allowHttp?: boolean;
   selectors: PinnedSelector[];
