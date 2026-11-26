@@ -1,3 +1,4 @@
+import { sha256 as sha256Bytes } from "@noble/hashes/sha2.js";
 import type {
   SelectorEvaluationResult,
   SelectorVersion,
@@ -15,6 +16,13 @@ export const monitoringAccess = {
   origins: ["http://*/*", "https://*/*"],
 };
 export const maxSnapshotBytes = 5 * 1024 * 1024;
+export const maxVisualArchiveBytes = 16 * 1024 * 1024;
+export const visualArchiveVersion = "visual-html-1";
+export const visualArchiveAccess = {
+  permissions: [
+    "webRequestFilterResponse",
+  ] as browser._manifest.OptionalPermission[],
+};
 export const captureMessage = "burbot:monitoring-capture";
 export const representation = "rendered_dom";
 export const representationVersion = "firefox-dom-1";
@@ -50,6 +58,7 @@ export interface Job {
   leaseExpiresAt: string;
   representation: typeof representation;
   comparisonVersion?: string;
+  visualArchiveVersion?: string;
   selectors: PinnedSelector[];
   navigation?: { mode: "trusted"; allowHttp: boolean };
 }
@@ -78,6 +87,7 @@ export type Completion = Omit<Capture, "html"> & {
   leaseId: string;
   completionKey: string;
   uploadIntentId: string;
+  visualArchiveUploadId?: string;
   representation: typeof representation;
   representationVersion: typeof representationVersion;
   structureHashVersion: typeof structureHashVersion;
@@ -88,9 +98,15 @@ export type Completion = Omit<Capture, "html"> & {
 export interface CaptureMessage {
   type: typeof captureMessage;
   comparisonVersion?: typeof comparisonVersion;
+  visualArchive?: boolean;
   expectedOrigins: string[];
   allowHttp?: boolean;
   selectors: PinnedSelector[];
+}
+
+export interface VisualMarkup {
+  html: string;
+  baseUrl: string;
 }
 
 export type AgentStatus = {
@@ -200,8 +216,11 @@ export function validateSettings(settings: Settings): Settings {
 }
 
 export async function sha256(bytes: Uint8Array<ArrayBuffer>): Promise<string> {
-  return Array.from(
-    new Uint8Array(await crypto.subtle.digest("SHA-256", bytes)),
-    (byte) => byte.toString(16).padStart(2, "0"),
-  ).join("");
+  // Firefox omits Web Crypto from content scripts on approved HTTP Sources.
+  const digest = crypto.subtle
+    ? new Uint8Array(await crypto.subtle.digest("SHA-256", bytes))
+    : sha256Bytes(bytes);
+  return Array.from(digest, (byte) => byte.toString(16).padStart(2, "0")).join(
+    "",
+  );
 }

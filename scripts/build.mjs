@@ -41,7 +41,6 @@ const configs = [
     metafile: true,
     entryPoints: {
       "pdf-reader": "src/pdf-reader/bootstrap.ts",
-      "snapshot-viewer": "src/snapshot-viewer/index.ts",
       sidepanel: "src/sidepanel/main.tsx",
       popup: "src/popup/main.tsx",
       options: "src/options/main.tsx",
@@ -55,6 +54,7 @@ const configs = [
       "selector-highlights": "src/content/selector-highlights.ts",
       "import-review-highlights": "src/content/import-review-highlights.ts",
       "monitoring-capture": "src/content/monitoring-capture.ts",
+      "archive-launch": "src/background/archive-launch.ts",
       "evidence-locator": "src/content/evidence-locator.ts",
     },
   },

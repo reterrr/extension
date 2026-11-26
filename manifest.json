@@ -65,6 +65,7 @@
   "optional_permissions": [
     "cookies",
     "webRequest",
-    "webRequestBlocking"
+    "webRequestBlocking",
+    "webRequestFilterResponse"
   ]
 }

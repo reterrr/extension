@@ -1,4 +1,4 @@
-import { uuid } from "../shared/monitoring/snapshot-viewer-store";
+import { uuid } from "../shared/monitoring/snapshot-delivery";
 
 const contextKey = "burbotMonitoringContext";
 const contextPrefix = "Burbot monitoring ";

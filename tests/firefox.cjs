@@ -132,6 +132,13 @@ async function launch({ sourceDir = root } = {}) {
       const target = await until(() => targetFor(suffix), suffix);
       return evaluate(target.consoleActor, expression);
     };
+    const webView = async (url, expression) => {
+      const { tabs } = await request({ to: "root", type: "listTabs" });
+      const tab = tabs.find((entry) => entry.url === url);
+      if (!tab) throw Error("Firefox tab is unavailable");
+      const { frame } = await request({ to: tab.actor, type: "getTarget" });
+      return evaluate(frame.consoleActor, expression);
+    };
     const ui = (expression) => inView("/sidebar.html", expression);
     const background = (expression) =>
       inView("/_generated_background_page.html", expression);
@@ -236,6 +243,7 @@ async function launch({ sourceDir = root } = {}) {
       context,
       page,
       inView,
+      webView,
       ui,
       chrome,
       storage,

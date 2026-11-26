@@ -1,29 +1,28 @@
 import {
   maxSnapshotBytes,
+  maxVisualArchiveBytes,
   settingsKey,
   sha256,
   validateSettings,
+  visualArchiveVersion,
   type Settings,
 } from "../shared/monitoring/contracts";
 import {
-  snapshotViewerPage,
-  snapshotViewerReady,
-  snapshotViewerStore,
+  archiveTabKey,
+  snapshotDeliveries,
   uuid,
-  type ViewerOutcome,
-  type ViewerRecord,
-} from "../shared/monitoring/snapshot-viewer-store";
+  type SnapshotDelivery,
+  type SnapshotOutcome,
+  type SnapshotTabContext,
+} from "../shared/monitoring/snapshot-delivery";
+import { archiveDocument } from "../shared/monitoring/archive-document";
+import { closeArchiveLauncher, loadArchiveTab } from "./archive-tab";
 import { agentFetch } from "./monitoring-request";
 
 const queue = "agents/snapshot-commands/";
 const wakeAlarm = "burbot-snapshot-bridge";
 const pollInterval = 2_000;
 const timeout = 12_000;
-const viewers = new Map<number, string>();
-
-function viewerURL(id: string) {
-  return browser.runtime.getURL(snapshotViewerPage) + "#" + id;
-}
 
 interface ClaimedCommand {
   commandId: string;
@@ -33,8 +32,7 @@ interface ClaimedCommand {
   expiresAt: string;
   sourceUrl: string | null;
   capturedAt: string;
-  selector?: unknown;
-  evaluation?: unknown;
+  selectorContext?: SnapshotTabContext["selectorContext"];
 }
 
 const artifactErrors = new Set([
@@ -72,7 +70,7 @@ function claimed(value: unknown): ClaimedCommand | null {
 
 export async function readSnapshotArtifact(
   response: Response,
-): Promise<string> {
+): Promise<{ html: string; format: SnapshotTabContext["format"] }> {
   if (!response.ok) {
     const data = await response.json().catch(() => null);
     const code = data?.detail?.code;
@@ -83,12 +81,18 @@ export async function readSnapshotArtifact(
   const sizeHeader = response.headers.get("X-Burbot-Snapshot-Size") ?? "";
   const size = Number(sizeHeader);
   const digest = response.headers.get("X-Burbot-Snapshot-SHA256") ?? "";
+  const format = response.headers.get("X-Burbot-Snapshot-Format") ?? "evidence";
   if (
     response.headers.get("Content-Type")?.split(";")[0] !==
       "application/octet-stream" ||
     response.headers.get("X-Burbot-Snapshot-Mime") !== "text/html" ||
+    (format !== "evidence" && format !== visualArchiveVersion) ||
     !/^\d+$/.test(sizeHeader) ||
-    size > maxSnapshotBytes ||
+    size <= 0 ||
+    size >
+      (format === visualArchiveVersion
+        ? maxVisualArchiveBytes
+        : maxSnapshotBytes) ||
     !/^[a-f0-9]{64}$/.test(digest) ||
     !response.body
   ) {
@@ -113,15 +117,16 @@ export async function readSnapshotArtifact(
   if (seen !== size || (await sha256(bytes)) !== digest)
     throw new SnapshotError("SNAPSHOT_INTEGRITY_MISMATCH");
   try {
-    return new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(
-      bytes,
-    );
+    return {
+      html: new TextDecoder("utf-8", { fatal: true }).decode(bytes),
+      format,
+    };
   } catch {
     throw new SnapshotError("INVALID_ARTIFACT");
   }
 }
 
-function failure(error: unknown): ViewerOutcome {
+function failure(error: unknown): SnapshotOutcome {
   return {
     state: "failed",
     errorCode:
@@ -144,76 +149,88 @@ async function openCommand(
     sourceId,
     snapshotId,
     sourceUrl,
-    capturedAt,
-    selector,
-    evaluation,
+    selectorContext,
   } = command;
-  const url = viewerURL(id);
-  const existing = await snapshotViewerStore.get(id);
+  const existing = await snapshotDeliveries.get(id);
   if (existing) {
     if (existing.scope !== scope)
       return { state: "failed", errorCode: "VIEWER_INTERRUPTED" } as const;
     if (existing.outcome) return existing.outcome;
     // A previous background may have stopped between creating the tab and recording its ID.
     // Never create another tab once the durable opening record exists.
-    const tab = (
-      await browser.tabs.query({
-        url: browser.runtime.getURL(snapshotViewerPage),
-      })
-    ).find((item) => item.url === url);
-    const outcome: ViewerOutcome = tab
-      ? { state: "opened" }
-      : { state: "failed", errorCode: "VIEWER_INTERRUPTED" };
-    if (tab?.id !== undefined) viewers.set(tab.id, id);
-    await snapshotViewerStore.put({ ...existing, outcome });
+    const tabContext =
+      existing.tabId === undefined
+        ? null
+        : ((await browser.sessions
+            .getTabValue(existing.tabId, archiveTabKey)
+            .catch(() => null)) as SnapshotTabContext | null);
+    const outcome: SnapshotOutcome =
+      tabContext?.commandId === id
+        ? { state: "opened" }
+        : { state: "failed", errorCode: "VIEWER_INTERRUPTED" };
+    if (outcome.state === "failed" && existing.tabId !== undefined)
+      await closeArchiveLauncher(existing.tabId, id);
+    await snapshotDeliveries.put({ ...existing, outcome });
     return outcome;
   }
 
-  const record: ViewerRecord = {
+  const record: SnapshotDelivery = {
     id,
     scope,
     expiresAt: Date.parse(command.expiresAt),
   };
+  let html: string;
+  let format: SnapshotTabContext["format"];
   try {
     const response = await agentFetch(settings, queue + id + "/artifact", {
       method: "GET",
       signal,
       timeout,
+      headers: { "X-Burbot-Snapshot-Accept": visualArchiveVersion },
     });
-    const html = await readSnapshotArtifact(response);
+    const artifact = await readSnapshotArtifact(response);
     signal.throwIfAborted();
     if (record.expiresAt <= Date.now()) return null;
-    record.payload = {
-      sourceId,
-      snapshotId,
-      sourceUrl,
-      capturedAt,
-      selector,
-      evaluation,
-      html,
-    };
+    format = artifact.format;
+    html = archiveDocument(artifact.html, sourceUrl ?? undefined);
   } catch (error) {
     if (signal.aborted) return null;
     const outcome = failure(error);
-    await snapshotViewerStore.put({ ...record, outcome });
+    await snapshotDeliveries.put({ ...record, outcome });
     return outcome;
   }
-  await snapshotViewerStore.put(record);
+  await snapshotDeliveries.put(record);
   if (signal.aborted || record.expiresAt <= Date.now()) return null;
-  let tab: browser.tabs.Tab;
   try {
-    tab = await browser.tabs.create({ url, active: true });
+    const tab = await browser.tabs.create({
+      url: "about:blank",
+      active: false,
+    });
+    if (tab.id === undefined) throw new Error("Archive tab unavailable");
+    record.tabId = tab.id;
+    await snapshotDeliveries.put(record);
+    const deadline = AbortSignal.any([
+      signal,
+      AbortSignal.timeout(Math.max(0, record.expiresAt - Date.now())),
+    ]);
+    await loadArchiveTab(
+      tab.id,
+      html,
+      { commandId: id, sourceId, snapshotId, format, selectorContext },
+      deadline,
+    );
   } catch {
     const outcome = {
       state: "failed",
       errorCode: "VIEWER_OPEN_FAILED",
     } as const;
-    await snapshotViewerStore.put({ ...record, payload: undefined, outcome });
+    if (record.tabId !== undefined)
+      await closeArchiveLauncher(record.tabId, id, true);
+    await snapshotDeliveries.put({ ...record, outcome });
     return outcome;
   }
   const outcome = { state: "opened" } as const;
-  if (tab.id !== undefined) viewers.set(tab.id, id);
-  await snapshotViewerStore.put({ ...record, outcome });
+  await snapshotDeliveries.put({ ...record, outcome });
   return outcome;
 }
 
@@ -228,6 +245,7 @@ export async function pollSnapshotCommands(
   if (!response.ok || response.status === 204) return;
   const command = claimed(await response.json());
   if (!command) return;
+  await snapshotDeliveries.prune(Date.now());
   const scope = await sha256(
     new TextEncoder().encode(settings.apiOrigin + "\n" + settings.agentToken),
   );
@@ -286,22 +304,5 @@ export function installSnapshotBridge() {
     if (name === wakeAlarm) schedule();
   });
   browser.runtime.onStartup.addListener(start);
-  browser.runtime.onMessage.addListener((message, sender) => {
-    const id = message?.id;
-    if (
-      message?.type === snapshotViewerReady &&
-      typeof id === "string" &&
-      uuid.test(id) &&
-      sender.url === viewerURL(id) &&
-      sender.tab?.id !== undefined
-    )
-      viewers.set(sender.tab.id, id);
-  });
-  browser.tabs.onRemoved.addListener((tabId, info) => {
-    const id = viewers.get(tabId);
-    viewers.delete(tabId);
-    if (id && !info.isWindowClosing)
-      void snapshotViewerStore.closeViewer(id).catch(() => undefined);
-  });
   start();
 }

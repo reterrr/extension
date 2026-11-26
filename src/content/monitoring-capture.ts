@@ -9,6 +9,7 @@ import {
   type Capture,
   type CaptureMessage,
   type SnapshotComparison,
+  type VisualMarkup,
 } from "../shared/monitoring/contracts";
 import {
   validateSelectorEvaluation,
@@ -174,7 +175,68 @@ function cleanResult(result: {
     throw new Error("Unsupported character in literal.");
 }
 
-async function capture(message: CaptureMessage): Promise<Capture> {
+function visualMarkup(
+  doc: Document,
+  pageUrl: string,
+): VisualMarkup | undefined {
+  try {
+    const archive = doc.implementation.createHTMLDocument("");
+    archive.replaceChild(
+      archive.importNode(doc.documentElement, true),
+      archive.documentElement,
+    );
+    // Use Firefox's selected image candidate without waking lazy images.
+    const copies = Array.from(archive.querySelectorAll("img"));
+    Array.from(doc.images).forEach((image, index) => {
+      const copy = copies[index];
+      if (image.currentSrc && copy) copy.setAttribute("src", image.currentSrc);
+    });
+    const styleCopies = Array.from(archive.querySelectorAll("style"));
+    Array.from(doc.querySelectorAll("style")).forEach((element, index) => {
+      const sheet = element.sheet;
+      const copy = styleCopies[index];
+      if (!copy || !sheet) return;
+      if (sheet.disabled) copy.remove();
+      else
+        copy.textContent = Array.from(
+          sheet.cssRules,
+          (rule) => rule.cssText,
+        ).join("\n");
+    });
+    const linkCopies = Array.from(archive.querySelectorAll("link"));
+    Array.from(doc.querySelectorAll("link")).forEach((link, index) => {
+      if (link.disabled || link.sheet?.disabled) linkCopies[index]?.remove();
+    });
+    for (const sheet of doc.adoptedStyleSheets ?? []) {
+      if (sheet.disabled) continue;
+      const style = archive.createElement("style");
+      style.textContent = Array.from(
+        sheet.cssRules,
+        (rule) => rule.cssText,
+      ).join("\n");
+      archive.head.append(style);
+    }
+    for (const node of archive.querySelectorAll(
+      "script,iframe,object,embed,template",
+    ))
+      node.remove();
+    const doctype = doc.compatMode === "CSS1Compat" ? "<!doctype html>\n" : "";
+    const html = doctype + archive.documentElement.outerHTML;
+    if (new TextEncoder().encode(html).length > maxSnapshotBytes)
+      return undefined;
+    return {
+      html,
+      baseUrl: safeReference(doc.baseURI, pageUrl) ? doc.baseURI : pageUrl,
+    };
+  } catch {
+    // Visual capture cannot invalidate the separately collected evidence.
+    return undefined;
+  }
+}
+
+async function capture(
+  message: CaptureMessage,
+): Promise<Capture & { visualMarkup?: VisualMarkup }> {
   await settleDOM();
   if (document.contentType !== "text/html")
     throw new Error("Source must be HTML.");
@@ -227,6 +289,7 @@ async function capture(message: CaptureMessage): Promise<Capture> {
   });
   const normalized =
     nativeSourceSets && comparisonRepresentation(dom, nativeSourceSets);
+  const archive = message.visualArchive && visualMarkup(document, pageUrl);
   const [contentHash, structureHash, comparison] = await Promise.all([
     sha256(bytes),
     sha256(encoder.encode(shape(dom))),
@@ -245,6 +308,7 @@ async function capture(message: CaptureMessage): Promise<Capture> {
     contentHash,
     structureHash,
     ...(comparison && { comparison }),
+    ...(archive && { visualMarkup: archive }),
     contentSize: bytes.length,
     capturedAt,
     pageUrl,

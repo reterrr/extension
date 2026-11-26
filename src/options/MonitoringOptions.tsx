@@ -4,6 +4,7 @@ import {
   settingsKey,
   statusKey,
   validateSettings,
+  visualArchiveAccess,
   type AgentStatus,
   type Settings,
 } from "../shared/monitoring/contracts";
@@ -24,8 +25,13 @@ export function MonitoringOptions() {
   const [status, setStatus] = useState<AgentStatus>();
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  const [archiveAllowed, setArchiveAllowed] = useState(false);
 
   useEffect(() => {
+    void browser.permissions
+      .contains(visualArchiveAccess)
+      .then(setArchiveAllowed)
+      .catch(() => undefined);
     void browser.storage.local
       .get([settingsKey, statusKey])
       .then((state) => {
@@ -165,6 +171,24 @@ export function MonitoringOptions() {
           )}
         </div>
       </form>
+      {saved.enabled && !archiveAllowed && (
+        <button
+          type="button"
+          onClick={() => {
+            setError("");
+            void browser.permissions
+              .request(visualArchiveAccess)
+              .then((allowed) => {
+                setArchiveAllowed(allowed);
+                if (!allowed)
+                  setError("Archive resource permission was declined.");
+              })
+              .catch(() => setError("Could not enable archive resources."));
+          }}
+        >
+          Save loaded styles, images and fonts in archives
+        </button>
+      )}
       <p aria-live="polite">
         {saved.enabled
           ? {

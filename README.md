@@ -552,16 +552,30 @@ history. [Automatic Source Monitoring](https://github.com/reterrr/burbot/blob/ma
 
 ## Historical snapshots in Firefox
 
-With a configured monitoring agent, use **Open in Firefox** in Burbot Studio.
-The extension checks for commands independently of capture jobs. It verifies
-the stored HTML and opens an extension-owned tab with the archived page, exact
-HTML source, and the pinned selector when supplied. CSS, XPath, and element ID
-tests run on the archived structure locally. Site scripts and remote resources
-are blocked in the displayed page. Close the snapshot tab in Firefox when done.
+With a configured monitoring agent, use **Open snapshot** in Burbot Studio.
+Firefox verifies the downloaded artifact and opens it as an ordinary HTML
+document at an isolated `blob:null` URL. Inspect the archived DOM with Firefox
+DevTools. Studio retains the SelectorTree and recorded diagnostics. Firefox
+stores the historical selector IDs as extension-owned tab metadata.
+
+New captures can also store a visual archive alongside the original monitoring
+evidence. Enable **Save loaded styles, images and fonts in archives** in the
+monitoring options to embed permitted CSS, raster images and fonts Firefox
+receives during capture. Inline styles and supported embedded images are saved
+without this optional permission. The agent uses the responses from the capture
+tab and makes no extra requests for display resources.
+
+The loaded archive works offline. Site scripts, form submission and external
+resources are blocked. Older captures display the HTML originally saved with the
+evidence and may have little or no styling. Archives omit resources that were
+unavailable, too large or outside the page's approval.
+Video, canvas content and state that depends on site scripts are not replayed.
+Use **Open snapshot** again after closing Firefox or reloading an expired blob URL.
 
 The `sessions` permission marks temporary monitoring tabs so Firefox can
 recover their ownership after a restart. Capture cleanup removes its marked
-tab and its temporary container. Snapshot viewer tabs have a separate lifecycle.
+tab and its temporary container. An opened archive stays until the user closes
+the tab.
 
 Build the extension with `npm run build`. For the native browser regression,
 install Playwright Firefox with `npx playwright install firefox` and run

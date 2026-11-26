@@ -25,7 +25,9 @@
     "export:schema": "node scripts/export-business-schema.mjs"
   },
   "dependencies": {
+    "@noble/hashes": "^2.0.1",
     "better-sqlite3": "^13.0.3",
+    "css-tree": "^3.1.0",
     "dotenv": "^17.4.2",
     "parse5": "^7.3.0",
     "pdfjs-dist": "^6.3.289",
@@ -33,6 +35,7 @@
     "react-dom": "^19.0.0"
   },
   "devDependencies": {
+    "@types/css-tree": "^2.3.10",
     "@types/firefox-webext-browser": "^120.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",

@@ -1,12 +1,18 @@
 import {
   captureMessage,
   comparisonVersion,
+  maxVisualArchiveBytes,
   monitoredURL,
+  visualArchiveAccess,
+  visualArchiveVersion,
   type Capture,
   type CaptureMessage,
   type Job,
   type Settings,
+  type VisualMarkup,
 } from "../shared/monitoring/contracts";
+import { archiveDocument } from "../shared/monitoring/archive-document";
+import { recordArchiveResources } from "./archive-resources";
 import {
   cleanupMonitoringContext,
   createMonitoringContext,
@@ -162,7 +168,7 @@ export async function acquire(
   job: Job,
   settings: Settings,
   signal: AbortSignal,
-): Promise<Capture> {
+): Promise<Capture & { visualArchive?: string }> {
   const trusted = settings.mode === "trusted";
   if (
     trusted
@@ -207,6 +213,8 @@ export async function acquire(
 
   const { owner, context } = await createMonitoringContext(job.jobId);
   let tabId: number | undefined;
+  const visual = job.visualArchiveVersion === visualArchiveVersion;
+  let recorder: ReturnType<typeof recordArchiveResources> | undefined;
   let requestCount = 0;
   let responseOrigin: string | undefined;
   const guard = async (request: browser.webRequest._OnBeforeRequestDetails) => {
@@ -225,6 +233,7 @@ export async function acquire(
       (await abortable(allowed(request.url), deadline).catch(() => false));
     if (!accepted && mainFrame)
       rejection.abort(new AcquisitionError("NAVIGATION_FAILED"));
+    if (accepted) recorder?.observe(request);
     return { cancel: !accepted };
   };
   const checkResponse: Parameters<
@@ -260,6 +269,14 @@ export async function acquire(
   try {
     const tab = await createMonitoringTab(owner);
     tabId = tab.id;
+    if (visual && typeof browser.webRequest.filterResponseData === "function") {
+      try {
+        if (await browser.permissions.contains(visualArchiveAccess))
+          recorder = recordArchiveResources(tabId);
+      } catch {
+        // A visual archive can still retain inline CSS and data images.
+      }
+    }
     browser.webRequest.onBeforeRequest.addListener(
       guard,
       { urls: ["<all_urls>"] },
@@ -295,6 +312,7 @@ export async function acquire(
     const message: CaptureMessage = {
       type: captureMessage,
       ...(job.comparisonVersion === comparisonVersion && { comparisonVersion }),
+      ...(visual && { visualArchive: true }),
       selectors: job.selectors,
       expectedOrigins: origins ? [...origins] : [pageOrigin],
       allowHttp,
@@ -302,7 +320,7 @@ export async function acquire(
     const result = (await abortable(
       browser.tabs.sendMessage(tabId, message, { frameId: 0 }),
       deadline,
-    )) as Capture | null;
+    )) as (Capture & { visualMarkup?: VisualMarkup }) | null;
     const finalTab = await abortable(browser.tabs.get(tabId), deadline);
     if (
       !result ||
@@ -311,7 +329,21 @@ export async function acquire(
     )
       throw new AcquisitionError("CAPTURE_FAILED");
     monitoringTabEvent("Monitoring capture completed", owner);
-    return result;
+    if (!result.visualMarkup) return result;
+    const { visualMarkup, ...capture } = result;
+    try {
+      await recorder?.drain(deadline);
+      const html = archiveDocument(
+        visualMarkup.html,
+        visualMarkup.baseUrl,
+        recorder?.resources,
+      );
+      if (new TextEncoder().encode(html).length <= maxVisualArchiveBytes)
+        return { ...capture, visualArchive: html };
+    } catch {
+      // A visual archive is independent of the canonical evidence.
+    }
+    return capture;
   } catch (error) {
     if (signal.aborted) throw new AcquisitionError("CANCELLED");
     if (deadline.reason instanceof AcquisitionError) throw deadline.reason;
@@ -320,11 +352,15 @@ export async function acquire(
     throw new AcquisitionError("CAPTURE_FAILED");
   } finally {
     try {
-      await cleanupMonitoringContext(owner, true);
+      recorder?.close();
     } finally {
-      browser.webRequest.onBeforeRequest.removeListener(guard);
-      if (trusted)
-        browser.webRequest.onHeadersReceived.removeListener(checkResponse);
+      try {
+        await cleanupMonitoringContext(owner, true);
+      } finally {
+        browser.webRequest.onBeforeRequest.removeListener(guard);
+        if (trusted)
+          browser.webRequest.onHeadersReceived.removeListener(checkResponse);
+      }
     }
   }
 }

@@ -1,5 +1,6 @@
 import {
   maxSnapshotBytes,
+  maxVisualArchiveBytes,
   mimeType,
   monitoringAccess,
   representation,
@@ -30,6 +31,12 @@ interface Outbox {
   completion: Completion;
 }
 
+interface UploadGrant {
+  uploadIntentId: string;
+  url: string;
+  expiresAt: string;
+}
+
 class RequestError extends Error {
   constructor(readonly status: number) {
     super("Monitoring request failed.");
@@ -49,6 +56,40 @@ async function request<T>(
 
 function jobEndpoint(jobId: string, action: string) {
   return "jobs/" + encodeURIComponent(jobId) + "/" + action;
+}
+
+function uploadTarget(settings: Settings, grant: UploadGrant | null) {
+  if (!grant) throw new AcquisitionError("UPLOAD_FAILED");
+  const url = new URL(grant.url);
+  if (
+    url.origin !== settings.storageOrigin ||
+    url.username ||
+    url.password ||
+    url.hash ||
+    !(Date.parse(grant.expiresAt) > Date.now())
+  )
+    throw new AcquisitionError("UPLOAD_FAILED");
+  return { url, id: grant.uploadIntentId };
+}
+
+async function putArtifact(
+  url: URL,
+  bytes: Uint8Array<ArrayBuffer>,
+  signal: AbortSignal,
+) {
+  try {
+    const response = await fetch(url, {
+      method: "PUT",
+      headers: { "Content-Type": mimeType },
+      body: bytes,
+      redirect: "error",
+      credentials: "omit",
+      signal: AbortSignal.any([signal, AbortSignal.timeout(apiTimeout)]),
+    });
+    if (!response.ok) throw new Error();
+  } catch {
+    throw new AcquisitionError("UPLOAD_FAILED");
+  }
 }
 
 async function replay(
@@ -115,7 +156,11 @@ async function executeJob(
     )
       throw new AcquisitionError("CAPTURE_FAILED");
     await heartbeat();
-    const { html, ...snapshot } = await acquire(job, settings, signal);
+    const { html, visualArchive, ...snapshot } = await acquire(
+      job,
+      settings,
+      signal,
+    );
     const bytes = new TextEncoder().encode(html);
     if (
       bytes.length !== snapshot.contentSize ||
@@ -124,11 +169,7 @@ async function executeJob(
     )
       throw new AcquisitionError("CAPTURE_FAILED");
 
-    const grant = await request<{
-      uploadIntentId: string;
-      url: string;
-      expiresAt: string;
-    }>(
+    const grant = await request<UploadGrant>(
       settings,
       endpoint("uploads"),
       {
@@ -140,21 +181,12 @@ async function executeJob(
       },
       signal,
     );
-    if (!grant) throw new AcquisitionError("UPLOAD_FAILED");
-    const upload = new URL(grant.url);
-    if (
-      upload.origin !== settings.storageOrigin ||
-      upload.username ||
-      upload.password ||
-      upload.hash ||
-      Date.parse(grant.expiresAt) <= Date.now()
-    )
-      throw new AcquisitionError("UPLOAD_FAILED");
+    const upload = uploadTarget(settings, grant);
 
     const completion: Completion = {
       ...snapshot,
       leaseId: job.leaseId,
-      uploadIntentId: grant.uploadIntentId,
+      uploadIntentId: upload.id,
       completionKey: crypto.randomUUID(),
       representation,
       representationVersion,
@@ -168,18 +200,38 @@ async function executeJob(
     )
       throw new AcquisitionError("CAPTURE_FAILED");
 
-    try {
-      const response = await fetch(upload, {
-        method: "PUT",
-        headers: { "Content-Type": mimeType },
-        body: bytes,
-        redirect: "error",
-        credentials: "omit",
-        signal: AbortSignal.any([signal, AbortSignal.timeout(apiTimeout)]),
-      });
-      if (!response.ok) throw new Error();
-    } catch {
-      throw new AcquisitionError("UPLOAD_FAILED");
+    await putArtifact(upload.url, bytes, signal);
+    if (visualArchive && !signal.aborted) {
+      try {
+        const archive = new TextEncoder().encode(visualArchive);
+        if (archive.length <= maxVisualArchiveBytes) {
+          const archiveGrant = await request<UploadGrant>(
+            settings,
+            endpoint("archive-uploads"),
+            {
+              leaseId: job.leaseId,
+              mimeType,
+              contentHash: await sha256(archive),
+              contentSize: archive.length,
+            },
+            signal,
+          );
+          const archiveTarget = uploadTarget(settings, archiveGrant);
+          await putArtifact(archiveTarget.url, archive, signal);
+          const archiveId = archiveTarget.id;
+          if (
+            new TextEncoder().encode(
+              JSON.stringify({
+                ...completion,
+                visualArchiveUploadId: archiveId,
+              }),
+            ).length <= maxCompletionBytes
+          )
+            completion.visualArchiveUploadId = archiveId;
+        }
+      } catch {
+        // Complete the evidence upload even if the optional archive could not be sent.
+      }
     }
     signal.throwIfAborted();
     const outbox: Outbox = {
