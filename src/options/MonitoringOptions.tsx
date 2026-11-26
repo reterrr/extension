@@ -64,10 +64,29 @@ export function MonitoringOptions() {
         enabled: true,
         allowedOrigins: origins.split(/\s+/).filter(Boolean),
       });
-      if (!(await browser.permissions.request(monitoringAccess)))
+      // Request recording access while the user is explicitly enabling
+      // Monitoring; otherwise silently missing permission produces HTML-only
+      // archives even though selector extraction succeeds.
+      const allPermissions = {
+        permissions: [
+          ...new Set([
+            ...monitoringAccess.permissions,
+            ...visualArchiveAccess.permissions,
+          ]),
+        ],
+        origins: monitoringAccess.origins,
+      };
+      const fullAccess = await browser.permissions.request(allPermissions);
+      if (!fullAccess && !(await browser.permissions.request(monitoringAccess)))
         throw new Error("Monitoring permissions were declined.");
+      const canArchive = await browser.permissions.contains(visualArchiveAccess);
+      setArchiveAllowed(canArchive);
       await browser.storage.local.set({ [settingsKey]: config });
       setSaved(config);
+      if (!canArchive)
+        setError(
+          "Monitoring is enabled, but Firefox has not granted offline archive resources. Grant access below to save external CSS, images and fonts.",
+        );
     } catch (cause) {
       setError(
         cause instanceof Error ? cause.message : "Could not enable monitoring.",
@@ -171,6 +190,13 @@ export function MonitoringOptions() {
           )}
         </div>
       </form>
+      {saved.enabled && !archiveAllowed && (
+        <p className="ui-muted">
+          Historical pages may have no styling until Firefox can record the
+          stylesheets, fonts and images loaded during future checks. This
+          permission does not change selector evaluation.
+        </p>
+      )}
       {saved.enabled && !archiveAllowed && (
         <button
           type="button"
