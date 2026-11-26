@@ -288,14 +288,14 @@ test(
         "page",
         [
           "text/html",
-          `<!doctype html><title>Archived Firefox page</title><link rel="stylesheet" href="/archive-fixture/site.css"><h1 id="headline" style="padding-left:7px">Archived Firefox page</h1><p id="font">A</p><img id="fixture-image" src="/archive-fixture/pixel.png"><a href="/archive-fixture/live">Live only</a>`,
+          `<!doctype html><title>Archived Firefox page</title><link rel="stylesheet" href="/archive-fixture/assets/site.css"><h1 id="headline" style="padding-left:7px">Archived Firefox page</h1><p id="font">A</p><img id="fixture-image" src="/archive-fixture/pixel.png"><a href="/archive-fixture/live">Live only</a>`,
         ],
       ],
       [
         "site.css",
         [
           "text/css",
-          '@import "nested.css"; #headline{background-image:url(pixel.png)} @font-face{font-family:ArchiveTest;src:url(letter.woff) format("woff")} #font{font-family:ArchiveTest}',
+          '@import "../nested.css"; #headline{background-image:url(../pixel.png)} @font-face{font-family:ArchiveTest;src:url(../letter.woff) format("woff")} #font{font-family:ArchiveTest}',
         ],
       ],
       ["nested.css", ["text/css", "#headline { color: rgb(18, 52, 86); }"]],
