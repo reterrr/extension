@@ -191,29 +191,58 @@ function visualMarkup(
       const copy = copies[index];
       if (image.currentSrc && copy) copy.setAttribute("src", image.currentSrc);
     });
+    // CSSOM is a fallback when a stylesheet came from cache or the user has not
+    // granted Firefox's optional response-filter permission. It represents the
+    // rules the page actually loaded, not a second network fetch.
+    function readableRules(sheet: CSSStyleSheet): string | undefined {
+      try {
+        return Array.from(sheet.cssRules, (rule) => rule.cssText).join("\n");
+      } catch {
+        // Cross-origin stylesheets without CORS are opaque to CSSOM. Keep the
+        // original link so the separately captured response can be used.
+        return undefined;
+      }
+    }
+
     const styleCopies = Array.from(archive.querySelectorAll("style"));
     Array.from(doc.querySelectorAll("style")).forEach((element, index) => {
       const sheet = element.sheet;
       const copy = styleCopies[index];
       if (!copy || !sheet) return;
-      if (sheet.disabled) copy.remove();
-      else
-        copy.textContent = Array.from(
-          sheet.cssRules,
-          (rule) => rule.cssText,
-        ).join("\n");
+      if (sheet.disabled) {
+        copy.remove();
+        return;
+      }
+      const rules = readableRules(sheet);
+      if (rules !== undefined) copy.textContent = rules;
     });
+
     const linkCopies = Array.from(archive.querySelectorAll("link"));
     Array.from(doc.querySelectorAll("link")).forEach((link, index) => {
-      if (link.disabled || link.sheet?.disabled) linkCopies[index]?.remove();
+      const copy = linkCopies[index];
+      if (!copy) return;
+      if (link.disabled || link.sheet?.disabled) {
+        copy.remove();
+        return;
+      }
+      if (!link.relList.contains("stylesheet") || !link.sheet) return;
+      const rules = readableRules(link.sheet);
+      if (rules === undefined) return;
+      const style = archive.createElement("style");
+      // CSS url(...) inside an external stylesheet resolves relative to the
+      // stylesheet, not the document. Preserve its base for offline rewriting.
+      if (safeReference(link.href, pageUrl))
+        style.setAttribute("data-burbot-style-base", link.href);
+      if (link.media) style.setAttribute("media", link.media);
+      style.textContent = rules;
+      copy.replaceWith(style);
     });
     for (const sheet of doc.adoptedStyleSheets ?? []) {
       if (sheet.disabled) continue;
+      const rules = readableRules(sheet);
+      if (rules === undefined) continue;
       const style = archive.createElement("style");
-      style.textContent = Array.from(
-        sheet.cssRules,
-        (rule) => rule.cssText,
-      ).join("\n");
+      style.textContent = rules;
       archive.head.append(style);
     }
     for (const node of archive.querySelectorAll(
