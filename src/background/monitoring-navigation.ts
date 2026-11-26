@@ -1,5 +1,6 @@
 import {
   captureMessage,
+  comparisonVersion,
   monitoredURL,
   type Capture,
   type CaptureMessage,
@@ -109,7 +110,7 @@ function abortable<T>(operation: Promise<T>, signal: AbortSignal): Promise<T> {
   });
 }
 
-async function loaded(
+async function committedPage(
   tabId: number,
   url: string,
   allowHttp: boolean,
@@ -118,18 +119,21 @@ async function loaded(
   // Observe before navigation. The initial extension-owned placeholder is ignored.
   let listener: Parameters<typeof browser.tabs.onUpdated.addListener>[0];
   let removed: Parameters<typeof browser.tabs.onRemoved.addListener>[0];
-  const complete = new Promise<string>((resolve, reject) => {
+  const committed = new Promise<string>((resolve, reject) => {
     listener = (id, change, tab) => {
       if (id !== tabId) return;
+      // Firefox reports the committed location while subresources can still load.
+      const page =
+        change.url ?? (change.status === "complete" ? tab.url : undefined);
+      if (!page || page === "about:blank") return;
       if (
-        change.url &&
-        change.url !== "about:blank" &&
-        !change.url.startsWith("https:") &&
-        !(allowHttp && change.url.startsWith("http:"))
-      )
+        !page.startsWith("https:") &&
+        !(allowHttp && page.startsWith("http:"))
+      ) {
         reject(new AcquisitionError("NAVIGATION_FAILED"));
-      if (change.status === "complete" && tab.url && tab.url !== "about:blank")
-        resolve(tab.url);
+        return;
+      }
+      resolve(page);
     };
     removed = (id) => {
       if (id === tabId) reject(new AcquisitionError("NAVIGATION_FAILED"));
@@ -142,7 +146,7 @@ async function loaded(
       throw new AcquisitionError("NAVIGATION_FAILED");
     });
     const [, page] = await abortable(
-      Promise.all([navigation, complete]),
+      Promise.all([navigation, committed]),
       signal,
     );
     return page;
@@ -266,6 +270,15 @@ export async function acquire(
       );
     monitoringTabEvent("Monitoring navigation started", owner);
     const page = await loaded(tabId, job.url, allowHttp, deadline);
+    const tab = await browser.tabs.create({
+      active: false,
+      url: "about:blank",
+      cookieStoreId: context.cookieStoreId,
+    });
+    if (tab.id === undefined || tab.cookieStoreId !== context.cookieStoreId)
+      throw new AcquisitionError("NAVIGATION_FAILED");
+    tabId = tab.id;
+    const page = await committedPage(tabId, job.url, allowHttp, deadline);
     const pageOrigin = monitoredURL(page, { allowHttp }).origin;
     if (
       (trusted && responseOrigin !== pageOrigin) ||
@@ -281,6 +294,7 @@ export async function acquire(
     );
     const message: CaptureMessage = {
       type: captureMessage,
+      ...(job.comparisonVersion === comparisonVersion && { comparisonVersion }),
       selectors: job.selectors,
       expectedOrigins: origins ? [...origins] : [pageOrigin],
       allowHttp,

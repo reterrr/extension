@@ -533,9 +533,19 @@ payload. MinIO credentials stay on the server.
 While Firefox is running, the enabled agent polls once a minute and checks one
 job at a time. It opens each source in an inactive temporary container tab.
 The agent confirms the navigation policy and public DNS results, waits briefly
-for the DOM to settle, runs the job's pinned SelectorTree and uploads the
-sanitized HTML and evaluation. Disabling monitoring aborts the active check.
+for the committed document's DOM to settle, runs the job's pinned SelectorTree
+and uploads the sanitized HTML and evaluation. Image loads can continue during
+capture. Disabling monitoring aborts the active check.
 Enable Firefox containers for the monitoring profile.
+
+SelectorTrees run on the sanitized DOM that supplies the HTML evidence. The
+agent hashes the exact UTF-8 bytes as `contentHash` and records `structureHash`
+for the element hierarchy and attribute names. When the backend advertises
+`dom-comparison-1`, the agent also reports fingerprints for change detection.
+They ignore confirmed overlays and recognized image-loading states while
+preserving document links, business text and the original selector evidence.
+Opening the saved HTML through `file://` can render differently from the live
+page because the capture omits active page code and relies on external resources.
 
 The backend guide includes deployment, trusted Agent registration and check
 history. [Automatic Source Monitoring](https://github.com/reterrr/burbot/blob/main/docs/monitoring.md)
