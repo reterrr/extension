@@ -190,6 +190,12 @@ export function MonitoringOptions() {
           )}
         </div>
       </form>
+      {saved.enabled && archiveAllowed && (
+        <p className="ui-muted">
+          Visual archive resource capture is enabled. Loaded styles, images
+          and fonts will be saved for future snapshots within archive limits.
+        </p>
+      )}
       {saved.enabled && !archiveAllowed && (
         <p className="ui-muted">
           Historical pages may have no styling until Firefox can record the
