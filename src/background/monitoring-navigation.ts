@@ -113,9 +113,11 @@ function abortable<T>(operation: Promise<T>, signal: AbortSignal): Promise<T> {
 async function committedPage(
   tabId: number,
   url: string,
+  placeholder: string,
   allowHttp: boolean,
   signal: AbortSignal,
 ) {
+  signal.throwIfAborted();
   // Observe before navigation. The initial extension-owned placeholder is ignored.
   let listener: Parameters<typeof browser.tabs.onUpdated.addListener>[0];
   let removed: Parameters<typeof browser.tabs.onRemoved.addListener>[0];
@@ -125,7 +127,7 @@ async function committedPage(
       // Firefox reports the committed location while subresources can still load.
       const page =
         change.url ?? (change.status === "complete" ? tab.url : undefined);
-      if (!page || page === "about:blank") return;
+      if (!page || page === "about:blank" || page === placeholder) return;
       if (
         !page.startsWith("https:") &&
         !(allowHttp && page.startsWith("http:"))
@@ -256,7 +258,8 @@ export async function acquire(
     return {};
   };
   try {
-    tabId = await createMonitoringTab(owner);
+    const tab = await createMonitoringTab(owner);
+    tabId = tab.id;
     browser.webRequest.onBeforeRequest.addListener(
       guard,
       { urls: ["<all_urls>"] },
@@ -269,16 +272,13 @@ export async function acquire(
         ["blocking", "responseHeaders"],
       );
     monitoringTabEvent("Monitoring navigation started", owner);
-    const page = await loaded(tabId, job.url, allowHttp, deadline);
-    const tab = await browser.tabs.create({
-      active: false,
-      url: "about:blank",
-      cookieStoreId: context.cookieStoreId,
-    });
-    if (tab.id === undefined || tab.cookieStoreId !== context.cookieStoreId)
-      throw new AcquisitionError("NAVIGATION_FAILED");
-    tabId = tab.id;
-    const page = await committedPage(tabId, job.url, allowHttp, deadline);
+    const page = await committedPage(
+      tabId,
+      job.url,
+      tab.placeholder,
+      allowHttp,
+      deadline,
+    );
     const pageOrigin = monitoredURL(page, { allowHttp }).origin;
     if (
       (trusted && responseOrigin !== pageOrigin) ||

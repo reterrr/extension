@@ -76,9 +76,10 @@ export async function createMonitoringContext(jobId: string) {
 }
 
 export async function createMonitoringTab(owner: MonitoringContext) {
+  const placeholder = initialURL(owner);
   const tab = await browser.tabs.create({
     active: false,
-    url: initialURL(owner),
+    url: placeholder,
     cookieStoreId: owner.id,
   });
   if (tab.id === undefined) throw new Error("MONITORING_TAB_UNAVAILABLE");
@@ -88,7 +89,7 @@ export async function createMonitoringTab(owner: MonitoringContext) {
     throw new Error("MONITORING_CONTEXT_MISMATCH");
   await browser.sessions.setTabValue(tab.id, tabOwnerKey, owner.name);
   await remember(owner);
-  return tab.id;
+  return { id: tab.id, placeholder };
 }
 
 async function ownedTab(tab: browser.tabs.Tab, owner: MonitoringContext) {

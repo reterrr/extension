@@ -114,6 +114,12 @@ test("monitoring closes its tab and removes the container after capture, timeout
 
   const cases = [
     [artifact, {}, null, ["remove tab 1", "context removed"]],
+    [
+      artifact,
+      { completePlaceholder: true },
+      null,
+      ["remove tab 1", "context removed"],
+    ],
     [null, {}, "CAPTURE_FAILED", ["remove tab 1", "context removed"]],
     [
       artifact,
@@ -167,7 +173,9 @@ test("monitoring recovery uses the persisted owner and retries partial cleanup",
   globalThis.browser = browserStub(storage, null, () => undefined, navigation);
   t.after(() => delete globalThis.browser);
   const { owner } = await createMonitoringContext(crypto.randomUUID());
-  await createMonitoringTab(owner);
+  const { id } = await createMonitoringTab(owner);
+  const tab = await browser.tabs.get(id);
+  tab.url = pageUrl;
   await cleanupMonitoringContext(owner, true);
   assert.deepEqual(navigation.events, ["remove tab 1", "context removed"]);
   assert.equal(storage.burbotMonitoringContext[0].tabId, 1);
@@ -670,8 +678,12 @@ function browserStub(storage, capture, onNavigation, navigation = {}) {
       onUpdated,
       onRemoved,
       create: async (options) => {
-        assert.equal(options.active, false);
-        assert.equal(options.cookieStoreId, context.cookieStoreId);
+        assert.equal(tab, undefined);
+        assert.deepEqual(options, {
+          active: false,
+          url: options.url,
+          cookieStoreId: context.cookieStoreId,
+        });
         assert.match(
           options.url,
           /^moz-extension:\/\/fixture\/monitoring-tab\.html#[0-9a-f-]+$/,
@@ -680,6 +692,8 @@ function browserStub(storage, capture, onNavigation, navigation = {}) {
       },
       update: async (tabId, { url }) => {
         onNavigation();
+        if (navigation.completePlaceholder)
+          onUpdated.emit(tabId, { status: "complete" }, { url: tab.url });
         if (navigation.closeFirst) return removeTab(tabId);
         if (navigation.stall) return;
         const initial = { tabId, url, method: "GET", type: "main_frame" };
@@ -1077,11 +1091,12 @@ test("trusted navigation rejects mismatched jobs, private hops and non-HTML resp
   for (const [candidate, navigation, code, tabs] of cases) {
     let navigations = 0;
     const storage = {};
+    const events = [];
     globalThis.browser = browserStub(
       storage,
       () => assert.fail("Rejected page reached capture"),
       () => navigations++,
-      navigation,
+      { ...navigation, events },
     );
     globalThis.browser.dns.resolve = async (host) => ({
       addresses:
@@ -1092,6 +1107,7 @@ test("trusted navigation rejects mismatched jobs, private hops and non-HTML resp
       { code },
     );
     assert.equal(navigations, tabs);
+    assert.deepEqual(events, tabs ? ["remove tab 1", "context removed"] : []);
     assert.deepEqual(storage, {});
     assert.deepEqual(
       globalThis.browser.webRequest.onBeforeRequest.emit({}),
