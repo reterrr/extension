@@ -3,6 +3,7 @@ import {
   comparisonVersion,
   hasSensitiveParameters,
   maxSnapshotBytes,
+  maxVisualArchiveBytes,
   monitoredURL,
   secretName,
   sha256,
@@ -251,7 +252,9 @@ function visualMarkup(
       node.remove();
     const doctype = doc.compatMode === "CSS1Compat" ? "<!doctype html>\n" : "";
     const html = doctype + archive.documentElement.outerHTML;
-    if (new TextEncoder().encode(html).length > maxSnapshotBytes)
+    // The visual representation may contain CSSOM rules in addition to DOM.
+    // Apply its own archive limit, not the smaller canonical evidence limit.
+    if (new TextEncoder().encode(html).length > maxVisualArchiveBytes)
       return undefined;
     return {
       html,
