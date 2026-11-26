@@ -137,15 +137,15 @@ export function archiveDocument(
     const key = resourceKey(value, base);
     const resource = key && resources.get(key);
     if (!resource || !types.has(resource.mediaType)) return;
-    // A single icon or font can appear hundreds of times in CSS. Charge its
-    // encoded bytes once; repeated references share the same data URI.
-    const reused = encoded.get(resource);
-    if (reused) return reused;
     const length =
       4 * Math.ceil(resource.bytes.length / 3) + resource.mediaType.length + 13;
     if (length > budget) return;
     budget -= length;
-    const uri = `data:${resource.mediaType};base64,${base64(resource.bytes)}`;
+    // Each inline reference occupies bytes in the serialized archive even
+    // when the same resource was encoded before. Count every occurrence.
+    const uri =
+      encoded.get(resource) ??
+      `data:${resource.mediaType};base64,${base64(resource.bytes)}`;
     encoded.set(resource, uri);
     return uri;
   }
