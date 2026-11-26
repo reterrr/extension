@@ -7,9 +7,13 @@ import {
   type Job,
   type Settings,
 } from "../shared/monitoring/contracts";
+import {
+  cleanupMonitoringContext,
+  createMonitoringContext,
+  createMonitoringTab,
+  monitoringTabEvent,
+} from "./monitoring-tabs";
 
-const contextKey = "burbotMonitoringContext";
-const contextPrefix = "Burbot monitoring ";
 const navigationTimeout = 40_000;
 const maxMainFrameRequests = 10;
 const redirects = new Set([301, 302, 303, 307, 308]);
@@ -95,18 +99,6 @@ export function approvalGuard(
   };
 }
 
-export async function recoverContext() {
-  const saved = (await browser.storage.local.get(contextKey))[contextKey] as
-    { id: string; name: string } | undefined;
-  if (!saved) return;
-  const identity = await browser.contextualIdentities
-    .get(saved.id)
-    .catch(() => null);
-  if (identity?.name === saved.name && saved.name.startsWith(contextPrefix))
-    await browser.contextualIdentities.remove(saved.id);
-  await browser.storage.local.remove(contextKey);
-}
-
 function abortable<T>(operation: Promise<T>, signal: AbortSignal): Promise<T> {
   if (signal.aborted) return Promise.reject(signal.reason);
   return new Promise((resolve, reject) => {
@@ -121,10 +113,12 @@ function abortable<T>(operation: Promise<T>, signal: AbortSignal): Promise<T> {
 async function committedPage(
   tabId: number,
   url: string,
+  placeholder: string,
   allowHttp: boolean,
   signal: AbortSignal,
 ) {
-  // Observe before navigation. Initial about:blank completion is ignored.
+  signal.throwIfAborted();
+  // Observe before navigation. The initial extension-owned placeholder is ignored.
   let listener: Parameters<typeof browser.tabs.onUpdated.addListener>[0];
   let removed: Parameters<typeof browser.tabs.onRemoved.addListener>[0];
   const committed = new Promise<string>((resolve, reject) => {
@@ -133,7 +127,7 @@ async function committedPage(
       // Firefox reports the committed location while subresources can still load.
       const page =
         change.url ?? (change.status === "complete" ? tab.url : undefined);
-      if (!page || page === "about:blank") return;
+      if (!page || page === "about:blank" || page === placeholder) return;
       if (
         !page.startsWith("https:") &&
         !(allowHttp && page.startsWith("http:"))
@@ -211,12 +205,7 @@ export async function acquire(
     throw new AcquisitionError("NAVIGATION_FAILED");
   }
 
-  const name = contextPrefix + crypto.randomUUID();
-  const context = await browser.contextualIdentities.create({
-    name,
-    color: "blue",
-    icon: "circle",
-  });
+  const { owner, context } = await createMonitoringContext(job.jobId);
   let tabId: number | undefined;
   let requestCount = 0;
   let responseOrigin: string | undefined;
@@ -269,9 +258,8 @@ export async function acquire(
     return {};
   };
   try {
-    await browser.storage.local.set({
-      [contextKey]: { id: context.cookieStoreId, name },
-    });
+    const tab = await createMonitoringTab(owner);
+    tabId = tab.id;
     browser.webRequest.onBeforeRequest.addListener(
       guard,
       { urls: ["<all_urls>"] },
@@ -283,15 +271,14 @@ export async function acquire(
         { urls: ["http://*/*", "https://*/*"], types: ["main_frame"] },
         ["blocking", "responseHeaders"],
       );
-    const tab = await browser.tabs.create({
-      active: false,
-      url: "about:blank",
-      cookieStoreId: context.cookieStoreId,
-    });
-    if (tab.id === undefined || tab.cookieStoreId !== context.cookieStoreId)
-      throw new AcquisitionError("NAVIGATION_FAILED");
-    tabId = tab.id;
-    const page = await committedPage(tabId, job.url, allowHttp, deadline);
+    monitoringTabEvent("Monitoring navigation started", owner);
+    const page = await committedPage(
+      tabId,
+      job.url,
+      tab.placeholder,
+      allowHttp,
+      deadline,
+    );
     const pageOrigin = monitoredURL(page, { allowHttp }).origin;
     if (
       (trusted && responseOrigin !== pageOrigin) ||
@@ -323,6 +310,7 @@ export async function acquire(
       !(await abortable(allowed(result.pageUrl), deadline))
     )
       throw new AcquisitionError("CAPTURE_FAILED");
+    monitoringTabEvent("Monitoring capture completed", owner);
     return result;
   } catch (error) {
     if (signal.aborted) throw new AcquisitionError("CANCELLED");
@@ -332,8 +320,7 @@ export async function acquire(
     throw new AcquisitionError("CAPTURE_FAILED");
   } finally {
     try {
-      await browser.contextualIdentities.remove(context.cookieStoreId);
-      await browser.storage.local.remove(contextKey);
+      await cleanupMonitoringContext(owner, true);
     } finally {
       browser.webRequest.onBeforeRequest.removeListener(guard);
       if (trusted)

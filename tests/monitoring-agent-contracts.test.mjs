@@ -94,6 +94,126 @@ test("named hosts, redirects and all returned DNS addresses must be allowed", as
   }
 });
 
+test("monitoring closes its tab and removes the container after capture, timeout, cancellation and failure", async (t) => {
+  const { acquire } = await load("src/background/monitoring-navigation.ts");
+  const job = {
+    jobId: crypto.randomUUID(),
+    leaseId: crypto.randomUUID(),
+    sourceId: 57,
+    url: pageUrl,
+    allowedOrigins: config.allowedOrigins,
+    representation: "rendered_dom",
+    selectors: [],
+  };
+  const artifact = { pageUrl };
+  const originalTimeout = AbortSignal.timeout;
+  t.mock.method(AbortSignal, "timeout", (ms) =>
+    originalTimeout(ms === 40_000 ? 30 : ms),
+  );
+  t.after(() => delete globalThis.browser);
+
+  const cases = [
+    [artifact, {}, null, ["remove tab 1", "context removed"]],
+    [
+      artifact,
+      { completePlaceholder: true },
+      null,
+      ["remove tab 1", "context removed"],
+    ],
+    [null, {}, "CAPTURE_FAILED", ["remove tab 1", "context removed"]],
+    [
+      artifact,
+      { stall: true },
+      "PAGE_TIMEOUT",
+      ["remove tab 1", "context removed"],
+    ],
+    [artifact, {}, "CANCELLED", ["remove tab 1", "context removed"]],
+    [
+      artifact,
+      { closeFirst: true },
+      "NAVIGATION_FAILED",
+      ["remove tab 1", "context removed"],
+    ],
+    [artifact, { contextGone: true }, null, ["remove tab 1"]],
+  ];
+  for (const [capture, navigation, errorCode, expectedEvents] of cases) {
+    const storage = {};
+    const controller = new AbortController();
+    const events = [];
+    globalThis.browser = browserStub(
+      storage,
+      capture,
+      () => {
+        if (errorCode === "CANCELLED") controller.abort();
+      },
+      { ...navigation, events },
+    );
+    if (errorCode)
+      await assert.rejects(acquire(job, config, controller.signal), {
+        code: errorCode,
+      });
+    else assert.equal(await acquire(job, config, controller.signal), artifact);
+    assert.deepEqual(events, expectedEvents);
+    assert.deepEqual(storage, {});
+    assert.deepEqual(
+      (await browser.tabs.query({})).map((tab) => tab.id),
+      [40, 41],
+    );
+  }
+});
+
+test("monitoring recovery uses the persisted owner and retries partial cleanup", async (t) => {
+  const {
+    createMonitoringContext,
+    createMonitoringTab,
+    cleanupMonitoringContext,
+  } = await load("src/background/monitoring-tabs.ts");
+  const storage = {};
+  const navigation = { events: [], failTabRemove: true };
+  globalThis.browser = browserStub(storage, null, () => undefined, navigation);
+  t.after(() => delete globalThis.browser);
+  const { owner } = await createMonitoringContext(crypto.randomUUID());
+  const { id } = await createMonitoringTab(owner);
+  const tab = await browser.tabs.get(id);
+  tab.url = pageUrl;
+  await cleanupMonitoringContext(owner, true);
+  assert.deepEqual(navigation.events, ["remove tab 1", "context removed"]);
+  assert.equal(storage.burbotMonitoringContext[0].tabId, 1);
+  navigation.failTabRemove = false;
+  const { recoverContext } = await load("src/background/monitoring-tabs.ts");
+  await recoverContext();
+  assert.deepEqual(storage, {});
+  assert.deepEqual(navigation.events, [
+    "remove tab 1",
+    "context removed",
+    "remove tab 1",
+  ]);
+  assert.deepEqual(
+    (await browser.tabs.query({})).map((tab) => tab.id),
+    [40, 41],
+  );
+});
+
+test("monitoring recovery preserves an unrelated tab even inside the temporary container", async (t) => {
+  const { createMonitoringContext, createMonitoringTab, recoverContext } =
+    await load("src/background/monitoring-tabs.ts");
+  const storage = {};
+  const events = [];
+  globalThis.browser = browserStub(storage, null, () => undefined, {
+    events,
+    extraTabs: [
+      { id: 40, url: "about:blank", cookieStoreId: "firefox-container-321" },
+    ],
+  });
+  t.after(() => delete globalThis.browser);
+  const { owner } = await createMonitoringContext(crypto.randomUUID());
+  await createMonitoringTab(owner);
+  await recoverContext();
+  assert.deepEqual(events, ["remove tab 1"]);
+  assert.equal((await browser.tabs.get(40)).url, "about:blank");
+  assert.equal(storage.burbotMonitoringContext[0].name, owner.name);
+});
+
 test("RARR fixtures compare equally across known overlays and lazy image states", async (t) => {
   globalThis.browser = { runtime: { onMessage: event() } };
   t.after(() => {
@@ -504,10 +624,33 @@ function browserStub(storage, capture, onNavigation, navigation = {}) {
   const onHeaders = event();
   const onUpdated = event();
   const onAlarm = event();
-  let page = pageUrl;
+  const onRemoved = event();
+  const extraTabs = navigation.extraTabs ?? [
+    { id: 40, url: "about:blank", cookieStoreId: "firefox-default" },
+    {
+      id: 41,
+      url: "moz-extension://fixture/snapshot-viewer.html",
+      cookieStoreId: "firefox-default",
+    },
+  ];
+  const owners = new Map();
+  let identity;
+  let tab;
+  const removeTab = (id) => {
+    if (tab?.id !== id) throw Error("Tab already closed");
+    tab = undefined;
+    onRemoved.emit(id);
+  };
   return {
     alarms: { onAlarm, create() {}, clear() {} },
-    runtime: { onStartup: event() },
+    runtime: {
+      onStartup: event(),
+      getURL: (path) => `moz-extension://fixture/${path}`,
+    },
+    sessions: {
+      setTabValue: async (id, _key, owner) => owners.set(id, owner),
+      getTabValue: async (id) => owners.get(id),
+    },
     permissions: { contains: async () => true, onRemoved: event() },
     storage: {
       onChanged: event(),
@@ -522,25 +665,37 @@ function browserStub(storage, capture, onNavigation, navigation = {}) {
     },
     dns: { resolve: async () => ({ addresses: ["8.8.8.8"] }) },
     contextualIdentities: {
-      create: async () => context,
+      create: async ({ name }) => (identity = { ...context, name }),
+      query: async ({ name }) => (identity?.name === name ? [identity] : []),
       remove: async (id) => {
         assert.equal(id, context.cookieStoreId);
+        navigation.events?.push("context removed");
+        identity = undefined;
       },
     },
     webRequest: { onBeforeRequest: onBefore, onHeadersReceived: onHeaders },
     tabs: {
       onUpdated,
-      onRemoved: event(),
+      onRemoved,
       create: async (options) => {
+        assert.equal(tab, undefined);
         assert.deepEqual(options, {
           active: false,
-          url: "about:blank",
+          url: options.url,
           cookieStoreId: context.cookieStoreId,
         });
-        return { ...context, id: 1 };
+        assert.match(
+          options.url,
+          /^moz-extension:\/\/fixture\/monitoring-tab\.html#[0-9a-f-]+$/,
+        );
+        return (tab = { ...context, id: 1, url: options.url });
       },
       update: async (tabId, { url }) => {
         onNavigation();
+        if (navigation.completePlaceholder)
+          onUpdated.emit(tabId, { status: "complete" }, { url: tab.url });
+        if (navigation.closeFirst) return removeTab(tabId);
+        if (navigation.stall) return;
         const initial = { tabId, url, method: "GET", type: "main_frame" };
         if ((await onBefore.emit(initial)[0]).cancel) return;
         const [redirect] = onBefore.emit({
@@ -559,7 +714,8 @@ function browserStub(storage, capture, onNavigation, navigation = {}) {
             request.url,
           );
         }
-        page = navigation.redirectTo ?? url;
+        const page = navigation.redirectTo ?? url;
+        tab.url = page;
         if (navigation.redirectTo) {
           assert.equal(
             onHeaders.emit({ ...initial, statusCode: 302 })[0]?.cancel,
@@ -589,9 +745,26 @@ function browserStub(storage, capture, onNavigation, navigation = {}) {
             { url: page },
           );
       },
-      get: async () => ({ url: page }),
-      sendMessage: async (_tabId, message) =>
-        typeof capture === "function" ? capture(message) : capture,
+      query: async ({ cookieStoreId }) =>
+        [tab, ...extraTabs].filter(
+          (item) =>
+            item && (!cookieStoreId || item.cookieStoreId === cookieStoreId),
+        ),
+      get: async (id) => {
+        const result = [tab, ...extraTabs].find((item) => item?.id === id);
+        if (!result) throw Error("Tab already closed");
+        return result;
+      },
+      remove: async (id) => {
+        navigation.events?.push(`remove tab ${id}`);
+        if (navigation.failTabRemove)
+          throw Error("Tab removal temporarily unavailable");
+        removeTab(id);
+      },
+      sendMessage: async (_tabId, message) => {
+        if (navigation.contextGone) identity = undefined;
+        return typeof capture === "function" ? capture(message) : capture;
+      },
     },
     scripting: {
       executeScript: async (arg) =>
@@ -918,11 +1091,12 @@ test("trusted navigation rejects mismatched jobs, private hops and non-HTML resp
   for (const [candidate, navigation, code, tabs] of cases) {
     let navigations = 0;
     const storage = {};
+    const events = [];
     globalThis.browser = browserStub(
       storage,
       () => assert.fail("Rejected page reached capture"),
       () => navigations++,
-      navigation,
+      { ...navigation, events },
     );
     globalThis.browser.dns.resolve = async (host) => ({
       addresses:
@@ -933,6 +1107,7 @@ test("trusted navigation rejects mismatched jobs, private hops and non-HTML resp
       { code },
     );
     assert.equal(navigations, tabs);
+    assert.deepEqual(events, tabs ? ["remove tab 1", "context removed"] : []);
     assert.deepEqual(storage, {});
     assert.deepEqual(
       globalThis.browser.webRequest.onBeforeRequest.emit({}),

@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Burbot Snapshot</title>
+    <link rel="stylesheet" href="snapshot-viewer.css" />
+    <script type="module" src="snapshot-viewer.js"></script>
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1 id="title">Burbot Snapshot</h1>
+        <p id="capture"></p>
+        <p id="source"></p>
+      </header>
+      <p id="loading" role="status">Loading archived capture…</p>
+      <section id="viewer" hidden>
+        <nav aria-label="Snapshot views">
+          <button type="button" data-panel="page" aria-pressed="true">
+            Page
+          </button>
+          <button type="button" data-panel="html" aria-pressed="false">
+            HTML source
+          </button>
+          <button type="button" data-panel="selector" aria-pressed="false">
+            Selectors
+          </button>
+        </nav>
+        <section id="page" aria-label="Snapshot page">
+          <p>
+            Archived page. Site scripts and remote resources are blocked, so
+            styles and images may be missing.
+          </p>
+          <iframe
+            id="archive"
+            title="Archived snapshot page"
+            sandbox=""
+            referrerpolicy="no-referrer"
+          ></iframe>
+        </section>
+        <section id="html" aria-label="HTML source" hidden>
+          <pre id="original" tabindex="0"></pre>
+        </section>
+        <section
+          id="selector"
+          aria-label="Selector inspection"
+          hidden
+        ></section>
+      </section>
+    </main>
+  </body>
+</html>
