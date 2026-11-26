@@ -384,15 +384,14 @@ test(
     assert.equal(first.contentHash, digest(evidence));
     assert.doesNotMatch(evidence.toString(), /<style|data:image\//);
     assert.match(visual.toString(), /data:image\/png;base64/);
-    const stylesheet = /data:text\/css;base64,([\w+/=]+)/.exec(
-      visual.toString(),
-    );
-    assert.ok(stylesheet, "the loaded stylesheet was saved");
+    // CSSOM may inline the stylesheet in place. Either representation must
+    // retain the loaded font and its rules in the archived document.
     assert.match(
-      Buffer.from(stylesheet[1], "base64").toString(),
-      /data:font\/woff;base64,/,
-      "the loaded font was saved in the stylesheet",
+      visual.toString(),
+      /data:font\\/woff;base64,/,
+      "the loaded font was saved in the archived CSS",
     );
+    assert.match(visual.toString(), /@font-face/);
     assert.ok(hits.some((path) => path.endsWith("site.css")));
     assert.ok(hits.some((path) => path.endsWith("letter.woff")));
     const initialHits = [...hits];
