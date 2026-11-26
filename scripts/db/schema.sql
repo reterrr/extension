@@ -421,7 +421,8 @@ CREATE TABLE IF NOT EXISTS backend_workspace_identity (
   schema_revision_id TEXT,
   registry_json TEXT,
   created_at TEXT NOT NULL,
-  last_synced_at TEXT
+  last_synced_at TEXT,
+  continuous_mode INTEGER CHECK (continuous_mode IN (0,1))
 ) STRICT;
 
 CREATE TABLE IF NOT EXISTS backend_field_bindings (
@@ -475,6 +476,12 @@ CREATE TABLE IF NOT EXISTS backend_sync_operations (
   result_json TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
+  identity_key TEXT,
+  predecessor_id TEXT,
+  due_at INTEGER NOT NULL DEFAULT 0,
+  attempt_count INTEGER NOT NULL DEFAULT 0,
+  lease_id TEXT,
+  lease_until INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (workspace_uuid, operation_id)
 ) STRICT;
 
@@ -514,4 +521,4 @@ CREATE TABLE IF NOT EXISTS backend_bulk_sync_items (
     REFERENCES backend_bulk_sync_jobs(workspace_uuid, operation_id) ON DELETE CASCADE
 ) STRICT;
 
-PRAGMA user_version = 16;
+PRAGMA user_version = 17;

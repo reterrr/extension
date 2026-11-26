@@ -1,5 +1,6 @@
 import { installMonitoringAgent } from "./monitoring";
 import { installSnapshotBridge } from "./snapshot-bridge";
+import { installContinuousSync, wakeAfterCommit } from "./continuous-sync";
 import { commitSummary } from "../shared/commits/summary";
 import { createActiveTabHighlightSync } from "./activeTabHighlights";
 import "../shared/domain/schema.js";
@@ -1427,14 +1428,20 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
         if (draft.reviewVersion === 1) {
           validateReviewSelection(draft, message.expectedReview);
         }
-        if (!commitSessionView(draft).dirty) {
+        const review = commitSessionView(draft);
+        if (!review.dirty) {
           throw new Error("Zaznacz co najmniej jedną zmianę do zapisu.");
         }
 
         const stagedObjectIds = [...draft.stagedObjectIds];
         const candidate = applyStagedObjects(draft);
         validateCommittedReferences(candidate);
-        const committed = await commitState(draft.baseRevision, candidate);
+        const committed = await commitState(
+          draft.baseRevision,
+          candidate,
+          review.objects.filter((object) => object.staged).map((object) => object.id),
+        );
+        wakeAfterCommit();
 
         rebaseCommittedObjects(draft, committed, stagedObjectIds);
         draft.baseRevision = committed.revision;
@@ -1619,3 +1626,4 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
 
 installMonitoringAgent();
 installSnapshotBridge();
+installContinuousSync();

@@ -246,7 +246,7 @@ test("SQLite migration preserves IDs and staged sync survives offline restart", 
     assert.ok(result.ok, await result.clone().text());
     return result.json();
   };
-  assert.equal((await fromLocal("/info")).schemaVersion, 16);
+  assert.equal((await fromLocal("/info")).schemaVersion, 17);
   assert.deepEqual(await fromLocal("/state"), initial);
   const { workspaceUuid: generated } = await fromLocal("/backend-sync");
   assert.match(generated, /^[0-9a-f-]{36}$/);
@@ -730,7 +730,7 @@ test("bulk preview is read-only and exact approved work resumes after SQLite and
     assert.fail("Unexpected remote write or read " + path);
   };
 
-  assert.equal((await fromLocal("/info")).schemaVersion, 16);
+  assert.equal((await fromLocal("/info")).schemaVersion, 17);
   const sqliteState = await fromLocal("/state");
   const before = await fromLocal("/backend-sync");
   const discovery = discoverSources(sqliteState);
@@ -895,3 +895,415 @@ test("bulk preview is read-only and exact approved work resumes after SQLite and
   assert.equal(created.size, 2);
   assert.equal(requests.filter(({ path }) => path === "/selectors").length, 3);
 });
+
+async function continuousFixture(t, { unlinked = false } = {}) {
+  const folder = await mkdtemp(join(tmpdir(), "burbot-continuous-sqlite-"));
+  const file = join(folder, "workspace.sqlite");
+  const port = await ephemeralPort();
+  const impl = await startStateService(port, file);
+  t.after(async () => {
+    await stop(impl);
+    await rm(folder, { recursive: true, force: true });
+  });
+  const url = "http://127.0.0.1:" + port;
+  async function call(
+    path,
+    value,
+    method = value === undefined ? "GET" : "POST",
+  ) {
+    return fetch(url + path, {
+      method,
+      headers: { "Content-Type": "application/json" },
+      body: value === undefined ? undefined : JSON.stringify(value),
+    });
+  }
+  async function local(path, value, method) {
+    const response = await call(path, value, method);
+    assert.ok(response.ok, await response.clone().text());
+    return response.json();
+  }
+  await local("/state", initial, "PUT");
+  if (!unlinked) {
+    await local("/backend-sync/registry", { origin, registry });
+    await local("/backend-sync/continuous/configure", {
+      origin,
+      enabled: true,
+    });
+  }
+  return { file, url, call, local };
+}
+
+test("continuous SQLite Commit and outbox roll back together, and pause retains work", async (t) => {
+  const { file, call, local } = await continuousFixture(t);
+  const path = "/backend-sync/continuous";
+  assert.equal((await local(path)).pending, 0);
+  const first = {
+    id: "new-project",
+    type: "project",
+    label: "New Project",
+    values: { status: "PLANOWANY" },
+  };
+  const second = {
+    id: "other-project",
+    type: "project",
+    label: "Independent Project",
+    values: { status: "AKTYWNY" },
+  };
+  const final = {
+    ...initial,
+    revision: 6,
+    objects: [...initial.objects, first, second],
+  };
+
+  const db = new Database(file);
+  t.after(() => db.close());
+  db.exec(`CREATE TRIGGER test_outbox_failure BEFORE INSERT ON backend_sync_operations
+    WHEN NEW.identity_key IS NOT NULL BEGIN SELECT RAISE(ABORT, 'outbox unavailable'); END;`);
+  assert.equal(
+    (await call("/state/commit", { expectedRevision: 5, state: final })).status,
+    500,
+  );
+  assert.equal((await local("/state")).revision, 5);
+  assert.equal((await local(path)).pending, 0);
+  db.exec("DROP TRIGGER test_outbox_failure;");
+  await local(path + "/configure", { origin, enabled: false });
+  await local("/state/commit", { expectedRevision: 5, state: final });
+  assert.equal((await local(path)).pending, 2);
+  assert.equal(
+    (await local(path + "/claim", { origin, manual: false })).job,
+    null,
+  );
+
+  const { job: firstJob } = await local(path + "/claim", {
+    origin,
+    manual: true,
+  });
+  assert.equal(firstJob.intent.label, first.label);
+  assert.equal(firstJob.intent.canCreate, true);
+  assert.equal(
+    (await local(path + "/claim", { origin, manual: true })).job,
+    null,
+  );
+  await local(path + "/finish", {
+    origin,
+    workspaceUuid,
+    leaseId: firstJob.leaseId,
+    operationId: firstJob.intent.operationId,
+    status: "CONFLICT",
+    result: { code: "CANONICAL_VALUE_CHANGED" },
+  });
+  const { job: other } = await local(path + "/claim", { origin, manual: true });
+  assert.equal(other.intent.label, second.label);
+  assert.equal((await local(path)).conflicts, 1);
+  assert.equal((await local("/backend-sync")).operations.length, 0);
+});
+
+test("continuous worker preserves schema conflicts and stops denied creations", async (t) => {
+  const { url, local } = await continuousFixture(t);
+  const path = "/backend-sync/continuous";
+  const changed = {
+    id: "queued-before-schema-change",
+    type: "project",
+    values: { status: "AKTYWNY" },
+  };
+  await local("/state/commit", {
+    expectedRevision: 5,
+    state: {
+      ...initial,
+      revision: 6,
+      objects: [...initial.objects, changed],
+    },
+  });
+  const newer = {
+    ...registry,
+    revisionId: "16",
+    permissions: { ...registry.permissions, create: false },
+  };
+  await local("/backend-sync/registry", { origin, registry: newer });
+  const created = {
+    id: "creation-requires-permission",
+    type: "project",
+    values: { status: "AKTYWNY" },
+  };
+  await local("/state/commit", {
+    expectedRevision: 6,
+    state: {
+      ...initial,
+      revision: 7,
+      objects: [...initial.objects, changed, created],
+    },
+  });
+
+  const settings = {
+    origin,
+    token: "t".repeat(43),
+    syncApprovedCommits: false,
+  };
+  const { syncContinuousBatch } = await load(
+    "src/shared/backend-sync/continuous.ts",
+  );
+  const nativeFetch = globalThis.fetch;
+  const requests = [];
+  const cancellation = new AbortController();
+  try {
+    globalThis.fetch = (target, options) => {
+      if (target.startsWith("http://127.0.0.1:8765/"))
+        return nativeFetch(url + new URL(target).pathname, options);
+      const payload = JSON.parse(options.body);
+      requests.push(payload);
+      return Promise.resolve(
+        Response.json({
+          identity: payload.identity,
+          status: "LOCAL_ONLY",
+          objectFields: {},
+          businessObjectId: null,
+          schemaRevisionId: newer.revisionId,
+          businessEntityId: newer.entities.find(
+            (entity) => entity.localType === "project",
+          ).businessEntityId,
+          businessModelId: newer.businessModelId,
+        }),
+      );
+    };
+    await syncContinuousBatch(settings, false, cancellation.signal);
+    await syncContinuousBatch(settings, false, cancellation.signal);
+  } finally {
+    globalThis.fetch = nativeFetch;
+  }
+  assert.deepEqual(
+    requests.map((payload) => [payload.identity.localObjectId, payload.action]),
+    [[created.id, "preview"]],
+  );
+  const status = await local(path);
+  assert.equal(status.conflicts, 1);
+  assert.deepEqual(
+    status.problems.map(({ status, code }) => [status, code]).sort(),
+    [
+      ["BLOCKED", "CREATE_PERMISSION_REQUIRED"],
+      ["CONFLICT", "SCHEMA_REVISION_CHANGED"],
+    ],
+  );
+});
+
+test(
+  "continuous sync writes typed dependencies through real SQLite and PostgreSQL",
+  {
+    timeout: 60_000,
+    skip:
+      !process.env.BURBOT_TEST_SYNC_ORIGIN ||
+      !process.env.BURBOT_TEST_SYNC_TOKEN,
+  },
+  async (t) => {
+    const prefix = "/api/v1/extension-sync";
+    const backend = process.env.BURBOT_TEST_SYNC_ORIGIN;
+    const token = process.env.BURBOT_TEST_SYNC_TOKEN;
+    const { url, local } = await continuousFixture(t, { unlinked: true });
+    async function remote(path, payload) {
+      const response = await fetch(backend + prefix + path, {
+        method: payload ? "POST" : "GET",
+        headers: {
+          Authorization: "Bearer " + token,
+          "Content-Type": "application/json",
+        },
+        body: payload && JSON.stringify(payload),
+      });
+      assert.ok(response.ok, path + " returned " + response.status);
+      return response.json();
+    }
+    const schema = await remote("/schema");
+    await local("/backend-sync/registry", {
+      origin: backend,
+      registry: schema,
+    });
+    const path = "/backend-sync/continuous";
+    await local(path + "/configure", { origin: backend, enabled: true });
+
+    const operator = {
+      id: crypto.randomUUID(),
+      type: "operator",
+      values: { name: "Fixture Operator" },
+    };
+    const project = {
+      id: crypto.randomUUID(),
+      type: "project",
+      values: { name: "Fixture Project", operator_id: operator.id },
+    };
+    const recruitment = {
+      id: crypto.randomUUID(),
+      type: "recruitment",
+      values: {
+        external_number: "FIX-" + crypto.randomUUID(),
+        project_id: project.id,
+        operator_id: operator.id,
+      },
+    };
+    const category = {
+      id: crypto.randomUUID(),
+      objectId: recruitment.id,
+      label: "Fixture training",
+    };
+    const funding = {
+      id: crypto.randomUUID(),
+      objectId: recruitment.id,
+      company_size: "SMALL",
+      variant_no: 1,
+      max_amount_pln: 25000,
+      service_category_id: category.id,
+    };
+    const geography = {
+      id: crypto.randomUUID(),
+      objectId: recruitment.id,
+      operatorId: operator.id,
+      type: "POLSKA",
+      role: "OBEJMUJE",
+      value: "Polska",
+    };
+    const assignment = {
+      id: crypto.randomUUID(),
+      objectId: project.id,
+      operatorId: operator.id,
+      operatorType: "GLOWNY",
+    };
+    const contact = {
+      id: crypto.randomUUID(),
+      objectId: operator.id,
+      kind: "EMAIL",
+      value: "fixture@example.org",
+      variant_no: 1,
+    };
+    const file = {
+      id: crypto.randomUUID(),
+      objectId: recruitment.id,
+      name: "Fixture.pdf",
+      fileType: "PDF",
+      url: "https://example.org/fixture.pdf",
+      sourcePageUrl: "https://example.org",
+      addedAt: new Date().toISOString(),
+    };
+    const document = {
+      id: crypto.randomUUID(),
+      objectId: recruitment.id,
+      label: "Fixture requirement",
+      requirement: "REQUIRED",
+      purpose: "Application",
+      source_file_source_ids: [file.id],
+    };
+    const missingSource = {
+      ...file,
+      id: crypto.randomUUID(),
+      name: "File awaiting authorized Source",
+      url: "https://example.org/another-fixture.pdf",
+      source: "missing-import-source",
+    };
+    await local("/state/commit", {
+      expectedRevision: 5,
+      state: {
+        ...initial,
+        revision: 6,
+        objects: [...initial.objects, recruitment, project, operator],
+        operatorAssignments: [assignment],
+        operatorContacts: [contact],
+        financingRules: [funding],
+        geographies: [geography],
+        serviceCategories: [category],
+        fileSources: [file, missingSource],
+        documentRequirements: [document],
+      },
+    });
+
+    const { syncContinuousBatch } = await load(
+      "src/shared/backend-sync/continuous.ts",
+    );
+    const realFetch = globalThis.fetch;
+    const settings = { origin: backend, token, syncApprovedCommits: false };
+    const deadline = Date.now() + 35_000;
+    try {
+      globalThis.fetch = (target, options) =>
+        target.startsWith("http://127.0.0.1:8765/")
+          ? realFetch(url + new URL(target).pathname, options)
+          : realFetch(target, options);
+      let current;
+      while (Date.now() < deadline) {
+        const outcome = await syncContinuousBatch(
+          settings,
+          false,
+          AbortSignal.timeout(20_000),
+        );
+        current = await local(path);
+        if (current.synced === 10) break;
+        assert.equal(current.conflicts, 0, JSON.stringify(current.problems));
+        assert.ok(
+          current.problems.every((item) => item.status !== "BLOCKED"),
+          JSON.stringify(current.problems),
+        );
+        await delay(
+          Math.max(40, Math.min(600, (outcome.retryAt ?? 0) - Date.now())),
+        );
+      }
+      assert.equal(current.synced, 10, JSON.stringify(current.problems));
+      assert.equal(current.pending, 1);
+      assert.equal(current.problems[0].code, "SOURCE_UNRESOLVED");
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+    const readObject = (object, kind, record) =>
+      remote("/objects/resolve", {
+        workspaceUuid: schema.workspaceUuid,
+        action: "preview",
+        identity: {
+          localObjectId: object.id,
+          localType: object.type,
+          ...(record && { target: { kind, id: record.id } }),
+        },
+      });
+    const [
+      op,
+      pr,
+      rec,
+      variant,
+      area,
+      service,
+      row,
+      physical,
+      requirement,
+      operatorLink,
+    ] = await Promise.all([
+      readObject(operator),
+      readObject(project),
+      readObject(recruitment),
+      readObject(recruitment, "funding", funding),
+      readObject(recruitment, "geography", geography),
+      readObject(recruitment, "service_category", category),
+      readObject(operator, "operator_contact", contact),
+      readObject(recruitment, "file_source", file),
+      readObject(recruitment, "document", document),
+      readObject(project, "operator_assignment", assignment),
+    ]);
+    assert.equal(pr.objectFields.operator_id.value, op.businessObjectId);
+    assert.equal(rec.objectFields.project_id.value, pr.businessObjectId);
+    assert.equal(
+      variant.objectFields.recruitment_owner.value,
+      rec.businessObjectId,
+    );
+    assert.equal(
+      variant.objectFields.service_category_id.value,
+      service.businessObjectId,
+    );
+    assert.equal(Number(variant.objectFields.max_amount_pln.value), 25000);
+    assert.equal(area.objectFields.value.value, "Polska");
+    assert.equal(area.objectFields.operatorId.value, op.businessObjectId);
+    assert.equal(row.objectFields.value.value, contact.value);
+    assert.equal(
+      operatorLink.objectFields.operatorId.value,
+      op.businessObjectId,
+    );
+    assert.deepEqual(requirement.objectFields.source_file_source_ids.value, [
+      physical.businessObjectId,
+    ]);
+    assert.equal(
+      (await readObject(recruitment, "file_source", missingSource))
+        .businessObjectId,
+      null,
+    );
+  },
+);

@@ -19,6 +19,8 @@ import type {
 } from "./bulkTypes";
 import type {
   CommitOperation,
+  CommitRequest,
+  ContinuousSummary,
   Identity,
   OperationResult,
   Registry,
@@ -31,7 +33,15 @@ import type {
 } from "./types";
 
 export const syncSettingsKey = "burbotBackendSynchronization";
+export const continuousSignalKey = "burbotContinuousSyncSignal";
+export const syncActionMessage = "burbot:backend-sync-action";
 const localOrigin = "http://127.0.0.1:8765";
+
+export type SyncAction = "wake" | "configure" | "sync" | "retry" | "legacy";
+export async function requestSyncAction(action: SyncAction) {
+  const result = await browser.runtime.sendMessage({ type: syncActionMessage, action });
+  if (result?.error) throw new Error(result.error);
+}
 
 export class SyncError extends Error {
   constructor(
@@ -50,6 +60,7 @@ async function json<T>(
   url: string,
   payload?: unknown,
   token?: string,
+  signal?: AbortSignal,
 ): Promise<T> {
   const response = await fetch(url, {
     method: payload === undefined ? "GET" : "POST",
@@ -61,9 +72,16 @@ async function json<T>(
     cache: "no-store",
     credentials: "omit",
     redirect: "error",
-    signal: AbortSignal.timeout(20_000),
+    signal: signal
+      ? AbortSignal.any([signal, AbortSignal.timeout(20_000)])
+      : AbortSignal.timeout(20_000),
   });
-  const result = await response.json().catch(() => ({}));
+  const result = await response.json().catch((error: unknown) => {
+    if (!response.ok) return {};
+    // A connection can drop after the backend has sent headers and committed.
+    if (!(error instanceof SyntaxError)) throw error;
+    throw new SyncError(422, { code: "BACKEND_RESPONSE_INVALID" });
+  });
   if (!response.ok) {
     const detail =
       typeof result.detail === "object" && !Array.isArray(result.detail)
@@ -92,11 +110,12 @@ export async function readSyncSettings(): Promise<SyncSettings | null> {
   return stored ? validateSyncSettings(stored) : null;
 }
 
-function remote<T>(settings: SyncSettings, path: string, body?: unknown) {
+function remote<T>(settings: SyncSettings, path: string, body?: unknown, signal?: AbortSignal) {
   return json<T>(
     settings.origin + "/api/v1/extension-sync" + path,
     body,
     settings.token,
+    signal,
   );
 }
 
@@ -104,6 +123,15 @@ export const readSyncState = () =>
   json<SyncState>(localOrigin + "/backend-sync");
 const local = <T = unknown>(action: string, body: unknown) =>
   json<T>(localOrigin + "/backend-sync/" + action, body);
+
+export const readContinuousSummary = () =>
+  json<ContinuousSummary>(localOrigin + "/backend-sync/continuous");
+
+export const continuousLocal = <T = unknown>(action: string, body: unknown) =>
+  local<T>("continuous/" + action, body);
+
+export const configureContinuous = (settings: SyncSettings, enabled: boolean) =>
+  continuousLocal("configure", { origin: settings.origin, enabled });
 
 function connected(settings: SyncSettings, state: SyncState): Registry {
   if (
@@ -181,6 +209,27 @@ export const finishBulkItem = (job: BulkJob, progress: BulkProgress) =>
     progress,
   });
 
+export function resolveRemoteObject(
+  settings: SyncSettings,
+  workspaceUuid: string,
+  identity: Identity,
+  action: ResolveAction,
+  existingBusinessObjectId?: ServerId,
+  signal?: AbortSignal,
+) {
+  return remote<ResolvedBusinessObject>(
+    settings,
+    "/objects/resolve",
+    {
+      workspaceUuid,
+      identity,
+      action,
+      ...(existingBusinessObjectId && { existingBusinessObjectId }),
+    },
+    signal,
+  );
+}
+
 export async function reconcile(
   settings: SyncSettings,
   state: SyncState,
@@ -189,16 +238,7 @@ export async function reconcile(
   existingBusinessObjectId?: ServerId,
 ) {
   connected(settings, state);
-  const object = await remote<ResolvedBusinessObject>(
-    settings,
-    "/objects/resolve",
-    {
-      workspaceUuid: state.workspaceUuid,
-      identity,
-      action,
-      ...(existingBusinessObjectId && { existingBusinessObjectId }),
-    },
-  );
+  const object = await resolveRemoteObject(settings, state.workspaceUuid, identity, action, existingBusinessObjectId);
   if (state.registry?.revisionId !== object.schemaRevisionId)
     await refreshRegistry(settings);
   await local("binding", { workspaceUuid: state.workspaceUuid, object });
@@ -292,9 +332,16 @@ export const enqueueOperation = (operation: CommitOperation) =>
   local("enqueue", operation);
 
 let flushing: Promise<void> | undefined;
+let ordered: Promise<unknown> = Promise.resolve();
+export function inSyncOrder<T>(operation: () => Promise<T>): Promise<T> {
+  const run = ordered.then(operation, operation);
+  ordered = run;
+  return run;
+}
+
 export function flushQueue(settings: SyncSettings): Promise<void> {
   if (flushing) return flushing;
-  flushing = sendQueue(settings).finally(() => {
+  flushing = inSyncOrder(() => sendQueue(settings)).finally(() => {
     flushing = undefined;
   });
   return flushing;
@@ -308,7 +355,7 @@ async function sendQueue(settings: SyncSettings) {
     let status = "SYNCED";
     let result: OperationResult;
     try {
-      result = await remote<OperationResult>(settings, "/commits", op.request);
+      result = await submitCommit(settings, op.request);
     } catch (error) {
       if (error instanceof SyncError) {
         status = [409, 422].includes(error.status) ? "CONFLICT" : "SYNC_ERROR";
@@ -328,21 +375,28 @@ async function sendQueue(settings: SyncSettings) {
   }
 }
 
+export const submitCommit = (settings: SyncSettings, request: CommitRequest, signal?: AbortSignal) =>
+  remote<OperationResult>(settings, "/commits", request, signal);
+
 export async function persistReviewedCommit(
   before: LegacyStorageState | null,
   committed: LegacyStorageState,
   expectedRevision: number,
-): Promise<boolean> {
+  reviewedObjectIds?: string[],
+): Promise<void> {
   const settings = await readSyncSettings().catch(() => null);
-  if (!settings?.syncApprovedCommits) return false;
-  const state = await readSyncState();
-  if (!state.registry || state.backendOrigin !== settings.origin) return false;
-  const { operation } = makeCommitPreview(state, before, committed);
-  await json(localOrigin + "/state/commit", {
+  let operation: CommitOperation | null = null;
+  if (settings?.syncApprovedCommits) {
+    const state = await readSyncState();
+    if (state.registry && state.backendOrigin === settings.origin)
+      operation = makeCommitPreview(state, before, committed).operation;
+  }
+  const synced = await json<{ legacyQueued?: boolean }>(localOrigin + "/state/commit", {
     state: committed,
     expectedRevision,
+    reviewedObjectIds,
     operation,
   });
-  if (operation?.request) void flushQueue(settings).catch(() => undefined);
-  return true;
+  if (settings && operation?.request && synced.legacyQueued !== false)
+    void flushQueue(settings).catch(() => undefined);
 }

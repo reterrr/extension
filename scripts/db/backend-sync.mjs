@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
+import { identityKey } from "../../src/shared/backend-sync/records.js";
+import { createContinuousSync } from "./continuous-sync.mjs";
 
-export const identityKey = ({ localObjectId, target }) =>
-  JSON.stringify([localObjectId, target?.kind ?? null, target?.id ?? null]);
+export { identityKey } from "../../src/shared/backend-sync/records.js";
 
 export class LocalSyncError extends Error {
   constructor(status, message) {
@@ -189,6 +190,29 @@ export function createBackendSyncStore(db) {
   const binding = db.transaction(({ workspaceUuid, object }) =>
     writeBinding(workspaceUuid, object),
   );
+
+  const bindingForKey = db.prepare(
+    "SELECT binding_json, business_object_id FROM backend_object_bindings WHERE workspace_uuid=? AND identity_key=? AND business_object_id IS NOT NULL",
+  );
+  const readSlots = db.prepare(
+    "SELECT persistent_key, slot_json FROM backend_object_field_bindings WHERE workspace_uuid=? AND identity_key=?",
+  );
+  function readBinding(workspaceUuid, key) {
+    const record = bindingForKey.get(workspaceUuid, key);
+    if (!record) return null;
+    return {
+      ...parse(record.binding_json),
+      objectFields: Object.fromEntries(
+        readSlots.all(workspaceUuid, key).map((row) => [row.persistent_key, parse(row.slot_json)]),
+      ),
+    };
+  }
+
+  const continuous = createContinuousSync(db, {
+    workspace, requireWorkspace, readBinding, writeBinding,
+    boundId: (namespace, key) => bindingForKey.get(namespace, key)?.business_object_id,
+    invalid: (status, message) => new LocalSyncError(status, message),
+  });
   function writeSelector(workspaceUuid, value) {
     requireWorkspace(workspaceUuid);
     const key = uuid(value.selectorUuid);
@@ -218,7 +242,8 @@ export function createBackendSyncStore(db) {
     requireWorkspace(op.workspaceUuid);
     const time = now();
     db.prepare(
-      "INSERT INTO backend_sync_operations VALUES (?, ?, ?, ?, ?, NULL, ?, ?)",
+      `INSERT INTO backend_sync_operations (workspace_uuid, operation_id, local_revision,
+       sync_status, payload_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       op.workspaceUuid,
       uuid(op.operationId),
@@ -237,7 +262,7 @@ export function createBackendSyncStore(db) {
         throw new LocalSyncError(422, "Invalid sync operation status.");
       const op = db
         .prepare(
-          "SELECT * FROM backend_sync_operations WHERE workspace_uuid=? AND operation_id=?",
+          "SELECT * FROM backend_sync_operations WHERE workspace_uuid=? AND operation_id=? AND identity_key IS NULL",
         )
         .get(workspaceUuid, uuid(operationId));
       if (!op) throw new LocalSyncError(404, "Unknown sync operation.");
@@ -286,7 +311,7 @@ export function createBackendSyncStore(db) {
         .map((item) => parse(item.binding_json)),
       operations: db
         .prepare(
-          `SELECT * FROM backend_sync_operations WHERE workspace_uuid=?
+          `SELECT * FROM backend_sync_operations WHERE workspace_uuid=? AND identity_key IS NULL
         ORDER BY rowid DESC`,
         )
         .all(namespace)
@@ -469,6 +494,7 @@ export function createBackendSyncStore(db) {
     initialize.run(randomUUID(), now());
   };
   return {
+    continuous,
     read,
     registry,
     binding,

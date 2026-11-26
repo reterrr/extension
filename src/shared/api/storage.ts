@@ -171,13 +171,13 @@ export async function saveState(state: LegacyStorageState): Promise<void> {
 }
 
 /**
- * Finalizes one staged commit. The database service already persists PUT /state
- * as one SQLite transaction. We additionally verify that the committed state did
- * not move since the draft was created.
+ * Finalizes one staged commit and its outbox entries in the SQLite service.
+ * Verify the draft revision before materializing the reviewed state.
  */
 export async function commitState(
   baseRevision: number,
   workingState: LegacyStorageState,
+  reviewedObjectIds?: string[],
 ): Promise<LegacyStorageState> {
   assertLegacyState(workingState);
   const current = await loadRemoteState();
@@ -195,8 +195,7 @@ export async function commitState(
     checkedAt,
   );
   committed.revision = baseRevision + 1;
-  if (!await persistReviewedCommit(current, committed, baseRevision))
-    await saveRemoteState(committed);
+  await persistReviewedCommit(current, committed, baseRevision, reviewedObjectIds);
   await writeLegacyMirror(committed);
   return committed;
 }
