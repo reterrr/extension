@@ -7,7 +7,7 @@ export interface SnapshotTabContext {
   commandId: string;
   sourceId: number;
   snapshotId: number;
-  format: "visual-html-1" | "evidence";
+  format: "visual-html-1" | "full-resource-1" | "evidence";
   selectorContext?: {
     extractionRunId: number;
     selectorUuid: string;

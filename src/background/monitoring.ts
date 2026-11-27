@@ -15,6 +15,13 @@ import {
   type Job,
   type Settings,
 } from "../shared/monitoring/contracts";
+import {
+  discardArchiveStage,
+  stagedArchiveBlob,
+  writeArchiveChunk,
+} from "../shared/monitoring/archive-stage";
+import type { FullArchivePlan } from "../shared/monitoring/full-archive";
+import { uploadFullArchive } from "./full-archive-upload";
 import { acquire, AcquisitionError } from "./monitoring-navigation";
 import { agentFetch } from "./monitoring-request";
 import { recoverContext } from "./monitoring-tabs";
@@ -29,6 +36,7 @@ interface Outbox {
   agentScope: string;
   jobId: string;
   completion: Completion;
+  fullArchive?: boolean;
 }
 
 interface UploadGrant {
@@ -102,6 +110,29 @@ async function replay(
     outbox.apiOrigin === settings.apiOrigin &&
     outbox.agentScope === agentScope
   ) {
+    if (outbox.fullArchive) {
+      const scope = outbox.completion.leaseId;
+      let fullArchive: FullArchivePlan = {
+        scope,
+        failure: "capture_unavailable",
+      };
+      try {
+        const staged = await stagedArchiveBlob(scope, "plan");
+        const plan = JSON.parse(await staged.text()) as FullArchivePlan;
+        if (plan.scope === scope) fullArchive = plan;
+      } catch {
+        // A lost archive stage does not prevent an evidence retry.
+      }
+      await uploadFullArchive(
+        settings,
+        outbox.jobId,
+        scope,
+        fullArchive,
+        signal,
+      ).catch(() => undefined);
+      signal.throwIfAborted();
+      await discardArchiveStage(scope).catch(() => undefined);
+    }
     try {
       await request(
         settings,
@@ -117,6 +148,8 @@ async function replay(
         throw error;
       // The backend already lost or rejected this attempt. Its lease handles re-claim.
     }
+  } else if (outbox.fullArchive) {
+    await discardArchiveStage(outbox.completion.leaseId).catch(() => undefined);
   }
   await browser.storage.local.remove(outboxKey);
 }
@@ -156,7 +189,7 @@ async function executeJob(
     )
       throw new AcquisitionError("CAPTURE_FAILED");
     await heartbeat();
-    const { html, visualArchive, ...snapshot } = await acquire(
+    const { html, visualArchive, fullArchive, ...snapshot } = await acquire(
       job,
       settings,
       signal,
@@ -234,11 +267,19 @@ async function executeJob(
       }
     }
     signal.throwIfAborted();
+    if (fullArchive)
+      await writeArchiveChunk(
+        job.leaseId,
+        "plan",
+        0,
+        new Blob([JSON.stringify(fullArchive)]),
+      ).catch(() => undefined);
     const outbox: Outbox = {
       apiOrigin: settings.apiOrigin,
       agentScope,
       jobId: job.jobId,
       completion,
+      ...(fullArchive && { fullArchive: true }),
     };
     await browser.storage.local.set({ [outboxKey]: outbox });
     saved = true;
@@ -257,6 +298,8 @@ async function executeJob(
     throw error;
   } finally {
     clearInterval(timer);
+    if (!saved && job.snapshotMode === "full")
+      await discardArchiveStage(job.leaseId).catch(() => undefined);
   }
 }
 
@@ -283,6 +326,11 @@ export function installMonitoringAgent() {
       await recoverContext();
       const storage = await browser.storage.local.get([settingsKey, outboxKey]);
       if (!storage[settingsKey]?.enabled || !permitted) {
+        const pending = storage[outboxKey] as Outbox | undefined;
+        if (pending?.fullArchive)
+          await discardArchiveStage(pending.completion.leaseId).catch(
+            () => undefined,
+          );
         await browser.storage.local.remove(outboxKey);
         await browser.alarms.clear(alarm);
         await state("disabled");

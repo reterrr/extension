@@ -24,7 +24,7 @@ export async function closeArchiveLauncher(
 
 export async function loadArchiveTab(
   tabId: number,
-  html: string,
+  html: string | null,
   context: SnapshotTabContext,
   signal: AbortSignal,
 ) {
@@ -43,7 +43,8 @@ export async function loadArchiveTab(
       message?.id !== context.commandId
     )
       return undefined;
-    if (message.type === "archive-markup") return Promise.resolve(html);
+    if (message.type === "archive-markup")
+      return Promise.resolve(html ?? { staged: true });
     if (
       message.type === "archive-published" &&
       !destination &&

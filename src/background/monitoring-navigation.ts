@@ -12,7 +12,14 @@ import {
   type VisualMarkup,
 } from "../shared/monitoring/contracts";
 import { archiveDocument } from "../shared/monitoring/archive-document";
+import { pruneArchiveStages } from "../shared/monitoring/archive-stage";
+import {
+  validArchiveLimits,
+  type FullArchivePlan,
+} from "../shared/monitoring/full-archive";
 import { recordArchiveResources } from "./archive-resources";
+import { recordFullArchiveResources } from "./full-archive-resources";
+import { prepareFullArchive } from "./full-archive-upload";
 import {
   cleanupMonitoringContext,
   createMonitoringContext,
@@ -168,7 +175,9 @@ export async function acquire(
   job: Job,
   settings: Settings,
   signal: AbortSignal,
-): Promise<Capture & { visualArchive?: string }> {
+): Promise<
+  Capture & { visualArchive?: string; fullArchive?: FullArchivePlan }
+> {
   const trusted = settings.mode === "trusted";
   if (
     trusted
@@ -213,8 +222,14 @@ export async function acquire(
 
   const { owner, context } = await createMonitoringContext(job.jobId);
   let tabId: number | undefined;
-  const visual = job.visualArchiveVersion === visualArchiveVersion;
+  const full = job.snapshotMode === "full";
+  const limits =
+    full && validArchiveLimits(job.fullArchive) ? job.fullArchive : undefined;
+  const visual =
+    job.snapshotMode === undefined &&
+    job.visualArchiveVersion === visualArchiveVersion;
   let recorder: ReturnType<typeof recordArchiveResources> | undefined;
+  let fullRecorder: ReturnType<typeof recordFullArchiveResources> | undefined;
   let requestCount = 0;
   let responseOrigin: string | undefined;
   const guard = async (request: browser.webRequest._OnBeforeRequestDetails) => {
@@ -233,7 +248,7 @@ export async function acquire(
       (await abortable(allowed(request.url), deadline).catch(() => false));
     if (!accepted && mainFrame)
       rejection.abort(new AcquisitionError("NAVIGATION_FAILED"));
-    if (accepted) recorder?.observe(request);
+    if (accepted) (fullRecorder ?? recorder)?.observe(request);
     return { cancel: !accepted };
   };
   const checkResponse: Parameters<
@@ -269,10 +284,22 @@ export async function acquire(
   try {
     const tab = await createMonitoringTab(owner);
     tabId = tab.id;
-    if (visual && typeof browser.webRequest.filterResponseData === "function") {
+    if (limits) void pruneArchiveStages().catch(() => undefined);
+    if (
+      (visual || limits) &&
+      typeof browser.webRequest.filterResponseData === "function"
+    ) {
       try {
-        if (await browser.permissions.contains(visualArchiveAccess))
-          recorder = recordArchiveResources(tabId);
+        if (await browser.permissions.contains(visualArchiveAccess)) {
+          if (limits)
+            fullRecorder = recordFullArchiveResources(
+              tabId,
+              job.leaseId,
+              limits,
+              allowHttp,
+            );
+          else recorder = recordArchiveResources(tabId);
+        }
       } catch {
         // A visual archive can still retain inline CSS and data images.
       }
@@ -313,6 +340,7 @@ export async function acquire(
       type: captureMessage,
       ...(job.comparisonVersion === comparisonVersion && { comparisonVersion }),
       ...(visual && { visualArchive: true }),
+      ...(limits && { fullArchive: true }),
       selectors: job.selectors,
       expectedOrigins: origins ? [...origins] : [pageOrigin],
       allowHttp,
@@ -329,8 +357,30 @@ export async function acquire(
     )
       throw new AcquisitionError("CAPTURE_FAILED");
     monitoringTabEvent("Monitoring capture completed", owner);
-    if (!result.visualMarkup) return result;
+    if (!full && !result.visualMarkup) return result;
     const { visualMarkup, ...capture } = result;
+    if (full) {
+      let plan: FullArchivePlan = {
+        scope: job.leaseId,
+        failure: "capture_unavailable",
+      };
+      try {
+        if (limits && visualMarkup)
+          plan = await prepareFullArchive(
+            job.leaseId,
+            capture,
+            visualMarkup,
+            fullRecorder,
+            limits,
+            allowHttp,
+            deadline,
+          );
+      } catch {
+        // The canonical capture has already been evaluated.
+      }
+      return { ...capture, fullArchive: plan };
+    }
+    if (!visualMarkup) return capture;
     try {
       await recorder?.drain(deadline);
       const html = archiveDocument(
@@ -353,6 +403,7 @@ export async function acquire(
   } finally {
     try {
       recorder?.close();
+      fullRecorder?.close();
     } finally {
       try {
         await cleanupMonitoringContext(owner, true);
