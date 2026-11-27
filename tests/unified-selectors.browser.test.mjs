@@ -43,7 +43,7 @@ async function pageWith(html) {
   const page = await browser.newPage();
   // HTTPS origin supplies crypto.randomUUID, as it does in extension pages.
   await page.route("https://selector.test/**", (route) =>
-    route.fulfill({ contentType: "text/html", body: html }),
+    route.fulfill({ contentType: "text/html; charset=utf-8", body: html }),
   );
   await page.goto("https://selector.test/");
   await page.addScriptTag({ content: bundle.outputFiles[0].text });
@@ -99,9 +99,7 @@ test("picker captures verified CSS, XPath, id and TextQuote alternatives in one 
   );
 });
 
-test("actual picker selection becomes a stored tree and runs through the picker port", async (t) => {
-  const page = await pageWith('<p id="value">Funding 80% now</p>');
-  t.after(() => page.close());
+async function installPicker(page) {
   await page.evaluate(() => {
     window.pickerListeners = [];
     window.pickerConnections = [];
@@ -117,6 +115,12 @@ test("actual picker selection becomes a stored tree and runs through the picker 
     };
   });
   await page.addScriptTag({ content: pickerBundle.outputFiles[0].text });
+}
+
+test("actual picker selection becomes a stored tree and runs through the picker port", async (t) => {
+  const page = await pageWith('<p id="value">Funding 80% now</p>');
+  t.after(() => page.close());
+  await installPicker(page);
   const result = await page.evaluate(async () => {
     const text = document.getElementById("value").firstChild;
     const range = document.createRange();
@@ -161,9 +165,13 @@ test("actual picker selection becomes a stored tree and runs through the picker 
       postMessage: (message) => messages.push(message),
     });
     callbacks[0]({ id: "run", op: "RUN", rules: state.rules });
+    text.data = "Funding 90% now";
+    callbacks[0]({ id: "changed", op: "RUN", rules: state.rules });
     return {
       tree: state.rules[0].selectorTree,
       run: messages.find((message) => message.id === "run"),
+      changed: messages.find((message) => message.id === "changed"),
+      methods: candidate.options.map((item) => item.extraction.type),
     };
   });
   assert.equal(result.tree.versions[0].recipes.length, 1);
@@ -176,6 +184,84 @@ test("actual picker selection becomes a stored tree and runs through the picker 
   assert.equal(result.run.ok, true);
   assert.equal(result.run.value[0].raw, "80%");
   assert.equal(result.run.value[0].evaluation.status, "success");
+  assert.equal(result.changed.value[0].evaluation.status, "error");
+  assert.deepEqual(result.methods, ["selection"]);
+});
+
+test("selecting a whole recruitment element offers dynamic text and retains failed alternatives", async (t) => {
+  const original = "Nabór rozpocznie się 01 października 2026";
+  const current = "Nabór zakończy się 29 listopada 2026";
+  const page = await pageWith(
+    '<div class="info-top"><p id="announcement" class="wp-block-paragraph">' +
+      original +
+      "</p><p>Other information</p></div>",
+  );
+  t.after(() => page.close());
+  await installPicker(page);
+  const result = await page.evaluate(async (current) => {
+    const u = UnifiedSelectors;
+    const target = document.querySelector("div.info-top p.wp-block-paragraph");
+    const range = document.createRange();
+    range.selectNodeContents(target);
+    getSelection().removeAllRanges();
+    getSelection().addRange(range);
+    const response = await pickerListeners[0]({ type: "BURBOT_SELECTION" });
+    if (!response.ok) throw new Error(response.error);
+    const full = response.value.options.find(
+      (option) => option.extraction.type === "text",
+    );
+    const exact = response.value.options.find(
+      (option) => option.extraction.type === "selection",
+    );
+    target.textContent = " \n" + current + "  ";
+    let runtime = u.createDOMSelectorRuntime(document);
+    const dynamic = u.evaluateSelectorVersion(full.selectorVersion, runtime);
+    const failed = u.evaluateSelectorVersion(exact.selectorVersion, runtime);
+    target.innerHTML = "Numer: <b>ABC-123</b> Status: otwarty";
+    runtime = u.createDOMSelectorRuntime(document);
+    const bounded = u.evaluateLocator(
+      {
+        uuid: crypto.randomUUID(),
+        kind: "css_path",
+        order: 0,
+        selector: "#announcement",
+      },
+      { type: "text_between", start: "Numer:", end: "Status:" },
+      runtime,
+    );
+    return {
+      full,
+      dynamic,
+      failed,
+      bounded,
+    };
+  }, current);
+  assert.equal(result.full.raw, original);
+  assert.equal(result.dynamic.status, "success");
+  assert.equal(result.dynamic.rawValue, current);
+  const locators = result.full.selectorVersion.recipes[0].parts[0].locators;
+  const outcomes =
+    result.dynamic.recipeResults[0].partResults[0].locatorResults;
+  for (const [index, locator] of locators.entries()) {
+    if (locator.kind === "text_quote") {
+      assert.equal(outcomes[index].status, "not_found");
+      assert.equal(outcomes[index].candidate, undefined);
+    } else {
+      assert.equal(outcomes[index].rawValue, current);
+      assert.equal(outcomes[index].matchCount, 1);
+    }
+  }
+  assert.ok(locators.some((locator) => locator.kind === "text_quote"));
+  assert.ok(locators.some((locator) => locator.kind === "xpath"));
+  assert.equal(result.failed.status, "error");
+  const [failed] = result.failed.recipeResults[0].partResults[0].locatorResults;
+  assert.equal(failed.extractionError, "selection_quote_mismatch");
+  assert.deepEqual(failed.candidate, {
+    rawText: " \n" + current + "  ",
+    source: "matched_element_text",
+    verified: false,
+  });
+  assert.equal(result.bounded.rawValue, "ABC-123");
 });
 
 test("real DOM resolves attribute, cross-node selection, XPath and duplicate quote/id diagnostics", async (t) => {
@@ -371,18 +457,22 @@ test("simple editor creates, saves and approves a draft with active history inta
   await page.evaluate(() => {
     const u = UnifiedSelectors;
     const element = document.getElementById("value");
+    const extraction = {
+      type: "selection",
+      quote: { exact: "80%", prefix: "", suffix: "" },
+    };
     const version = u.buildCapturedSelectorVersion(
       element,
       u.buildDurableSelectors(element),
-      { type: "text" },
+      extraction,
       "80%",
     );
     const candidate = u.createCapturedExtractionInput(
       { pageUrl: location.href, selector: "#value", options: [] },
       {
-        label: "Text",
+        label: "Exact selected text",
         raw: "80%",
-        extraction: { type: "text" },
+        extraction,
         selectorVersion: version,
       },
     );
@@ -418,8 +508,16 @@ test("simple editor creates, saves and approves a draft with active history inta
           );
           render();
         },
-        evaluate: async (v) =>
-          u.evaluateSelectorVersion(v, u.createDOMSelectorRuntime(document)),
+        evaluate: async (v) => {
+          const source = new DOMParser().parseFromString(
+            element.outerHTML,
+            "text/html",
+          );
+          return u.evaluateSelectorVersion(
+            v,
+            u.createDOMSelectorRuntime(source),
+          );
+        },
         error: (error) => {
           window.editorError = error.message;
         },
@@ -430,13 +528,18 @@ test("simple editor creates, saves and approves a draft with active history inta
   await page.getByRole("button", { name: "Create draft", exact: true }).click();
   const input = page.getByRole("textbox", { name: "Draft version 2 JSON" });
   await input.waitFor();
+  const initialDraft = JSON.parse(await input.inputValue());
+  await page.getByText("Change extraction method", { exact: true }).click();
+  await page
+    .getByRole("combobox", { name: "Extraction method" })
+    .selectOption("text");
+  await page.getByRole("button", { name: "Set extraction method" }).click();
   const edited = JSON.parse(await input.inputValue());
-  edited.recipes[0].parts[0].locators = [
-    edited.recipes[0].parts[0].locators.find(
-      (locator) => locator.kind === "xpath",
-    ),
-  ];
-  await input.fill(JSON.stringify(edited));
+  assert.deepEqual(edited.recipes[0].parts[0].extraction, { type: "text" });
+  assert.deepEqual(
+    edited.recipes[0].parts[0].locators,
+    initialDraft.recipes[0].parts[0].locators,
+  );
   await page
     .getByRole("button", { name: "Save draft to View", exact: true })
     .click();
@@ -448,13 +551,16 @@ test("simple editor creates, saves and approves a draft with active history inta
     ),
     true,
   );
+  await page.locator("#value").evaluate((element) => {
+    element.textContent = "90%";
+  });
   await page
     .getByRole("button", { name: "Test edited draft", exact: true })
     .click();
   await page.waitForFunction(() =>
     document
       .querySelector(".selector-diagnostics")
-      .textContent.includes('"status": "success"'),
+      .textContent.includes('"rawValue": "90%"'),
   );
   await page
     .getByRole("button", { name: "Approve draft", exact: true })

@@ -27,6 +27,7 @@ export interface TextQuote {
 export type ExtractionSpec =
   | { type: "text" }
   | { type: "attribute"; name: string }
+  | { type: "text_between"; start: string; end: string }
   | { type: "selection"; quote: TextQuote };
 
 /** Local reserved contracts. Map against backend models before REST serialization. */
@@ -120,12 +121,33 @@ export interface SelectorTree {
 export type EvaluationStatus =
   "success" | "not_found" | "ambiguous" | "conflict" | "error" | "unsupported";
 
+export type ExtractionErrorCode =
+  | "selection_quote_mismatch"
+  | "selection_quote_ambiguous"
+  | "selection_context_mismatch"
+  | "selection_context_ambiguous"
+  | "text_boundary_missing"
+  | "text_boundary_ambiguous"
+  | "element_required"
+  | "attribute_missing"
+  | "empty_value"
+  | "value_too_large"
+  | "extraction_failed";
+
+export interface DiagnosticCandidate {
+  rawText: string;
+  source: "matched_element_text";
+  verified: false;
+}
+
 export interface LocatorEvaluationResult {
   locatorUuid: UUID;
   status: EvaluationStatus;
   matchCount: number;
   rawValue?: string;
   diagnostic?: string;
+  extractionError?: ExtractionErrorCode;
+  candidate?: DiagnosticCandidate;
 }
 
 export interface PartEvaluationResult {

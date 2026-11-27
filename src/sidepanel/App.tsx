@@ -479,6 +479,7 @@ export function App() {
           <div id="capture-source" hidden>
             <label htmlFor="method">Odczytaj ze strony</label>
             <select id="method" />
+            <p id="capture-target" className="hint" aria-live="polite" />
             <div id="sample" className="source-sample" />
           </div>
         </details>

@@ -224,6 +224,6 @@ test("selected text has a quote-only fallback when CSS cannot be unique", () => 
   );
   assert.match(
     picker,
-    /if \(!quoteOnly && full\)[\s\S]*?if \(!quoteOnly\) \{/,
+    /if \(!quoteOnly && wholeTarget && full\)[\s\S]*?if \(!quoteOnly\) \{/,
   );
 });

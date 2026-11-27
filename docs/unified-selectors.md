@@ -10,6 +10,10 @@ Each locator reports its status, match count, raw value and diagnostic. A missin
 
 Consensus normalization is a separate function and defaults to exact string equality. Existing DOM extraction semantics remain: text uses whitespace-collapsed DOM text, attributes preserve their contents, href/src become absolute URLs, and selections with unique prefix/suffix context may read a changed value. TextQuote locators require an exact quote with matching supplied context. Their ephemeral DOM index is never stored as Snapshot offsets.
 
+The picker offers **Exact selected text** for the original literal and **Current element text (dynamic)** for a uniquely located element. A whole-element selection offers both methods. A narrow selection that does not cover the intended element can be reviewed by picking the element directly. A draft part can also use **Text between markers (dynamic)** to extract from a single ordered pair of stable markers inside an element.
+
+When a locator finds one element and the read fails, its diagnostic can include an extraction error code and bounded, unverified element text. Monitoring captures derive this text from the sanitized DOM associated with the capture.
+
 `dom_path`, `dom_range`, `exact_pos`, `text_position`, and `text_fragment` have separate structured payload types and return `unsupported`. Position payloads require representation, representation version, offset units, and a SHA-256 representation digest. No offsets are inferred from arbitrary `textContent`.
 
 ## Local storage and migration
@@ -26,7 +30,7 @@ Evaluation values and diagnostics live outside the immutable tree. The workspace
 
 ## Editor and JSON
 
-Select a field and expand its rule details to see version/recipe/part/locator structure. Create a draft, edit its JSON or use the add/remove controls, save it to View, test it, and approve or reject it. Approval is disabled while the JSON has unsaved changes. Export/import preserves all entity UUIDs and version history. Imported targets must belong to the current workspace object; existing approved definitions remain immutable.
+Select a field and expand its rule details to see version/recipe/part/locator structure. Create a draft and use **Change extraction method** on the part, or edit the draft JSON. Test the edited draft to see the value and match counts. Save it to View, then approve or reject it. Approval is disabled while the JSON has unsaved changes. Export/import preserves all entity UUIDs and version history. Imported targets must belong to the current workspace object. Approved definitions remain immutable.
 
 `exportSelectorTree`/`importSelectorTree` expose the full portable tree. `selectorTreeDTO` prepares future selector/version API inputs and removes local migration metadata. These helpers perform no network calls. **Backend Pydantic models are not in this repository**: the reserved payload contracts are explicitly local, and their field/enum mapping must be checked against the actual backend before implementing REST serialization. No `/selectors` endpoints, Python backend dependency, Snapshot creation, MinIO behavior or sync changes are introduced.
 

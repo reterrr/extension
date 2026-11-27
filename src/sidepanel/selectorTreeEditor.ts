@@ -1,11 +1,16 @@
 import { newSelectorUuid } from "../shared/selectors/uuid.js";
 import type { LegacyStoredRule } from "../shared/types/legacy-storage";
 import type {
+  ExtractionSpec,
   SelectorEvaluationResult,
   SelectorLocator,
   SelectorPart,
   SelectorVersion,
 } from "../shared/types/selectors";
+import {
+  elementLocatorKinds,
+  maxBoundaryLength,
+} from "../shared/selectors/evaluation.js";
 import {
   activeSelectorVersion,
   exportSelectorTree,
@@ -17,6 +22,13 @@ interface EditorActions {
   evaluate(version: SelectorVersion): Promise<SelectorEvaluationResult>;
   error(error: unknown): void;
 }
+
+const extractionLabels = {
+  text: "Current element text (dynamic)",
+  selection: "Exact selected text",
+  text_between: "Text between markers (dynamic)",
+  attribute: "Attribute value",
+};
 
 function node<K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -104,6 +116,14 @@ export function renderSelectorTreeEditor(
       node("summary", `Version ${version.versionNo} · ${version.status}`),
     );
     const versionTools = node("div");
+    const input = version.status === "draft" ? node("textarea") : undefined;
+    const update = (edit: (draft: SelectorVersion) => void) => {
+      if (!input) return;
+      const draft = JSON.parse(input.value) as SelectorVersion;
+      edit(draft);
+      input.value = JSON.stringify(draft, null, 2);
+      input.dispatchEvent(new Event("input"));
+    };
     let approve: HTMLButtonElement | undefined;
     button(versionTools, "Test version", () => run(version, true));
     if (version.status === "draft") {
@@ -147,18 +167,142 @@ export function renderSelectorTreeEditor(
           locators.append(row);
         }
         partRow.append(locators);
+        if (input) {
+          const settings = node("details");
+          settings.append(node("summary", "Change extraction method"));
+          const method = node("select");
+          const label = node("label", "Extraction method ");
+          label.append(method);
+          for (const [value, text] of Object.entries(extractionLabels))
+            method.add(new Option(text, value));
+          method.value = part.extraction.type;
+          const field = (
+            description: string,
+            value: string,
+            maxLength?: number,
+          ) => {
+            const label = node("label", description + " ");
+            const input = node("input");
+            input.value = value;
+            if (maxLength) input.maxLength = maxLength;
+            label.append(input);
+            return { label, input };
+          };
+          const exact = field(
+            "Original text",
+            part.extraction.type === "selection"
+              ? part.extraction.quote.exact
+              : "",
+          );
+          const start = field(
+            "Start marker",
+            part.extraction.type === "text_between"
+              ? part.extraction.start
+              : "",
+            maxBoundaryLength,
+          );
+          const end = field(
+            "End marker",
+            part.extraction.type === "text_between" ? part.extraction.end : "",
+            maxBoundaryLength,
+          );
+          const attribute = field(
+            "Attribute name",
+            part.extraction.type === "attribute" ? part.extraction.name : "",
+          );
+          const hint = node("p");
+          const refresh = () => {
+            exact.label.hidden = method.value !== "selection";
+            start.label.hidden = end.label.hidden =
+              method.value !== "text_between";
+            attribute.label.hidden = method.value !== "attribute";
+            hint.textContent =
+              {
+                text: "Reads all current text from the located element. Preview the target before approval.",
+                selection: "Requires the original text.",
+                text_between:
+                  "Reads the changing text inside one pair of markers in the located element.",
+                attribute: "Reads the current value of the named attribute.",
+              }[method.value] ?? "";
+          };
+          method.onchange = refresh;
+          refresh();
+          settings.append(
+            label,
+            exact.label,
+            start.label,
+            end.label,
+            attribute.label,
+            hint,
+          );
+          button(settings, "Set extraction method", () =>
+            update((draft) => {
+              const edited = draft.recipes
+                .find(({ uuid }) => uuid === recipe.uuid)
+                ?.parts.find(({ uuid }) => uuid === part.uuid);
+              if (!edited)
+                throw new Error("This part was removed from the draft.");
+              const type = method.value as ExtractionSpec["type"];
+              if (
+                (type === "text" || type === "text_between") &&
+                !edited.locators.some(
+                  (locator) =>
+                    elementLocatorKinds.includes(locator.kind) &&
+                    (locator.kind !== "css_path" ||
+                      !/^(?:html|body|head|:root)$/i.test(
+                        locator.selector.trim(),
+                      )),
+                )
+              ) {
+                throw new Error(
+                  "Add a locator for the intended element before using dynamic text.",
+                );
+              }
+              switch (type) {
+                case "text":
+                  edited.extraction = { type };
+                  break;
+                case "selection":
+                  if (!exact.input.value.trim())
+                    throw new Error("Enter the original text.");
+                  edited.extraction = {
+                    type,
+                    quote: { exact: exact.input.value },
+                  };
+                  break;
+                case "text_between":
+                  if (!start.input.value.trim() || !end.input.value.trim())
+                    throw new Error("Enter both text markers.");
+                  edited.extraction = {
+                    type,
+                    start: start.input.value,
+                    end: end.input.value,
+                  };
+                  break;
+                case "attribute":
+                  if (!attribute.input.value.trim())
+                    throw new Error("Enter the attribute name.");
+                  edited.extraction = {
+                    type,
+                    name: attribute.input.value.trim(),
+                  };
+                  break;
+              }
+            }),
+          );
+          partRow.append(settings);
+        }
         parts.append(partRow);
       }
       recipeRow.append(parts);
       list.append(recipeRow);
     }
     section.append(list);
-    if (version.status === "draft") {
+    if (input) {
       const label = node(
         "label",
         "Draft definition (JSON) · save to View before approval and Commit; saving clears earlier draft diagnostics",
       );
-      const input = node("textarea");
       input.rows = 18;
       input.spellcheck = false;
       input.setAttribute(
@@ -173,12 +317,6 @@ export function renderSelectorTreeEditor(
       label.append(input);
       section.append(label);
       const editTools = node("div");
-      const update = (edit: (draft: SelectorVersion) => void) => {
-        const draft = JSON.parse(input.value) as SelectorVersion;
-        edit(draft);
-        input.value = JSON.stringify(draft, null, 2);
-        input.dispatchEvent(new Event("input"));
-      };
       const part = (): SelectorPart => ({
         uuid: newSelectorUuid(),
         order: 0,

@@ -12,6 +12,7 @@ import {
   type SnapshotComparison,
   type VisualMarkup,
 } from "../shared/monitoring/contracts";
+import { privateTextSelector } from "../shared/selectors/evaluation.js";
 import {
   validateSelectorEvaluation,
   validateSelectorTree,
@@ -90,28 +91,7 @@ export function sanitizedDOM(
     snapshot.importNode(doc.documentElement, true),
     snapshot.documentElement,
   );
-  const remove = [
-    "script",
-    "style",
-    "noscript",
-    "template",
-    "iframe",
-    "frame",
-    "object",
-    "embed",
-    "input",
-    "textarea",
-    "select",
-    "[contenteditable]",
-    "meta[http-equiv]",
-    "base",
-    "[data-burbot-selector-highlight]",
-    "[data-burbot-picker]",
-    "[data-burbot-import-review-highlight]",
-    "div[data-burbot-import-review-focused]",
-    "div#automa-palette",
-  ];
-  for (const node of Array.from(snapshot.querySelectorAll(remove.join(","))))
+  for (const node of Array.from(snapshot.querySelectorAll(privateTextSelector)))
     node.remove();
   const walker = snapshot.createTreeWalker(snapshot, NodeFilter.SHOW_COMMENT);
   const comments: Node[] = [];

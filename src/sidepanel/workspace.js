@@ -597,6 +597,9 @@ export const workspaceReady = (() => {
         (o) => o.extraction.attribute === "href",
       );
       if (href >= 0) methodIndex = href;
+    } else {
+      const text = candidate.options.findIndex((option) => option.extraction.type === "text");
+      if (text >= 0) methodIndex = text;
     }
     updateDraftFromCapture();
     publishSelectorPreview();
@@ -2008,7 +2011,22 @@ export const workspaceReady = (() => {
         ...candidate.options.map((o, i) => new Option(o.label, String(i))),
       );
       $("method").value = String(methodIndex);
-      $("sample").textContent = candidate.options[methodIndex]?.raw || "";
+      const option = candidate.options[methodIndex];
+      const locator = option?.selectorVersion?.recipes[0]?.parts[0]?.locators[0];
+      const target = locator && (
+        locator.kind === "css_path" ? "CSS " + locator.selector :
+        locator.kind === "xpath" ? "XPath " + locator.expression :
+        locator.kind === "element_id" ? "Element ID " + locator.elementId :
+        "Text quote"
+      );
+      const literal = option?.extraction.type === "selection";
+      const method = literal ? "Requires the original text." :
+        option?.extraction.type === "text" ? "Reads the current text as it changes." : "";
+      const advice = literal && !candidate.options.some((item) => item.extraction.type === "text")
+        ? " Pick the intended element to preview its whole text."
+        : "";
+      $("capture-target").textContent = target ? target + " · 1 match. " + method + advice : "";
+      $("sample").textContent = option?.raw || "";
     }
     const root = $("value-control");
     root.replaceChildren();

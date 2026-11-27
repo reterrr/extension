@@ -10,6 +10,7 @@ import { activeSelectorVersion } from "../shared/selectors/repository";
 import {
   createDOMSelectorRuntime,
   evaluateSelectorVersion,
+  readTextBetween,
   type SelectorRuntime,
 } from "./selector-resolver";
 import type {
@@ -159,11 +160,13 @@ export function runExtractionRules(
                 resolve: (locator: SelectorLocator) =>
                   locator.kind === "css_path" ? runtime.selectAll(locator.selector) : null,
                 read: (target: Element | Range, extraction: SelectorExtractionSpec) =>
-                  runtime.readElement(target as Element, (
-                    extraction.type === "attribute"
-                      ? { type: "attribute", attribute: extraction.name }
-                      : extraction
-                  ) as ElementExtractionSpec),
+                  extraction.type === "text_between"
+                    ? readTextBetween(runtime.readElement(target as Element, { type: "text" }), extraction)
+                    : runtime.readElement(target as Element, (
+                        extraction.type === "attribute"
+                          ? { type: "attribute", attribute: extraction.name }
+                          : extraction
+                      ) as ElementExtractionSpec),
               });
         const evaluation = evaluateSelectorVersion(version, resolver);
         if (evaluation.status !== "success") return {
