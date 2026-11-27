@@ -2,12 +2,12 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { loadCommittedState } from "../shared/api/storage";
 import {
   enqueueOperation,
-  flushQueue,
   readSyncSettings,
   readSyncState,
   reconcile,
   refreshRegistry,
   reportCapture,
+  requestSyncAction,
   SyncError,
   syncSelector,
   syncSettingsKey,
@@ -30,6 +30,7 @@ import type {
 } from "../shared/backend-sync/types";
 import type { LegacyStorageState } from "../shared/types/legacy-storage";
 import { BulkSyncOptions } from "./BulkSyncOptions";
+import { ContinuousSyncOptions } from "./ContinuousSyncOptions";
 
 const emptySettings: SyncSettings = {
   origin: "",
@@ -65,6 +66,7 @@ export function BackendSyncOptions() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [continuousMode, setContinuousMode] = useState<boolean | null>(null);
 
   async function localState() {
     const [state, committed] = await Promise.all([
@@ -207,6 +209,7 @@ export function BackendSyncOptions() {
         }
       }
       await localState();
+      void requestSyncAction("wake").catch(() => undefined);
       setPreview(null);
       setMessage(
         failures
@@ -238,7 +241,7 @@ export function BackendSyncOptions() {
       );
     await enqueueOperation(preview.operation);
     setPreview(null);
-    await flushQueue(settings);
+    await requestSyncAction("legacy");
     await localState();
   });
 
@@ -307,16 +310,18 @@ export function BackendSyncOptions() {
             }
           />
         </label>
-        <label className="ui-sync-checkbox">
-          <input
-            type="checkbox"
-            checked={input.syncApprovedCommits}
-            onChange={(event) =>
-              setInput({ ...input, syncApprovedCommits: event.target.checked })
-            }
-          />
-          Send future, locally approved commits to Burbot
-        </label>
+        {continuousMode === null && (
+          <label className="ui-sync-checkbox">
+            <input
+              type="checkbox"
+              checked={input.syncApprovedCommits}
+              onChange={(event) =>
+                setInput({ ...input, syncApprovedCommits: event.target.checked })
+              }
+            />
+            Sync approved values for bound records
+          </label>
+        )}
         <div className="ui-actions">
           <button disabled={busy}>Refresh schema</button>
           <button
@@ -330,6 +335,12 @@ export function BackendSyncOptions() {
           </button>
         </div>
       </form>
+
+      <ContinuousSyncOptions
+        settings={settings}
+        linked={Boolean(registry)}
+        onMode={setContinuousMode}
+      />
 
       {sync && (
         <p className="ui-muted">
@@ -594,7 +605,7 @@ export function BackendSyncOptions() {
               disabled={busy || !settings}
               onClick={action(async () => {
                 if (!settings) return;
-                await flushQueue(settings);
+                await requestSyncAction("legacy");
                 await localState();
               })}
             >
@@ -638,6 +649,7 @@ export function BackendSyncOptions() {
         onSynchronized={async () => {
           if (settings) await refreshRegistry(settings).catch(() => undefined);
           await localState();
+          void requestSyncAction("wake").catch(() => undefined);
         }}
       />
       {message && <p role="status">{message}</p>}

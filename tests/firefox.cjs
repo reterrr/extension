@@ -22,13 +22,13 @@ async function until(check, label = "condition", timeout = 10000) {
     `Timed out waiting for ${label}${last ? ": " + last.message : ""}`,
   );
 }
-async function launch({ sourceDir = root } = {}) {
+async function launch({ sourceDir = root, profileDir = "" } = {}) {
   const { connectWithMaxRetries, findFreeTcpPort } = await import(
     pathToFileURL(path.join(root, "node_modules/web-ext/lib/firefox/remote.js"))
   );
   const port = await findFreeTcpPort();
   const container = process.env.BURBOT_TEST_CONTAINER === "1";
-  const context = await firefox.launchPersistentContext("", {
+  const context = await firefox.launchPersistentContext(profileDir, {
     headless: true,
     timeout: 20000,
     args: ["--start-debugger-server", String(port)],
@@ -44,6 +44,7 @@ async function launch({ sourceDir = root } = {}) {
       : {}),
     firefoxUserPrefs: {
       ...(container ? { "security.sandbox.content.level": 0 } : {}),
+      ...(profileDir ? { "extensions.webextensions.keepStorageOnUninstall": true } : {}),
       "devtools.debugger.remote-enabled": true,
       "devtools.debugger.prompt-connection": false,
       "devtools.chrome.enabled": true,

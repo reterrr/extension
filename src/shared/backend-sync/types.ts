@@ -12,6 +12,7 @@ export type ObjectStatus =
 
 export interface ValueDefinition {
   type: string;
+  system?: boolean;
   nullable?: boolean;
   enum_values?: Array<string | number>;
   item?: ValueDefinition;
@@ -125,6 +126,7 @@ export interface CommitPreview {
 }
 
 export interface OperationResult {
+  operationId?: string;
   code?: string;
   message?: string;
   object?: ResolvedBusinessObject;
@@ -158,4 +160,47 @@ export interface SyncSettings {
   origin: string;
   token: string;
   syncApprovedCommits: boolean;
+}
+
+export interface ConfirmedHead {
+  from: Slot | null;
+  to: Slot;
+}
+
+export interface ContinuousIntent {
+  identity: Identity;
+  label: string;
+  canCreate: boolean;
+  operationId: string;
+  localRevision: number;
+  schemaRevisionId: ServerId;
+  boundObjectId: ServerId | null;
+  fields: Array<{ localKey: string; persistentKey: string | null; value: unknown }>;
+  heads: Record<string, Slot>;
+  request?: CommitRequest;
+  anchors?: Record<string, Slot | null>;
+}
+
+export interface ContinuousJob {
+  workspaceUuid: string;
+  leaseId: string;
+  registry: Registry;
+  intent: ContinuousIntent;
+  resolved: Record<string, ServerId>;
+  missing: (OperationResult & { blocked?: boolean }) | null;
+  confirmed: Record<string, ConfirmedHead>;
+}
+
+export type ContinuousStatus =
+  "SYNCED" | "RETRY_PENDING" | "WAITING_DEPENDENCY" | "CONFLICT" | "BLOCKED";
+
+export interface ContinuousSummary {
+  mode: boolean | null;
+  linked: boolean;
+  pending: number;
+  synced: number;
+  conflicts: number;
+  lastSuccess: string | null;
+  running: boolean;
+  problems: Array<{ id: string; label: string; status: ContinuousStatus; code?: string; message?: string }>;
 }

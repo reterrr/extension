@@ -7,26 +7,21 @@ import type {
   FieldChange,
   FieldDefinition,
   Identity,
-  Registry,
   ResolvedBusinessField,
   SyncState,
   ValueDefinition,
 } from "./types";
 
-export const identityKey = ({ localObjectId, target }: Identity) =>
-  JSON.stringify([localObjectId, target?.kind ?? null, target?.id ?? null]);
+import {
+  entityFor,
+  fieldFor,
+  identityKey,
+  localRecords,
+  same,
+  type LocalRecord,
+} from "./records";
 
-function same(a: unknown, b: unknown): boolean {
-  return JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
-}
-
-export function entityFor(registry: Registry, identity: Identity) {
-  const kind =
-    identity.target?.kind ??
-    registry.aliases[identity.localType]?.entity ??
-    identity.localType;
-  return registry.entities.find((entity) => entity.localType === kind);
-}
+export { entityFor, identityKey, localRecords, type LocalRecord } from "./records";
 
 export function resolveBusinessObject(sync: SyncState, identity: Identity) {
   const key = identityKey(identity);
@@ -40,14 +35,6 @@ export function resolveBusinessObject(sync: SyncState, identity: Identity) {
     found.businessEntityId === entity?.businessEntityId
     ? found
     : null;
-}
-
-function fieldFor(registry: Registry, identity: Identity, localKey: string) {
-  const alias =
-    !identity.target && registry.aliases[identity.localType]?.fields[localKey];
-  return entityFor(registry, identity)?.fields.find(
-    (field) => field.localKey === (alias || localKey),
-  );
 }
 
 export function resolveBusinessField(
@@ -79,66 +66,6 @@ export function resolveBusinessField(
       persistentKey: definition.persistentKey,
     },
   };
-}
-
-const nested = {
-  operator_assignment: "operatorAssignments",
-  operator_contact: "operatorContacts",
-  geography: "geographies",
-  funding: "financingRules",
-  service_category: "serviceCategories",
-  file_source: "fileSources",
-  document: "documentRequirements",
-} as const;
-
-export interface LocalRecord {
-  identity: Identity;
-  label: string;
-  values: Record<string, unknown>;
-}
-
-export function localRecords(state: LegacyStorageState): LocalRecord[] {
-  const records: LocalRecord[] = [];
-  const roots = new Map(state.objects.map((obj) => [obj.id, obj]));
-  for (const obj of state.objects)
-    records.push({
-      identity: { localObjectId: obj.id, localType: obj.type },
-      label:
-        obj.label ??
-        String(
-          obj.values.name ??
-            obj.values.external_number ??
-            obj.values.title ??
-            obj.id,
-        ),
-      values: obj.values,
-    });
-  for (const [kind, collection] of Object.entries(nested)) {
-    for (const row of (state[collection] ?? []) as Array<
-      Record<string, unknown>
-    >) {
-      const parent = roots.get(String(row.objectId));
-      if (!parent || typeof row.id !== "string" || !row.id) continue;
-      const type = parent.type === "nabor" ? "recruitment" : parent.type;
-      records.push({
-        identity: {
-          localObjectId: parent.id,
-          localType: parent.type,
-          target: { kind, id: row.id },
-        },
-        label: String(
-          row.label ??
-            row.display_name ??
-            row.name ??
-            row.value ??
-            row.company_size ??
-            row.id,
-        ),
-        values: { ...row, [type + "_owner"]: parent.id },
-      });
-    }
-  }
-  return records;
 }
 
 export function selectorIdentity(
@@ -194,33 +121,31 @@ export function resolveSelectorTarget(
     : ({ status: "READY", identity, field: slot.field } as const);
 }
 
-function wireValue(
+export function wireValue(
   value: unknown,
   type: ValueDefinition,
   field: FieldDefinition,
-  records: LocalRecord[],
-  sync: SyncState,
+  reference: (kind: string, value: string) => string | undefined,
+  source?: (value: string) => string | undefined,
 ): unknown {
   if (value == null || value === "") return null;
   if (type.type === "list") {
     if (!Array.isArray(value) || !type.item)
       throw new Error("COLLECTION_REQUIRED");
     return value.map((item) =>
-      wireValue(item, type.item!, field, records, sync),
+      wireValue(item, type.item!, field, reference, source),
     );
   }
   if (type.type === "reference") {
     if (typeof value !== "string") throw new Error("LOCAL_REFERENCE_REQUIRED");
-    const candidates = records.filter(
-      (record) =>
-        (record.identity.target?.kind ?? record.identity.localType) ===
-          field.references &&
-        (record.identity.target?.id ?? record.identity.localObjectId) === value,
-    );
-    if (candidates.length !== 1) throw new Error("REFERENCE_UNRESOLVED");
-    const bound = resolveBusinessObject(sync, candidates[0].identity);
-    if (!bound?.businessObjectId) throw new Error("REFERENCE_UNRESOLVED");
-    return bound.businessObjectId;
+    const id = field.references && reference(field.references, value);
+    if (!id) throw new Error("REFERENCE_UNRESOLVED");
+    return id;
+  }
+  if (type.type === "source" && source) {
+    const id = typeof value === "string" && source(value);
+    if (!id) throw new Error("SOURCE_UNRESOLVED");
+    return id;
   }
   if (type.type === "enum") {
     const proposed =
@@ -254,6 +179,15 @@ export function makeCommitPreview(
   if (!sync.registry?.permissions.commit)
     return { operation: null, differences: [] };
   const records = localRecords(state);
+  const reference = (kind: string, value: string) => {
+    const candidates = records.filter(({ identity }) =>
+      (identity.target?.kind ?? identity.localType) === kind &&
+      (identity.target?.id ?? identity.localObjectId) === value,
+    );
+    return candidates.length === 1
+      ? resolveBusinessObject(sync, candidates[0].identity)?.businessObjectId ?? undefined
+      : undefined;
+  };
   const previous = new Map(
     (before ? localRecords(before) : []).map((r) => [
       identityKey(r.identity),
@@ -321,8 +255,7 @@ export function makeCommitPreview(
           proposed,
           definition.definition,
           definition,
-          records,
-          sync,
+          reference,
         );
         if (same(slot.value, value)) continue;
         fields.push({

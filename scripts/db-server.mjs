@@ -146,10 +146,32 @@ ensureColumn("recruitments", "funding_rules", "TEXT");
 ensureColumn("recruitments", "funding_verified_at", "TEXT");
 ensureColumn("recruitments", "funding_verification_url", "TEXT");
 ensureColumn("geographies", "operator_object_id", "TEXT");
-db.pragma("user_version = 16");
+
+db.transaction(() => {
+  ensureColumn("backend_workspace_identity", "continuous_mode", "INTEGER CHECK (continuous_mode IN (0,1))");
+  const outbox = "backend_sync_operations";
+  ensureColumn(outbox, "identity_key", "TEXT");
+  ensureColumn(outbox, "predecessor_id", "TEXT");
+  ensureColumn(outbox, "due_at", "INTEGER NOT NULL DEFAULT 0");
+  ensureColumn(outbox, "attempt_count", "INTEGER NOT NULL DEFAULT 0");
+  ensureColumn(outbox, "lease_id", "TEXT");
+  ensureColumn(outbox, "lease_until", "INTEGER NOT NULL DEFAULT 0");
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS backend_sync_by_identity ON backend_sync_operations
+      (workspace_uuid, identity_key, local_revision DESC) WHERE identity_key IS NOT NULL;
+    CREATE INDEX IF NOT EXISTS backend_sync_due ON backend_sync_operations
+      (workspace_uuid, sync_status, due_at) WHERE identity_key IS NOT NULL;
+    CREATE INDEX IF NOT EXISTS backend_sync_revision_order ON backend_sync_operations
+      (workspace_uuid, local_revision) WHERE identity_key IS NOT NULL
+      AND sync_status IN ('QUEUED','RETRY_PENDING','WAITING_DEPENDENCY');
+    CREATE INDEX IF NOT EXISTS backend_sync_leases ON backend_sync_operations
+      (workspace_uuid, lease_until) WHERE lease_until > 0;
+  `);
+  db.pragma("user_version = 17");
+})();
 
 db.prepare(
-  `INSERT INTO app_meta(key, value) VALUES ('schema_version', '16')
+  `INSERT INTO app_meta(key, value) VALUES ('schema_version', '17')
    ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
 ).run();
 
@@ -772,11 +794,15 @@ function saveState(state) {
   persistStateTransaction(state);
 }
 
-const commitReviewedState = db.transaction(({ state, expectedRevision, operation }) => {
-  if ((loadState()?.revision ?? 0) !== expectedRevision || state.revision !== expectedRevision + 1)
+const commitReviewedState = db.transaction(({ state, expectedRevision, operation, reviewedObjectIds }) => {
+  const before = loadState();
+  if ((before?.revision ?? 0) !== expectedRevision || state.revision !== expectedRevision + 1)
     throw new LocalSyncError(409, "The SQLite workspace revision changed during review.");
+  if (reviewedObjectIds !== undefined &&
+      (!Array.isArray(reviewedObjectIds) || reviewedObjectIds.some((id) => typeof id !== "string")))
+    throw new LocalSyncError(422, "The reviewed object list is invalid.");
   persistStateTransaction(state);
-  if (operation) backendSync.enqueue(operation);
+  return backendSync.continuous.enqueue(before, state, operation, backendSync.enqueue, reviewedObjectIds);
 });
 
 const resetTransaction = db.transaction(() => {
@@ -982,6 +1008,18 @@ const server = createServer(async (req, res) => {
       sendJson(res, 200, backendSync.readBulk(requestUrl.searchParams.get("operationId")));
       return;
     }
+    if (req.method === "GET" && pathname === "/backend-sync/continuous") {
+      sendJson(res, 200, backendSync.continuous.summary());
+      return;
+    }
+    if (req.method === "POST" && pathname.startsWith("/backend-sync/continuous/")) {
+      const action = pathname.slice("/backend-sync/continuous/".length);
+      if (["configure", "claim", "prepare", "finish", "release", "retry"].includes(action)) {
+        const result = backendSync.continuous[action](await readJsonBody(req));
+        sendJson(res, 200, result ?? { ok: true });
+        return;
+      }
+    }
     if (req.method === "POST" && pathname.startsWith("/backend-sync/")) {
       const action = pathname.slice("/backend-sync/".length);
       if (["registry", "binding", "selector", "enqueue", "finish", "bulkStart", "bulkFinish"].includes(action)) {
@@ -992,8 +1030,8 @@ const server = createServer(async (req, res) => {
     }
     if (req.method === "POST" && pathname === "/state/commit") {
       const request = await readJsonBody(req);
-      commitReviewedState(request);
-      sendJson(res, 200, { ok: true, revision: request.state.revision });
+      const sync = commitReviewedState(request);
+      sendJson(res, 200, { ok: true, revision: request.state.revision, ...sync });
       return;
     }
 
