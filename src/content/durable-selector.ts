@@ -332,12 +332,18 @@ export function buildCapturedSelectorVersion(
   legacyExtraction: ElementExtractionSpec,
   raw: string,
   range?: Range,
+  exactSelection = false,
 ): SelectorVersion {
   const extraction: ExtractionSpec =
     legacyExtraction.type === "attribute"
       ? { type: "attribute", name: legacyExtraction.attribute }
       : legacyExtraction.type === "selection"
-        ? { type: "selection", quote: { ...legacyExtraction.quote } }
+        ? {
+            type: "selection",
+            quote: exactSelection
+              ? { exact: legacyExtraction.quote.exact }
+              : { ...legacyExtraction.quote },
+          }
         : { type: "text" };
   const runtime = createDOMSelectorRuntime(element.ownerDocument);
   const locators: SelectorLocator[] = [];

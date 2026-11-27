@@ -1,3 +1,14 @@
+import {
+  elementLocatorKinds,
+  errorExtractionTypes,
+  isSafeCandidateText,
+  maxBoundaryLength,
+  maxRawLength,
+  summarizePart,
+  summarizeRecipe,
+  summarizeVersion,
+} from "./evaluation.js";
+
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const record = (value) =>
@@ -283,13 +294,24 @@ export function validateSelectorTree(tree) {
             ? ["type", "name"]
             : part.extraction.type === "selection"
               ? ["type", "quote"]
-              : ["type"],
+              : part.extraction.type === "text_between"
+                ? ["type", "start", "end"]
+                : ["type"],
         );
         if (part.extraction.type === "attribute")
           text(part.extraction.name, "attribute name");
         else if (part.extraction.type === "selection")
           quote(part.extraction.quote);
-        else
+        else if (part.extraction.type === "text_between") {
+          for (const marker of [part.extraction.start, part.extraction.end])
+            requireValue(
+              typeof marker === "string" &&
+                marker.length <= maxBoundaryLength &&
+                marker.trim().length > 0 &&
+                !/[\u0000\uD800-\uDFFF]/u.test(marker),
+              "Text boundaries must be nonempty and at most 256 characters.",
+            );
+        } else
           requireValue(
             part.extraction.type === "text",
             "Unsupported extraction specification.",
@@ -300,6 +322,13 @@ export function validateSelectorTree(tree) {
         );
         ordered(part.locators, "locator");
         part.locators.forEach(validateLocator);
+        if (part.extraction.type === "text_between")
+          requireValue(
+            part.locators.some(({ kind }) =>
+              elementLocatorKinds.includes(kind),
+            ),
+            "Text boundaries require an element locator.",
+          );
       }
     }
   }
@@ -324,20 +353,23 @@ export function validateSelectorEvaluation(result, version) {
     "error",
     "unsupported",
   ];
-  const check = (value) => {
+  const check = (value, fields) => {
     requireValue(
       record(value) && statuses.includes(value.status),
       "Invalid evaluation status.",
     );
+    keys(value, ["status", "rawValue", "diagnostic", ...fields]);
     requireValue(
-      value.rawValue === undefined || typeof value.rawValue === "string",
+      value.rawValue === undefined ||
+        (typeof value.rawValue === "string" &&
+          !value.rawValue.includes("\u0000")),
       "Invalid evaluation value.",
     );
     requireValue(
       value.status !== "success" ||
         (typeof value.rawValue === "string" &&
           value.rawValue.length > 0 &&
-          value.rawValue.length <= 100000),
+          value.rawValue.length <= maxRawLength),
       "Successful evaluation requires a bounded value.",
     );
     requireValue(
@@ -345,52 +377,106 @@ export function validateSelectorEvaluation(result, version) {
       "Invalid evaluation diagnostic.",
     );
   };
-  const children = (results, definitions, key) => {
+  const children = (results, definitions, key, fields) => {
     requireValue(
       Array.isArray(results) &&
         results.length === definitions.length &&
-        new Set(results.map((item) => item[key])).size === results.length,
+        new Set(results.map((item) => item?.[key])).size === results.length,
       "Incomplete evaluation diagnostics.",
     );
-    return results.map((item) => {
-      const definition = definitions.find((entry) => entry.uuid === item[key]);
-      requireValue(definition, "Evaluation references an unknown definition.");
-      check(item);
-      return [item, definition];
-    });
+    const byId = new Map(results.map((item) => [item?.[key], item]));
+    return [...definitions]
+      .sort((a, b) => a.order - b.order)
+      .map((definition) => {
+        const item = byId.get(definition.uuid);
+        requireValue(item, "Evaluation references an unknown definition.");
+        check(item, [key, ...fields]);
+        return [item, definition];
+      });
   };
-  check(result);
+  const sameOutcome = (reported, expected) => {
+    requireValue(
+      reported.status === expected.status &&
+        (reported.status !== "success" ||
+          reported.rawValue === expected.rawValue),
+      "Reported outcome does not follow from its diagnostics.",
+    );
+  };
+  check(result, ["selectorVersionUuid", "recipeResults"]);
   requireValue(
     result.selectorVersionUuid === version.uuid,
     "Evaluation belongs to another version.",
   );
-  for (const [recipeResult, recipe] of children(
+  const recipes = children(
     result.recipeResults,
     version.recipes,
     "recipeUuid",
-  )) {
-    for (const [partResult, part] of children(
-      recipeResult.partResults,
-      recipe.parts,
-      "partUuid",
-    )) {
-      for (const [locatorResult] of children(
+    ["partResults"],
+  );
+  for (const [recipeResult, recipe] of recipes) {
+    const parts = children(recipeResult.partResults, recipe.parts, "partUuid", [
+      "locatorResults",
+    ]);
+    for (const [partResult, part] of parts) {
+      const locators = children(
         partResult.locatorResults,
         part.locators,
         "locatorUuid",
-      )) {
+        ["matchCount", "extractionError", "candidate"],
+      );
+      for (const [locatorResult, locator] of locators) {
+        const { candidate, extractionError, status, matchCount, rawValue } =
+          locatorResult;
         requireValue(
-          Number.isSafeInteger(locatorResult.matchCount) &&
-            locatorResult.matchCount >= 0,
+          Number.isSafeInteger(matchCount) &&
+            matchCount >= 0 &&
+            status !== "conflict" &&
+            (status !== "success" || matchCount === 1) &&
+            (!["not_found", "unsupported"].includes(status) ||
+              matchCount === 0) &&
+            (status !== "ambiguous" || matchCount >= 2),
           "Invalid locator match count.",
         );
+        if (extractionError !== undefined)
+          requireValue(
+            status === "error" &&
+              matchCount === 1 &&
+              rawValue === undefined &&
+              typeof extractionError === "string" &&
+              Object.hasOwn(errorExtractionTypes, extractionError) &&
+              (errorExtractionTypes[extractionError] === null ||
+                errorExtractionTypes[extractionError] ===
+                  part.extraction.type) &&
+              (extractionError !== "element_required" ||
+                (locator.kind === "text_quote" &&
+                  ["attribute", "text_between"].includes(
+                    part.extraction.type,
+                  ))),
+            "Invalid locator extraction error.",
+          );
+        if (candidate === undefined) continue;
         requireValue(
-          locatorResult.status !== "success" || locatorResult.matchCount === 1,
-          "A successful locator requires a unique match.",
+          record(candidate) &&
+            extractionError !== undefined &&
+            elementLocatorKinds.includes(locator.kind) &&
+            candidate.source === "matched_element_text" &&
+            candidate.verified === false &&
+            isSafeCandidateText(candidate.rawText),
+          "Invalid locator diagnostic candidate.",
         );
+        keys(candidate, ["source", "verified", "rawText"]);
       }
+      sameOutcome(partResult, summarizePart(locators.map(([item]) => item)));
     }
+    sameOutcome(
+      recipeResult,
+      summarizeRecipe(
+        parts.map(([, part]) => part),
+        parts.map(([item]) => item),
+      ),
+    );
   }
+  sameOutcome(result, summarizeVersion(recipes.map(([item]) => item)));
 }
 
 function stable(value) {

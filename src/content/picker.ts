@@ -119,9 +119,11 @@ if (!globalThis.__burbotPickerLoaded) {
 
     const options: ElementExtractionCandidateOption[] = [];
     const full = C.clean(element.textContent);
+    const exact = range ? C.clean(range.toString()) : null;
+    if (range && !exact)
+      throw new Error("Select nonempty text or pick the intended element.");
 
-    if (range) {
-      const exact = C.clean(range.toString());
+    if (range && exact) {
       const preceding = document.createRange();
 
       preceding.selectNodeContents(element);
@@ -145,15 +147,18 @@ if (!globalThis.__burbotPickerLoaded) {
       };
 
       options.push({
-        label: "Selected text",
+        label: "Exact selected text",
         raw: exact,
         extraction: { type: "selection", quote },
       });
     }
 
-    if (!quoteOnly && full) {
+    const wholeTarget = !element.matches("html,head,body") &&
+      (!range || (exact === full &&
+        !element.querySelector("article,section,div,p,li,dt,dd,td,th")));
+    if (!quoteOnly && wholeTarget && full) {
       options.push({
-        label: "Element text",
+        label: "Current element text (dynamic)",
         raw: full,
         extraction: { type: "text" },
       });
@@ -195,6 +200,7 @@ if (!globalThis.__burbotPickerLoaded) {
           selectorVersion: buildCapturedSelectorVersion(
             element, selectors, option.extraction, option.raw,
             option.extraction.type === "selection" ? range : undefined,
+            true,
           ),
         });
       } catch {

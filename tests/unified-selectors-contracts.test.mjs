@@ -12,6 +12,7 @@ import {
   migrateRuleSelector,
 } from "../src/shared/selectors/migration.js";
 import {
+  validateSelectorEvaluation,
   validateSelectorTree,
   validateSelectorTransition,
 } from "../src/shared/selectors/validation.js";
@@ -96,6 +97,70 @@ function runtimeWith(values) {
     read: (target) => target.value,
   };
 }
+
+test("evaluation validation checks diagnostic candidates and recomputes consensus", () => {
+  const extraction = { type: "selection", quote: { exact: "Original" } };
+  const locator = css("#value");
+  const v = version([recipe([part([locator], 0, extraction)])]);
+  const rawText = " \nChanged 😀  ";
+  const result = runtime.evaluateSelectorVersion(v, {
+    resolve: () => [{}],
+    read: () => {
+      throw new Error("Configured selection did not match.");
+    },
+    readCandidate: () => rawText,
+  });
+  const locatorResult = (report) =>
+    report.recipeResults[0].partResults[0].locatorResults[0];
+  assert.deepEqual(locatorResult(result).candidate, {
+    rawText,
+    source: "matched_element_text",
+    verified: false,
+  });
+  validateSelectorEvaluation(result, v);
+  for (const change of [
+    { matchCount: 0 },
+    { rawValue: rawText },
+    { extractionError: "attribute_missing" },
+    { extractionError: ["extraction_failed"] },
+    { candidate: { ...locatorResult(result).candidate, verified: true } },
+    {
+      candidate: {
+        ...locatorResult(result).candidate,
+        source: "document_text",
+      },
+    },
+    {
+      candidate: {
+        ...locatorResult(result).candidate,
+        rawText: "😀".repeat(2049),
+      },
+    },
+    {
+      candidate: {
+        ...locatorResult(result).candidate,
+        rawText: "password\u00a0=private",
+      },
+    },
+    { candidate: { ...locatorResult(result).candidate, extractionRunId: 32 } },
+  ]) {
+    const bad = structuredClone(result);
+    Object.assign(locatorResult(bad), change);
+    assert.throws(() => validateSelectorEvaluation(bad, v));
+  }
+  assert.throws(
+    () =>
+      validateSelectorEvaluation(
+        { ...result, status: "success", rawValue: rawText },
+        v,
+      ),
+    /does not follow/,
+  );
+  const historical = structuredClone(result);
+  delete locatorResult(historical).candidate;
+  delete locatorResult(historical).extractionError;
+  validateSelectorEvaluation(historical, v);
+});
 
 test("migration creates one complete tree, preserves legacy mapping and remains idempotent", () => {
   const rule = legacy();

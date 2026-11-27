@@ -1,5 +1,5 @@
 import type {
-  EvaluationStatus,
+  ExtractionErrorCode,
   ExtractionSpec,
   LocatorEvaluationResult,
   PartEvaluationResult,
@@ -11,31 +11,41 @@ import type {
   SelectorVersion,
   TextQuote,
 } from "../shared/types/selectors";
+import {
+  isSafeCandidateText,
+  maxCandidateLength,
+  maxRawLength,
+  privateTextSelector,
+  summarizePart,
+  summarizeRecipe,
+  summarizeVersion,
+} from "../shared/selectors/evaluation.js";
 import { ordered } from "../shared/selectors/repository";
+
+export { normalizeConsensusValue } from "../shared/selectors/evaluation.js";
 
 export type LocatorTarget = Element | Range;
 export interface SelectorRuntime {
   resolve(locator: SelectorLocator): LocatorTarget[] | null;
   read(target: LocatorTarget, extraction: ExtractionSpec): string;
+  readCandidate?(target: LocatorTarget): string | undefined;
 }
 
 export interface ConsensusOptions {
   normalize?: (rawValue: string) => string;
 }
 
-/** Exact comparison by default: case, punctuation and number formatting matter. */
-export function normalizeConsensusValue(value: string): string {
-  return value;
+class ExtractionFailure extends Error {
+  constructor(
+    readonly code: ExtractionErrorCode,
+    message: string,
+  ) {
+    super(message);
+  }
 }
+
 const message = (error: unknown) =>
   error instanceof Error ? error.message : String(error);
-const failureStatus = (
-  results: Array<{ status: EvaluationStatus }>,
-): EvaluationStatus =>
-  (
-    ["conflict", "ambiguous", "error", "unsupported", "not_found"] as const
-  ).find((status) => results.some((result) => result.status === status)) ??
-  "error";
 
 export function evaluateLocator(
   locator: SelectorLocator,
@@ -43,34 +53,55 @@ export function evaluateLocator(
   runtime: SelectorRuntime,
 ): LocatorEvaluationResult {
   const base = { locatorUuid: locator.uuid, matchCount: 0 };
-  let matchCount = 0;
+  let targets: LocatorTarget[] | null;
   try {
-    const targets = runtime.resolve(locator);
-    if (targets === null)
-      return {
-        ...base,
-        status: "unsupported",
-        diagnostic: `No runtime resolver for ${locator.kind}.`,
-      };
-    matchCount = targets.length;
-    if (targets.length !== 1)
-      return {
-        ...base,
-        matchCount,
-        status: targets.length === 0 ? "not_found" : "ambiguous",
-        diagnostic: `Locator matched ${targets.length} fragments.`,
-      };
-    const rawValue = runtime.read(targets[0], extraction);
-    if (!rawValue || rawValue.length > 100000)
-      return {
-        ...base,
-        matchCount,
-        status: "error",
-        diagnostic: "Extracted value is empty or too large.",
-      };
+    targets = runtime.resolve(locator);
+  } catch (error) {
+    return { ...base, status: "error", diagnostic: message(error) };
+  }
+  if (targets === null)
+    return {
+      ...base,
+      status: "unsupported",
+      diagnostic: "No runtime resolver for " + locator.kind + ".",
+    };
+  const matchCount = targets.length;
+  if (matchCount !== 1)
+    return {
+      ...base,
+      matchCount,
+      status: matchCount === 0 ? "not_found" : "ambiguous",
+      diagnostic: "Locator matched " + matchCount + " fragments.",
+    };
+  const target = targets[0];
+  try {
+    const rawValue = runtime.read(target, extraction);
+    if (!rawValue)
+      throw new ExtractionFailure("empty_value", "Extracted value is empty.");
+    if (rawValue.length > maxRawLength)
+      throw new ExtractionFailure(
+        "value_too_large",
+        "Extracted value is too large.",
+      );
     return { ...base, matchCount, status: "success", rawValue };
   } catch (error) {
-    return { ...base, matchCount, status: "error", diagnostic: message(error) };
+    let rawText: string | undefined;
+    try {
+      rawText = runtime.readCandidate?.(target);
+    } catch {
+      // Candidate collection is optional. Keep the original extraction error.
+    }
+    return {
+      ...base,
+      matchCount,
+      status: "error",
+      diagnostic: message(error),
+      extractionError:
+        error instanceof ExtractionFailure ? error.code : "extraction_failed",
+      ...(rawText && {
+        candidate: { rawText, source: "matched_element_text", verified: false },
+      }),
+    };
   }
 }
 
@@ -82,28 +113,11 @@ export function evaluatePart(
   const locatorResults = ordered(part.locators).map((locator) =>
     evaluateLocator(locator, part.extraction, runtime),
   );
-  const successes = locatorResults.filter(
-    (result) => result.status === "success",
-  );
-  const base = { partUuid: part.uuid, locatorResults };
-  if (!successes.length)
-    return {
-      ...base,
-      status: failureStatus(locatorResults),
-      diagnostic: "No locator resolved this part uniquely.",
-    };
-  const normalize = options.normalize ?? normalizeConsensusValue;
-  if (
-    new Set(successes.map((result) => normalize(result.rawValue!))).size !== 1
-  )
-    return {
-      ...base,
-      status: "conflict",
-      diagnostic: "Successful locators disagree about this part's value.",
-    };
-  // Failed/ambiguous alternatives remain visible in locatorResults; they are
-  // never treated as successful matches or allowed to choose an arbitrary node.
-  return { ...base, status: "success", rawValue: successes[0].rawValue };
+  return {
+    partUuid: part.uuid,
+    locatorResults,
+    ...summarizePart(locatorResults, options.normalize),
+  };
 }
 
 export function evaluateRecipe(
@@ -113,29 +127,11 @@ export function evaluateRecipe(
 ): RecipeEvaluationResult {
   const parts = ordered(recipe.parts);
   const partResults = parts.map((part) => evaluatePart(part, runtime, options));
-  const base = { recipeUuid: recipe.uuid, partResults };
-  if (
-    !partResults.length ||
-    partResults.some((result) => result.status !== "success")
-  )
-    return {
-      ...base,
-      status: failureStatus(partResults),
-      diagnostic: "Recipe did not produce every part.",
-    };
-  const rawValue = partResults
-    .map(
-      (result, index) =>
-        (index ? (parts[index].joinWith ?? "") : "") + result.rawValue!,
-    )
-    .join("");
-  if (rawValue.length > 100000)
-    return {
-      ...base,
-      status: "error",
-      diagnostic: "Assembled recipe value is too large.",
-    };
-  return { ...base, status: "success", rawValue };
+  return {
+    recipeUuid: recipe.uuid,
+    partResults,
+    ...summarizeRecipe(parts, partResults),
+  };
 }
 
 export function evaluateSelectorVersion(
@@ -146,27 +142,11 @@ export function evaluateSelectorVersion(
   const recipeResults = ordered(version.recipes).map((recipe) =>
     evaluateRecipe(recipe, runtime, options),
   );
-  const base = { selectorVersionUuid: version.uuid, recipeResults };
-  const successes = recipeResults.filter(
-    (result) => result.status === "success",
-  );
-  const normalize = options.normalize ?? normalizeConsensusValue;
-  if (new Set(successes.map((result) => normalize(result.rawValue!))).size > 1)
-    return {
-      ...base,
-      status: "conflict",
-      diagnostic: "Independent recipes disagree.",
-    };
-  if (
-    !recipeResults.length ||
-    recipeResults.some((result) => result.status !== "success")
-  )
-    return {
-      ...base,
-      status: failureStatus(recipeResults),
-      diagnostic: "Every independent recipe must produce a complete result.",
-    };
-  return { ...base, status: "success", rawValue: recipeResults[0].rawValue };
+  return {
+    selectorVersionUuid: version.uuid,
+    recipeResults,
+    ...summarizeVersion(recipeResults, options.normalize),
+  };
 }
 
 const clean = (value: string) => value.replace(/\s+/g, " ").trim();
@@ -244,6 +224,55 @@ function quoteRanges(index: DOMText, quote: TextQuote, doc: Document): Range[] {
   return result;
 }
 
+/** Find a single ordered pair in the normalized element text. */
+function boundarySpan(text: string, prefix: string, suffix: string) {
+  const starts: number[] = [],
+    ends: number[] = [];
+  for (
+    let i = text.indexOf(prefix);
+    i >= 0 && starts.length <= 200;
+    i = text.indexOf(prefix, i + 1)
+  )
+    starts.push(i + prefix.length);
+  for (
+    let i = text.indexOf(suffix);
+    i >= 0 && ends.length <= 200;
+    i = text.indexOf(suffix, i + 1)
+  )
+    ends.push(i);
+  if (starts.length > 200 || ends.length > 200) return "ambiguous";
+  const pairs = starts.flatMap((start) =>
+    ends.filter((end) => end >= start).map((end) => ({ start, end })),
+  );
+  if (pairs.length !== 1) return pairs.length ? "ambiguous" : "missing";
+  let { start, end } = pairs[0];
+  while (start < end && /\s/.test(text[start])) start++;
+  while (end > start && /\s/.test(text[end - 1])) end--;
+  return { start, end };
+}
+
+export function readTextBetween(
+  text: string,
+  extraction: Extract<ExtractionSpec, { type: "text_between" }>,
+) {
+  const span = boundarySpan(
+    text,
+    clean(extraction.start),
+    clean(extraction.end),
+  );
+  if (span === "missing")
+    throw new ExtractionFailure(
+      "text_boundary_missing",
+      "Text boundaries no longer match.",
+    );
+  if (span === "ambiguous")
+    throw new ExtractionFailure(
+      "text_boundary_ambiguous",
+      "Multiple text boundary pairs match.",
+    );
+  return text.slice(span.start, span.end);
+}
+
 function selectionRanges(
   index: DOMText,
   quote: TextQuote,
@@ -253,35 +282,44 @@ function selectionRanges(
     suffix = clean(quote.suffix ?? "");
   if (!prefix || !suffix)
     return quoteRanges(index, { exact: quote.exact }, doc);
-  const starts: number[] = [],
-    ends: number[] = [];
-  for (
-    let i = index.text.indexOf(prefix);
-    i >= 0 && starts.length <= 200;
-    i = index.text.indexOf(prefix, i + 1)
-  )
-    starts.push(i + prefix.length);
-  for (
-    let i = index.text.indexOf(suffix);
-    i >= 0 && ends.length <= 200;
-    i = index.text.indexOf(suffix, i + 1)
-  )
-    ends.push(i);
-  if (starts.length > 200 || ends.length > 200)
-    throw new Error("Selection context is too repetitive.");
-  const pairs = starts.flatMap((start) =>
-    ends.filter((end) => end >= start).map((end) => ({ start, end })),
-  );
-  if (pairs.length !== 1)
-    throw new Error("Selection context changed or is ambiguous.");
-  let { start, end } = pairs[0];
-  while (start < end && /\s/.test(index.text[start])) start++;
-  while (end > start && /\s/.test(index.text[end - 1])) end--;
-  if (end <= start) throw new Error("Selected text is now empty.");
+  const span = boundarySpan(index.text, prefix, suffix);
+  if (span === "missing")
+    throw new ExtractionFailure(
+      "selection_context_mismatch",
+      "Selection context no longer matches.",
+    );
+  if (span === "ambiguous")
+    throw new ExtractionFailure(
+      "selection_context_ambiguous",
+      "Selection context is ambiguous.",
+    );
+  const { start, end } = span;
+  if (end <= start)
+    throw new ExtractionFailure("empty_value", "Selected text is now empty.");
   const range = doc.createRange();
   range.setStart(index.starts[start].node, index.starts[start].offset);
   range.setEnd(index.ends[end - 1].node, index.ends[end - 1].offset);
   return [range];
+}
+
+function readCandidateText(target: LocatorTarget, doc: Document) {
+  if (
+    !("getAttribute" in target) ||
+    /^(?:html|head|body)$/i.test(target.localName)
+  )
+    return undefined;
+  const walker = doc.createTreeWalker(target, 4 /* SHOW_TEXT */);
+  let text = "";
+  for (
+    let node = walker.nextNode() as Text | null;
+    node;
+    node = walker.nextNode() as Text | null
+  ) {
+    if (node.parentElement?.closest(privateTextSelector)) continue;
+    if (text.length + node.data.length > maxCandidateLength) return undefined;
+    text += node.data;
+  }
+  return isSafeCandidateText(text) ? text : undefined;
 }
 
 export function resolveSelectionRange(
@@ -353,18 +391,27 @@ export function createDOMSelectorRuntime(
           return null;
       }
     },
+    readCandidate(target) {
+      return readCandidateText(target, doc);
+    },
     read(target, extraction) {
       const isElement = "getAttribute" in target;
       if (extraction.type === "attribute") {
         if (!isElement)
-          throw new Error("Attribute extraction requires an element locator.");
+          throw new ExtractionFailure(
+            "element_required",
+            "Attribute extraction requires an element locator.",
+          );
         const owner =
           extraction.name === "href"
             ? (target.closest("a[href]") ?? target)
             : target;
         const attribute = owner.getAttribute(extraction.name);
         if (attribute === null)
-          throw new Error(`Missing attribute: ${extraction.name}.`);
+          throw new ExtractionFailure(
+            "attribute_missing",
+            "The configured attribute was not found.",
+          );
         // Preserve the extension's existing absolute href/src behavior.
         if (["href", "src"].includes(extraction.name))
           return new URL(attribute, owner.baseURI).href;
@@ -372,17 +419,34 @@ export function createDOMSelectorRuntime(
       }
       if (extraction.type === "text")
         return isElement ? index(target).text : clean(target.toString());
+      if (extraction.type === "text_between") {
+        if (!isElement)
+          throw new ExtractionFailure(
+            "element_required",
+            "Text boundaries require an element locator.",
+          );
+        return readTextBetween(index(target).text, extraction);
+      }
       if (isElement) {
         const ranges = selectionRanges(index(target), extraction.quote, doc);
-        if (ranges.length !== 1)
-          throw new Error(
-            `Selection quote matched ${ranges.length} fragments.`,
+        if (ranges.length === 0)
+          throw new ExtractionFailure(
+            "selection_quote_mismatch",
+            "The selection quote no longer matches.",
+          );
+        if (ranges.length > 1)
+          throw new ExtractionFailure(
+            "selection_quote_ambiguous",
+            "The selection quote matches multiple fragments.",
           );
         return clean(ranges[0].toString());
       }
       const raw = clean(target.toString());
       if (raw !== clean(extraction.quote.exact))
-        throw new Error("Text locator and selection extraction disagree.");
+        throw new ExtractionFailure(
+          "selection_quote_mismatch",
+          "Text locator and selection extraction disagree.",
+        );
       return raw;
     },
   };
