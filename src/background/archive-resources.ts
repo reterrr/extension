@@ -3,7 +3,7 @@ import {
   type ArchiveResource,
 } from "../shared/monitoring/archive-document";
 
-const resourceTypes: browser.webRequest.ResourceType[] = [
+export const resourceTypes: browser.webRequest.ResourceType[] = [
   "stylesheet",
   "image",
   "font",
@@ -22,6 +22,38 @@ interface ResourceStream {
   bytes: number;
   chunks: ArrayBuffer[];
   filter: browser.webRequest.StreamFilter;
+}
+
+export function archiveResponseType(
+  request: browser.webRequest._OnHeadersReceivedDetails,
+  full = false,
+) {
+  let mime = request.responseHeaders
+    ?.find(({ name }) => name.toLowerCase() === "content-type")
+    ?.value?.split(";", 1)[0]
+    .trim()
+    .toLowerCase();
+  if (full && mime)
+    mime =
+      (
+        {
+          "application/x-font-ttf": "font/ttf",
+          "application/x-font-opentype": "font/otf",
+          "application/font-woff2": "font/woff2",
+        } as Record<string, string>
+      )[mime] ?? mime;
+  if (
+    !mime ||
+    (!archiveMediaTypes.has(mime) && !(full && mime === "image/svg+xml"))
+  )
+    return undefined;
+  const matches =
+    request.type === "stylesheet"
+      ? mime === "text/css"
+      : request.type === "image" || request.type === "imageset"
+        ? mime.startsWith("image/")
+        : mime !== "text/css" && !mime.startsWith("image/");
+  return matches ? mime : undefined;
 }
 
 export function recordArchiveResources(tabId: number) {
@@ -53,20 +85,8 @@ export function recordArchiveResources(tabId: number) {
     const entry = streams.get(request.requestId);
     if (!entry || request.tabId !== tabId || request.statusCode !== 200)
       return {};
-    const mime = request.responseHeaders
-      ?.find(({ name }) => name.toLowerCase() === "content-type")
-      ?.value?.split(";", 1)[0]
-      .trim()
-      .toLowerCase();
-    const permittedType =
-      mime &&
-      archiveMediaTypes.has(mime) &&
-      (request.type === "stylesheet"
-        ? mime === "text/css"
-        : request.type === "image"
-          ? mime.startsWith("image/")
-          : mime !== "text/css" && !mime.startsWith("image/"));
-    if (permittedType) {
+    const mime = archiveResponseType(request);
+    if (mime) {
       entry.mediaType = mime;
       entry.responseUrl = request.url;
     } else disconnect(request.requestId, entry);

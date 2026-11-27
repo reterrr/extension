@@ -558,18 +558,17 @@ document at an isolated `blob:null` URL. Inspect the archived DOM with Firefox
 DevTools. Studio retains the SelectorTree and recorded diagnostics. Firefox
 stores the historical selector IDs as extension-owned tab metadata.
 
-New captures can also store a visual archive alongside the original monitoring
-evidence. Enable **Save loaded styles, images and fonts in archives** in the
-monitoring options to embed permitted CSS, raster images and fonts Firefox
-receives during capture. Inline styles and supported embedded images are saved
-without this optional permission. The agent uses the responses from the capture
-tab and makes no extra requests for display resources.
+The backend selects the archival mode for each claimed check. Minimal keeps
+canonical evidence. Full also saves a versioned manifest and separately
+verified document, CSS, image and font payloads. Firefox uses the existing
+**Allow recording loaded archive resources** permission for responses from the
+monitoring tab. Readable CSSOM, inline styles and supported embedded images
+are available as fallbacks. Capture uses the same evidence path in both modes.
 
 The loaded archive works offline. Site scripts, form submission and external
-resources are blocked. Older captures display the HTML originally saved with the
-evidence and may have little or no styling. Archives omit resources that were
-unavailable, too large or outside the page's approval.
-Video, canvas content and state that depends on site scripts are not replayed.
+requests are blocked. Archives show the captured page with the available
+resources and report missing and truncated assets. Video streams, canvas
+pixels, closed shadow roots and interactive state can differ from the live page.
 Use **Open snapshot** again after closing Firefox or reloading an expired blob URL.
 
 The `sessions` permission marks temporary monitoring tabs so Firefox can

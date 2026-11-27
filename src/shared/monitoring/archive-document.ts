@@ -1,4 +1,4 @@
-import { generate, parse as parseCSS, walk } from "css-tree";
+import { generate, parse as parseCSS, walk, type CssNode } from "css-tree";
 import {
   defaultTreeAdapter as tree,
   parse,
@@ -6,10 +6,13 @@ import {
   serialize,
 } from "parse5";
 import type { DefaultTreeAdapterTypes as Tree } from "parse5";
+import { readSourceSet } from "../../content/monitoring-comparison";
+import { archiveSVG } from "./archive-svg";
 import { maxVisualArchiveBytes, secretName } from "./contracts";
 
 const images = new Set([
   "image/png",
+  "image/apng",
   "image/jpeg",
   "image/gif",
   "image/webp",
@@ -33,6 +36,17 @@ export interface ArchiveResource {
   bytes: Uint8Array;
   responseUrl?: string;
 }
+
+export type FullArchiveRewrite =
+  | {
+      mode: "capture";
+      reference(value: string, base: string): string | undefined;
+    }
+  | {
+      mode: "replay";
+      assets: ReadonlyMap<string, { mediaType: string; token: string }>;
+      styles: ReadonlyMap<string, { css: string; base: string }>;
+    };
 
 const activeTags = new Set([
   "script",
@@ -100,7 +114,7 @@ const embedded = /^data:([\w.+/-]+);base64,[a-z0-9+/=]+$/i;
 const htmlNamespace =
   "http://www.w3.org/1999/xhtml" as Tree.Element["namespaceURI"];
 
-function base64(bytes: Uint8Array): string {
+export function archiveBase64(bytes: Uint8Array): string {
   let text = "";
   for (let i = 0; i < bytes.length; i += 8192)
     text += String.fromCharCode(...bytes.subarray(i, i + 8192));
@@ -108,6 +122,7 @@ function base64(bytes: Uint8Array): string {
 }
 
 function resourceKey(value: string, base: string) {
+  if (!value || value.startsWith("#")) return;
   try {
     const url = new URL(value, base);
     if (url.protocol !== "http:" && url.protocol !== "https:") return;
@@ -118,23 +133,119 @@ function resourceKey(value: string, base: string) {
   }
 }
 
+function scopedImport(css: string, tail: CssNode[]) {
+  const wrappers: string[] = [];
+  const layer = tail[0];
+  if (layer?.type === "Identifier" && layer.name.toLowerCase() === "layer") {
+    wrappers.push("@layer");
+    tail.shift();
+  } else if (
+    layer?.type === "Function" &&
+    layer.name.toLowerCase() === "layer"
+  ) {
+    wrappers.push(
+      "@layer " +
+        layer.children
+          .toArray()
+          .map((node) => generate(node))
+          .join(""),
+    );
+    tail.shift();
+  }
+  const supports = tail[0];
+  if (
+    supports?.type === "Function" &&
+    supports.name.toLowerCase() === "supports"
+  ) {
+    wrappers.push(
+      "@supports (" +
+        supports.children
+          .toArray()
+          .map((node) => generate(node))
+          .join("") +
+        ")",
+    );
+    tail.shift();
+  }
+  if (tail.length)
+    wrappers.push("@media " + tail.map((node) => generate(node)).join(" "));
+  return wrappers.reduceRight((inner, rule) => rule + "{" + inner + "}", css);
+}
+
+export function archiveCssReferences(
+  text: string,
+  visit: (value: string) => void,
+) {
+  walk(parseCSS(text, { parseCustomProperty: true }), (node) => {
+    if (node.type === "Url") visit(node.value);
+    if (node.type === "Atrule" && node.name.toLowerCase() === "import") {
+      const first =
+        node.prelude?.type === "AtrulePrelude" && node.prelude.children.first;
+      if (first && first.type === "String") visit(first.value);
+    }
+    if (node.type === "Function" && /^(?:-webkit-)?image-set$/i.test(node.name))
+      for (const child of node.children)
+        if (child.type === "String") visit(child.value);
+  });
+}
+
 // Archive markup is parsed as data. It never becomes the DOM of an extension page.
 export function archiveDocument(
   original: string,
   pageBase = "",
   resources: ReadonlyMap<string, ArchiveResource> = new Map(),
+  full?: FullArchiveRewrite,
 ): string {
   const document = parse(original);
   let budget =
     maxVisualArchiveBytes - new TextEncoder().encode(original).length;
   const encoded = new Map<ArchiveResource, string>();
+  let stylesheetBudget = 16 * 1024 * 1024;
+
+  const keyFor = (value: string, base: string) =>
+    full?.mode === "capture"
+      ? full.reference(value, base)
+      : resourceKey(value, base);
 
   function embed(value: string, base: string, types: ReadonlySet<string>) {
     if (value.startsWith("data:")) {
+      if (
+        full &&
+        value.length <= 2 * 1024 * 1024 &&
+        /^data:image\/svg\+xml[,;]/i.test(value)
+      ) {
+        try {
+          const split = value.indexOf(",");
+          if (split < 0) return undefined;
+          const payload = value.slice(split + 1);
+          const text = /;base64$/i.test(value.slice(0, split))
+            ? new TextDecoder().decode(
+                Uint8Array.from(atob(payload), (char) => char.charCodeAt(0)),
+              )
+            : decodeURIComponent(payload);
+          const image = archiveSVG(text);
+          return image
+            ? "data:image/svg+xml;base64," +
+                archiveBase64(new TextEncoder().encode(image))
+            : undefined;
+        } catch {
+          return undefined;
+        }
+      }
       const type = embedded.exec(value)?.[1].toLowerCase();
       return type && types.has(type) ? value : undefined;
     }
-    const key = resourceKey(value, base);
+    const key = keyFor(value, base);
+    if (full?.mode === "capture") return key;
+    if (full?.mode === "replay") {
+      const asset = key && full.assets.get(key);
+      if (
+        asset &&
+        (types.has(asset.mediaType) || asset.mediaType === "image/svg+xml")
+      )
+        return asset.token;
+      return;
+    }
     const resource = key && resources.get(key);
     if (!resource || !types.has(resource.mediaType)) return;
     const length =
@@ -145,7 +256,7 @@ export function archiveDocument(
     // when the same resource was encoded before. Count every occurrence.
     const uri =
       encoded.get(resource) ??
-      `data:${resource.mediaType};base64,${base64(resource.bytes)}`;
+      "data:" + resource.mediaType + ";base64," + archiveBase64(resource.bytes);
     encoded.set(resource, uri);
     return uri;
   }
@@ -158,20 +269,52 @@ export function archiveDocument(
   ): string {
     const ast = parseCSS(text, { context, parseCustomProperty: true });
     walk(ast, function (node, item, list) {
+      if (
+        full?.mode === "replay" &&
+        node.type === "Atrule" &&
+        node.name.toLowerCase() === "charset" &&
+        item &&
+        list
+      ) {
+        list.remove(item);
+        return this.skip;
+      }
       if (node.type === "Atrule" && node.name.toLowerCase() === "import") {
-        const first =
-          node.prelude?.type === "AtrulePrelude" && node.prelude.children.first;
+        const prelude =
+          node.prelude?.type === "AtrulePrelude"
+            ? node.prelude.children
+            : undefined;
+        const first = prelude?.first;
         const value =
           first && (first.type === "Url" || first.type === "String")
             ? first.value
             : "";
-        const key = resourceKey(value, base);
-        const uri =
-          value.startsWith("data:text/css;base64,") && embedded.test(value)
-            ? value
-            : key && stylesheet(key, imports);
-        if (uri && first && (first.type === "Url" || first.type === "String"))
-          first.value = uri;
+        const key = keyFor(value, base);
+        const style =
+          !full &&
+          value.startsWith("data:text/css;base64,") &&
+          embedded.test(value)
+            ? { uri: value }
+            : key
+              ? stylesheet(key, imports)
+              : undefined;
+        if (style?.cssText !== undefined && list && item) {
+          list.replace(
+            item,
+            list.createItem({
+              type: "Raw",
+              value: scopedImport(
+                style.cssText,
+                prelude?.toArray().slice(1) ?? [],
+              ),
+            }),
+          );
+        } else if (
+          style?.uri &&
+          first &&
+          (first.type === "Url" || first.type === "String")
+        )
+          first.value = style.uri;
         else if (item && list) list.remove(item);
         return this.skip;
       }
@@ -189,7 +332,23 @@ export function archiveDocument(
     return generate(ast);
   }
 
-  function stylesheet(key: string, imports: readonly string[]) {
+  function stylesheet(
+    key: string,
+    imports: readonly string[],
+  ): { uri?: string; cssText?: string } | undefined {
+    if (full?.mode === "capture") return { uri: key };
+    if (full?.mode === "replay") {
+      const sheet = full.styles.get(key);
+      if (
+        !sheet ||
+        imports.length >= 8 ||
+        imports.includes(key) ||
+        sheet.css.length > stylesheetBudget
+      )
+        return;
+      stylesheetBudget -= sheet.css.length;
+      return { cssText: css(sheet.css, sheet.base, [...imports, key]) };
+    }
     const resource = resources.get(key);
     if (
       resource?.mediaType !== "text/css" ||
@@ -207,7 +366,7 @@ export function archiveDocument(
     const length = 4 * Math.ceil(bytes.length / 3) + 21;
     if (length > budget) return;
     budget -= length;
-    return `data:text/css;base64,${base64(bytes)}`;
+    return { uri: "data:text/css;base64," + archiveBase64(bytes) };
   }
 
   const pending: Tree.ParentNode[] = [document];
@@ -216,13 +375,25 @@ export function archiveDocument(
     const children: Tree.ChildNode[] = [];
     for (const child of parent.childNodes) {
       if (!("tagName" in child)) {
-        children.push(child);
+        if (!full || child.nodeName !== "#comment") children.push(child);
         continue;
       }
       const tag = child.tagName.toLowerCase();
       const attr = (name: string) =>
         child.attrs.find((item) => item.name === name)?.value;
-      if (activeTags.has(tag)) continue;
+      if (activeTags.has(tag)) {
+        if (
+          full &&
+          tag === "template" &&
+          attr("shadowrootmode") === "open" &&
+          "content" in child
+        ) {
+          child.attrs = [{ name: "shadowrootmode", value: "open" }];
+          children.push(child);
+          pending.push((child as Tree.Template).content);
+        }
+        continue;
+      }
       if (tag === "link") {
         const rel = attr("rel")?.toLowerCase().split(/\s+/) ?? [];
         if (
@@ -231,17 +402,34 @@ export function archiveDocument(
           attr("disabled") !== undefined
         )
           continue;
-        const key = resourceKey(attr("href") ?? "", pageBase);
-        const uri = key && stylesheet(key, []);
-        if (!uri) continue;
-        const style = tree.createElement("style", htmlNamespace, []);
+        const key = keyFor(attr("href") ?? "", pageBase);
+        const sheet = key && stylesheet(key, []);
+        if (!sheet) continue;
         const media = attr("media");
+        if (full?.mode === "capture" && sheet.uri) {
+          child.attrs = [
+            { name: "rel", value: "stylesheet" },
+            { name: "href", value: sheet.uri },
+          ];
+          if (media) child.attrs.push({ name: "media", value: media });
+          children.push(child);
+          continue;
+        }
+        const style = tree.createElement("style", htmlNamespace, []);
         if (media) style.attrs.push({ name: "media", value: media });
-        tree.insertText(style, `@import url("${uri}");`);
+        tree.insertText(
+          style,
+          sheet.cssText !== undefined
+            ? sheet.cssText.replace(/<(?=\/style\b)/gi, "\\3c ")
+            : '@import url("' + sheet.uri + '");',
+        );
         children.push(style);
         continue;
       }
       if (tag === "style") {
+        const fallback = attr("data-burbot-style-fallback");
+        if (full?.mode === "replay" && fallback && full.styles.has(fallback))
+          continue;
         const text = child.childNodes
           .map((node) => ("value" in node ? node.value : ""))
           .join("");
@@ -256,13 +444,36 @@ export function archiveDocument(
           ).replace(/<(?=\/style\b)/gi, "\\3c "),
         );
       }
-      if (tag === "textarea") child.childNodes = [];
+      if (
+        tag === "textarea" ||
+        (full &&
+          attr("contenteditable") !== undefined &&
+          attr("contenteditable") !== "false")
+      )
+        child.childNodes = [];
       const imageAttr =
         tag === "img" ? "src" : tag === "image" ? "href" : undefined;
       const image = imageAttr && embed(attr(imageAttr) ?? "", pageBase, images);
+      const srcset =
+        full &&
+        (tag === "img" ||
+          (tag === "source" &&
+            "tagName" in parent &&
+            parent.tagName === "picture"))
+          ? readSourceSet(attr("srcset") ?? "", pageBase)
+              ?.flatMap(([url, descriptor]) => {
+                const archived = embed(url, pageBase, images);
+                return archived ? [archived + " " + descriptor] : [];
+              })
+              .join(", ")
+          : undefined;
       const poster =
         tag === "video" && embed(attr("poster") ?? "", pageBase, images);
       const background = embed(attr("background") ?? "", pageBase, images);
+      const fallback =
+        tag === "style" &&
+        full?.mode === "capture" &&
+        attr("data-burbot-style-fallback");
       child.attrs = child.attrs.filter(({ name, prefix, value }) => {
         if (
           name.startsWith("on") ||
@@ -278,8 +489,17 @@ export function archiveDocument(
           name !== "loading"
         );
       });
+      if (fallback) {
+        const safeFallback = keyFor(fallback, pageBase);
+        if (safeFallback)
+          child.attrs.push({
+            name: "data-burbot-style-fallback",
+            value: safeFallback,
+          });
+      }
       if (image && imageAttr)
         child.attrs.push({ name: imageAttr, value: image });
+      if (srcset) child.attrs.push({ name: "srcset", value: srcset });
       if (poster) child.attrs.push({ name: "poster", value: poster });
       if (background)
         child.attrs.push({ name: "background", value: background });

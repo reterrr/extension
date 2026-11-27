@@ -2,15 +2,29 @@ import {
   isolatedArchiveURL,
   uuid,
 } from "../shared/monitoring/snapshot-delivery";
+import {
+  replayArchiveScope,
+  stagedArchiveBlob,
+} from "../shared/monitoring/archive-stage";
 
 async function launch() {
   const id = location.hash.slice(1);
   if (!uuid.test(id)) return;
-  const html: unknown = await browser.runtime.sendMessage({
+  const payload: unknown = await browser.runtime.sendMessage({
     type: "archive-markup",
     id,
   });
-  if (typeof html !== "string") return;
+  const html =
+    typeof payload === "string"
+      ? payload
+      : (payload as { staged?: boolean } | null)?.staged === true
+        ? await stagedArchiveBlob(
+            replayArchiveScope(id),
+            "document",
+            "text/html;charset=utf-8",
+          )
+        : null;
+  if (!html || (html instanceof Blob && !html.size)) return;
   const publisher = document.createElement("iframe");
   publisher.hidden = true;
   // This frame only publishes an opaque URL. Firefox loads the HTML into the whole tab.
@@ -45,7 +59,10 @@ function publish() {
     if (event.source !== parent || event.origin !== launcherOrigin) return;
     if (event.data === "navigate" && url) {
       top?.location.replace(url);
-    } else if (!url && typeof event.data?.html === "string") {
+    } else if (
+      !url &&
+      (typeof event.data?.html === "string" || event.data?.html instanceof Blob)
+    ) {
       url = URL.createObjectURL(
         new Blob([event.data.html], { type: "text/html;charset=utf-8" }),
       );

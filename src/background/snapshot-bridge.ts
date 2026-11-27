@@ -16,7 +16,13 @@ import {
   type SnapshotTabContext,
 } from "../shared/monitoring/snapshot-delivery";
 import { archiveDocument } from "../shared/monitoring/archive-document";
+import {
+  discardArchiveStage,
+  replayArchiveScope,
+} from "../shared/monitoring/archive-stage";
+import { fullArchiveVersion } from "../shared/monitoring/full-archive";
 import { closeArchiveLauncher, loadArchiveTab } from "./archive-tab";
+import { prepareFullReplay } from "./full-archive-replay";
 import { agentFetch } from "./monitoring-request";
 
 const queue = "agents/snapshot-commands/";
@@ -33,6 +39,7 @@ interface ClaimedCommand {
   sourceUrl: string | null;
   capturedAt: string;
   selectorContext?: SnapshotTabContext["selectorContext"];
+  archiveVersion?: string | null;
 }
 
 const artifactErrors = new Set([
@@ -179,28 +186,51 @@ async function openCommand(
     scope,
     expiresAt: Date.parse(command.expiresAt),
   };
-  let html: string;
+  const full = command.archiveVersion === fullArchiveVersion;
+  const endpoint = queue + id;
+  const deadline = AbortSignal.any([
+    signal,
+    AbortSignal.timeout(Math.max(0, record.expiresAt - Date.now())),
+  ]);
+  const discard = () =>
+    full
+      ? discardArchiveStage(replayArchiveScope(id)).catch(() => undefined)
+      : Promise.resolve();
+  let html: string | null;
   let format: SnapshotTabContext["format"];
   try {
-    const response = await agentFetch(settings, queue + id + "/artifact", {
-      method: "GET",
-      signal,
-      timeout,
-      headers: { "X-Burbot-Snapshot-Accept": visualArchiveVersion },
-    });
-    const artifact = await readSnapshotArtifact(response);
-    signal.throwIfAborted();
-    if (record.expiresAt <= Date.now()) return null;
-    format = artifact.format;
-    html = archiveDocument(artifact.html, sourceUrl ?? undefined);
+    if (full) {
+      await prepareFullReplay(settings, endpoint, id, deadline);
+      html = null;
+      format = fullArchiveVersion;
+    } else {
+      const response = await agentFetch(settings, endpoint + "/artifact", {
+        method: "GET",
+        signal: deadline,
+        timeout,
+        headers: { "X-Burbot-Snapshot-Accept": visualArchiveVersion },
+      });
+      const artifact = await readSnapshotArtifact(response);
+      format = artifact.format;
+      html = archiveDocument(artifact.html, sourceUrl ?? undefined);
+    }
+    deadline.throwIfAborted();
   } catch (error) {
+    await discard();
     if (signal.aborted) return null;
-    const outcome = failure(error);
+    const outcome = failure(
+      full && !deadline.aborted
+        ? new SnapshotError("SNAPSHOT_ARCHIVE_UNAVAILABLE")
+        : error,
+    );
     await snapshotDeliveries.put({ ...record, outcome });
     return outcome;
   }
   await snapshotDeliveries.put(record);
-  if (signal.aborted || record.expiresAt <= Date.now()) return null;
+  if (deadline.aborted) {
+    await discard();
+    return null;
+  }
   try {
     const tab = await browser.tabs.create({
       url: "about:blank",
@@ -209,10 +239,6 @@ async function openCommand(
     if (tab.id === undefined) throw new Error("Archive tab unavailable");
     record.tabId = tab.id;
     await snapshotDeliveries.put(record);
-    const deadline = AbortSignal.any([
-      signal,
-      AbortSignal.timeout(Math.max(0, record.expiresAt - Date.now())),
-    ]);
     await loadArchiveTab(
       tab.id,
       html,
@@ -228,6 +254,8 @@ async function openCommand(
       await closeArchiveLauncher(record.tabId, id, true);
     await snapshotDeliveries.put({ ...record, outcome });
     return outcome;
+  } finally {
+    await discard();
   }
   const outcome = { state: "opened" } as const;
   await snapshotDeliveries.put({ ...record, outcome });

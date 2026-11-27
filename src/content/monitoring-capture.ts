@@ -159,6 +159,7 @@ function cleanResult(result: {
 function visualMarkup(
   doc: Document,
   pageUrl: string,
+  full = false,
 ): VisualMarkup | undefined {
   try {
     const archive = doc.implementation.createHTMLDocument("");
@@ -183,6 +184,42 @@ function visualMarkup(
         // original link so the separately captured response can be used.
         return undefined;
       }
+    }
+
+    if (full) {
+      function copyDisplayState(original: ParentNode, clone: ParentNode) {
+        const originals = Array.from(original.querySelectorAll("*"));
+        const copies = Array.from(clone.querySelectorAll("*"));
+        originals.forEach((element, index) => {
+          const copy = copies[index];
+          if (!copy || copy.localName !== element.localName) return;
+          if (element instanceof HTMLImageElement && element.currentSrc)
+            copy.setAttribute("src", element.currentSrc);
+          if (element instanceof HTMLInputElement)
+            copy.toggleAttribute("checked", element.checked);
+          if (element instanceof HTMLOptionElement)
+            copy.toggleAttribute("selected", element.selected);
+          if (element instanceof HTMLSelectElement)
+            copy.removeAttribute("value");
+          const shadow = element.shadowRoot;
+          if (!shadow) return;
+          const template = archive.createElement("template");
+          template.setAttribute("shadowrootmode", "open");
+          for (const node of shadow.childNodes)
+            template.content.append(archive.importNode(node, true));
+          copyDisplayState(shadow, template.content);
+          for (const sheet of shadow.adoptedStyleSheets ?? []) {
+            const rules = sheet.disabled ? undefined : readableRules(sheet);
+            if (rules !== undefined) {
+              const style = archive.createElement("style");
+              style.textContent = rules;
+              template.content.append(style);
+            }
+          }
+          copy.prepend(template);
+        });
+      }
+      copyDisplayState(doc.documentElement, archive.documentElement);
     }
 
     const styleCopies = Array.from(archive.querySelectorAll("style"));
@@ -216,7 +253,10 @@ function visualMarkup(
         style.setAttribute("data-burbot-style-base", link.href);
       if (link.media) style.setAttribute("media", link.media);
       style.textContent = rules;
-      copy.replaceWith(style);
+      if (full && safeReference(link.href, pageUrl)) {
+        style.setAttribute("data-burbot-style-fallback", link.href);
+        copy.after(style);
+      } else copy.replaceWith(style);
     });
     for (const sheet of doc.adoptedStyleSheets ?? []) {
       if (sheet.disabled) continue;
@@ -227,7 +267,9 @@ function visualMarkup(
       archive.head.append(style);
     }
     for (const node of archive.querySelectorAll(
-      "script,iframe,object,embed,template",
+      full
+        ? "script,iframe,object,embed,template:not([shadowrootmode=open])"
+        : "script,iframe,object,embed,template",
     ))
       node.remove();
     const doctype = doc.compatMode === "CSS1Compat" ? "<!doctype html>\n" : "";
@@ -301,7 +343,9 @@ async function capture(
   });
   const normalized =
     nativeSourceSets && comparisonRepresentation(dom, nativeSourceSets);
-  const archive = message.visualArchive && visualMarkup(document, pageUrl);
+  const archive =
+    (message.fullArchive || message.visualArchive) &&
+    visualMarkup(document, pageUrl, message.fullArchive === true);
   const [contentHash, structureHash, comparison] = await Promise.all([
     sha256(bytes),
     sha256(encoder.encode(shape(dom))),

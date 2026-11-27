@@ -1,4 +1,5 @@
 import { sha256 as sha256Bytes } from "@noble/hashes/sha2.js";
+import type { ArchiveLimits } from "./full-archive";
 import type {
   SelectorEvaluationResult,
   SelectorVersion,
@@ -59,6 +60,8 @@ export interface Job {
   representation: typeof representation;
   comparisonVersion?: string;
   visualArchiveVersion?: string;
+  snapshotMode?: "minimal" | "full";
+  fullArchive?: ArchiveLimits;
   selectors: PinnedSelector[];
   navigation?: { mode: "trusted"; allowHttp: boolean };
 }
@@ -99,6 +102,7 @@ export interface CaptureMessage {
   type: typeof captureMessage;
   comparisonVersion?: typeof comparisonVersion;
   visualArchive?: boolean;
+  fullArchive?: boolean;
   expectedOrigins: string[];
   allowHttp?: boolean;
   selectors: PinnedSelector[];

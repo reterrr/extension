@@ -79,13 +79,14 @@ export function MonitoringOptions() {
       const fullAccess = await browser.permissions.request(allPermissions);
       if (!fullAccess && !(await browser.permissions.request(monitoringAccess)))
         throw new Error("Monitoring permissions were declined.");
-      const canArchive = await browser.permissions.contains(visualArchiveAccess);
+      const canArchive =
+        await browser.permissions.contains(visualArchiveAccess);
       setArchiveAllowed(canArchive);
       await browser.storage.local.set({ [settingsKey]: config });
       setSaved(config);
       if (!canArchive)
         setError(
-          "Monitoring is enabled, but Firefox has not granted offline archive resources. Grant access below to save external CSS, images and fonts.",
+          "Firefox can monitor pages. Full archives need permission to record loaded CSS, images and fonts.",
         );
     } catch (cause) {
       setError(
@@ -192,15 +193,14 @@ export function MonitoringOptions() {
       </form>
       {saved.enabled && archiveAllowed && (
         <p className="ui-muted">
-          Visual archive resource capture is enabled. Loaded styles, images
-          and fonts will be saved for future snapshots within archive limits.
+          Firefox can record styles, images and fonts when the backend requests
+          a full archive.
         </p>
       )}
       {saved.enabled && !archiveAllowed && (
         <p className="ui-muted">
-          Historical pages may have no styling until Firefox can record the
-          stylesheets, fonts and images loaded during future checks. This
-          permission does not change selector evaluation.
+          Full archives may have limited styling until Firefox can record loaded
+          resources.
         </p>
       )}
       {saved.enabled && !archiveAllowed && (
@@ -218,7 +218,7 @@ export function MonitoringOptions() {
               .catch(() => setError("Could not enable archive resources."));
           }}
         >
-          Save loaded styles, images and fonts in archives
+          Allow recording loaded archive resources
         </button>
       )}
       <p aria-live="polite">
