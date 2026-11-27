@@ -7,6 +7,7 @@ import type {
   FieldChange,
   FieldDefinition,
   Identity,
+  ResolvedBusinessObject,
   ResolvedBusinessField,
   SyncState,
   ValueDefinition,
@@ -16,16 +17,21 @@ import {
   entityFor,
   fieldFor,
   identityKey,
+  localFieldKeys,
   localRecords,
+  recordKind,
   same,
+  sourceLookupKey,
   type LocalRecord,
 } from "./records";
 
 export { entityFor, identityKey, localRecords, type LocalRecord } from "./records";
 
-export function resolveBusinessObject(sync: SyncState, identity: Identity) {
+export function resolveBusinessObject(
+  sync: SyncState, identity: Identity, index?: ReadonlyMap<string, ResolvedBusinessObject>,
+) {
   const key = identityKey(identity);
-  const found = sync.bindings.find(
+  const found = index ? index.get(key) : sync.bindings.find(
     (item) => identityKey(item.identity) === key,
   );
   const entity = sync.registry && entityFor(sync.registry, identity);
@@ -178,15 +184,28 @@ export function makeCommitPreview(
 ): CommitPreview {
   if (!sync.registry?.permissions.commit)
     return { operation: null, differences: [] };
+  const registry = sync.registry;
   const records = localRecords(state);
+  const boundByKey = new Map(sync.bindings.map((item) => [identityKey(item.identity), item]));
+  const refs = new Map<string, Identity | null>();
+  for (const { identity } of records) {
+    const key = JSON.stringify([recordKind(registry, identity), identity.target?.id ?? identity.localObjectId]);
+    refs.set(key, refs.has(key) ? null : identity);
+  }
   const reference = (kind: string, value: string) => {
-    const candidates = records.filter(({ identity }) =>
-      (identity.target?.kind ?? identity.localType) === kind &&
-      (identity.target?.id ?? identity.localObjectId) === value,
-    );
-    return candidates.length === 1
-      ? resolveBusinessObject(sync, candidates[0].identity)?.businessObjectId ?? undefined
+    const identity = refs.get(JSON.stringify([kind, value]));
+    return identity
+      ? resolveBusinessObject(sync, identity, boundByKey)?.businessObjectId ?? undefined
       : undefined;
+  };
+  const source = (value: string) => {
+    if (registry.sources.some(({ sourceId }) => sourceId === value)) return value;
+    const url = sourceLookupKey(value);
+    const candidates = new Set(
+      (sync.sourceBindings ?? []).filter((item) => item.localSourceKey === value || item.canonicalUrl === url)
+        .map((item) => item.backendSourceId),
+    );
+    return candidates.size === 1 ? candidates.values().next().value : undefined;
   };
   const previous = new Map(
     (before ? localRecords(before) : []).map((r) => [
@@ -197,25 +216,17 @@ export function makeCommitPreview(
   const changes = [];
   const skipped: NonNullable<CommitPreview["operation"]>["skipped"] = [];
   const differences: CommitPreview["differences"] = [];
+  const compared: NonNullable<CommitPreview["compared"]> = {};
   for (const { identity, values } of records) {
     const key = identityKey(identity);
     if (selected && !selected.has(key)) continue;
-    const entity = entityFor(sync.registry, identity);
+    const entity = entityFor(registry, identity);
     const fields: FieldChange[] = [];
     const old = previous.get(key)?.values ?? {};
-    const bound = resolveBusinessObject(sync, identity);
+    const bound = resolveBusinessObject(sync, identity, boundByKey);
     // Only declared local field keys participate, so provenance and UI metadata stay local.
-    const alias = identity.target
-      ? undefined
-      : sync.registry.aliases[identity.localType];
-    const localKeys = alias
-      ? Object.keys(alias.fields)
-      : entity
-        ? [
-            ...entity.fields.map((field) => field.localKey),
-            ...(entity.unavailableLocalKeys ?? []),
-          ]
-        : [...new Set([...Object.keys(old), ...Object.keys(values)])];
+    const localKeys = localFieldKeys(registry, identity) ??
+      [...new Set([...Object.keys(old), ...Object.keys(values)])];
     for (const localKey of localKeys) {
       const proposed = values[localKey] ?? null;
       if (
@@ -233,7 +244,7 @@ export function makeCommitPreview(
         });
         continue;
       }
-      if (definition.readonly) continue;
+      if (definition.readonly || definition.definition.system) continue;
       const found = resolveBusinessField(sync, identity, localKey);
       if (
         found.status === "UNRESOLVED" ||
@@ -256,7 +267,9 @@ export function makeCommitPreview(
           definition.definition,
           definition,
           reference,
+          source,
         );
+        (compared[key] ??= []).push(found.field.persistentKey);
         if (same(slot.value, value)) continue;
         fields.push({
           persistentKey: found.field.persistentKey,
@@ -290,10 +303,11 @@ export function makeCommitPreview(
       });
   }
   if (!changes.length && !skipped.length)
-    return { operation: null, differences };
+    return { operation: null, differences, compared };
   const operationId = crypto.randomUUID();
   return {
     differences,
+    compared,
     operation: {
       workspaceUuid: sync.workspaceUuid,
       operationId,

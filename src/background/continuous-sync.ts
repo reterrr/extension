@@ -51,7 +51,7 @@ async function automatic() {
       if (!settings || run.signal.aborted) return null;
       return syncContinuousBatch(settings, false, run.signal);
     });
-    if (result?.processed) await notify();
+    if (result?.changed) await notify();
     if (result?.more) next = 0;
     else if (result?.retryAt != null)
       next = Math.max(0, result.retryAt - Date.now());
@@ -83,7 +83,7 @@ async function manual(action: "sync" | "retry" | "legacy") {
         let result;
         do {
           result = await syncContinuousBatch(settings, true, run.signal);
-          if (result.processed) await notify();
+          if (result.changed) await notify();
         } while (result.more);
       });
       wakeContinuousSync();

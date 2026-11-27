@@ -1,6 +1,7 @@
 import { installMonitoringAgent } from "./monitoring";
 import { installSnapshotBridge } from "./snapshot-bridge";
 import { installContinuousSync, wakeAfterCommit } from "./continuous-sync";
+import { localDocumentKey } from "../shared/backend-sync/records";
 import { commitSummary } from "../shared/commits/summary";
 import { createActiveTabHighlightSync } from "./activeTabHighlights";
 import "../shared/domain/schema.js";
@@ -718,7 +719,7 @@ function mutateDocumentRequirement(
 
   if (message.op === "ADD_DOCUMENT_REQUIREMENT") {
     const id = crypto.randomUUID();
-    const importKey = `DOC_${id.replace(/-/g, "").slice(0, 16)}`;
+    const importKey = localDocumentKey(id);
     let row;
     if (typeof message.fileSourceId === "string" && message.fileSourceId) {
       const source = (state.fileSources ?? []).find(

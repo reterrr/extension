@@ -10,10 +10,18 @@ export interface LocalRecord {
   identity: Identity;
   label: string;
   values: Record<string, unknown>;
+  imported: boolean;
 }
 
 export function identityKey(identity: Identity): string;
 export function same(before: unknown, after: unknown): boolean;
+export function sourceLookupKey(value: string): string;
+export function localDocumentKey(id: string): string;
+export function recordKind(registry: Registry, identity: Identity): string;
+export function localFieldKeys(
+  registry: Registry,
+  identity: Identity,
+): string[] | undefined;
 export function entityFor(
   registry: Registry,
   identity: Identity,

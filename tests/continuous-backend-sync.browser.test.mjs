@@ -288,7 +288,9 @@ test(
     assert.equal((await request(local, "/state")).objects.length, 1);
     assert.equal((await summary()).pending, 0);
     assert.equal(
-      history.some((entry) => entry.path === "/objects/resolve"),
+      history.some(
+        (entry) => entry.payload?.identity?.localObjectId === draft.id,
+      ),
       false,
     );
 
@@ -312,7 +314,7 @@ test(
       (
         await probeDb(
           file,
-          "SELECT operation_id FROM backend_sync_operations WHERE identity_key IS NOT NULL",
+          "SELECT operation_id FROM backend_sync_operations WHERE identity_key IS NOT NULL AND work_kind='commit'",
         )
       ).length,
       3,
@@ -441,6 +443,242 @@ test(
       (await preview(identity)).objectFields.notes.value,
       "Concurrent server update",
     );
-    assert.equal((await summary()).problems[0].code, "CANONICAL_VALUE_CHANGED");
+    assert.ok(
+      (await summary()).problems.some(
+        (item) => item.code === "CANONICAL_VALUE_CHANGED",
+      ),
+    );
+  },
+);
+
+test(
+  "Firefox discovers the historical Nabór and resumes its approved document after one identity review",
+  {
+    timeout: 120_000,
+    skip:
+      !process.env.BURBOT_TEST_SYNC_ORIGIN ||
+      !process.env.BURBOT_TEST_SYNC_TOKEN,
+  },
+  async (t) => {
+    const upstream = process.env.BURBOT_TEST_SYNC_ORIGIN;
+    const token = process.env.BURBOT_TEST_SYNC_TOKEN;
+    const schema = await request(upstream, api + "/schema", { token });
+    const resolveBinding = (identity, action = "preview") =>
+      request(upstream, api + "/objects/resolve", {
+        token,
+        body: { workspaceUuid: schema.workspaceUuid, identity, action },
+      });
+    const project = {
+      id: randomUUID(),
+      type: "project",
+      values: { name: "Historical Project" },
+    };
+    const recruitment = {
+      id: randomUUID(),
+      type: "recruitment",
+      label: "Nabór BUR-I/2.3/2026",
+      values: { external_number: "BUR-I/2.3/2026", project_id: project.id },
+    };
+    const parent = {
+      localObjectId: recruitment.id,
+      localType: recruitment.type,
+    };
+    const projectIdentity = {
+      localObjectId: project.id,
+      localType: project.type,
+    };
+    const persistedProject = await resolveBinding(projectIdentity, "create");
+    const folder = await mkdtemp(join(tmpdir(), "burbot-reconcile-firefox-"));
+    const file = join(folder, "workspace.sqlite");
+    const stopDb = await startDb(file);
+    let firefox;
+    t.after(async () => {
+      await firefox?.close().catch(() => undefined);
+      await stopDb();
+      await rm(folder, { recursive: true, force: true });
+    });
+    await request(local, "/state/commit", {
+      body: {
+        expectedRevision: 0,
+        reviewedObjectIds: [project.id, recruitment.id],
+        state: {
+          version: 1,
+          revision: 1,
+          objects: [project, recruitment],
+          rules: [],
+        },
+      },
+    });
+    assert.equal((await summary()).mode, null);
+    const proxy = await fixtureProxy(t, upstream);
+    firefox = await launch({
+      sourceDir: resolve("dist"),
+      profileDir: join(folder, "profile"),
+    });
+    await firefox.storage(
+      `browser.storage.local.set(${JSON.stringify({
+        [settingsKey]: {
+          origin: proxy.origin,
+          token,
+          syncApprovedCommits: false,
+        },
+      })})`,
+    );
+    const options = await optionsPage(firefox);
+    const button = (text) =>
+      `[...document.querySelectorAll("button")].find(button => button.textContent.trim() === ${JSON.stringify(text)})`;
+    const click = (text) =>
+      until(
+        () =>
+          options(
+            `(() => { const control = ${button(text)}; if (!control || control.disabled) return false; control.click(); return true; })()`,
+          ),
+        text,
+      );
+    await until(
+      () =>
+        options(
+          `Boolean((${button("Start reconciliation")}) && !(${button("Start reconciliation")}).disabled)`,
+        ),
+      "initial reconciliation control",
+    );
+    await click("Start reconciliation");
+    await until(async () => {
+      const { reconciliation } = await summary();
+      return reconciliation.identityReview === 1 && reconciliation.bound === 1;
+    }, "one historical identity review and one recovered binding");
+    const locallyCached = await request(local, "/backend-sync");
+    assert.ok(
+      locallyCached.bindings.some(
+        (binding) =>
+          binding.businessObjectId === persistedProject.businessObjectId,
+      ),
+    );
+    assert.equal((await resolveBinding(parent)).businessObjectId, null);
+
+    const state = await send(options, "BURBOT_DATA", "GET");
+    const drafted = await send(
+      options,
+      "BURBOT_DATA",
+      "ADD_DOCUMENT_REQUIREMENT",
+      {
+        objectId: recruitment.id,
+        expectedRevision: state.revision,
+      },
+    );
+    const [document] = drafted.documentRequirements;
+    const documentLabel = "Otwiera w nowej karcie.docx";
+    await send(options, "BURBOT_DATA", "UPDATE_DOCUMENT_REQUIREMENT", {
+      objectId: recruitment.id,
+      documentId: document.id,
+      expectedRevision: drafted.revision,
+      values: { label: documentLabel },
+    });
+    const approved = await approvedCommit(options);
+    assert.equal(
+      approved.state.documentRequirements?.[0]?.label,
+      documentLabel,
+    );
+    const isWaiting = (item) =>
+      item.identity.target?.id === document.id &&
+      item.label.endsWith(documentLabel) &&
+      item.status === "WAITING_DEPENDENCY" &&
+      item.dependencies?.some(
+        (dependency) =>
+          dependency.identity?.localObjectId === recruitment.id &&
+          dependency.upstreamCode === "IDENTITY_REVIEW_REQUIRED",
+      );
+    await until(
+      async () => (await summary()).problems.some(isWaiting),
+      "document waiting for the historical parent",
+    ).catch(async (error) => {
+      throw new Error(error.message + " " + JSON.stringify(await summary()), {
+        cause: error,
+      });
+    });
+    assert.equal(
+      proxy.history.filter((entry) => entry.payload?.action === "create")
+        .length,
+      0,
+    );
+    assert.equal(
+      proxy.history.filter((entry) => entry.path === "/commits").length,
+      0,
+    );
+    await click("Review identities");
+    const number = recruitment.values.external_number;
+    await until(
+      () =>
+        options(
+          `[...document.querySelectorAll('section[aria-label="Initial reconciliation"] .ui-sync-record')].some(row => row.textContent.includes(${JSON.stringify(number)}))`,
+        ),
+      "historical Nabór review",
+    );
+    await options(`(() => {
+      window.confirm = () => true;
+      const row = [...document.querySelectorAll('section[aria-label="Initial reconciliation"] .ui-sync-record')].find(row => row.textContent.includes(${JSON.stringify(number)}));
+      row.querySelector('input[type="checkbox"]').click();
+      return true;
+    })()`);
+    await click("Confirm selected identities");
+    await until(
+      async () => (await summary()).synced === 1,
+      "automatic document continuation",
+      35_000,
+    );
+    const recruitmentBinding = await resolveBinding(parent);
+    const documentBinding = await resolveBinding({
+      ...parent,
+      target: { kind: "document", id: document.id },
+    });
+    assert.ok(recruitmentBinding.businessObjectId);
+    assert.equal(recruitmentBinding.objectFields.external_number.value, null);
+    assert.equal(
+      documentBinding.objectFields.recruitment_owner.value,
+      recruitmentBinding.businessObjectId,
+    );
+    assert.equal(documentBinding.objectFields.label.value, documentLabel);
+    assert.deepEqual(
+      proxy.history
+        .filter((entry) => entry.payload?.action === "create")
+        .map(
+          ({ payload }) =>
+            payload.identity.target?.kind ?? payload.identity.localType,
+        ),
+      ["recruitment", "document"],
+    );
+
+    await click("Review values");
+    await until(
+      () =>
+        options(
+          `[...document.querySelectorAll('section[aria-label="Initial reconciliation"] .ui-sync-record')].some(row => row.textContent.includes(${JSON.stringify(number)}))`,
+        ),
+      "historical value review",
+    );
+    await options(`(() => {
+      const row = [...document.querySelectorAll('section[aria-label="Initial reconciliation"] .ui-sync-record')].find(row => row.textContent.includes(${JSON.stringify(number)}));
+      row.querySelector('input[type="checkbox"]').click();
+      return true;
+    })()`);
+    await click("Compare selected values for review");
+    await until(
+      () =>
+        options(
+          "document.getElementById('historical-value-preview')?.textContent.includes('BUR-I/2.3/2026')",
+        ),
+      "historical canonical comparison",
+    );
+    await click("Confirm server synchronization");
+    await until(
+      async () =>
+        (await resolveBinding(parent)).objectFields.external_number.value ===
+        "BUR-I/2.3/2026",
+      "explicitly reviewed historical values",
+    );
+    assert.equal(
+      (await resolveBinding(parent)).objectFields.project_id.value,
+      persistedProject.businessObjectId,
+    );
   },
 );

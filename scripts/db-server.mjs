@@ -156,6 +156,8 @@ db.transaction(() => {
   ensureColumn(outbox, "attempt_count", "INTEGER NOT NULL DEFAULT 0");
   ensureColumn(outbox, "lease_id", "TEXT");
   ensureColumn(outbox, "lease_until", "INTEGER NOT NULL DEFAULT 0");
+  ensureColumn(outbox, "work_kind", "TEXT NOT NULL DEFAULT 'commit'");
+  ensureColumn(outbox, "priority", "INTEGER NOT NULL DEFAULT 0");
   db.exec(`
     CREATE INDEX IF NOT EXISTS backend_sync_by_identity ON backend_sync_operations
       (workspace_uuid, identity_key, local_revision DESC) WHERE identity_key IS NOT NULL;
@@ -166,12 +168,17 @@ db.transaction(() => {
       AND sync_status IN ('QUEUED','RETRY_PENDING','WAITING_DEPENDENCY');
     CREATE INDEX IF NOT EXISTS backend_sync_leases ON backend_sync_operations
       (workspace_uuid, lease_until) WHERE lease_until > 0;
+    CREATE UNIQUE INDEX IF NOT EXISTS backend_sync_identity_work ON backend_sync_operations
+      (workspace_uuid, identity_key) WHERE work_kind='identity';
+    CREATE INDEX IF NOT EXISTS backend_sync_ready_order ON backend_sync_operations
+      (workspace_uuid, priority, local_revision) WHERE identity_key IS NOT NULL
+      AND sync_status IN ('QUEUED','RETRY_PENDING');
   `);
-  db.pragma("user_version = 17");
+  db.pragma("user_version = 18");
 })();
 
 db.prepare(
-  `INSERT INTO app_meta(key, value) VALUES ('schema_version', '17')
+  `INSERT INTO app_meta(key, value) VALUES ('schema_version', '18')
    ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
 ).run();
 
@@ -769,6 +776,7 @@ const persistStateTransaction = db.transaction((state) => {
     "document",
     state.documentRequirements ?? [],
   );
+  backendSync.continuous.indexCommitted(state);
 
   db.prepare(`
     INSERT INTO workspace_state(id, revision, state_json, updated_at)
@@ -830,6 +838,7 @@ function resetState() {
 
 // One-time local migration: persist UUIDs without changing workspace revisions.
 const selectorMigrationState = loadState();
+backendSync.continuous.migrate(selectorMigrationState);
 if (selectorMigrationState && migrateLegacySelectors(selectorMigrationState)) {
   persistStateTransaction(selectorMigrationState);
 }
@@ -1014,7 +1023,8 @@ const server = createServer(async (req, res) => {
     }
     if (req.method === "POST" && pathname.startsWith("/backend-sync/continuous/")) {
       const action = pathname.slice("/backend-sync/continuous/".length);
-      if (["configure", "claim", "prepare", "finish", "release", "retry"].includes(action)) {
+      if (["configure", "scan", "claim", "prepare", "finish", "release", "retry",
+        "review", "approveIdentities", "approveValues"].includes(action)) {
         const result = backendSync.continuous[action](await readJsonBody(req));
         sendJson(res, 200, result ?? { ok: true });
         return;

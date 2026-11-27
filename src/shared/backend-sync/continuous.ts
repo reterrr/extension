@@ -14,6 +14,7 @@ import type {
   OperationResult,
   ResolvedBusinessObject,
   Slot,
+  SyncDependency,
   SyncSettings,
   ValueDefinition,
 } from "./types";
@@ -67,6 +68,89 @@ type Prepared = {
   anchors: Record<string, Slot | null>;
 };
 
+function checkIdentity(job: ContinuousJob, current: ResolvedBusinessObject) {
+  const { intent, registry } = job;
+  if (current.schemaRevisionId !== registry.revisionId)
+    throw new ReviewRequired("CONFLICT", "SCHEMA_REVISION_CHANGED");
+  const key = identityKey(intent.identity);
+  const expected =
+    intent.boundObjectId ?? job.resolved[JSON.stringify(["identity", key])];
+  if (
+    current.businessModelId !== registry.businessModelId ||
+    current.businessEntityId !==
+      entityFor(registry, intent.identity)?.businessEntityId ||
+    identityKey(current.identity) !== key ||
+    (expected && current.businessObjectId !== expected)
+  )
+    throw new ReviewRequired("CONFLICT", "OBJECT_BINDING_CHANGED");
+}
+
+async function reconcileIdentity(
+  settings: SyncSettings,
+  job: ContinuousJob,
+  signal: AbortSignal,
+): Promise<Outcome> {
+  const { intent, registry, workspaceUuid } = job;
+  const preview = await resolveRemoteObject(
+    settings,
+    workspaceUuid,
+    intent.identity,
+    "preview",
+    undefined,
+    signal,
+  );
+  checkIdentity(job, preview);
+  const resolution = intent.resolution;
+  const existing =
+    resolution?.action === "bind"
+      ? resolution.existingBusinessObjectId
+      : undefined;
+  if (preview.businessObjectId && preview.status === "SYNCED") {
+    if (existing && existing !== preview.businessObjectId)
+      throw new ReviewRequired("CONFLICT", "OBJECT_BINDING_CHANGED");
+    return { status: "SYNCED", result: { object: preview } };
+  }
+  if (preview.status !== "LOCAL_ONLY" || preview.businessObjectId)
+    throw new ReviewRequired(
+      "CONFLICT",
+      preview.reason ?? "OBJECT_BINDING_CHANGED",
+    );
+  if (
+    !resolution &&
+    (!intent.canCreate ||
+      preview.reason ||
+      registry.revisionId !== intent.schemaRevisionId)
+  )
+    throw new ReviewRequired(
+      "BLOCKED",
+      preview.reason || "IDENTITY_REVIEW_REQUIRED",
+    );
+  const action = resolution?.action ?? "create";
+  if (action === "create" && !registry.permissions.create)
+    throw new ReviewRequired("BLOCKED", "CREATE_PERMISSION_REQUIRED");
+  if (action === "bind" && !registry.permissions.bindExisting)
+    throw new ReviewRequired("BLOCKED", "BIND_PERMISSION_REQUIRED");
+  if (!resolution && job.missing)
+    return { status: "WAITING_DEPENDENCY", result: job.missing };
+  const object = await resolveRemoteObject(
+    settings,
+    workspaceUuid,
+    intent.identity,
+    action,
+    existing,
+    signal,
+    registry.revisionId,
+  );
+  checkIdentity(job, object);
+  if (
+    !object.businessObjectId ||
+    object.status !== "SYNCED" ||
+    (existing && object.businessObjectId !== existing)
+  )
+    throw new ReviewRequired("BLOCKED", "IDENTITY_REVIEW_REQUIRED");
+  return { status: "SYNCED", result: { object } };
+}
+
 async function prepare(
   settings: SyncSettings,
   job: ContinuousJob,
@@ -104,43 +188,15 @@ async function prepare(
     }
   });
 
-  const resolve = (action: "preview" | "create") =>
-    resolveRemoteObject(
-      settings,
-      workspaceUuid,
-      intent.identity,
-      action,
-      undefined,
-      signal,
-    );
-  const check = (current: ResolvedBusinessObject) => {
-    if (current.schemaRevisionId !== intent.schemaRevisionId)
-      throw new ReviewRequired("CONFLICT", "SCHEMA_REVISION_CHANGED");
-    if (
-      current.businessModelId !== registry.businessModelId ||
-      current.businessEntityId !== entity.businessEntityId ||
-      identityKey(current.identity) !== identityKey(intent.identity) ||
-      (intent.boundObjectId &&
-        current.businessObjectId !== intent.boundObjectId)
-    )
-      throw new ReviewRequired("CONFLICT", "OBJECT_BINDING_CHANGED");
-  };
-  let current = await resolve("preview");
-  check(current);
-  if (!current.businessObjectId) {
-    if (
-      !intent.canCreate ||
-      current.reason === "EXPLICIT_LEGACY_MATCH_REQUIRED"
-    )
-      throw new ReviewRequired(
-        "BLOCKED",
-        current.reason || "IDENTITY_REVIEW_REQUIRED",
-      );
-    if (!registry.permissions.create)
-      throw new ReviewRequired("BLOCKED", "CREATE_PERMISSION_REQUIRED");
-    current = await resolve("create");
-    check(current);
-  }
+  const current = await resolveRemoteObject(
+    settings,
+    workspaceUuid,
+    intent.identity,
+    "preview",
+    undefined,
+    signal,
+  );
+  checkIdentity(job, current);
   if (!current.businessObjectId || current.status !== "SYNCED")
     throw new ReviewRequired("BLOCKED", "IDENTITY_REVIEW_REQUIRED");
 
@@ -198,7 +254,10 @@ async function prepare(
 
 type Outcome = {
   status: ContinuousStatus;
-  result: OperationResult & { confirmed?: ContinuousJob["confirmed"] };
+  result: OperationResult & {
+    confirmed?: ContinuousJob["confirmed"];
+    dependencies?: SyncDependency[];
+  };
 };
 
 function failed(error: unknown): Outcome {
@@ -258,15 +317,21 @@ async function processJob(
     continuousLocal("finish", { ...scope, ...outcome });
   try {
     signal.throwIfAborted();
+    if (job.kind === "identity") {
+      let outcome: Outcome;
+      try {
+        outcome = await reconcileIdentity(settings, job, signal);
+      } catch (error) {
+        signal.throwIfAborted();
+        outcome = failed(error);
+        if (outcome.status === "BLOCKED" && job.missing?.dependencies)
+          outcome.result.dependencies = job.missing.dependencies;
+      }
+      signal.throwIfAborted();
+      return await finish(outcome);
+    }
     let { request, anchors } = intent;
     if (!request) {
-      if (job.missing) {
-        const { blocked, ...result } = job.missing;
-        return await finish({
-          status: blocked ? "BLOCKED" : "WAITING_DEPENDENCY",
-          result,
-        });
-      }
       let plan: Prepared;
       try {
         plan = await prepare(settings, job, signal);
@@ -312,15 +377,29 @@ export async function syncContinuousBatch(
   signal: AbortSignal,
 ) {
   const limit = 20;
+  signal.throwIfAborted();
+  const discovery = await continuousLocal<{ more: boolean; scanned: number }>(
+    "scan",
+    { origin: settings.origin, manual },
+  );
   let processed = 0;
+  let changed = discovery.scanned > 0;
   while (processed < limit && !signal.aborted) {
-    const { job, retryAt } = await continuousLocal<{
+    const { job, retryAt, progressed } = await continuousLocal<{
       job: ContinuousJob | null;
       retryAt: number | null;
+      progressed?: boolean;
     }>("claim", { origin: settings.origin, manual });
-    if (!job) return { more: false, retryAt, processed };
+    if (!job)
+      return {
+        more: retryAt == null ? discovery.more : retryAt <= Date.now(),
+        retryAt,
+        processed,
+        changed: changed || Boolean(progressed),
+      };
     await processJob(settings, job, signal);
     processed++;
+    changed = true;
   }
-  return { more: !signal.aborted, retryAt: null, processed };
+  return { more: !signal.aborted, retryAt: null, processed, changed };
 }
