@@ -110,6 +110,11 @@ async function reconcileIdentity(
       throw new ReviewRequired("CONFLICT", "OBJECT_BINDING_CHANGED");
     return { status: "SYNCED", result: { object: preview } };
   }
+  if (preview.status !== "LOCAL_ONLY" || preview.businessObjectId)
+    throw new ReviewRequired(
+      "CONFLICT",
+      preview.reason ?? "OBJECT_BINDING_CHANGED",
+    );
   if (
     !resolution &&
     (!intent.canCreate ||
@@ -387,7 +392,7 @@ export async function syncContinuousBatch(
     }>("claim", { origin: settings.origin, manual });
     if (!job)
       return {
-        more: discovery.more,
+        more: retryAt == null ? discovery.more : retryAt <= Date.now(),
         retryAt,
         processed,
         changed: changed || Boolean(progressed),

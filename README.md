@@ -613,7 +613,8 @@ once. Saving a binding wakes its dependents immediately. A parent value
 conflict leaves its binding available to children. **Inspect dependency chain**
 shows which committed record or job is blocking a write. Missing and ambiguous
 references or cycles wait for a relevant local change, a binding, or review.
-Network failures use bounded exponential backoff.
+Network failures use bounded exponential backoff and a short workspace cooldown
+so a large scan does not flood an unavailable backend.
 
 The worker previews a backend identity before creating it. Automatic creation
 requires an approved new local record and the workspace's create grant.

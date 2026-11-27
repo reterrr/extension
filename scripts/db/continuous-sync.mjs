@@ -472,6 +472,11 @@ export function createContinuousSync(
     SELECT MIN(lease_until) AS deadline FROM backend_sync_operations
     WHERE workspace_uuid=? AND lease_until>0 AND lease_until>?
   `);
+  const networkCooldown = db.prepare(`
+    SELECT MAX(MIN(due_at, unixepoch(updated_at, 'subsec') * 1000 + 10000)) AS deadline
+    FROM backend_sync_operations
+    WHERE workspace_uuid=? AND identity_key IS NOT NULL AND sync_status='RETRY_PENDING' AND due_at>?
+  `);
   const next = db.prepare(`
     SELECT * FROM backend_sync_operations o WHERE ${readyCondition}
     AND o.due_at<=? AND o.lease_until<=?
@@ -518,6 +523,10 @@ export function createContinuousSync(
     const now = Date.now();
     const active = activeLease.get(namespace, now).deadline;
     if (active) return { job: null, retryAt: active };
+    // A large initial scan should share a cooldown after a connection failure.
+    const cooledUntil = networkCooldown.get(namespace, now).deadline;
+    if (cooledUntil > now)
+      return { job: null, retryAt: Math.ceil(cooledUntil) };
     const registry = decode(row.registry_json);
     for (let checked = 0; checked < 32; checked++) {
       const item = next.get(namespace, now, now);

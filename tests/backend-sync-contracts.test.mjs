@@ -1831,3 +1831,28 @@ test("explicit reconciliation replaces a confirmed conflict with the latest revi
   assert.equal(patch.expectedValueId, serverHead.valueId);
   assert.equal(patch.value, "PLANOWANY");
 });
+
+test("one backend outage pauses dispatch for the workspace without losing queued identities", async (t) => {
+  const { local } = await continuousFixture(t, {
+    state: {
+      ...initial,
+      objects: [record, { ...record, id: "other-local-identity" }],
+    },
+  });
+  const path = "/backend-sync/continuous";
+  const claim = () => local(path + "/claim", { origin, manual: false });
+  await local(path + "/scan", { origin, manual: false });
+  const { job } = await claim();
+  await local(path + "/finish", {
+    origin,
+    workspaceUuid,
+    operationId: job.intent.operationId,
+    leaseId: job.leaseId,
+    status: "RETRY_PENDING",
+    result: { code: "BACKEND_UNAVAILABLE" },
+  });
+  const paused = await claim();
+  assert.equal(paused.job, null);
+  assert.ok(paused.retryAt > Date.now());
+  assert.equal((await local(path)).reconciliation.queued, 2);
+});
