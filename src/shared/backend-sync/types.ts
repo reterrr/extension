@@ -117,6 +117,7 @@ export interface CommitOperation {
 
 export interface CommitPreview {
   operation: CommitOperation | null;
+  compared?: Record<string, string[]>;
   differences: Array<{
     identity: Identity;
     field: string;
@@ -152,6 +153,11 @@ export interface SyncState {
   backendOrigin: string | null;
   registry: Registry | null;
   bindings: ResolvedBusinessObject[];
+  sourceBindings?: Array<{
+    localSourceKey: string;
+    canonicalUrl: string;
+    backendSourceId: ServerId;
+  }>;
   selectors: SelectorBinding[];
   operations: StoredOperation[];
 }
@@ -175,19 +181,38 @@ export interface ContinuousIntent {
   localRevision: number;
   schemaRevisionId: ServerId;
   boundObjectId: ServerId | null;
-  fields: Array<{ localKey: string; persistentKey: string | null; value: unknown }>;
+  fields: Array<{
+    localKey: string;
+    persistentKey: string | null;
+    value: unknown;
+  }>;
   heads: Record<string, Slot>;
   request?: CommitRequest;
   anchors?: Record<string, Slot | null>;
+  resolution?:
+    | { action: "create" }
+    | { action: "bind"; existingBusinessObjectId: ServerId };
+}
+
+export interface SyncDependency {
+  code: string;
+  label?: string;
+  identity?: Identity;
+  localExists?: boolean;
+  upstreamId?: string;
+  upstreamStatus?: string;
+  upstreamCode?: string;
+  chain?: SyncDependency[];
 }
 
 export interface ContinuousJob {
   workspaceUuid: string;
   leaseId: string;
+  kind: "identity" | "commit";
   registry: Registry;
   intent: ContinuousIntent;
   resolved: Record<string, ServerId>;
-  missing: (OperationResult & { blocked?: boolean }) | null;
+  missing: (OperationResult & { dependencies?: SyncDependency[] }) | null;
   confirmed: Record<string, ConfirmedHead>;
 }
 
@@ -202,5 +227,37 @@ export interface ContinuousSummary {
   conflicts: number;
   lastSuccess: string | null;
   running: boolean;
-  problems: Array<{ id: string; label: string; status: ContinuousStatus; code?: string; message?: string }>;
+  problems: Array<{
+    id: string;
+    key: string;
+    identity: Identity;
+    label: string;
+    status: ContinuousStatus;
+    code?: string;
+    message?: string;
+    dependencies?: SyncDependency[];
+  }>;
+  reconciliation: {
+    found: number;
+    scanned: number;
+    alreadyBound: number;
+    queued: number;
+    identityReview: number;
+    valueReview: number;
+    bound: number;
+    completed: number;
+  };
+}
+
+export interface SyncReviewPage {
+  permissions: Registry["permissions"];
+  items: Array<{
+    key: string;
+    identity: Identity;
+    label: string;
+    code?: string;
+    pending: boolean;
+    conflictReview: boolean;
+  }>;
+  next: string | null;
 }

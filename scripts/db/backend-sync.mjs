@@ -102,6 +102,7 @@ export function createBackendSyncStore(db) {
           id(field.fieldVersionId),
           revision,
         );
+    continuous.registryChanged(row, incoming);
   });
 
   function writeBinding(namespace, object) {
@@ -185,6 +186,8 @@ export function createBackendSyncStore(db) {
         json(value),
       );
     }
+    if (objectId && !previous?.business_object_id)
+      continuous.bindingChanged(namespace, key);
   }
 
   const binding = db.transaction(({ workspaceUuid, object }) =>
@@ -296,6 +299,10 @@ export function createBackendSyncStore(db) {
       workspaceUuid: namespace,
       backendOrigin: row.backend_origin,
       registry: parse(row.registry_json),
+      sourceBindings: db.prepare(`
+        SELECT local_source_key AS localSourceKey, canonical_url AS canonicalUrl,
+          backend_source_id AS backendSourceId FROM backend_source_bindings WHERE workspace_uuid=?
+      `).all(namespace),
       bindings: db
         .prepare("SELECT * FROM backend_object_bindings WHERE workspace_uuid=?")
         .all(namespace)
@@ -378,6 +385,8 @@ export function createBackendSyncStore(db) {
       );
     for (const key of task.localKeys)
       if (key !== task.key) put.run(workspaceUuid, key, ...values);
+    for (const key of new Set([task.key, ...task.localKeys]))
+      continuous.sourcesChanged(workspaceUuid, key, receipt.canonicalUrl);
   }
 
   const bulkFinish = db.transaction(
@@ -482,6 +491,7 @@ export function createBackendSyncStore(db) {
 
   const reset = () => {
     for (const table of [
+      "backend_sync_records",
       "backend_bulk_sync_jobs",
       "backend_source_bindings",
       "backend_sync_operations",

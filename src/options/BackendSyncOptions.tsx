@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { loadCommittedState } from "../shared/api/storage";
 import {
+  continuousLocal,
   enqueueOperation,
   readSyncSettings,
   readSyncState,
@@ -62,6 +63,12 @@ export function BackendSyncOptions() {
   const [sourceId, setSourceId] = useState("");
   const [snapshotId, setSnapshotId] = useState("");
   const [preview, setPreview] = useState<CommitPreview | null>(null);
+  const [historyReview, setHistoryReview] = useState<{
+    keys: string[];
+    expectedRevision: number;
+    schemaRevisionId: string;
+    workspaceUuid: string;
+  } | null>(null);
   const [statuses, setStatuses] = useState<Record<string, string>>({});
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -121,6 +128,13 @@ export function BackendSyncOptions() {
     () => (workspace ? localRecords(workspace) : []),
     [workspace],
   );
+  const labels = useMemo(
+    () =>
+      new Map(
+        records.map((record) => [identityKey(record.identity), record.label]),
+      ),
+    [records],
+  );
   const active = records.filter((record) =>
     selected.has(identityKey(record.identity)),
   );
@@ -135,9 +149,17 @@ export function BackendSyncOptions() {
       .toLowerCase()
       .includes(filter.trim().toLowerCase()),
   );
+  const bindingIndex = useMemo(
+    () =>
+      new Map(
+        sync?.bindings.map((object) => [identityKey(object.identity), object]),
+      ),
+    [sync],
+  );
   const bound = sync
-    ? records.filter((record) => resolveBusinessObject(sync, record.identity))
-        .length
+    ? records.filter((record) =>
+        resolveBusinessObject(sync, record.identity, bindingIndex),
+      ).length
     : 0;
   const conflicts =
     sync?.operations.filter((op) => op.status === "CONFLICT") ?? [];
@@ -219,21 +241,67 @@ export function BackendSyncOptions() {
     });
   }
 
-  const compare = action(async () => {
-    if (!settings || !sync || !active.length) return;
-    // Refresh current heads for the comparison the user will actually review.
-    for (const record of active)
-      await reconcile(settings, sync, record.identity, "preview");
-    const { state, committed } = await localState();
-    if (!committed) return;
-    const proposed = makeCommitPreview(state, null, committed, selected);
-    setPreview(proposed);
-    if (!proposed.operation)
-      setMessage("The selected values have no changes to send.");
-  });
+  function compare(historyKeys?: string[]) {
+    return action(async () => {
+      if (!settings || !sync) return;
+      const keys = historyKeys ? new Set(historyKeys) : selected;
+      const snapshot = historyKeys ? await localState() : null;
+      const toCompare = historyKeys
+        ? (snapshot?.committed ? localRecords(snapshot.committed) : []).filter(
+            (record) => keys.has(identityKey(record.identity)),
+          )
+        : active;
+      if (!toCompare.length) return;
+      setPreview(null);
+      setHistoryReview(null);
+      // Refresh current heads for the comparison the user will actually review.
+      for (const record of toCompare)
+        await reconcile(
+          settings,
+          snapshot?.state ?? sync,
+          record.identity,
+          "preview",
+        );
+      const { state, committed } = await localState();
+      if (!committed || !state.registry) return;
+      const proposed = makeCommitPreview(state, null, committed, keys);
+      if (historyKeys) {
+        setHistoryReview({
+          keys: historyKeys,
+          expectedRevision: committed.revision,
+          schemaRevisionId: state.registry.revisionId,
+          workspaceUuid: state.workspaceUuid,
+        });
+      }
+      setPreview(proposed);
+      if (!proposed.operation)
+        setMessage("The selected values have no changes to send.");
+    });
+  }
+
+  useEffect(() => {
+    if (preview && historyReview)
+      document
+        .getElementById("historical-value-preview")
+        ?.scrollIntoView({ block: "nearest" });
+  }, [preview, historyReview]);
 
   const sendPreview = action(async () => {
-    if (!settings || !preview?.operation?.request) return;
+    if (!settings || !preview) return;
+    if (historyReview) {
+      await continuousLocal("approveValues", {
+        origin: settings.origin,
+        ...historyReview,
+        preview: preview.operation,
+        compared: preview.compared,
+      });
+      setHistoryReview(null);
+      setPreview(null);
+      await requestSyncAction("wake");
+      setMessage("Value review saved.");
+      return;
+    }
+    if (!preview.operation?.request) return;
     const current = await loadCommittedState();
     if (current?.revision !== preview.operation.localRevision)
       throw new Error(
@@ -316,7 +384,10 @@ export function BackendSyncOptions() {
               type="checkbox"
               checked={input.syncApprovedCommits}
               onChange={(event) =>
-                setInput({ ...input, syncApprovedCommits: event.target.checked })
+                setInput({
+                  ...input,
+                  syncApprovedCommits: event.target.checked,
+                })
               }
             />
             Sync approved values for bound records
@@ -340,6 +411,7 @@ export function BackendSyncOptions() {
         settings={settings}
         linked={Boolean(registry)}
         onMode={setContinuousMode}
+        onReviewValues={(keys) => compare(keys)()}
       />
 
       {sync && (
@@ -381,7 +453,11 @@ export function BackendSyncOptions() {
           <div className="ui-sync-records">
             {visible.slice(0, 100).map((record) => {
               const key = identityKey(record.identity);
-              const binding = resolveBusinessObject(sync, record.identity);
+              const binding = resolveBusinessObject(
+                sync,
+                record.identity,
+                bindingIndex,
+              );
               const definition = entityFor(registry, record.identity);
               return (
                 <div className="ui-sync-record" key={key}>
@@ -475,7 +551,7 @@ export function BackendSyncOptions() {
                 !active.length ||
                 !registry.permissions.commit
               }
-              onClick={compare}
+              onClick={compare()}
             >
               Compare selected values
             </button>
@@ -501,8 +577,11 @@ export function BackendSyncOptions() {
             </>
           )}
 
-          {preview?.operation && (
-            <div className="ui-sync-preview">
+          {preview && (preview.operation || historyReview) && (
+            <div
+              className="ui-sync-preview"
+              id={historyReview ? "historical-value-preview" : undefined}
+            >
               <h3>Review proposed server changes</h3>
               {preview.differences.length > 0 && (
                 <table>
@@ -518,7 +597,8 @@ export function BackendSyncOptions() {
                     {preview.differences.map((row) => (
                       <tr key={identityKey(row.identity) + row.field}>
                         <td>
-                          {row.identity.localObjectId}
+                          {labels.get(identityKey(row.identity)) ??
+                            row.identity.localObjectId}
                           {row.identity.target &&
                             ` / ${row.identity.target.id}`}
                         </td>
@@ -530,16 +610,23 @@ export function BackendSyncOptions() {
                   </tbody>
                 </table>
               )}
-              {preview.operation.skipped.map((row) => (
+              {preview.operation?.skipped.map((row) => (
                 <p key={identityKey(row.identity) + row.field}>
                   {row.identity.localObjectId} · {row.field} · {row.reason}
                 </p>
               ))}
               <button
-                disabled={busy || !preview.operation.request}
+                disabled={
+                  busy ||
+                  (!preview.operation?.request &&
+                    (!historyReview ||
+                      Boolean(preview.operation?.skipped.length)))
+                }
                 onClick={sendPreview}
               >
-                Confirm server synchronization
+                {historyReview && !preview.operation?.request
+                  ? "Mark values reviewed"
+                  : "Confirm server synchronization"}
               </button>
             </div>
           )}

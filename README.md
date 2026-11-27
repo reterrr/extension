@@ -599,25 +599,41 @@ backend, then enter the backend origin and token and refresh the schema.
 SQLite keeps the namespace, registry, bindings and queued operations. The
 workspace token stays in Firefox local extension storage.
 
-Restart the updated SQLite service and enable **Continuous Backend Sync** after
-refreshing the schema. Each approved
-Commit writes changed records to the existing SQLite outbox in the same
-transaction as the business data. Firefox wakes the coordinator after Commit,
-at startup and when retry work is due. The worker checks the workspace identity,
-parent and reference bindings before it prepares a canonical write. Stored
-requests retain their operation UUID and expected field heads across restarts.
+Deploy the backend with schema-pinned identity resolution, restart the updated
+SQLite service and refresh the schema in Firefox. Enable **Continuous Backend
+Sync** or select **Start reconciliation**. Firefox scans committed SQLite roots
+and nested records in batches of 64. Discovery checkpoints survive restarts and
+reuse cached or existing server bindings. The Review lists show 20 records per
+page.
 
-The worker can create identities for new local records using the workspace
-grant. Existing unbound records, imported identities and ambiguous legacy
-records can be reconciled through **Preview bindings** and the explicit bind
-or create actions. **Compare selected values** reviews a write against current
-server heads. Conflicts require review and leave other records eligible.
+Each approved Commit records its changed fields in the SQLite outbox with the
+local data. The worker follows parent identities and the business references in
+the schema. Finding an unbound local record schedules identity reconciliation
+once. Saving a binding wakes its dependents immediately. A parent value
+conflict leaves its binding available to children. **Inspect dependency chain**
+shows which committed record or job is blocking a write. Missing and ambiguous
+references or cycles wait for a relevant local change, a binding, or review.
+Network failures use bounded exponential backoff.
 
-Pausing keeps capturing approved changes in SQLite and stops automatic sends.
-**Sync now** runs eligible work on demand. **Retry failed** rechecks blocked
-dependencies and authorization. Sources still require their own authorized
-bindings. The selector and capture controls use a selected Source and its
-registered Snapshot.
+The worker previews a backend identity before creating it. Automatic creation
+requires an approved new local record and the workspace's create grant.
+Historical and imported records without an exact binding remain available in
+**Review identities**. Enter a confirmed server object ID to match an existing
+object, or select and confirm records that are genuinely new. Source bindings
+and grants still use **Bulk Source & Selector Synchronization**.
+
+**Review values** shows historical values and confirmed write conflicts.
+Compare a batch with current server values, then confirm the changes. A
+confirmed conflict review covers the current committed values and replaces
+the blocked writes only when all their fields were compared. If a newer local
+Commit arrives before confirmation, compare again. Prepared writes retain their
+operation UUID, schema and field versions, and expected field heads across
+restarts. The existing manual preview, bind, and compare controls remain available.
+
+Pausing preserves the outbox and continues recording approved commits.
+**Resume reconciliation** restores automatic dispatch. **Sync now** runs eligible
+work on demand, and **Retry failed** rechecks recoverable failures. The selector
+and capture controls use a selected Source and its registered Snapshot.
 
 Use **Bulk Source & Selector Synchronization** to scan the committed workspace,
 preview Source registrations and selector bindings, and choose ambiguous URLs.
@@ -627,10 +643,12 @@ restart. **Export report** downloads each item's outcome and the pending evidenc
 count. The backend administrator sets Source registration permissions separately
 from business object permissions.
 
-SQLite upgrades to schema version 17 on service startup and keeps existing
-operations, bindings and evidence. An interrupted lease can take up to 90 seconds
-to expire. Each automatic server write covers one business record so conflicts
-stay local to that record. The schema manifest is generated with
+SQLite upgrades to schema version 18 on service startup. The additive migration
+indexes committed records and preserves workspace IDs, operations, bindings and
+evidence. It requeues older dependency waits once. An interrupted lease can take
+up to 90 seconds to expire. Each automatic canonical write covers one business
+record. Historical matching without an exact key requires a confirmed server
+ID or a reviewed decision to create. The schema manifest is generated with
 `npm run --silent export:schema`.
 
 [Backend bootstrap and enrollment](https://github.com/reterrr/burbot/blob/main/docs/extension-sync.md)
@@ -642,5 +660,5 @@ node --test tests/backend-sync-contracts.test.mjs
 Set `BURBOT_TEST_SYNC_ORIGIN` and `BURBOT_TEST_SYNC_TOKEN` for a disposable
 backend workspace to run the PostgreSQL-dependent contract case. With the same
 environment and Playwright Firefox installed, build the extension and run
-`node --test tests/continuous-backend-sync.browser.test.mjs`. The browser test
+`node --test tests/continuous-backend-sync.browser.test.mjs`. The browser suite
 starts a temporary SQLite service on port 8765.

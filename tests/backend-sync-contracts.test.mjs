@@ -246,7 +246,7 @@ test("SQLite migration preserves IDs and staged sync survives offline restart", 
     assert.ok(result.ok, await result.clone().text());
     return result.json();
   };
-  assert.equal((await fromLocal("/info")).schemaVersion, 17);
+  assert.equal((await fromLocal("/info")).schemaVersion, 18);
   assert.deepEqual(await fromLocal("/state"), initial);
   const { workspaceUuid: generated } = await fromLocal("/backend-sync");
   assert.match(generated, /^[0-9a-f-]{36}$/);
@@ -730,7 +730,7 @@ test("bulk preview is read-only and exact approved work resumes after SQLite and
     assert.fail("Unexpected remote write or read " + path);
   };
 
-  assert.equal((await fromLocal("/info")).schemaVersion, 17);
+  assert.equal((await fromLocal("/info")).schemaVersion, 18);
   const sqliteState = await fromLocal("/state");
   const before = await fromLocal("/backend-sync");
   const discovery = discoverSources(sqliteState);
@@ -896,11 +896,14 @@ test("bulk preview is read-only and exact approved work resumes after SQLite and
   assert.equal(requests.filter(({ path }) => path === "/selectors").length, 3);
 });
 
-async function continuousFixture(t, { unlinked = false } = {}) {
+async function continuousFixture(
+  t,
+  { unlinked = false, state = initial } = {},
+) {
   const folder = await mkdtemp(join(tmpdir(), "burbot-continuous-sqlite-"));
   const file = join(folder, "workspace.sqlite");
   const port = await ephemeralPort();
-  const impl = await startStateService(port, file);
+  let impl = await startStateService(port, file);
   t.after(async () => {
     await stop(impl);
     await rm(folder, { recursive: true, force: true });
@@ -922,7 +925,7 @@ async function continuousFixture(t, { unlinked = false } = {}) {
     assert.ok(response.ok, await response.clone().text());
     return response.json();
   }
-  await local("/state", initial, "PUT");
+  await local("/state", state, "PUT");
   if (!unlinked) {
     await local("/backend-sync/registry", { origin, registry });
     await local("/backend-sync/continuous/configure", {
@@ -930,7 +933,11 @@ async function continuousFixture(t, { unlinked = false } = {}) {
       enabled: true,
     });
   }
-  return { file, url, call, local };
+  async function restart() {
+    await stop(impl);
+    impl = await startStateService(port, file);
+  }
+  return { file, url, call, local, restart };
 }
 
 test("continuous SQLite Commit and outbox roll back together, and pause retains work", async (t) => {
@@ -1072,17 +1079,29 @@ test("continuous worker preserves schema conflicts and stops denied creations", 
   }
   assert.deepEqual(
     requests.map((payload) => [payload.identity.localObjectId, payload.action]),
-    [[created.id, "preview"]],
+    [
+      [created.id, "preview"],
+      [record.id, "preview"],
+      [changed.id, "preview"],
+    ],
   );
   const status = await local(path);
   assert.equal(status.conflicts, 1);
   assert.deepEqual(
-    status.problems.map(({ status, code }) => [status, code]).sort(),
+    status.problems
+      .filter(
+        (item) =>
+          item.code !== "IDENTITY_REVIEW_REQUIRED" &&
+          item.code !== "WAITING_UPSTREAM_JOB",
+      )
+      .map(({ status, code }) => [status, code])
+      .sort(),
     [
       ["BLOCKED", "CREATE_PERMISSION_REQUIRED"],
       ["CONFLICT", "SCHEMA_REVISION_CHANGED"],
     ],
   );
+  assert.equal(status.reconciliation.identityReview, 3);
 });
 
 test(
@@ -1233,7 +1252,11 @@ test(
         if (current.synced === 10) break;
         assert.equal(current.conflicts, 0, JSON.stringify(current.problems));
         assert.ok(
-          current.problems.every((item) => item.status !== "BLOCKED"),
+          current.problems.every(
+            (item) =>
+              item.status !== "BLOCKED" ||
+              item.identity.localObjectId === record.id,
+          ),
           JSON.stringify(current.problems),
         );
         await delay(
@@ -1242,7 +1265,9 @@ test(
       }
       assert.equal(current.synced, 10, JSON.stringify(current.problems));
       assert.equal(current.pending, 1);
-      assert.equal(current.problems[0].code, "SOURCE_UNRESOLVED");
+      assert.ok(
+        current.problems.some((item) => item.code === "SOURCE_UNRESOLVED"),
+      );
     } finally {
       globalThis.fetch = realFetch;
     }
@@ -1300,10 +1325,509 @@ test(
     assert.deepEqual(requirement.objectFields.source_file_source_ids.value, [
       physical.businessObjectId,
     ]);
-    assert.equal(
-      (await readObject(recruitment, "file_source", missingSource))
-        .businessObjectId,
-      null,
+    const waitingFile = await readObject(
+      recruitment,
+      "file_source",
+      missingSource,
     );
+    assert.ok(waitingFile.businessObjectId);
+    assert.equal(waitingFile.objectFields.source.value, null);
   },
 );
+
+test("initial reconciliation checkpoints an 8,014-record workspace without approving historical values", async (t) => {
+  const historical = Array.from({ length: 8013 }, (_, index) => ({
+    id: `historic-${String(index).padStart(5, "0")}`,
+    type: "project",
+    values: { status: "PLANOWANY" },
+  }));
+  const state = { ...initial, objects: [record, ...historical] };
+  const { file, url, local, call, restart } = await continuousFixture(t, {
+    state,
+  });
+  const path = "/backend-sync/continuous";
+  await local("/backend-sync/binding", { workspaceUuid, object: bound });
+  assert.equal(
+    (
+      await call("/backend-sync/binding", {
+        workspaceUuid: crypto.randomUUID(),
+        object: bound,
+      })
+    ).status,
+    409,
+  );
+
+  const established = {
+    ...bound,
+    identity: { localType: "project", localObjectId: historical[0].id },
+    businessObjectId: "89",
+    objectFields: {
+      status: {
+        ...bound.objectFields.status,
+        value: "AKTYWNY",
+        valueId: "90",
+        businessObjectFieldId: "91",
+      },
+    },
+  };
+  const { syncContinuousBatch } = await load(
+    "src/shared/backend-sync/continuous.ts",
+  );
+  const actualFetch = globalThis.fetch;
+  const actions = [];
+  try {
+    globalThis.fetch = (target, init) => {
+      if (target.startsWith("http://127.0.0.1:8765/"))
+        return actualFetch(url + new URL(target).pathname, init);
+      const body = JSON.parse(init.body);
+      actions.push(body);
+      assert.equal(body.action, "preview");
+      return Promise.resolve(
+        Response.json(
+          body.identity.localObjectId === historical[0].id
+            ? established
+            : {
+                ...established,
+                businessObjectId: null,
+                objectFields: {},
+                identity: body.identity,
+                status: "LOCAL_ONLY",
+              },
+        ),
+      );
+    };
+    await syncContinuousBatch(
+      { origin, token: "t".repeat(43), syncApprovedCommits: false },
+      false,
+      new AbortController().signal,
+    );
+  } finally {
+    globalThis.fetch = actualFetch;
+  }
+  const before = (await local(path)).reconciliation;
+  assert.equal(before.found, 8014);
+  assert.equal(before.scanned, 64);
+  assert.equal(before.alreadyBound, 1);
+  assert.equal(before.valueReview, 2);
+  assert.equal(before.identityReview, 19);
+  assert.equal(actions.length, 20);
+  assert.equal((await local(path)).synced, 0);
+  await restart();
+  assert.deepEqual((await local(path)).reconciliation, before);
+  let scan;
+  do {
+    scan = await local(path + "/scan", { origin, manual: false });
+    assert.ok(scan.scanned <= 64);
+  } while (scan.more);
+  assert.deepEqual(await local(path + "/scan", { origin, manual: false }), {
+    scanned: 0,
+    more: false,
+  });
+  assert.equal((await local(path)).reconciliation.scanned, 8014);
+  const db = new Database(file, { readonly: true });
+  t.after(() => db.close());
+  assert.equal(
+    db
+      .prepare(
+        "SELECT COUNT(*) AS n FROM backend_sync_operations WHERE work_kind='identity'",
+      )
+      .get().n,
+    8013,
+  );
+  assert.equal(
+    db
+      .prepare(
+        "SELECT COUNT(*) AS n FROM backend_sync_operations WHERE work_kind='commit'",
+      )
+      .get().n,
+    0,
+  );
+  assert.equal(
+    (await local(path + "/review", { origin, kind: "identity" })).items.length,
+    19,
+  );
+
+  const { makeCommitPreview, identityKey } = await load(
+    "src/shared/backend-sync/resolve.ts",
+  );
+  const key = identityKey(established.identity);
+  const sync = await local("/backend-sync");
+  const preview = makeCommitPreview(sync, null, state, new Set([key]));
+  assert.equal(preview.differences[0].server, "AKTYWNY");
+  assert.equal(preview.differences[0].proposed, "PLANOWANY");
+  const selection = {
+    origin,
+    workspaceUuid,
+    keys: [key],
+    expectedRevision: state.revision,
+    schemaRevisionId: registry.revisionId,
+    preview: preview.operation,
+  };
+  await local(path + "/approveValues", selection);
+  const { job } = await local(path + "/claim", { origin, manual: false });
+  assert.equal(job.kind, "commit");
+  assert.deepEqual(
+    job.intent.request.changes,
+    preview.operation.request.changes,
+  );
+
+  const newState = {
+    ...state,
+    revision: state.revision + 1,
+    objects: [{ ...record, values: { status: "AKTYWNY" } }, ...historical],
+  };
+  await local("/state/commit", {
+    state: newState,
+    expectedRevision: state.revision,
+  });
+  assert.equal(
+    (
+      await call(path + "/approveValues", {
+        ...selection,
+        keys: [identityKey(identity)],
+      })
+    ).status,
+    409,
+  );
+  assert.equal((await local("/state")).revision, newState.revision);
+  assert.equal(
+    db
+      .prepare(
+        "SELECT COUNT(*) AS n FROM backend_sync_operations WHERE work_kind='commit'",
+      )
+      .get().n,
+    2,
+  );
+});
+
+test("the durable reference graph identifies cycles, missing records and ambiguous nested IDs without retrying", async (t) => {
+  const { file, url, local } = await continuousFixture(t, {
+    state: { ...initial, objects: [] },
+  });
+  const link = {
+    ...statusField,
+    localKey: "link",
+    persistentKey: "link",
+    key: "link",
+    references: "project",
+    definition: { type: "reference" },
+  };
+  const fileLink = {
+    ...link,
+    localKey: "attachment",
+    persistentKey: "attachment",
+    key: "attachment",
+    references: "document",
+  };
+  const withReferences = {
+    ...registry,
+    entities: [
+      { ...registry.entities[0], fields: [statusField, link, fileLink] },
+      {
+        localType: "document",
+        businessEntityId: "92",
+        parents: ["project"],
+        fields: [],
+      },
+    ],
+  };
+  await local("/backend-sync/registry", { origin, registry: withReferences });
+  const objects = [
+    { id: "cycle-a", type: "project", values: { link: "cycle-b" } },
+    { id: "cycle-b", type: "project", values: { link: "cycle-a" } },
+    {
+      id: "missing-parent",
+      type: "project",
+      values: { link: "not-in-sqlite" },
+    },
+    {
+      id: "ambiguous-child",
+      type: "project",
+      values: { attachment: "duplicated-file" },
+    },
+  ];
+  await local("/state/commit", {
+    expectedRevision: initial.revision,
+    state: {
+      ...initial,
+      revision: initial.revision + 1,
+      objects,
+      documentRequirements: objects.slice(0, 2).map((item) => ({
+        id: "duplicated-file",
+        objectId: item.id,
+        label: "Same ID",
+      })),
+    },
+  });
+  const { syncContinuousBatch } = await load(
+    "src/shared/backend-sync/continuous.ts",
+  );
+  const actualFetch = globalThis.fetch;
+  let requests = 0;
+  const path = "/backend-sync/continuous";
+  const settings = {
+    origin,
+    token: "t".repeat(43),
+    syncApprovedCommits: false,
+  };
+  const signal = new AbortController().signal;
+  try {
+    globalThis.fetch = (urlValue, init) => {
+      if (urlValue.startsWith("http://127.0.0.1:8765/"))
+        return actualFetch(url + new URL(urlValue).pathname, init);
+      const request = JSON.parse(init.body);
+      assert.equal(request.action, "preview");
+      requests++;
+      return Promise.resolve(
+        Response.json({
+          ...bound,
+          identity: request.identity,
+          businessObjectId: null,
+          objectFields: {},
+          status: "LOCAL_ONLY",
+        }),
+      );
+    };
+    const batch = await syncContinuousBatch(settings, false, signal);
+    assert.equal(batch.retryAt, null);
+    const total = requests;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const result = await syncContinuousBatch(settings, false, signal);
+      assert.equal(result.retryAt, null);
+      assert.equal(result.processed, 0);
+    }
+    assert.ok(total > 0);
+    assert.equal(requests, total);
+  } finally {
+    globalThis.fetch = actualFetch;
+  }
+  const status = await local(path);
+  for (const code of [
+    "DEPENDENCY_CYCLE",
+    "LOCAL_RECORD_MISSING",
+    "REFERENCE_AMBIGUOUS",
+  ])
+    assert.ok(
+      status.problems.some((item) => item.code === code),
+      JSON.stringify(status),
+    );
+  assert.ok(
+    status.problems.some((item) =>
+      item.dependencies?.some((dep) => dep.upstreamId && dep.localExists),
+    ),
+  );
+  const db = new Database(file, { readonly: true });
+  t.after(() => db.close());
+  assert.equal(
+    db
+      .prepare(
+        "SELECT COUNT(*) AS n FROM backend_sync_operations WHERE work_kind='identity'",
+      )
+      .get().n,
+    6,
+  );
+  assert.ok(
+    db.prepare("SELECT COUNT(*) AS n FROM backend_sync_dependencies").get().n >
+      0,
+  );
+});
+
+test("an approved document discovers an unscanned parent and wakes on an external binding", async (t) => {
+  const old = {
+    id: "old-recruitment",
+    type: "recruitment",
+    label: "Nabór BUR-I/2.3/2026",
+    values: { external_number: "BUR-I/2.3/2026" },
+  };
+  const previous = { ...initial, objects: [old] };
+  const { call, file, local, restart } = await continuousFixture(t, {
+    unlinked: true,
+    state: previous,
+  });
+  const label = {
+    ...statusField,
+    key: "label",
+    localKey: "label",
+    persistentKey: "label",
+    definition: { type: "string" },
+  };
+  const owner = {
+    ...label,
+    key: "recruitment_owner",
+    localKey: "recruitment_owner",
+    persistentKey: "recruitment_owner",
+    references: "recruitment",
+    definition: { type: "reference" },
+  };
+  const nestedRegistry = {
+    ...registry,
+    entities: [
+      ...registry.entities,
+      { localType: "recruitment", businessEntityId: "92", fields: [] },
+      {
+        localType: "document",
+        businessEntityId: "93",
+        parents: ["recruitment"],
+        fields: [label, owner],
+      },
+    ],
+  };
+  const path = "/backend-sync/continuous";
+  await local("/backend-sync/registry", { origin, registry: nestedRegistry });
+  await local(path + "/configure", { origin, enabled: true });
+  const document = {
+    id: "new-document",
+    objectId: old.id,
+    label: "Otwiera w nowej karcie.docx",
+  };
+  await local("/state/commit", {
+    expectedRevision: previous.revision,
+    reviewedObjectIds: [old.id],
+    state: {
+      ...previous,
+      revision: previous.revision + 1,
+      documentRequirements: [document],
+    },
+  });
+  const legacy = new Database(file);
+  legacy.exec(`
+    DELETE FROM app_meta WHERE key='sync_reconciliation_index';
+    DELETE FROM backend_sync_records;
+    UPDATE backend_sync_operations SET sync_status='WAITING_DEPENDENCY',
+      due_at=9999999999999, result_json='{"code":"REFERENCE_UNRESOLVED"}';
+    PRAGMA user_version=17;
+  `);
+  legacy.close();
+  await restart();
+  const claim = () => local(path + "/claim", { origin, manual: false });
+  const finish = (job, status, result) =>
+    local(path + "/finish", {
+      origin,
+      workspaceUuid,
+      operationId: job.intent.operationId,
+      leaseId: job.leaseId,
+      status,
+      result,
+    });
+  const parent = (await claim()).job;
+  assert.equal(parent.kind, "identity");
+  assert.equal(parent.intent.identity.localObjectId, old.id);
+  assert.equal(parent.intent.canCreate, false);
+  assert.equal((await local(path)).reconciliation.scanned, 0);
+  await finish(parent, "BLOCKED", { code: "IDENTITY_REVIEW_REQUIRED" });
+  assert.equal((await claim()).retryAt, null);
+
+  const binding = {
+    ...bound,
+    identity: parent.intent.identity,
+    businessEntityId: "92",
+    businessObjectId: "110",
+    objectFields: {},
+  };
+  assert.equal(
+    (
+      await call("/backend-sync/binding", {
+        workspaceUuid: crypto.randomUUID(),
+        object: binding,
+      })
+    ).status,
+    409,
+  );
+  assert.equal((await claim()).job, null);
+  await local("/backend-sync/binding", { workspaceUuid, object: binding });
+  const child = (await claim()).job;
+  assert.equal(child.kind, "identity");
+  assert.equal(child.intent.identity.target.id, document.id);
+  assert.equal(child.intent.canCreate, true);
+  await finish(child, "SYNCED", {
+    object: {
+      ...binding,
+      identity: child.intent.identity,
+      businessEntityId: "93",
+      businessObjectId: "111",
+    },
+  });
+  const documentCommit = (await claim()).job;
+  assert.equal(documentCommit.kind, "commit");
+  assert.equal(
+    documentCommit.resolved[JSON.stringify(["recruitment", old.id])],
+    binding.businessObjectId,
+  );
+});
+
+test("explicit reconciliation replaces a confirmed conflict with the latest reviewed values and CAS", async (t) => {
+  const { file, local } = await continuousFixture(t);
+  const path = "/backend-sync/continuous";
+  await local("/backend-sync/binding", { workspaceUuid, object: bound });
+  await local(path + "/scan", { origin, manual: false });
+  const change = (value, revision) => ({
+    ...initial,
+    revision,
+    objects: [{ ...record, values: { status: value } }],
+  });
+  await local("/state/commit", {
+    expectedRevision: 5,
+    state: change("AKTYWNY", 6),
+  });
+  const latest = change("PLANOWANY", 7);
+  await local("/state/commit", { expectedRevision: 6, state: latest });
+  const claim = () => local(path + "/claim", { origin, manual: false });
+  const { job } = await claim();
+  await local(path + "/finish", {
+    origin,
+    workspaceUuid,
+    operationId: job.intent.operationId,
+    leaseId: job.leaseId,
+    status: "CONFLICT",
+    result: { code: "CANONICAL_VALUE_CHANGED" },
+  });
+  assert.equal((await claim()).job, null);
+  const serverHead = {
+    ...bound.objectFields.status,
+    value: "AKTYWNY",
+    valueId: String(BigInt(bound.objectFields.status.valueId) + 1n),
+  };
+  await local("/backend-sync/binding", {
+    workspaceUuid,
+    object: {
+      ...bound,
+      objectFields: { status: serverHead },
+    },
+  });
+  const { items } = await local(path + "/review", { origin, kind: "value" });
+  assert.equal(items[0].conflictReview, true);
+  const { makeCommitPreview, identityKey } = await load(
+    "src/shared/backend-sync/resolve.ts",
+  );
+  const key = identityKey(identity);
+  const preview = makeCommitPreview(
+    await local("/backend-sync"),
+    null,
+    latest,
+    new Set([key]),
+  );
+  const db = new Database(file, { readonly: true });
+  t.after(() => db.close());
+  const ops = db.prepare(
+    "SELECT operation_id, sync_status, payload_json FROM backend_sync_operations WHERE work_kind='commit' ORDER BY rowid",
+  );
+  const prior = ops.all();
+  await local(path + "/approveValues", {
+    origin,
+    workspaceUuid,
+    expectedRevision: 7,
+    schemaRevisionId: registry.revisionId,
+    keys: [key],
+    preview: preview.operation,
+    compared: preview.compared,
+  });
+  const updated = ops.all();
+  assert.deepEqual(
+    updated.slice(0, 2),
+    prior.map((item) => ({ ...item, sync_status: "SUPERSEDED" })),
+  );
+  const confirmed = (await claim()).job;
+  const [patch] = confirmed.intent.request.changes[0].fields;
+  assert.equal(patch.expectedValueId, serverHead.valueId);
+  assert.equal(patch.value, "PLANOWANY");
+});

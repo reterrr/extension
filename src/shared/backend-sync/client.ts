@@ -30,6 +30,7 @@ import type {
   ServerId,
   SyncSettings,
   SyncState,
+  SyncReviewPage,
 } from "./types";
 
 export const syncSettingsKey = "burbotBackendSynchronization";
@@ -133,6 +134,9 @@ export const continuousLocal = <T = unknown>(action: string, body: unknown) =>
 export const configureContinuous = (settings: SyncSettings, enabled: boolean) =>
   continuousLocal("configure", { origin: settings.origin, enabled });
 
+export const readSyncReview = (settings: SyncSettings, kind: "identity" | "value", after: string) =>
+  continuousLocal<SyncReviewPage>("review", { origin: settings.origin, kind, after });
+
 function connected(settings: SyncSettings, state: SyncState): Registry {
   if (
     !state.registry ||
@@ -202,12 +206,16 @@ export const readBulkJob = (operationId: string) =>
 
 export const startBulkJob = (job: BulkJob) => local("bulkStart", job);
 
-export const finishBulkItem = (job: BulkJob, progress: BulkProgress) =>
-  local<BulkProgress>("bulkFinish", {
+export async function finishBulkItem(job: BulkJob, progress: BulkProgress) {
+  const result = await local<BulkProgress>("bulkFinish", {
     workspaceUuid: job.workspaceUuid,
     operationId: job.operationId,
     progress,
   });
+  if (result.source && result.status === "SYNCED" && typeof browser !== "undefined")
+    void requestSyncAction("wake").catch(() => undefined);
+  return result;
+}
 
 export function resolveRemoteObject(
   settings: SyncSettings,
@@ -216,6 +224,7 @@ export function resolveRemoteObject(
   action: ResolveAction,
   existingBusinessObjectId?: ServerId,
   signal?: AbortSignal,
+  expectedSchemaRevisionId?: ServerId,
 ) {
   return remote<ResolvedBusinessObject>(
     settings,
@@ -225,6 +234,7 @@ export function resolveRemoteObject(
       identity,
       action,
       ...(existingBusinessObjectId && { existingBusinessObjectId }),
+      ...(expectedSchemaRevisionId && { expectedSchemaRevisionId }),
     },
     signal,
   );

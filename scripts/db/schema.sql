@@ -482,8 +482,46 @@ CREATE TABLE IF NOT EXISTS backend_sync_operations (
   attempt_count INTEGER NOT NULL DEFAULT 0,
   lease_id TEXT,
   lease_until INTEGER NOT NULL DEFAULT 0,
+  work_kind TEXT NOT NULL DEFAULT 'commit',
+  priority INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (workspace_uuid, operation_id)
 ) STRICT;
+
+-- Indexed projection of committed records. Discovery is durable per record.
+CREATE TABLE IF NOT EXISTS backend_sync_records (
+  identity_key TEXT PRIMARY KEY,
+  local_object_id TEXT NOT NULL,
+  local_type TEXT NOT NULL,
+  target_kind TEXT,
+  target_id TEXT,
+  label TEXT NOT NULL,
+  values_json TEXT NOT NULL,
+  imported INTEGER NOT NULL,
+  ambiguous INTEGER NOT NULL,
+  scanned INTEGER NOT NULL DEFAULT 0,
+  needs_value_review INTEGER NOT NULL DEFAULT 1
+) STRICT;
+
+CREATE INDEX IF NOT EXISTS backend_sync_records_pending
+  ON backend_sync_records(identity_key) WHERE scanned = 0;
+CREATE INDEX IF NOT EXISTS backend_sync_records_target
+  ON backend_sync_records(target_kind, target_id) WHERE target_kind IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS backend_sync_dependencies (
+  workspace_uuid TEXT NOT NULL,
+  operation_id TEXT NOT NULL,
+  lookup TEXT NOT NULL,
+  dependency_key TEXT,
+  upstream_id TEXT,
+  PRIMARY KEY (workspace_uuid, operation_id, lookup),
+  FOREIGN KEY (workspace_uuid, operation_id)
+    REFERENCES backend_sync_operations(workspace_uuid, operation_id) ON DELETE CASCADE
+) STRICT;
+
+CREATE INDEX IF NOT EXISTS backend_sync_dependencies_by_key
+  ON backend_sync_dependencies(workspace_uuid, dependency_key);
+CREATE INDEX IF NOT EXISTS backend_sync_dependencies_by_lookup
+  ON backend_sync_dependencies(workspace_uuid, lookup);
 
 -- Bulk sync keeps approved operations and Source identities outside portable state.
 CREATE TABLE IF NOT EXISTS backend_source_bindings (
@@ -521,4 +559,4 @@ CREATE TABLE IF NOT EXISTS backend_bulk_sync_items (
     REFERENCES backend_bulk_sync_jobs(workspace_uuid, operation_id) ON DELETE CASCADE
 ) STRICT;
 
-PRAGMA user_version = 17;
+PRAGMA user_version = 18;
