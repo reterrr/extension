@@ -141,6 +141,8 @@ export function archiveDocument(
       4 * Math.ceil(resource.bytes.length / 3) + resource.mediaType.length + 13;
     if (length > budget) return;
     budget -= length;
+    // Each inline reference occupies bytes in the serialized archive even
+    // when the same resource was encoded before. Count every occurrence.
     const uri =
       encoded.get(resource) ??
       `data:${resource.mediaType};base64,${base64(resource.bytes)}`;
@@ -246,7 +248,12 @@ export function archiveDocument(
         child.childNodes = [];
         tree.insertText(
           child,
-          css(text, pageBase).replace(/<(?=\/style\b)/gi, "\\3c "),
+          css(
+            text,
+            (attr("data-burbot-style-base") &&
+              resourceKey(attr("data-burbot-style-base")!, pageBase)) ||
+              pageBase,
+          ).replace(/<(?=\/style\b)/gi, "\\3c "),
         );
       }
       if (tag === "textarea") child.childNodes = [];

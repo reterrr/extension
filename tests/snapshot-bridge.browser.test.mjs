@@ -288,14 +288,14 @@ test(
         "page",
         [
           "text/html",
-          `<!doctype html><title>Archived Firefox page</title><link rel="stylesheet" href="/archive-fixture/site.css"><h1 id="headline" style="padding-left:7px">Archived Firefox page</h1><p id="font">A</p><img id="fixture-image" src="/archive-fixture/pixel.png"><a href="/archive-fixture/live">Live only</a>`,
+          `<!doctype html><title>Archived Firefox page</title><link rel="stylesheet" href="/archive-fixture/assets/site.css"><h1 id="headline" style="padding-left:7px">Archived Firefox page</h1><p id="font">A</p><img id="fixture-image" src="/archive-fixture/pixel.png"><a href="/archive-fixture/live">Live only</a>`,
         ],
       ],
       [
         "site.css",
         [
           "text/css",
-          '@import "nested.css"; #headline{background-image:url(pixel.png)} @font-face{font-family:ArchiveTest;src:url(letter.woff) format("woff")} #font{font-family:ArchiveTest}',
+          '@import "../nested.css"; #headline{background-image:url(../pixel.png)} @font-face{font-family:ArchiveTest;src:url(../letter.woff) format("woff")} #font{font-family:ArchiveTest}',
         ],
       ],
       ["nested.css", ["text/css", "#headline { color: rgb(18, 52, 86); }"]],
@@ -384,15 +384,14 @@ test(
     assert.equal(first.contentHash, digest(evidence));
     assert.doesNotMatch(evidence.toString(), /<style|data:image\//);
     assert.match(visual.toString(), /data:image\/png;base64/);
-    const stylesheet = /data:text\/css;base64,([\w+/=]+)/.exec(
-      visual.toString(),
-    );
-    assert.ok(stylesheet, "the loaded stylesheet was saved");
+    // CSSOM may inline the stylesheet in place. Either representation must
+    // retain the loaded font and its rules in the archived document.
     assert.match(
-      Buffer.from(stylesheet[1], "base64").toString(),
+      visual.toString(),
       /data:font\/woff;base64,/,
-      "the loaded font was saved in the stylesheet",
+      "the loaded font was saved in the archived CSS",
     );
+    assert.match(visual.toString(), /@font-face/);
     assert.ok(hits.some((path) => path.endsWith("site.css")));
     assert.ok(hits.some((path) => path.endsWith("letter.woff")));
     const initialHits = [...hits];
